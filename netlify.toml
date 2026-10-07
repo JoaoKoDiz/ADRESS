@@ -1,0 +1,20 @@
+# Deploy do ADRESS no Netlify
+# - Com Git (GitHub/GitLab): o Netlify roda o build e publica a pasta dist/.
+# - Sem Git: arraste o ADRESS-netlify.zip (ou a pasta dist/) em https://app.netlify.com/drop
+[build]
+  command = "npm run build:netlify"
+  publish = "dist"
+
+[build.environment]
+  NODE_VERSION = "20"
+
+# A música não muda: cache longo. O index.html sempre é revalidado (atualizações aparecem na hora).
+[[headers]]
+  for = "/assets/*"
+  [headers.values]
+    Cache-Control = "public, max-age=604800"
+
+[[headers]]
+  for = "/index.html"
+  [headers.values]
+    Cache-Control = "public, max-age=0, must-revalidate"

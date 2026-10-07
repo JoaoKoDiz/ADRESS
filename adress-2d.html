@@ -1,0 +1,847 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>ADRESS</title>
+<style>
+  html,body{margin:0;height:100%;background:#26331f;overflow:hidden}
+  canvas{display:block;margin:0 auto}
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<script>
+"use strict";
+// ================= Constantes =================
+const FONT = '"Trebuchet MS","Segoe UI",system-ui,sans-serif';
+const W = 1100, HUD = 120, MAP = 1100, H = HUD + MAP;
+const HEDGE = 16, ROAD = 76, LOT = 172, STEP = LOT + ROAD, WALK = 4;
+const lotX = c => HEDGE + ROAD + c * STEP;
+const lotY = r => HEDGE + ROAD + r * STEP;
+const MAXS = 210, ACC = 2.2, DEC = 3.5, TURN = 4.6;
+const VAN_START = { x: 550, y: 56, a: Math.PI / 2 };
+
+const cv = document.getElementById('c'), ctx = cv.getContext('2d');
+function resize() {
+  const dpr = window.devicePixelRatio || 1;
+  const s = Math.min(innerWidth / W, innerHeight / H);
+  cv.style.width = W * s + 'px'; cv.style.height = H * s + 'px';
+  cv.width = Math.round(W * s * dpr); cv.height = Math.round(H * s * dpr);
+}
+addEventListener('resize', resize); resize();
+
+// ================= Casas =================
+const ROOF_COL = { red:'#d8473a', blue:'#3a78d4', green:'#3c9d55', yellow:'#efbf2a', purple:'#8a55c4', gray:'#8b9099' };
+const DOOR_COL = { yellow:'#ffcc00', red:'#e3262e', pink:'#ff6fb5', teal:'#16c6c0' };
+const DOOR_DEFAULT = '#6b4428';
+
+const HOUSES = [
+  { name:'Seu Juca',     roof:'red',    f:['chimney','sunflowers','doghouse'] },
+  { name:'Dona Cida',    roof:'blue',   f:['dish','flamingo'] },
+  { name:'Seu Bené',     roof:'green',  f:['solar','trampoline'] },
+  { name:'Dona Lurdes',  roof:'yellow', f:['tank','clothesline','gnome'] },
+  { name:'Tio Zeca',     roof:'purple', f:['rooster','fruit'] },
+  { name:'Dona Neide',   roof:'gray',   door:'teal', f:['kite','tires'] },
+  { name:'Seu Arlindo',  roof:'red',    f:['patch','bike','mailbox'] },
+  { name:'Dona Zuleica', roof:'blue',   f:['chimney','pool','ballbush'] },
+  { name:'Seu Valdir',   roof:'green',  door:'yellow', f:['cactus','flamingo'] },
+  { name:'Dona Marlene', roof:'yellow', f:['dish','swing','mailbox'] },
+  { name:'Seu Osvaldo',  roof:'purple', door:'red', f:['bare','fence'] },
+  { name:'Dona Filó',    roof:'gray',   f:['solar','fountain','gnome'] },
+  { name:'Seu Tonho',    roof:'red',    f:['tank','trampoline'] },
+  { name:'Dona Célia',   roof:'blue',   door:'pink', f:['kite','fruit'] },
+  { name:'Seu Dito',     roof:'green',  f:['chimney','clothesline','fence'] },
+  { name:'Dona Rosa',    roof:'yellow', f:['rooster','ballbush','bike'] },
+];
+HOUSES.forEach(h => { h.tags = ['roof:' + h.roof].concat(h.door ? ['door:' + h.door] : [], h.f); });
+
+const PHRASE = {
+  'roof:red':'telhado vermelho', 'roof:blue':'telhado azul', 'roof:green':'telhado verde',
+  'roof:yellow':'telhado amarelo', 'roof:purple':'telhado roxo', 'roof:gray':'telhado cinza',
+  'door:yellow':'porta amarela', 'door:red':'porta vermelha', 'door:pink':'porta cor-de-rosa', 'door:teal':'porta azul-turquesa',
+  chimney:'uma chaminé soltando fumaça', dish:'uma antena parabólica', solar:'painéis solares',
+  tank:'uma caixa-d’água no telhado', rooster:'um galo de metal no telhado', kite:'uma pipa presa no telhado',
+  patch:'telhas remendadas de outra cor', mailbox:'uma caixa de correio torta', fence:'uma cerca com uma tábua faltando',
+  fruit:'uma árvore com frutas', bare:'uma árvore sem folhas', cactus:'um cacto grande',
+  sunflowers:'um canteiro de girassóis', ballbush:'um arbusto em formato de bola', doghouse:'uma casinha de cachorro',
+  pool:'uma piscina inflável', trampoline:'um trampolim', swing:'um balanço', bike:'uma bicicleta encostada na cerca',
+  flamingo:'um flamingo no jardim', gnome:'um gnomo de jardim', clothesline:'um varal com roupas', tires:'uma pilha de pneus',
+  fountain:'uma fonte pequena',
+};
+const ROOF_ITEMS = ['chimney','dish','solar','tank','rooster','kite','patch'];
+const YARD_ITEMS = ['fruit','bare','cactus','sunflowers','ballbush','doghouse','pool','trampoline','swing','bike','flamingo','gnome','clothesline','tires','fountain'];
+const ROOF_SPOTS = { TL:[62,26], TR:[112,26], BL:[62,56], BR:[112,56], MID:[86,41] };
+const ROOF_PREF = { chimney:['TR','TL'], dish:['TL','TR'], solar:['BL','BR'], tank:['TL','TR'], rooster:['MID'], kite:['BR','BL'], patch:['BR','BL'] };
+const YARD_SLOTS = [[40,128],[134,128]];
+
+// Posiciona objetos de cada casa uma única vez
+HOUSES.forEach(h => {
+  const used = new Set();
+  h.roofItems = h.f.filter(k => ROOF_ITEMS.includes(k)).map(k => {
+    const s = ROOF_PREF[k].find(p => !used.has(p)); used.add(s); return { k, p: ROOF_SPOTS[s] };
+  });
+  h.yardItems = h.f.filter(k => YARD_ITEMS.includes(k)).map((k, i) => ({ k, p: YARD_SLOTS[i] }));
+});
+
+// ================= Pistas =================
+const rand = n => Math.floor(Math.random() * n);
+const pick = a => a[rand(a.length)];
+function shuffle(a) { for (let i = a.length - 1; i > 0; i--) { const j = rand(i + 1); [a[i], a[j]] = [a[j], a[i]]; } return a; }
+function subsets(arr, k, start = 0, cur = [], out = []) {
+  if (cur.length === k) { out.push(cur.slice()); return out; }
+  for (let i = start; i < arr.length; i++) { cur.push(arr[i]); subsets(arr, k, i + 1, cur, out); cur.pop(); }
+  return out;
+}
+const isUnique = (h, s) => HOUSES.every((o, i) => i === h || !s.every(t => o.tags.includes(t)));
+function makeClue(h) {
+  const tags = HOUSES[h].tags;
+  for (let k = 1; k <= tags.length; k++) {
+    const opts = subsets(tags, k).filter(s => isUnique(h, s));
+    if (!opts.length) continue;
+    // às vezes combina cor + objeto, mesmo quando um objeto sozinho bastaria
+    if (k === 1 && Math.random() < 0.4) {
+      const withColor = subsets(tags, 2).filter(s => s[0].startsWith('roof:') && isUnique(h, s));
+      if (withColor.length) return pick(withColor);
+    }
+    return pick(opts);
+  }
+}
+function phrase(tags) {
+  const p = tags.map(t => PHRASE[t]);
+  return p.length === 1 ? p[0] : p.slice(0, -1).join(', ') + ' e ' + p[p.length - 1];
+}
+// Verificação de integridade do conjunto de casas
+(function validate() {
+  const keys = HOUSES.map(h => h.tags.slice().sort().join('|'));
+  console.assert(new Set(keys).size === 16, 'Combinações repetidas!');
+  HOUSES.forEach((h, i) => console.assert([1,2,3].some(k => subsets(h.tags, k).some(s => isUnique(i, s))), 'Casa sem pista única: ' + i));
+})();
+
+// ================= Falas =================
+const COMPLAINTS = [
+  'De novo uma entrega errada? Isso não é meu!',
+  'Eu pedi uma pizza, e isso claramente não é uma pizza.',
+  'Meu filho, nem meu nome está nisso.',
+  'Você tocou a campainha no meio da minha novela pra isso?',
+  'Moço, eu só assino jornal, e nem leio.',
+  'Não é meu, mas obrigado pela visita, eu acho.',
+  'Não é meu; o gato até ficou animado, mas não é.',
+  'Tá escrito “frágil” e você sacudiu até aqui pra nada?',
+  'Eu tenho cara de quem compra isso?',
+  'Você viu meu quintal e pensou que eu tinha comprado uma prancha?',
+  'Terceira caixa errada da semana, e ainda é quarta-feira!',
+  'Eu estava cochilando, e isso nem é meu.',
+];
+const FEATURE_COMPLAINTS = {
+  flamingo:'Só porque eu tenho um flamingo não quer dizer que eu compro tudo pela internet.',
+  gnome:'Nem o meu gnomo sabe de quem é isso, e ele sabe de tudo.',
+  doghouse:'Se fosse ração, o cachorro aceitava, mas não é.',
+  chimney:'Tô cuidando do fogão a lenha, e isso não é meu!',
+  dish:'Tenho trezentos canais e nenhum deles mandou isso.',
+  pool:'Tô de maiô, não vou assinar nada, e isso não é meu!',
+  tires:'Se não for pneu, não é meu.',
+  trampoline:'Pulei até aqui pra atender e nem é meu?',
+  cactus:'Meu cacto é mais simpático que essa caixa, e ela nem é minha.',
+  swing:'Eu tava no balanço, sabia? Não é meu!',
+};
+const HINTS = [
+  p => `Acho que é do pessoal da casa com ${p}.`,
+  p => `Talvez seja da casa com ${p}.`,
+  p => `Se não me engano, é da casa com ${p}.`,
+  p => `Tenta lá na casa com ${p}.`,
+  p => `Deve ser da casa com ${p}, eu acho.`,
+];
+const REPEATS = [
+  p => `De novo você? Já falei: acho que é da casa com ${p}.`,
+  p => `Continua não sendo meu. Tenta a casa com ${p}, como eu disse.`,
+];
+const NOHINT = [
+  'E sei lá de quem é; segue a pista que você tem aí.',
+  'Não faço ideia de quem seja, sinceramente.',
+  'Pergunta pra outro, porque eu não sei.',
+];
+const NOHINT_AGAIN = [
+  'Ainda não é meu! Segue a pista que você tem.',
+  'Voltou? Continua não sendo meu.',
+];
+const SUCCESS = [
+  'Finalmente! Era essa mesmo. Muito obrigado!',
+  'Ah, minha encomenda! Já achava que tinha fugido. Obrigado!',
+  'Isso! Era essa mesmo. Obrigado pela paciência!',
+];
+const SHIRTS = ['#e4572e','#4f86c6','#7bb661','#f2a541','#9b5de5','#ef476f','#06aed5','#8d6e63'];
+const HAIRS  = ['#3b2a1a','#9e9e9e','#f0d58c','#6b3e26','#222','#d9d9d9','#a0522d','#555'];
+
+// ================= Áudio =================
+let AC = null, eng = null;
+function initAudio() {
+  if (AC) { if (AC.state === 'suspended') AC.resume(); return; }
+  try {
+    AC = new (window.AudioContext || window.webkitAudioContext)();
+    const o = AC.createOscillator(), o2 = AC.createOscillator(), f = AC.createBiquadFilter(), g = AC.createGain();
+    o.type = 'sawtooth'; o2.type = 'square'; f.type = 'lowpass'; f.frequency.value = 260; g.gain.value = 0;
+    o.connect(f); o2.connect(f); f.connect(g); g.connect(AC.destination); o.start(); o2.start();
+    eng = { o, o2, g };
+  } catch (e) { AC = null; }
+}
+function tone(freq, at, dur, type = 'sine', vol = 0.12) {
+  if (!AC) return;
+  const t0 = AC.currentTime + at, o = AC.createOscillator(), g = AC.createGain();
+  o.type = type; o.frequency.value = freq;
+  g.gain.setValueAtTime(0, t0); g.gain.linearRampToValueAtTime(vol, t0 + 0.01);
+  g.gain.exponentialRampToValueAtTime(0.0008, t0 + dur);
+  o.connect(g); g.connect(AC.destination); o.start(t0); o.stop(t0 + dur + 0.05);
+}
+const sfxBell = () => { tone(880, 0, 0.45, 'sine', 0.13); tone(698, 0.3, 0.6, 'sine', 0.13); };
+const sfxGrumble = () => { tone(190, 0, 0.12, 'triangle', 0.08); tone(150, 0.13, 0.18, 'triangle', 0.08); };
+const sfxSuccess = () => [523, 659, 784, 1047].forEach((f, i) => tone(f, i * 0.09, 0.35, 'triangle', 0.1));
+function updEngine(running) {
+  if (!eng) return;
+  const t = AC.currentTime, s = Math.abs(van.speed);
+  eng.g.gain.setTargetAtTime(running ? 0.012 + 0.022 * (s / MAXS) : 0, t, 0.12);
+  const fr = 42 + s * 0.3;
+  eng.o.frequency.setTargetAtTime(fr, t, 0.1); eng.o2.frequency.setTargetAtTime(fr * 0.5, t, 0.1);
+}
+
+// ================= Entrada =================
+const keys = new Set(), pressed = new Set();
+addEventListener('keydown', e => {
+  initAudio();
+  if (['ArrowUp','ArrowDown','ArrowLeft','ArrowRight','Space'].includes(e.code)) e.preventDefault();
+  if (!keys.has(e.code)) pressed.add(e.code);
+  keys.add(e.code);
+});
+addEventListener('keyup', e => keys.delete(e.code));
+addEventListener('blur', () => keys.clear());
+const actionPressed = () => pressed.has('KeyE') || pressed.has('Space') || pressed.has('Enter');
+
+// ================= Estado do jogo =================
+let layout = [], slotOf = [], route = [], clues = [], step = 0;
+let prevRoute = null, prevPerm = null;
+let noHintVisited = new Set(), usedComplaints = new Set();
+const van = { x: 0, y: 0, a: 0, speed: 0 };
+let state = 'fadeIn', stateT = 0, fade = 1, dialog = null, pending = -1, delivered = 0, nearHouse = -1;
+
+function newRound() {
+  let perm;
+  do { perm = shuffle([...Array(16).keys()]); } while (prevPerm && perm.every((v, i) => v === prevPerm[i]));
+  layout = perm; slotOf = []; layout.forEach((h, s) => slotOf[h] = s);
+
+  const len = Math.random() < 0.5 ? 3 : 4;
+  for (let tries = 0; tries < 50; tries++) {
+    route = shuffle([...Array(16).keys()]).slice(0, len);
+    if (!prevRoute) break;
+    if (route[len - 1] !== prevRoute[prevRoute.length - 1] && route[0] !== prevRoute[0]) break;
+  }
+  clues = route.map(makeClue);
+  step = 0; noHintVisited = new Set(); usedComplaints = new Set(); dialog = null; pending = -1;
+  prevPerm = perm; prevRoute = route.slice();
+  Object.assign(van, VAN_START, { speed: 0 });
+}
+
+function complaintFor(h) {
+  const hs = HOUSES[h];
+  const special = hs.f.filter(k => FEATURE_COMPLAINTS[k] && !usedComplaints.has(FEATURE_COMPLAINTS[k]));
+  let c;
+  if (special.length && Math.random() < 0.5) c = FEATURE_COMPLAINTS[pick(special)];
+  else {
+    const pool = COMPLAINTS.filter(x => !usedComplaints.has(x));
+    c = pick(pool.length ? pool : COMPLAINTS);
+  }
+  usedComplaints.add(c);
+  return c;
+}
+
+function resolveVisit(h) {
+  const recipient = route[route.length - 1];
+  let text, success = false;
+  if (h === recipient) {
+    success = true; text = pick(SUCCESS);
+  } else {
+    const idx = route.indexOf(h);
+    if (idx === step) {                      // casa indicada: reclama e dá o próximo palpite
+      step++;
+      text = complaintFor(h) + ' ' + pick(HINTS)(phrase(clues[step]));
+    } else if (idx >= 0 && idx < step) {     // já visitada: repete o mesmo palpite
+      text = pick(REPEATS)(phrase(clues[idx + 1]));
+    } else if (noHintVisited.has(h)) {       // fora da rota, de novo
+      text = pick(NOHINT_AGAIN);
+    } else {                                 // fora da indicação atual: não altera a rota
+      noHintVisited.add(h);
+      text = complaintFor(h) + ' ' + pick(NOHINT);
+    }
+  }
+  dialog = { h, name: HOUSES[h].name, text, success };
+  state = 'dialog'; stateT = 0;
+  if (success) { delivered++; sfxSuccess(); } else sfxGrumble();
+}
+
+// ================= Física =================
+function solids() {
+  const out = [];
+  for (let r = 0; r < 4; r++) for (let c = 0; c < 4; c++)
+    out.push([lotX(c) - WALK, lotY(r) - WALK, LOT + WALK * 2, LOT + WALK * 2]);
+  return out;
+}
+const SOLIDS = solids();
+function resolveCollisions() {
+  let hit = false;
+  const R = 12.5;
+  for (let it = 0; it < 3; it++) {
+    for (const off of [-15, 0, 15]) {
+      const cx = van.x + Math.cos(van.a) * off, cy = van.y + Math.sin(van.a) * off;
+      for (const [rx, ry, rw, rh] of SOLIDS) {
+        const px = Math.max(rx, Math.min(cx, rx + rw)), py = Math.max(ry, Math.min(cy, ry + rh));
+        let dx = cx - px, dy = cy - py, d = Math.hypot(dx, dy);
+        if (d < R) {
+          if (d < 1e-4) { dx = 0; dy = -1; d = 1e-4; }
+          const push = (R - d) / (d || 1);
+          van.x += dx * push; van.y += dy * push; hit = true;
+        }
+      }
+      const lo = HEDGE + R, hi = MAP - HEDGE - R;
+      if (cx < lo) { van.x += lo - cx; hit = true; }
+      if (cx > hi) { van.x -= cx - hi; hit = true; }
+      if (cy < lo) { van.y += lo - cy; hit = true; }
+      if (cy > hi) { van.y -= cy - hi; hit = true; }
+    }
+  }
+  if (hit) van.speed *= 0.9;
+}
+const angDiff = (a, b) => { let d = a - b; while (d > Math.PI) d -= 2 * Math.PI; while (d < -Math.PI) d += 2 * Math.PI; return d; };
+const doorPoint = h => { const s = slotOf[h]; return [lotX(s % 4) + 86, lotY(Math.floor(s / 4)) + LOT + 26]; };
+
+function drive(dt) {
+  const ix = (keys.has('KeyD') || keys.has('ArrowRight') ? 1 : 0) - (keys.has('KeyA') || keys.has('ArrowLeft') ? 1 : 0);
+  const iy = (keys.has('KeyS') || keys.has('ArrowDown') ? 1 : 0) - (keys.has('KeyW') || keys.has('ArrowUp') ? 1 : 0);
+  if (ix || iy) {
+    const d = angDiff(Math.atan2(iy, ix), van.a);
+    van.a += Math.sign(d) * Math.min(Math.abs(d), TURN * dt);
+    const tgt = MAXS * Math.max(0.25, Math.cos(d));
+    van.speed += (tgt - van.speed) * Math.min(1, ACC * dt);
+  } else {
+    van.speed -= van.speed * Math.min(1, DEC * dt);
+    if (van.speed < 3) van.speed = 0;
+  }
+  van.x += Math.cos(van.a) * van.speed * dt;
+  van.y += Math.sin(van.a) * van.speed * dt;
+  resolveCollisions();
+
+  nearHouse = -1;
+  if (van.speed < 35) {
+    let best = 60;
+    for (let h = 0; h < 16; h++) {
+      const [dx, dy] = doorPoint(h), d = Math.hypot(van.x - dx, van.y - dy);
+      if (d < best) { best = d; nearHouse = h; }
+    }
+  }
+  if (nearHouse >= 0 && actionPressed()) {
+    pending = nearHouse; state = 'ring'; stateT = 0; van.speed = 0; nearHouse = -1; sfxBell();
+  }
+}
+
+// ================= Loop =================
+let last = performance.now(), T = 0;
+function frame(now) {
+  const dt = Math.min(0.05, (now - last) / 1000); last = now; T += dt; stateT += dt;
+  switch (state) {
+    case 'drive': drive(dt); break;
+    case 'ring': if (stateT > 0.8) resolveVisit(pending); break;
+    case 'dialog':
+      if ((stateT > 0.25 && actionPressed()) || (dialog.success && stateT > 4.5)) {
+        if (dialog.success) { state = 'fadeOut'; stateT = 0; }
+        else { state = 'drive'; stateT = 0; dialog = null; }
+      }
+      break;
+    case 'fadeOut':
+      fade = Math.min(1, stateT / 0.8);
+      if (fade >= 1) { newRound(); state = 'fadeIn'; stateT = 0; }
+      break;
+    case 'fadeIn':
+      fade = Math.max(0, 1 - stateT / 0.8);
+      if (fade <= 0) { state = 'drive'; stateT = 0; }
+      break;
+  }
+  updEngine(state === 'drive');
+  pressed.clear();
+  render();
+  requestAnimationFrame(frame);
+}
+
+// ================= Desenho: utilitários =================
+function rr(x, y, w, h, r) {
+  ctx.beginPath(); ctx.moveTo(x + r, y);
+  ctx.arcTo(x + w, y, x + w, y + h, r); ctx.arcTo(x + w, y + h, x, y + h, r);
+  ctx.arcTo(x, y + h, x, y, r); ctx.arcTo(x, y, x + w, y, r); ctx.closePath();
+}
+function circ(x, y, r, fill) { ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fillStyle = fill; ctx.fill(); }
+function ell(x, y, rx, ry, fill) { ctx.beginPath(); ctx.ellipse(x, y, rx, ry, 0, 0, Math.PI * 2); ctx.fillStyle = fill; ctx.fill(); }
+function line(x1, y1, x2, y2) { ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.stroke(); }
+function poly(pts, fill) { ctx.beginPath(); ctx.moveTo(pts[0], pts[1]); for (let i = 2; i < pts.length; i += 2) ctx.lineTo(pts[i], pts[i + 1]); ctx.closePath(); ctx.fillStyle = fill; ctx.fill(); }
+function shade(hex, p) {
+  const n = parseInt(hex.slice(1), 16); let r = n >> 16, g = (n >> 8) & 255, b = n & 255;
+  const t = p < 0 ? 0 : 255, a = Math.abs(p);
+  r = Math.round(r + (t - r) * a); g = Math.round(g + (t - g) * a); b = Math.round(b + (t - b) * a);
+  return `rgb(${r},${g},${b})`;
+}
+const shadow = (x, y, rx, ry) => ell(x, y, rx, ry, 'rgba(0,0,0,.18)');
+
+// ================= Desenho: objetos do telhado =================
+const DRAW_ROOF = {
+  chimney(t) {
+    ctx.fillStyle = 'rgba(0,0,0,.2)'; ctx.fillRect(-4, -5, 12, 14);
+    ctx.fillStyle = '#a64a33'; ctx.fillRect(-6, -7, 12, 14);
+    ctx.strokeStyle = '#7b3322'; ctx.lineWidth = 0.8;
+    for (let y = -3; y < 7; y += 4) line(-6, y, 6, y);
+    ctx.fillStyle = '#7b3322'; ctx.fillRect(-7.5, -10, 15, 4);
+    ctx.fillStyle = '#222'; ctx.fillRect(-4.5, -9.5, 9, 2.5);
+    for (let i = 0; i < 5; i++) {
+      const ph = (t * 0.45 + i / 5) % 1;
+      const x = ph * 16 + Math.sin(t * 2 + i) * 2, y = -12 - ph * 30;
+      ctx.globalAlpha = 0.6 * (1 - ph);
+      circ(x, y, 3 + ph * 7, '#e8e8e8');
+    }
+    ctx.globalAlpha = 1;
+  },
+  dish() {
+    shadow(3, 3, 10, 9);
+    ell(0, 0, 10.5, 9.5, '#b9bec4'); ell(0.5, 0.5, 9, 8, '#f4f5f6'); ell(1.5, 1.5, 5, 4.5, '#dde1e5');
+    ctx.strokeStyle = '#555'; ctx.lineWidth = 1.4; line(1, 1, -7, -7); circ(-7, -7, 2.2, '#333');
+  },
+  solar() {
+    ctx.fillStyle = 'rgba(0,0,0,.2)'; ctx.fillRect(-15, -8, 34, 20);
+    ctx.fillStyle = '#c9d0d8'; ctx.fillRect(-17, -10, 34, 20);
+    ctx.fillStyle = '#1d3a7a'; ctx.fillRect(-15.5, -8.5, 31, 17);
+    ctx.strokeStyle = '#6f93dc'; ctx.lineWidth = 0.8;
+    for (let x = -15.5 + 7.75; x < 15; x += 7.75) line(x, -8.5, x, 8.5);
+    line(-15.5, 0, 15.5, 0);
+    ctx.fillStyle = 'rgba(255,255,255,.18)'; poly([-15, -8, -5, -8, -14, 8, -15, 8], 'rgba(255,255,255,.18)');
+  },
+  tank() {
+    shadow(3, 6, 11, 5);
+    ctx.fillStyle = '#2466b3'; ctx.fillRect(-11, -4, 22, 10); ell(0, 6, 11, 4, '#2466b3');
+    ctx.strokeStyle = '#1a4f8f'; ctx.lineWidth = 1; line(-11, 1, 11, 1);
+    ell(0, -4, 11, 5, '#4a93e6'); ell(0, -4, 5.5, 2.5, '#8cc0f5');
+  },
+  rooster(t) {
+    ctx.strokeStyle = '#333'; ctx.lineWidth = 1.8; line(0, 2, 0, -6);
+    line(-11, -5, 11, -5); poly([11, -5, 7, -8, 7, -2], '#333');
+    poly([-11, -8, -11, -2, -8, -5], '#333');
+    ctx.save(); ctx.translate(0, -6); ctx.rotate(Math.sin(t * 0.8) * 0.08);
+    ctx.lineWidth = 2.5; ctx.strokeStyle = 'rgba(255,255,255,.75)'; ctx.lineJoin = 'round';
+    const silhouette = () => {
+      ctx.beginPath(); ctx.ellipse(1, -8, 7, 5, 0, 0, Math.PI * 2);
+      ctx.moveTo(5, -9); ctx.lineTo(13, -20); ctx.lineTo(9, -7); ctx.closePath();
+      ctx.moveTo(-3.5, -15); ctx.arc(-5, -15, 3.5, 0, Math.PI * 2);
+    };
+    silhouette(); ctx.stroke(); ctx.fillStyle = '#3d3326'; silhouette(); ctx.fill();
+    circ(-5.5, -19.5, 2.2, '#d8352a'); circ(-3.5, -19, 1.8, '#d8352a');
+    poly([-8.5, -16, -12, -14.5, -8.5, -13.5], '#e8a820');
+    ctx.strokeStyle = '#3d3326'; ctx.lineWidth = 1.3; line(0, -3, -1, 0); line(3, -3, 3, 0);
+    ctx.restore();
+  },
+  kite(t) {
+    ctx.strokeStyle = '#555'; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(0, 11);
+    for (let i = 1; i <= 6; i++) ctx.lineTo(i * 3.5 + Math.sin(t * 3 + i) * 2, 11 + i * 3);
+    ctx.stroke();
+    for (let i = 2; i <= 6; i += 2) { const x = i * 3.5 + Math.sin(t * 3 + i) * 2, y = 11 + i * 3; poly([x - 2.5, y - 2, x + 2.5, y + 2, x + 2.5, y - 2, x - 2.5, y + 2], '#ff3b3b'); }
+    ctx.save(); ctx.rotate(0.35);
+    poly([0, -13, -10, -1, 0, -1], '#ff3b3b'); poly([0, -13, 10, -1, 0, -1], '#ffd12a');
+    poly([0, 12, 10, -1, 0, -1], '#2f7fe0'); poly([0, 12, -10, -1, 0, -1], '#2fbf5a');
+    ctx.strokeStyle = '#fff'; ctx.lineWidth = 1; line(0, -13, 0, 12); line(-10, -1, 10, -1);
+    ctx.restore();
+  },
+  patch() {
+    ctx.save(); ctx.rotate(0.12);
+    const cols = ['#8c9bb3', '#e0c77a', '#9dbb74', '#c7825f'];
+    [[-12, -10], [0, -10], [-12, 0], [0, 0]].forEach(([x, y], i) => {
+      ctx.fillStyle = cols[i]; ctx.fillRect(x, y, 12, 10);
+      ctx.strokeStyle = '#3a3a3a'; ctx.lineWidth = 1; ctx.strokeRect(x, y, 12, 10);
+      ctx.beginPath(); ctx.moveTo(x + 3, y + 3); ctx.lineTo(x + 5, y + 5); ctx.moveTo(x + 5, y + 3); ctx.lineTo(x + 3, y + 5); ctx.stroke();
+    });
+    ctx.restore();
+  },
+};
+
+// ================= Desenho: objetos do quintal =================
+const DRAW_YARD = {
+  trampoline() {
+    shadow(3, 4, 20, 17);
+    circ(0, 0, 20, '#2d6fe0'); circ(0, 0, 16, '#1d1d1f');
+    ctx.strokeStyle = '#9ab0c8'; ctx.lineWidth = 1;
+    for (let i = 0; i < 18; i++) { const a = i / 18 * Math.PI * 2; line(Math.cos(a) * 16, Math.sin(a) * 16, Math.cos(a) * 18.5, Math.sin(a) * 18.5); }
+    ctx.strokeStyle = 'rgba(255,255,255,.15)'; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(0, 0, 10, 3.6, 4.8); ctx.stroke();
+  },
+  pool(t) {
+    shadow(3, 4, 19, 16);
+    circ(0, 0, 19, '#ff8fc0');
+    ctx.strokeStyle = '#ffe066'; ctx.lineWidth = 4;
+    for (let i = 0; i < 4; i++) { ctx.beginPath(); ctx.arc(0, 0, 16.5, i * Math.PI / 2, i * Math.PI / 2 + 0.6); ctx.stroke(); }
+    circ(0, 0, 14, '#56c6f0');
+    ctx.strokeStyle = 'rgba(255,255,255,.7)'; ctx.lineWidth = 1.3;
+    ctx.beginPath(); ctx.arc(-3, -2, 6 + Math.sin(t * 2) * 1.5, 3.4, 4.6); ctx.stroke();
+    const dx = Math.sin(t * 0.7) * 3;
+    ell(4 + dx, 3, 4, 3, '#ffd400'); circ(7 + dx, 0.5, 2.3, '#ffd400'); poly([9 + dx, 0, 11 + dx, 1, 9 + dx, 1.8], '#ff8a00');
+  },
+  swing(t) {
+    shadow(0, 14, 22, 5);
+    ctx.strokeStyle = '#7a5230'; ctx.lineWidth = 3; ctx.lineCap = 'round';
+    line(-20, 14, -16, -15); line(-12, 14, -16, -15); line(20, 14, 16, -15); line(12, 14, 16, -15);
+    ctx.lineWidth = 4; line(-17, -15, 17, -15);
+    const sw = Math.sin(t * 2.2) * 2;
+    ctx.strokeStyle = '#999'; ctx.lineWidth = 1;
+    line(-10, -15, -10 + sw, 5); line(-3, -15, -3 + sw, 5); line(3, -15, 3 - sw, 5); line(10, -15, 10 - sw, 5);
+    ctx.fillStyle = '#e63946'; ctx.fillRect(-11.5 + sw, 4, 10, 3.5);
+    ctx.fillStyle = '#2a9df4'; ctx.fillRect(1.5 - sw, 4, 10, 3.5);
+    ctx.lineCap = 'butt';
+  },
+  fountain(t) {
+    shadow(3, 4, 18, 16);
+    circ(0, 0, 18, '#a9adb4'); circ(0, 0, 14.5, '#62c3ee');
+    ctx.strokeStyle = 'rgba(255,255,255,.6)'; ctx.lineWidth = 1;
+    for (let i = 0; i < 2; i++) { const r = 5 + ((t * 8 + i * 5) % 10); ctx.globalAlpha = 1 - (r - 5) / 10; ctx.beginPath(); ctx.arc(0, 0, r, 0, Math.PI * 2); ctx.stroke(); }
+    ctx.globalAlpha = 1;
+    circ(0, 0, 4.5, '#c9ccd2'); circ(0, 0, 2.5, '#9fe3ff');
+    for (let i = 0; i < 6; i++) { const a = i / 6 * Math.PI * 2 + t; circ(Math.cos(a) * 7, Math.sin(a) * 7, 1.1, '#fff'); }
+  },
+  tires() {
+    shadow(2, 13, 15, 5);
+    for (let j = 0; j < 3; j++) {
+      const y = 9 - j * 8;
+      ell(0, y + 3, 13, 6.5, '#161616'); ell(0, y, 13, 6.5, '#383838'); ell(0, y, 6, 3, '#101010');
+      ctx.strokeStyle = '#555'; ctx.lineWidth = 0.8; ctx.beginPath(); ctx.ellipse(0, y, 10, 5, 0, 3.4, 5.8); ctx.stroke();
+    }
+  },
+  doghouse(t) {
+    shadow(2, 13, 18, 5);
+    ctx.fillStyle = '#c8864a'; ctx.fillRect(-13, -4, 26, 17);
+    poly([-16, -3, 0, -17, 16, -3], '#b8322a');
+    ctx.fillStyle = '#2a1b10'; ctx.beginPath(); ctx.arc(0, 6, 5, Math.PI, 0); ctx.lineTo(5, 13); ctx.lineTo(-5, 13); ctx.closePath(); ctx.fill();
+    circ(0, 9 + Math.sin(t * 3) * 0.6, 2.4, '#8a5a36'); // focinho do cachorro
+    ell(19, 11, 4.5, 2.5, '#3a7bd5'); ell(19, 10.5, 3, 1.4, '#8a5a36');
+  },
+  fruit() {
+    shadow(4, 5, 19, 15);
+    circ(0, 0, 18, '#2f8a33'); circ(-4, -4, 12, '#47a844');
+    [[-9, -4], [6, -9], [9, 4], [-3, 8], [2, -2], [-10, 6], [12, -3], [-4, -11]].forEach(([x, y]) => {
+      circ(x, y, 3.2, '#ff4a1c'); circ(x - 1, y - 1, 1, '#ffd0b0');
+    });
+  },
+  bare() {
+    shadow(4, 5, 17, 14);
+    ctx.strokeStyle = '#6e4a2a'; ctx.lineCap = 'round';
+    for (let k = 0; k < 7; k++) {
+      const a = k * 0.9 + 0.3;
+      ctx.lineWidth = 3; line(0, 0, Math.cos(a) * 17, Math.sin(a) * 17);
+      ctx.lineWidth = 1.5;
+      line(Math.cos(a) * 9, Math.sin(a) * 9, Math.cos(a + 0.5) * 15, Math.sin(a + 0.5) * 15);
+      line(Math.cos(a) * 13, Math.sin(a) * 13, Math.cos(a - 0.35) * 19, Math.sin(a - 0.35) * 19);
+    }
+    circ(0, 0, 5, '#5a3a1f'); ctx.lineCap = 'butt';
+  },
+  cactus() {
+    ell(0, 15, 13, 4.5, '#e6cf8f');
+    const g = '#3e9d4b';
+    ctx.fillStyle = g; rr(-5.5, -21, 11, 36, 5.5); ctx.fill();
+    rr(-15, -10, 6.5, 14, 3.2); ctx.fill(); ctx.fillRect(-11, -1, 7, 5);
+    rr(8.5, -15, 6.5, 13, 3.2); ctx.fill(); ctx.fillRect(4, -6, 7, 5);
+    ctx.strokeStyle = '#2d7a38'; ctx.lineWidth = 1; line(0, -18, 0, 13); line(-12, -8, -12, 2); line(11.7, -13, 11.7, -4);
+    ctx.fillStyle = '#fff'; [[-3, -14], [3, -8], [-3, -2], [3, 4], [-3, 9], [-12, -5], [12, -10]].forEach(([x, y]) => ctx.fillRect(x, y, 1, 1));
+    circ(0, -21, 2.6, '#ff6fa5');
+  },
+  sunflowers() {
+    ctx.fillStyle = '#7a4e2e'; rr(-20, 6, 40, 10, 4); ctx.fill();
+    [[-12, -6, 0], [0, -14, 1], [12, -5, 2]].forEach(([x, y, i]) => {
+      ctx.strokeStyle = '#3c8d3a'; ctx.lineWidth = 2; line(x, y, x, 10);
+      ell(x - 4, (y + 10) / 2 + 2, 4, 2, '#4caf50'); ell(x + 4, (y + 10) / 2 + 5, 4, 2, '#4caf50');
+      ctx.save(); ctx.translate(x, y); ctx.rotate(i * 0.3);
+      for (let p = 0; p < 12; p++) {
+        const a = p / 12 * Math.PI * 2;
+        poly([Math.cos(a - 0.22) * 3.5, Math.sin(a - 0.22) * 3.5, Math.cos(a) * 8.5, Math.sin(a) * 8.5, Math.cos(a + 0.22) * 3.5, Math.sin(a + 0.22) * 3.5], '#ffc61a');
+      }
+      circ(0, 0, 4, '#5a300e'); circ(-1, -1, 1.3, '#7a4a1e');
+      ctx.restore();
+    });
+  },
+  ballbush() {
+    shadow(2, 15, 10, 3.5);
+    ctx.fillStyle = '#c2663b'; rr(-7, 7, 14, 9, 2); ctx.fill();
+    ctx.fillStyle = '#6b4526'; ctx.fillRect(-1.5, 0, 3, 8);
+    circ(0, -7, 13.5, '#2c7f37'); circ(-4, -11, 7, '#43a04f');
+    ctx.fillStyle = 'rgba(0,0,0,.12)'; [[5, -3], [-6, -1], [7, -11], [0, -16], [-9, -8]].forEach(([x, y]) => ctx.fillRect(x, y, 1.5, 1.5));
+  },
+  flamingo(t) {
+    shadow(1, 16, 8, 2.5);
+    ctx.strokeStyle = '#d9457f'; ctx.lineWidth = 1.5;
+    line(1, 2, 0, 16); ctx.beginPath(); ctx.moveTo(3, 2); ctx.lineTo(6, 8); ctx.lineTo(2, 10); ctx.stroke();
+    ell(1, -2, 10, 6, '#ff66a8'); ell(3, -2.5, 6, 3.5, '#ff94c4');
+    ctx.strokeStyle = '#ff66a8'; ctx.lineWidth = 3.2; ctx.lineCap = 'round';
+    ctx.beginPath(); ctx.moveTo(-7, -4); ctx.bezierCurveTo(-13, -10, -2, -14, -6, -21); ctx.stroke();
+    circ(-6, -22, 3.6, '#ff66a8'); circ(-7, -23, 0.9, '#222');
+    poly([-3, -23, 1, -19, -2, -20], '#222');
+    ctx.lineCap = 'butt';
+  },
+  gnome() {
+    shadow(0, 14, 9, 3);
+    ctx.fillStyle = '#2f6fd0'; rr(-7.5, -1, 15, 14, 4); ctx.fill();
+    ell(-3.5, 13, 3, 1.8, '#3b2a1a'); ell(3.5, 13, 3, 1.8, '#3b2a1a');
+    poly([-6.5, -3, 6.5, -3, 0, 9], '#fafafa');
+    circ(0, -5, 4.5, '#f3c9a0'); circ(0, -4, 1.9, '#e8907a');
+    poly([-7.5, -7, 7.5, -7, 2, -26], '#e23b2e');
+  },
+  clothesline(t) {
+    shadow(0, 12, 22, 4);
+    ctx.fillStyle = '#7a5230'; ctx.fillRect(-21, -14, 3, 27); ctx.fillRect(18, -14, 3, 27);
+    ctx.strokeStyle = '#eee'; ctx.lineWidth = 1; line(-19, -12, 19, -12);
+    const f = k => Math.sin(t * 3 + k) * 0.12;
+    ctx.save(); ctx.translate(-11, -12); ctx.rotate(f(0));
+    poly([-6, 0, 6, 0, 8, 4, 5, 5, 5, 13, -5, 13, -5, 5, -8, 4], '#e63946'); ctx.restore();
+    ctx.save(); ctx.translate(1, -12); ctx.rotate(f(1));
+    poly([-5, 0, 5, 0, 5, 14, 1, 14, 0, 5, -1, 14, -5, 14], '#2a6bd1'); ctx.restore();
+    ctx.save(); ctx.translate(12, -12); ctx.rotate(f(2));
+    poly([-2, 0, 2, 0, 2, 7, 5, 9, 5, 11, -2, 11], '#ffd12a'); ctx.restore();
+    ctx.fillStyle = '#c9a36b'; [-15, -7, -3, 5, 10, 14].forEach(x => ctx.fillRect(x, -13.5, 1.5, 3));
+  },
+  bike() {
+    ctx.save(); ctx.rotate(-0.06);
+    shadow(0, 11, 18, 2.5);
+    ctx.strokeStyle = '#222'; ctx.lineWidth = 2.2;
+    ctx.beginPath(); ctx.arc(-11, 4, 7, 0, Math.PI * 2); ctx.stroke();
+    ctx.beginPath(); ctx.arc(11, 4, 7, 0, Math.PI * 2); ctx.stroke();
+    ctx.strokeStyle = '#bbb'; ctx.lineWidth = 0.6; line(-18, 4, -4, 4); line(-11, -3, -11, 11); line(4, 4, 18, 4); line(11, -3, 11, 11);
+    ctx.strokeStyle = '#11a3a3'; ctx.lineWidth = 2.3; ctx.lineJoin = 'round';
+    ctx.beginPath(); ctx.moveTo(-11, 4); ctx.lineTo(-1, 4); ctx.lineTo(6, -5); ctx.lineTo(-4, -5); ctx.closePath(); ctx.stroke();
+    line(-1, 4, -5, -8); line(6, -5, 11, 4); line(6, -5, 5, -10);
+    ctx.strokeStyle = '#222'; ctx.lineWidth = 2.5; line(-8, -8.5, -3, -8.5); line(3, -10, 8, -10);
+    ctx.restore();
+  },
+};
+
+// ================= Desenho: casa e lote =================
+function drawLot(h, x0, y0, t) {
+  const hs = HOUSES[h];
+  ctx.save(); ctx.translate(x0, y0);
+  // calçada e grama
+  ctx.fillStyle = '#d4cdbb'; ctx.fillRect(-WALK, -WALK, LOT + WALK * 2, LOT + WALK * 2);
+  ctx.fillStyle = '#95cc68'; ctx.fillRect(0, 0, LOT, LOT);
+  ctx.fillStyle = '#8bc25f';
+  for (let i = 0; i < 14; i++) { const gx = (i * 53 + h * 17) % 160 + 6, gy = (i * 37 + h * 29) % 160 + 6; ctx.fillRect(gx, gy, 2, 5); ctx.fillRect(gx + 3, gy + 1, 2, 4); }
+  // caminho
+  ctx.fillStyle = '#e8dfcb'; ctx.fillRect(79, 100, 14, 72);
+  ctx.fillStyle = '#d6cbb2'; for (let y = 104; y < 170; y += 10) ctx.fillRect(81, y, 10, 1.5);
+  // cerca (fundo e lados)
+  ctx.strokeStyle = '#a57a4c'; ctx.lineWidth = 3;
+  ctx.beginPath(); ctx.moveTo(2, 168); ctx.lineTo(2, 2); ctx.lineTo(170, 2); ctx.lineTo(170, 168); ctx.stroke();
+  ctx.fillStyle = '#7d5a35';
+  for (let p = 2; p <= 170; p += 28) { ctx.fillRect(p - 2, 0, 4, 4); ctx.fillRect(0, p - 2, 4, 4); ctx.fillRect(168, p - 2, 4, 4); }
+  // casa
+  drawHouse(hs, t);
+  // objetos do quintal
+  hs.yardItems.forEach(({ k, p }) => {
+    ctx.save();
+    ctx.translate(p[0], k === 'bike' ? 150 : p[1]); ctx.scale(1.18, 1.18);
+    DRAW_YARD[k](t); ctx.restore();
+  });
+  // caixa de correio
+  ctx.save(); ctx.translate(110, 166);
+  const crooked = hs.f.includes('mailbox');
+  if (crooked) { ctx.rotate(0.75); shadow(-2, 1, 6, 2); }
+  ctx.scale(1.25, 1.25);
+  ctx.fillStyle = '#6b4526'; ctx.fillRect(-1.5, -14, 3, 14);
+  ctx.fillStyle = '#3f6fb0'; rr(-7, -22, 14, 9, 3); ctx.fill();
+  if (crooked) {
+    ctx.fillStyle = '#2b4f86'; poly([-7, -17, -11, -12, -7, -13], '#2b4f86'); // tampa aberta pendurada
+    ctx.strokeStyle = '#223d66'; ctx.lineWidth = 1; line(-3, -21, 0, -16); line(2, -21, 4, -18);
+    ctx.fillStyle = '#e63946'; ctx.fillRect(5, -15, 5, 2); // bandeirinha caída
+  } else {
+    ctx.fillStyle = '#e63946'; ctx.fillRect(6, -26, 2, 5);
+  }
+  ctx.restore();
+  // cerca da frente (tábuas)
+  const missing = hs.f.includes('fence');
+  ctx.strokeStyle = '#b9ae98'; ctx.lineWidth = 1.5; line(3, 168, 72, 168); line(100, 168, 169, 168);
+  for (let x = 4; x < 168; x += 9) {
+    if (x > 68 && x < 100) continue;
+    if (missing && x === 31) continue;
+    ctx.fillStyle = '#b9ae98'; ctx.fillRect(x - 0.5, 160.5, 7, 11);
+    poly([x, 162, x + 3, 158, x + 6, 162], '#f6f1e6');
+    ctx.fillStyle = '#f6f1e6'; ctx.fillRect(x, 161, 6, 10);
+  }
+  ctx.fillStyle = '#7d5a35'; ctx.fillRect(68, 157, 4, 14); ctx.fillRect(100, 157, 4, 14);
+  if (missing) {
+    ctx.save(); ctx.translate(36, 181); ctx.rotate(0.35);
+    ctx.fillStyle = '#b9ae98'; ctx.fillRect(-8.5, -3.5, 17, 7); ctx.fillStyle = '#efe7d6'; ctx.fillRect(-8, -3, 16, 6);
+    ctx.restore();
+  }
+  ctx.restore();
+}
+
+function drawHouse(hs, t) {
+  ctx.fillStyle = 'rgba(0,0,0,.2)'; rr(42, 15, 100, 88, 4); ctx.fill();
+  // fachada
+  ctx.fillStyle = '#efe3cc'; ctx.fillRect(41, 66, 90, 32);
+  ctx.fillStyle = '#d6c4a0'; ctx.fillRect(41, 95, 90, 3);
+  for (const wx of [49, 105]) {
+    ctx.fillStyle = '#fff'; ctx.fillRect(wx - 1.5, 74.5, 21, 16);
+    ctx.fillStyle = '#8fc6e8'; ctx.fillRect(wx, 76, 18, 13);
+    ctx.fillStyle = '#fff'; ctx.fillRect(wx + 8.5, 76, 1.2, 13); ctx.fillRect(wx, 82, 18, 1.2);
+    ctx.fillStyle = 'rgba(255,255,255,.4)'; ctx.fillRect(wx + 1, 77, 5, 4);
+  }
+  const door = hs.door ? DOOR_COL[hs.door] : DOOR_DEFAULT;
+  ctx.fillStyle = '#3b2c1e'; ctx.fillRect(76.5, 73, 19, 25);
+  ctx.fillStyle = door; ctx.fillRect(78, 74.5, 16, 23.5);
+  ctx.fillStyle = 'rgba(0,0,0,.15)'; ctx.fillRect(80, 77, 12, 8); ctx.fillRect(80, 87, 12, 8);
+  circ(91, 87, 1.4, '#ffe28a');
+  ctx.fillStyle = '#cfc7b8'; ctx.fillRect(73, 97, 26, 4);
+  // telhado
+  const c = ROOF_COL[hs.roof];
+  ctx.fillStyle = shade(c, -0.4); rr(35, 8, 102, 64, 3); ctx.fill();
+  ctx.fillStyle = shade(c, 0.14); ctx.fillRect(37.5, 10.5, 97, 30);
+  ctx.fillStyle = c; ctx.fillRect(37.5, 41, 97, 29);
+  ctx.strokeStyle = shade(c, -0.18); ctx.lineWidth = 1;
+  for (let y = 17; y < 70; y += 7) {
+    if (Math.abs(y - 41) < 3) continue;
+    line(38, y, 134, y);
+    for (let x = 44 + ((y / 7) % 2) * 6; x < 134; x += 12) line(x, y - 7 < 10 ? 11 : y - 7, x, y);
+  }
+  ctx.fillStyle = shade(c, -0.32); ctx.fillRect(37.5, 39, 97, 4);
+  hs.roofItems.forEach(({ k, p }) => {
+    ctx.save(); ctx.translate(p[0], p[1]);
+    if (k !== 'solar') ctx.scale(1.2, 1.2);
+    DRAW_ROOF[k](t); ctx.restore();
+  });
+}
+
+function drawResident(h, x, y, t, happy) {
+  const shirt = SHIRTS[h % SHIRTS.length], hair = HAIRS[(h * 3) % HAIRS.length];
+  ctx.save(); ctx.translate(x, y);
+  shadow(0, 11, 8, 3);
+  const w = happy ? Math.sin(t * 9) * 0.5 : Math.sin(t * 13) * 0.7;
+  ctx.strokeStyle = shirt; ctx.lineWidth = 3.5; ctx.lineCap = 'round';
+  line(-6, 0, -12, -8 + w * 5); line(6, 0, 12, -8 - w * 5);
+  ctx.fillStyle = shirt; rr(-7, -4, 14, 15, 4); ctx.fill();
+  circ(0, -10, 6.5, '#f0c49a');
+  ctx.fillStyle = hair; ctx.beginPath(); ctx.arc(0, -11, 6.8, Math.PI, 0); ctx.fill();
+  if (happy) { ctx.fillStyle = '#c98a4a'; ctx.fillRect(-6, 1, 12, 9); ctx.fillStyle = '#f3d9a6'; ctx.fillRect(-1, 1, 2, 9); }
+  // balão
+  ctx.fillStyle = '#fff'; rr(8, -34, 22, 18, 6); ctx.fill(); poly([12, -17, 16, -17, 9, -11], '#fff');
+  ctx.fillStyle = happy ? '#2a9d4b' : '#e0402a'; ctx.font = `bold 14px ${FONT}`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.fillText(happy ? '♥' : '?!', 19, -24.5);
+  ctx.lineCap = 'butt'; ctx.restore();
+}
+
+function drawVan() {
+  ctx.save(); ctx.translate(van.x + 3, van.y + 4); ctx.rotate(van.a);
+  ctx.fillStyle = 'rgba(0,0,0,.28)'; rr(-25, -14, 50, 28, 7); ctx.fill(); ctx.restore();
+  ctx.save(); ctx.translate(van.x, van.y); ctx.rotate(van.a);
+  ctx.fillStyle = '#222'; [[-16, -15], [11, -15], [-16, 12], [11, 12]].forEach(([x, y]) => ctx.fillRect(x, y, 8, 3));
+  ctx.fillStyle = '#ff7a1a'; rr(-25, -14, 50, 28, 6); ctx.fill();
+  ctx.strokeStyle = '#b8480a'; ctx.lineWidth = 1.5; ctx.stroke();
+  ctx.fillStyle = '#fff6ea'; rr(-22, -11, 31, 22, 4); ctx.fill();
+  ctx.fillStyle = '#c98a4a'; ctx.fillRect(-13, -6, 12, 12);
+  ctx.fillStyle = '#f3d9a6'; ctx.fillRect(-8, -6, 2, 12); ctx.fillRect(-13, -1, 12, 2);
+  ctx.fillStyle = '#2b4a6e'; rr(10, -11, 8, 22, 2); ctx.fill();
+  ctx.fillStyle = 'rgba(255,255,255,.35)'; ctx.fillRect(12, -9, 2, 7);
+  ctx.fillStyle = '#fff7a0'; ctx.fillRect(22, -11, 3, 5); ctx.fillRect(22, 6, 3, 5);
+  ctx.fillStyle = '#d62020'; ctx.fillRect(-25, -11, 2, 5); ctx.fillRect(-25, 6, 2, 5);
+  ctx.fillStyle = '#b8480a'; ctx.fillRect(9, -17, 4, 3); ctx.fillRect(9, 14, 4, 3);
+  ctx.restore();
+}
+
+function drawMap(t) {
+  // sebe
+  ctx.fillStyle = '#3c7a3a'; ctx.fillRect(0, 0, MAP, MAP);
+  ctx.fillStyle = '#4a8c45';
+  for (let i = 8; i < MAP; i += 18) { circ(i, 8, 9, '#4a8c45'); circ(i, MAP - 8, 9, '#4a8c45'); circ(8, i, 9, '#4a8c45'); circ(MAP - 8, i, 9, '#4a8c45'); }
+  // asfalto
+  ctx.fillStyle = '#5d6470'; ctx.fillRect(HEDGE, HEDGE, MAP - HEDGE * 2, MAP - HEDGE * 2);
+  // entrada
+  ctx.fillRect(512, 0, 76, HEDGE + 2);
+  ctx.fillStyle = '#b8b0a0'; ctx.fillRect(504, 0, 8, 20); ctx.fillRect(588, 0, 8, 20);
+  ctx.fillStyle = '#8a5a36'; rr(420, 1, 80, 17, 3); ctx.fill();
+  ctx.fillStyle = '#fff3d6'; ctx.font = `bold 11px ${FONT}`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.fillText('VILA ADRESS', 460, 10);
+  // faixas
+  ctx.strokeStyle = '#f2d45c'; ctx.lineWidth = 2.5; ctx.setLineDash([14, 12]);
+  for (let i = 0; i < 5; i++) {
+    const cc = HEDGE + ROAD / 2 + i * STEP;
+    for (let j = 0; j < 4; j++) {
+      const a = lotX(j) - WALK + 10, b = lotX(j) + LOT + WALK - 10;
+      line(a, cc, b, cc); line(cc, a, cc, b);
+    }
+  }
+  ctx.setLineDash([]);
+  // lotes
+  for (let s = 0; s < 16; s++) drawLot(layout[s], lotX(s % 4), lotY(Math.floor(s / 4)), t);
+  // morador
+  if ((state === 'ring' && stateT > 0.5) || state === 'dialog' || state === 'fadeOut') {
+    const h = dialog ? dialog.h : pending, s = slotOf[h];
+    drawResident(h, lotX(s % 4) + 86, lotY(Math.floor(s / 4)) + 150, t, dialog && dialog.success);
+  }
+  drawVan();
+  if (state === 'drive' && nearHouse >= 0) {
+    const bx = van.x, by = van.y - 42;
+    ctx.fillStyle = 'rgba(0,0,0,.25)'; rr(bx - 55, by - 13, 112, 28, 9); ctx.fill();
+    ctx.fillStyle = '#fffaf0'; rr(bx - 57, by - 16, 112, 28, 9); ctx.fill();
+    ctx.strokeStyle = '#e8661a'; ctx.lineWidth = 2; ctx.stroke();
+    ctx.fillStyle = '#3a2a1a'; ctx.font = `bold 16px ${FONT}`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillText('E — Entregar', bx - 1, by - 1.5);
+  }
+}
+
+// ================= HUD =================
+function wrap(text, maxW) {
+  const words = text.split(' '), lines = []; let cur = '';
+  for (const w of words) { const t = cur ? cur + ' ' + w : w; if (ctx.measureText(t).width > maxW && cur) { lines.push(cur); cur = w; } else cur = t; }
+  if (cur) lines.push(cur); return lines;
+}
+function fitText(text, maxW, maxLines, size, weight) {
+  let s = size, lines;
+  for (; s >= 14; s -= 2) { ctx.font = `${weight} ${s}px ${FONT}`; lines = wrap(text, maxW); if (lines.length <= maxLines) break; }
+  return { lines, size: s };
+}
+function drawHUD() {
+  ctx.fillStyle = '#fff3d6'; ctx.fillRect(0, 0, W, HUD);
+  ctx.fillStyle = '#e6cc98'; ctx.fillRect(0, HUD - 4, W, 4);
+  ctx.textBaseline = 'middle';
+  ctx.textAlign = 'left'; ctx.font = `900 28px ${FONT}`; ctx.fillStyle = '#e8661a'; ctx.fillText('ADRESS', 22, 26);
+  // contador
+  const ct = `Entregas: ${delivered}`;
+  ctx.font = `bold 17px ${FONT}`; const cw = ctx.measureText(ct).width + 44;
+  ctx.fillStyle = '#ffe2b8'; rr(W - 22 - cw, 11, cw, 30, 15); ctx.fill();
+  ctx.fillStyle = '#c98a4a'; ctx.fillRect(W - 12 - cw, 19, 14, 14); ctx.fillStyle = '#f3d9a6'; ctx.fillRect(W - 6 - cw, 19, 2, 14);
+  ctx.fillStyle = '#5a3c1e'; ctx.textAlign = 'right'; ctx.fillText(ct, W - 34, 26.5);
+  // linha de estado
+  ctx.textAlign = 'center'; ctx.font = `15px ${FONT}`; ctx.fillStyle = '#9a8660';
+  let sub = 'WASD / Setas: dirigir   ·   E: entregar';
+  if (state === 'dialog') sub = dialog.success ? '✔ Entrega concluída!   ·   E / Espaço: continuar' : 'E / Espaço: continuar';
+  if (state === 'dialog' && dialog.success) { ctx.fillStyle = '#2a9d4b'; ctx.font = `bold 16px ${FONT}`; }
+  ctx.fillText(sub, W / 2, 26);
+  // texto principal
+  let main, color = '#3a2a1a', weight = 'bold';
+  if (state === 'ring') { main = 'Ding-dong… 🔔'; color = '#8a7355'; }
+  else if (state === 'dialog') { main = `${dialog.name}: “${dialog.text}”`; color = dialog.success ? '#1f7a3a' : '#7a2e1a'; weight = '600'; }
+  else if (state === 'fadeOut') { main = 'Entrega concluída! Preparando a próxima…'; color = '#1f7a3a'; }
+  else if (step === 0) main = `Entrega para a casa com ${phrase(clues[0])}.`;
+  else main = `Palpite do morador: casa com ${phrase(clues[step])}.`;
+  const { lines, size } = fitText(main, W - 60, 2, 25, weight);
+  ctx.fillStyle = color; ctx.font = `${weight} ${size}px ${FONT}`;
+  const lh = size * 1.25, y0 = 82 - (lines.length - 1) * lh / 2;
+  lines.forEach((l, i) => ctx.fillText(l, W / 2, y0 + i * lh));
+}
+
+function render() {
+  const k = cv.width / W;
+  ctx.setTransform(k, 0, 0, k, 0, 0);
+  drawHUD();
+  ctx.save(); ctx.translate(0, HUD); ctx.beginPath(); ctx.rect(0, 0, MAP, MAP); ctx.clip();
+  drawMap(T); ctx.restore();
+  if (fade > 0) { ctx.fillStyle = `rgba(27,36,24,${fade})`; ctx.fillRect(0, 0, W, H); }
+}
+
+newRound();
+requestAnimationFrame(frame);
+</script>
+</body>
+</html>

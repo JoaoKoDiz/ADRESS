@@ -1,0 +1,20 @@
+{
+  "name": "adress",
+  "version": "2.0.0",
+  "description": "ADRESS — jogo 3D de entregas num bairro com casas parecidas",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "node build.mjs",
+    "build:dev": "node build.mjs --dev",
+    "watch": "node build.mjs --dev --watch",
+    "build:netlify": "node build.mjs --out dist/index.html --with-assets"
+  },
+  "devDependencies": {
+    "esbuild": "^0.24.0",
+    "three": "^0.170.0"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
