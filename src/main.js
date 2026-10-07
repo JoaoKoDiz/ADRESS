@@ -49,9 +49,9 @@ const music = createMusic(stage);          // música de fundo (PAUSAR / CONTINU
 const input = createInput(() => { audio.unlock(); music.start(); });
 const hud = createHUD(hudEl, stage);
 const game = new Game();
-// Bairros: 'grid4' (4×4, 16 casas — Bairro 1, Bairro 3 com barreiras, Livre e demais fases) e
-// 'plaza6' (6×6 com praça central, 32 casas — só o Bairro 2). Cada um tem sua própria cena, construída uma vez
-// (o 6×6 só na primeira vez que for jogado).
+// Bairros (grade em layout.js): 'grid4' (4×4 — Bairros 1 e 3, e o modo Livre), 'plaza6' (6×6 com praça — Bairro 2),
+// 'grid5' (5×5 com posto — Bairro 4), 'grid6s' (6×6 com postos e comércio — Bairro 5), 'city6' (6×6 de prédios — Bairro 6).
+// Cada um tem sua própria cena, construída só na primeira vez que for jogado.
 const POOLS = { grid4: [...Array(16).keys()], plaza6: [...Array(32).keys()], grid5: [...Array(25).keys(), ...SHOPS],   // grid5: Bairro 4 (25 casas + prédios comerciais)
   grid6s: [...Array(32).keys(), ...SHOPS],        // grid6s (Bairro 5): 32 casas + os prédios comerciais
   city6: [...Array(32).keys()].concat([...Array(28).keys()].map(k => 38 + k)) };   // city6 (Bairro 6): 32 casas + 28 prédios residenciais
@@ -60,9 +60,10 @@ const buildAnyLot = (h, opts) => h.kind === 'shop' ? buildShopLot(h) : h.kind ==
 let world = createWorld({ renderer, buildLot: buildAnyLot, buildResident, yardBuilders: YARD_BUILDERS, pool: POOLS.grid4 });
 const worlds = { grid4: world };
 let neighborhood = 'grid4';
-// Bairro 5 (6×6): a cada partida, 1 posto de gasolina em 2 lotes vizinhos e 2–3 prédios comerciais;
-// o resto dos 34 lotes recebe casas sorteadas entre as 32.
-// Bairro 6 (cidade): 28 prédios residenciais + 8 casas sorteadas entre as 32.
+// Composição sorteada a cada partida:
+//   Bairro 4 (5×5): 1 posto (2 lotes vizinhos), 2 prédios comerciais e as 25 casas menos algumas (nunca as com galo/fonte);
+//   Bairro 5 (6×6): 1 ou 2 postos (em linhas diferentes), 5 a 8 prédios comerciais e casas sorteadas entre as 32;
+//   Bairro 6 (cidade): 28 prédios residenciais + 8 casas sorteadas entre as 32.
 function composeRound() {
   const city = neighborhood === 'city6';
   const shuffled = a => { a = a.slice(); for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; };
