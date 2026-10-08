@@ -8,7 +8,7 @@ const CSS = `
   font-family: "Trebuchet MS","Segoe UI",system-ui,sans-serif; color: #fff3d6; user-select: none; }
 .lsel.on { display: flex; }
 .lsel h2 { margin: 0; font-weight: 900; font-size: clamp(22px, 3vw, 42px); letter-spacing: .08em; text-shadow: 0 4px 0 rgba(0,0,0,.4); }
-.lsel-grid { display: grid; grid-template-columns: repeat(3, min(27vw, 46vh)); gap: 2vh 2vw; }
+.lsel-grid { display: grid; grid-template-columns: repeat(4, min(21.5vw, 36vh)); gap: 2vh 1.6vw; }
 .lsel-card { position: relative; border: 4px solid rgba(255,255,255,.55); border-radius: 18px; overflow: hidden; background: #6fae4a; cursor: pointer;
   box-shadow: 0 6px 18px rgba(0,0,0,.35); transition: transform .12s, border-color .12s, box-shadow .12s; }
 .lsel-card img { display: block; width: 100%; aspect-ratio: 4 / 3; object-fit: cover; }
@@ -19,7 +19,7 @@ const CSS = `
 .lsel-hint { font-weight: 700; font-size: clamp(13px, 1.2vw, 18px); opacity: .9; }
 .lsel-hint b { color: #fff; background: #e8661a; border-radius: 6px; padding: 0 .4em; margin: 0 .15em; }
 `;
-const COLS = 3, COUNT = 6;
+const COLS = 4, COUNT = 7;
 
 export function createLevelSelect(onPick) {
   const style = document.createElement('style');
@@ -54,8 +54,8 @@ export function createLevelSelect(onPick) {
     /** dx/dy: um passo de seta; o seletor para nas bordas (sem dar a volta). */
     move(dx, dy) {
       const c = sel % COLS + dx, r = Math.floor(sel / COLS) + dy;
-      if (c < 0 || c >= COLS || r < 0 || r >= COUNT / COLS) return;
-      sel = r * COLS + c; paint();
+      if (c < 0 || c >= COLS || r < 0 || r >= Math.ceil(COUNT / COLS)) return;
+      sel = Math.min(COUNT - 1, r * COLS + c); paint();   // a última fila é mais curta: desce para o último card
     },
   };
 }

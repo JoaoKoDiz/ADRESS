@@ -185,6 +185,7 @@ Casas especiais usadas em missões:
 | 4 | `grid5` 5×5 | 1 posto, 2 prédios comerciais, casas (sempre com as de galo/fonte) + 4 a 6 bloqueios (cavalete/caminhão/buraco) |
 | 5 | `grid6s` 6×6 | 1 ou 2 postos (linhas diferentes), 5 a 8 prédios comerciais, resto casas |
 | 6 | `city6` 6×6 | 28 prédios residenciais cinza e altos + 8 casas; grama seca amarelada fora do bairro |
+| 7 | `city6` 6×6 (mesma cena do 6) | igual ao Bairro 6, mas com 4 a 6 caminhões na diagonal (sem buracos nem cavaletes) e **2 a 3 engarrafamentos** (`barriers.js`, tipo `jam`): fila de carros que tampa um trecho inteiro de rua (só trechos horizontais com lote ao norte). O lote ao norte do trecho fica sem acesso, então `barriers.jammedSlots` o exclui das entregas (`applyJams` em `main.js`, via `game.newDelivery`). Missões ainda são modelos vazios |
 
 - **Bloqueios de rua** (`barriers.js`): o sorteio só é aceito se, pelo grafo de ruas (cruzamentos + meio de cada trecho, onde ficam os portões), **todas** as casas continuam alcançáveis. Nunca ficam na rua por dentro de um posto.
 - **Composição a cada partida:** `composeRound()` sorteia a composição dos Bairros 4–6; os demais usam `game.newRound()`. O botão Voltar sempre começa uma partida nova.
@@ -207,7 +208,7 @@ Casas especiais usadas em missões:
 | 2 Olhos Abertos | `blue` Telhado Azul ×3 · `redWrong` Telhado Vermelho Errado · `fountain` Fonte Pequena (2 falsas) · `trampoline` Insistir no Pulo (4× na mesma casa com pula-pula) · `hint` Pequena Dica (3 partidas) |
 | 3 Entregador Teimoso | `tenSame` Dez Vezes é Demais · `tourist` Turista do Bairro (mesma rua 10×) · `nextDoor` Não Era Aqui? (lote vizinho do indicado) · `opposite` Do Outro Lado (3× num canto e 3× no canto oposto) · `dizzy` Manobras Enjoativas (5 voltas em torno da mesma casa) |
 | 4 Péssimo Senso de Direção | `colors` Confundi as Cores (pista falsa para algo azul → entregar em algo vermelho; casa = telhado, prédio = toldo) · `roosters` Viciado em Galos (3 falsas em cada uma de 2 casas com galo, mesma partida; meta 2) · `fountainSwap` Fonte Errada · `expensive` É Muito Caro! (abastecer 2× na mesma partida) · `knowHouse` Eu Conheço Essa Casa (3 erradas no mesmo lote em 2 partidas seguidas) |
-| 5 e 6 | ainda são **modelos vazios** (`PLACEHOLDER()`, sem `id`): o dono vai mandar as missões |
+| 5, 6 e 7 | ainda são **modelos vazios** (`PLACEHOLDER()`, sem `id`): o dono vai mandar as missões |
 
 **Como adicionar missões de um nível:**
 1. Defina em `MISSIONS[n]` (`id`, `name`, `desc`, `goal`).

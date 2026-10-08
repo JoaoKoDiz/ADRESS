@@ -107,8 +107,12 @@ function refreshBarriers() {
   const lv = gameMode === 'career' ? careerLevel : freeLevel;   // o Livre também usa o bairro escolhido
   if (lv === 2) barriers.randomize(world.scene, { min: 3, max: 5, types: ['barrier'] });
   else if (lv === 3) barriers.randomize(world.scene, { min: 4, max: 6, types: ['barrier', 'truck', 'hole'] });
+  else if (lv === 6) barriers.randomize(world.scene, { min: 4, max: 6, types: ['truck'], jams: { min: 2, max: 3 } });   // Bairro 7: caminhões + engarrafamentos
   else barriers.clear();
 }
+/** Casa/prédio sem acesso por causa de um engarrafamento (Bairro 7): nunca entra nas entregas. */
+const jamBlocked = h => barriers.jammedSlots.includes(game.slotOf[h]);
+function applyJams() { if (barriers.jammedSlots.length) game.newDelivery(game.pool.filter(h => !jamBlocked(h))); }
 const van = createVan(world.scene);
 const rig = createCameraRig();
 world.setLayout(game.layout);
@@ -263,7 +267,7 @@ function goBack() {
 function startFree(mode = 'free') {
   // Bairro 2: 6×6 com praça; Bairro 4: 5×5 com bloqueios; o resto: 4×4
   const lv = mode === 'career' ? careerLevel : freeLevel;
-  useNeighborhood(lv === 1 ? 'plaza6' : lv === 3 ? 'grid5' : lv === 4 ? 'grid6s' : lv === 5 ? 'city6' : 'grid4');
+  useNeighborhood(lv === 1 ? 'plaza6' : lv === 3 ? 'grid5' : lv === 4 ? 'grid6s' : lv >= 5 ? 'city6' : 'grid4');   // Bairros 6 e 7: a cidade
   gameMode = mode;
   if (mode === 'career') career.startMatch(careerLevel); else career.stop();
   ENTRANCE_WALL.x0 = ENTRANCE.x0; ENTRANCE_WALL.x1 = ENTRANCE.x1;   // a entrada depende do bairro
@@ -271,6 +275,7 @@ function startFree(mode = 'free') {
   if (mode === 'career' && w < 0) SOLIDS.push(ENTRANCE_WALL);
   if (mode !== 'career' && w >= 0) SOLIDS.splice(w, 1);
   refreshBarriers();
+  applyJams();
   if (titleDriver) titleDriver.stop();
   title.hide();
   if (rig.mode !== 'chase') rig.toggle();
@@ -368,7 +373,7 @@ function wreck(dt) {
 // Livre: entrega certa → nova encomenda e pista na hora, no mesmo mapa (casas destruídas ficam de fora)
 function nextDelivery() {
   dialog = null; world.hideResident();
-  const available = game.pool.filter(h => !boom.isDestroyed(h));
+  const available = game.pool.filter(h => !boom.isDestroyed(h) && !jamBlocked(h));
   if (available.length < ROUTE_LEN) { setState('fadeOut'); return; }   // poucas casas de pé: recomeça o bairro
   game.newDelivery(available);
   hint.clear(); hintUsed = false; hintStep = -1;
@@ -380,6 +385,7 @@ function startNewRound() {
   walker.show(false);
   if (neighborhood === 'grid5' || neighborhood === 'grid6s' || neighborhood === 'city6') composeRound(); else game.newRound();
   refreshBarriers();                             // Bairro 3: barreiras em lugares novos
+  applyJams();                                   // Bairro 7: as entregas só entre os lotes que a van consegue alcançar
   if (gameMode === 'career') career.startMatch(careerLevel);   // nova partida da Carreira
   hint.clear(); hintUsed = false; hintStep = -1;
   heli.reset();
