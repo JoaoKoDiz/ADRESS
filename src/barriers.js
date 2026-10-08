@@ -15,12 +15,15 @@ import { mat, box, cyl, cone, at } from './models/kit.js';
 const START = () => [ENTRANCE.road, 0];   // cruzamento da entrada (rua central, borda norte)
 // Por tipo: distância do centro do cruzamento até o bloqueio (trechos horizontais, perto de uma ponta)
 // e meia espessura do obstáculo ao longo da rua. Tudo fica fora do cruzamento e longe do portão (meio do trecho).
+// cross = meia largura do obstáculo ao longo da largura da rua: não vai de ponta a ponta, mas deixa vãos
+// (~1,1 de cada lado) mais estreitos que a van (2,6), então ainda não dá para passar.
 const TYPES = {
-  barrier: { offset: ROAD / 2 + 1.0, half: 0.35 },
-  truck: { offset: ROAD / 2 + 3.7, half: 3.4 },      // caminhão na diagonal: ocupa ~7 ao longo da rua
-  hole: { offset: ROAD / 2 + 2.3, half: 2.1 },
+  barrier: { offset: ROAD / 2 + 1.0, half: 0.35, cross: 2.7 },
+  truck: { offset: ROAD / 2 + 3.0, half: 2.9, cross: 2.9 },
+  hole: { offset: ROAD / 2 + 1.7, half: 1.5, cross: 2.7 },
 };
 
+const BARRIER_W = 5.0;            // largura do cavalete (a rua tem 7,6)
 function stripeTexture() {
   const c = document.createElement('canvas');
   c.width = 256; c.height = 64;
@@ -31,14 +34,14 @@ function stripeTexture() {
   const t = new THREE.CanvasTexture(c);
   t.colorSpace = THREE.SRGBColorSpace;
   t.wrapS = THREE.RepeatWrapping;
-  t.repeat.set((ROAD - 0.6) / 2.2, 1);
+  t.repeat.set(BARRIER_W / 2.2, 1);
   return t;
 }
 
 /** Cavalete de obra atravessando a rua (tábuas listradas ao longo de X, pernas em A, luzinhas). */
 function buildBarrier(stripes) {
   const g = new THREE.Group();
-  const W = ROAD - 0.6;
+  const W = BARRIER_W;
   const boardMat = new THREE.MeshStandardMaterial({ map: stripes, roughness: 0.7 });
   for (const y of [0.55, 1.05]) {
     const b = new THREE.Mesh(new THREE.BoxGeometry(W, 0.34, 0.12), boardMat);
@@ -90,6 +93,7 @@ function buildTruck() {
   const lamp = mat('#ff9a1a', { emissive: '#ff7a00', emissiveIntensity: 1 });   // pisca-alerta
   for (const zz of [1.0, -1.0]) { const l = new THREE.Mesh(new THREE.SphereGeometry(0.16, 8, 6), lamp); l.position.set(3.5, 1.2, zz); g.add(l); }
   g.traverse(o => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
+  g.scale.setScalar(0.8);                      // menor: na diagonal não toma a rua de ponta a ponta
   g.userData.cargo = cargo;
   return g;
 }
@@ -112,6 +116,7 @@ function buildHole() {
     g.add(at(cone(0.3, 0.85, '#ff7a1a', 10), x, 0.43, zz));
     g.add(at(cyl(0.19, 0.23, 0.13, '#ffffff', 10), x, 0.48, zz));
   }
+  g.scale.setScalar(0.68);                     // mais estreito que a rua
   g.traverse(o => { if (o.isMesh) o.receiveShadow = true; });
   return g;
 }
@@ -198,9 +203,8 @@ export function createBarriers() {
         ? (Math.random() < 0.5 ? Math.PI / 4 : -Math.PI / 4) + (Math.random() < 0.5 ? Math.PI : 0)   // caminhão parado na diagonal
         : alongX ? Math.PI / 2 : 0;
       if (type === 'truck') b.userData.cargo.material = mat(TRUCK_COLORS[Math.floor(Math.random() * TRUCK_COLORS.length)]);
-      const half = ROAD / 2 + 0.1;
-      const s = alongX ? { x0: x - T.half, x1: x + T.half, z0: z - half, z1: z + half }
-                       : { x0: x - half, x1: x + half, z0: z - T.half, z1: z + T.half };
+      const s = alongX ? { x0: x - T.half, x1: x + T.half, z0: z - T.cross, z1: z + T.cross }
+                       : { x0: x - T.cross, x1: x + T.cross, z0: z - T.half, z1: z + T.half };
       SOLIDS.push(s); solids.push(s);
     });
     current = chosen;
