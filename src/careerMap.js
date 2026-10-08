@@ -195,6 +195,30 @@ function boardTexture(gray = false) {
   return t;
 }
 
+const PALETTES = [['red', 'blue', 'yellow', 'green'], ['purple', 'red', 'gray', 'yellow', 'blue', 'green', 'red', 'yellow'], ['blue', 'green', 'red', 'purple'],
+  ['yellow', 'gray', 'blue', 'red'], ['green', 'purple', 'yellow', 'blue'], ['red']];
+
+/** Miniaturas (data URL) dos 6 bairros, desenhadas uma vez num renderizador próprio. Usadas na seleção do modo Livre. */
+export function renderMiniThumbnails(w = 480, h = 360) {
+  const r = new THREE.WebGLRenderer({ antialias: true, alpha: true, preserveDrawingBuffer: true });
+  r.setSize(w, h, false);
+  const cam = new THREE.PerspectiveCamera(30, w / h, 1, 200);
+  const urls = MINI_KINDS.map((kind, i) => {
+    const scene = new THREE.Scene();
+    scene.add(new THREE.HemisphereLight('#fff6e0', '#7aa35a', 1.5));
+    const sun = new THREE.DirectionalLight('#ffffff', 2.0);
+    sun.position.set(-30, 60, 40);
+    scene.add(sun);
+    scene.add(miniNeighborhood(kind, PALETTES[i].map(c => ROOF_COL[c])));
+    cam.position.set(-6, 24, 27);
+    cam.lookAt(0, 1.5, 0);
+    r.render(scene, cam);
+    return r.domElement.toDataURL('image/png');
+  });
+  r.dispose(); r.forceContextLoss();
+  return urls;
+}
+
 export function createCareerMap(stageEl, audio) {
   const style = document.createElement('style');
   style.textContent = CSS;
@@ -234,8 +258,6 @@ export function createCareerMap(stageEl, audio) {
   scene.add(bakeStatic(dashes));
 
   // fases: bairros em miniatura alternando os lados da estrada, com placa numerada
-  const PALETTES = [['red', 'blue', 'yellow', 'green'], ['purple', 'red', 'gray', 'yellow', 'blue', 'green', 'red', 'yellow'], ['blue', 'green', 'red', 'purple'],
-    ['yellow', 'gray', 'blue', 'red'], ['green', 'purple', 'yellow', 'blue'], ['red']];
   const stops = [], boards = [];
   let clock = 0;
   [0.08, 0.25, 0.42, 0.58, 0.75, 0.92].forEach((u, i) => {

@@ -22,6 +22,11 @@ export function createInput(onFirstKey) {
       };
     },
     action: () => pressed.has('KeyE') || pressed.has('Space') || pressed.has('Enter'),
+    /** Navegação em menus: setas/WASD, um passo por toque. */
+    nav() {
+      const p = (...c) => c.some(k => pressed.has(k));
+      return { x: (p('KeyD', 'ArrowRight') ? 1 : 0) - (p('KeyA', 'ArrowLeft') ? 1 : 0), y: (p('KeyS', 'ArrowDown') ? 1 : 0) - (p('KeyW', 'ArrowUp') ? 1 : 0) };
+    },
     toggleCamera: () => pressed.has('KeyC'),
     hint: () => pressed.has('KeyT'),
     heli: () => pressed.has('KeyH'),

@@ -27,6 +27,7 @@ import { createTitle } from './title.js';
 import { createBarriers } from './barriers.js';
 import { createTitleDriver } from './titleDriver.js';
 import { createCareerMap } from './careerMap.js';
+import { createLevelSelect } from './levelSelect.js';
 import { createBackButton } from './backButton.js';
 import { createMissions, createMissionsButton, MISSIONS } from './missions.js';
 import { createCareer } from './career.js';
@@ -102,8 +103,9 @@ function composeRound() {
 // Bairro 3: barreiras de obra em 3–5 trechos de rua, sorteadas a cada partida (nunca isolam um portão)
 const barriers = createBarriers();
 function refreshBarriers() {
-  if (gameMode === 'career' && careerLevel === 2) barriers.randomize(world.scene, { min: 3, max: 5, types: ['barrier'] });
-  else if (gameMode === 'career' && careerLevel === 3) barriers.randomize(world.scene, { min: 4, max: 6, types: ['barrier', 'truck', 'hole'] });
+  const lv = gameMode === 'career' ? careerLevel : freeLevel;   // o Livre também usa o bairro escolhido
+  if (lv === 2) barriers.randomize(world.scene, { min: 3, max: 5, types: ['barrier'] });
+  else if (lv === 3) barriers.randomize(world.scene, { min: 4, max: 6, types: ['barrier', 'truck', 'hole'] });
   else barriers.clear();
 }
 const van = createVan(world.scene);
@@ -159,10 +161,20 @@ rig.toggle();
 rig.snap({ x: van.x, z: van.z, heading: van.heading, speed: 0 });
 let titleDriver = null;   // motorista curtindo a música (painel "Jogar")
 const title = createTitle({
-  onFree: () => titleDriver.fly(() => title.fadeOut(() => startFree('free'))),   // vira helicóptero e decola
+  onFree: () => { if (state === 'title' && !title.starting) openLevelSelect(); },   // Livre: primeiro escolhe o bairro
   onCareer: () => titleDriver.drive(() => title.fadeOut(enterMap)),     // dá a partida e vai para o mapa da Carreira
   onPlay: el => { titleDriver = titleDriver || createTitleDriver(el, audio); titleDriver.start(); },
 });
+// Livre: seleção do bairro (todas as miniaturas na tela; setas escolhem, E joga). Depois o helicóptero decola.
+const levelSelect = createLevelSelect(l => confirmLevel(l));
+function openLevelSelect() { levelSelect.open(freeLevel); setState('levelSelect'); }
+function confirmLevel(l) {
+  if (state !== 'levelSelect') return;
+  freeLevel = l;
+  levelSelect.close();
+  setState('levelFly');
+  titleDriver.fly(() => title.fadeOut(() => startFree('free')));   // vira helicóptero e decola
+}
 // Carreira: mapa de seleção de fases (A/D na estrada, E joga — por enquanto, sempre a mesma partida)
 let careerMap = null;
 const inMap = () => state === 'mapIn' || state === 'map' || state === 'mapOut';
@@ -194,6 +206,7 @@ const missionsBtn = createMissionsButton(stage, () => {
   if (gameMode === 'career' && IN_GAME.includes(state) && !missions.isOpen) missions.open(careerLevel);
 });
 let careerLevel = 0;                     // fase da Carreira sendo jogada
+let freeLevel = 0;                       // bairro escolhido no modo Livre
 const IN_GAME = ['drive', 'ring', 'dialog', 'missile', 'fuel'];
 function showPlayPanel() {
   if (rig.mode !== 'overview') rig.toggle();
@@ -207,6 +220,9 @@ function goBack() {
   if (state === 'title' && title.visible && title.screen === 'play' && !title.starting) {
     if (titleDriver) titleDriver.stop();
     title.show('home');
+  } else if (state === 'levelSelect') {
+    levelSelect.close();
+    setState('title');
   } else if (state === 'map') {
     missions.close();
     careerMap.leave();
@@ -221,7 +237,8 @@ function goBack() {
 
 function startFree(mode = 'free') {
   // Bairro 2: 6×6 com praça; Bairro 4: 5×5 com bloqueios; o resto: 4×4
-  useNeighborhood(mode !== 'career' ? 'grid4' : careerLevel === 1 ? 'plaza6' : careerLevel === 3 ? 'grid5' : careerLevel === 4 ? 'grid6s' : careerLevel === 5 ? 'city6' : 'grid4');
+  const lv = mode === 'career' ? careerLevel : freeLevel;
+  useNeighborhood(lv === 1 ? 'plaza6' : lv === 3 ? 'grid5' : lv === 4 ? 'grid6s' : lv === 5 ? 'city6' : 'grid4');
   gameMode = mode;
   if (mode === 'career') career.startMatch(careerLevel); else career.stop();
   ENTRANCE_WALL.x0 = ENTRANCE.x0; ENTRANCE_WALL.x1 = ENTRANCE.x1;   // a entrada depende do bairro
@@ -356,7 +373,7 @@ function focusOf(h) {
 // ---------- Atualização ----------
 function update(dt, t) {
   stateT += dt;
-  if (state !== 'title' && input.toggleCamera()) rig.toggle();
+  if (state !== 'title' && state !== 'levelSelect' && state !== 'levelFly' && input.toggleCamera()) rig.toggle();
 
   switch (state) {
     case 'drive': {
@@ -442,6 +459,12 @@ function update(dt, t) {
       fade = Math.min(1, stateT / FADE_TIME);
       if (fade >= 1) { startNewRound(); setState('fadeIn'); }
       break;
+    case 'levelSelect': {
+      const n = input.nav();
+      if (n.x || n.y) levelSelect.move(n.x, n.y);
+      if (input.action()) confirmLevel(levelSelect.selected);
+      break;
+    }
     case 'mapIn':
       fade = Math.max(0, 1 - stateT / FADE_TIME);
       careerMap.update(dt, 0, false);
@@ -497,7 +520,7 @@ function update(dt, t) {
 // ---------- HUD ----------
 const promptPos = new THREE.Vector3();
 function updateHUD() {
-  back.set((state === 'title' && title.visible && title.screen === 'play' && !title.starting) || (state === 'map' && !missions.isOpen) || (IN_GAME.includes(state) && !missions.isOpen));
+  back.set(state === 'levelSelect' || (state === 'title' && title.visible && title.screen === 'play' && !title.starting) || (state === 'map' && !missions.isOpen) || (IN_GAME.includes(state) && !missions.isOpen));
   missionsBtn.set(gameMode === 'career' && IN_GAME.includes(state) && !missions.isOpen,
     `MISSÕES ${career.completedCount(careerLevel)}/5`);
   hud.setCounter(game.delivered);
@@ -648,6 +671,8 @@ window.ADRESS = {
   get careerMap() { return careerMap; },
   get careerLevel() { return careerLevel; },
   setCareerLevel(l) { careerLevel = l; },
+  setFreeLevel(l) { freeLevel = l; },
+  get levelSelect() { return levelSelect; },
   startGame: m => startFree(m),
   get shadowTier() { return shadowTier; },
   get pacing() { return { every, refresh }; },

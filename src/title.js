@@ -70,7 +70,7 @@ export function createTitle({ onFree, onCareer, onPlay }) {
   });
   let starting = false;                               // um clique só (a transição já começou)
   const go = fn => () => { if (starting) return; starting = true; fn(); };
-  el.querySelector('.title-card.free').addEventListener('click', go(onFree));
+  el.querySelector('.title-card.free').addEventListener('click', () => onFree());   // abre a escolha do bairro (não inicia sozinho)
   el.querySelector('.title-card.career').addEventListener('click', go(onCareer));
   el.querySelector('[data-act="quit"]').addEventListener('click', () => {
     window.close();                                   // só funciona se a aba foi aberta por script

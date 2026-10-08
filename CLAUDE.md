@@ -38,7 +38,8 @@ ADRESS é um jogo 3D de entregas, aconchegante e meio cômico.
 - **Transições:** Carreira = a van sai dirigindo + fade. Livre = helicóptero decola + fade.
 
 **Modo Livre:**
-- Entregas sem fim no mesmo mapa (Bairro 1, 4×4).
+- Ao clicar em **Livre**, abre a seleção de bairro (`levelSelect.js`): as 6 miniaturas na tela, setas mudam a seleção, **E**/Enter ou clique joga (depois o helicóptero decola).
+- Entregas sem fim no bairro escolhido (`freeLevel`; mesma grade/composição/bloqueios da Carreira, sem parede de entrada).
 - Tem helicóptero (H), míssil (F), van imparável e explosões.
 - Destruir todas as casas leva a van automaticamente para fora do bairro e aparece um **monstro gigante** (barra de chefe).
 - Durante a contagem final, **T** transforma a van em robô por ~10 s. O monstro mata e a partida recomeça.
@@ -122,6 +123,7 @@ rm -f ADRESS-netlify.zip ADRESS-projeto-completo.zip && /c/Windows/System32/tar.
 | `barriers.js` | Bloqueios de rua sorteados (cavalete/caminhão/buraco) com garantia de alcance. |
 | `hint.js`, `boom.js`, `heli.js`, `monster.js` | Seta da dica, explosões/míssil, helicóptero, monstro/robô. |
 | `hud.js`, `title.js`, `titleDriver.js`, `menu.js`, `music.js`, `audio.js` | Interface, tela inicial, motorista, opções, música, sons (WebAudio). |
+| `levelSelect.js` | Seleção de bairro do modo Livre (miniaturas via `renderMiniThumbnails` em `careerMap.js`). |
 | `backButton.js`, `hintButton.js`, `lockButton.js`, `input.js` | Botões Voltar / DICA / cadeado; teclado. |
 
 `adress-2d.html` é a primeira versão, em 2D (só histórico).
