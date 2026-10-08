@@ -19,7 +19,7 @@ const CSS = `
 .lsel-hint { font-weight: 700; font-size: clamp(13px, 1.2vw, 18px); opacity: .9; }
 .lsel-hint b { color: #fff; background: #e8661a; border-radius: 6px; padding: 0 .4em; margin: 0 .15em; }
 `;
-const COLS = 4, COUNT = 7;
+const COLS = 4, COUNT = 8;
 
 export function createLevelSelect(onPick) {
   const style = document.createElement('style');

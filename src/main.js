@@ -54,13 +54,14 @@ const hud = createHUD(hudEl, stage);
 const game = new Game();
 // Bairros (grade em layout.js): 'grid4' (4×4 — Bairros 1 e 3, e o modo Livre), 'plaza6' (6×6 com praça — Bairro 2),
 // 'grid5' (5×5 com posto — Bairro 4), 'grid6s' (6×6 com postos e comércio — Bairro 5), 'city6' (6×6 de prédios — Bairro 6),
-// 'city7' (a mesma cidade, com 1–2 postos e 4–5 prédios comerciais — Bairro 7).
-const COMPOSED = ['grid5', 'grid6s', 'city6', 'city7'];   // bairros com composição sorteada a cada partida
+// 'city7' (a mesma cidade, com 1–2 postos e 4–5 prédios comerciais — Bairro 7), 'city8' (igual ao Bairro 7, porém 8×8 — Bairro 8).
+const COMPOSED = ['grid5', 'grid6s', 'city6', 'city7', 'city8'];   // bairros com composição sorteada a cada partida
 // Cada um tem sua própria cena, construída só na primeira vez que for jogado.
 const POOLS = { grid4: [...Array(16).keys()], plaza6: [...Array(32).keys()], grid5: [...Array(25).keys(), ...SHOPS],   // grid5: Bairro 4 (25 casas + prédios comerciais)
   grid6s: [...Array(32).keys(), ...SHOPS],        // grid6s (Bairro 5): 32 casas + os prédios comerciais
   city6: [...Array(32).keys()].concat([...Array(28).keys()].map(k => 38 + k)),   // city6 (Bairro 6): 32 casas + 28 prédios residenciais
-  city7: [...Array(32).keys()].concat([...Array(28).keys()].map(k => 38 + k), SHOPS) };   // city7 (Bairro 7): a cidade com postos e prédios comerciais
+  city7: [...Array(32).keys()].concat([...Array(28).keys()].map(k => 38 + k), SHOPS),   // city7 (Bairro 7): a cidade com postos e prédios comerciais
+  city8: [...Array(32).keys()].concat([...Array(28).keys()].map(k => 38 + k), SHOPS) };   // city8 (Bairro 8): o mesmo, em 8×8
 // lote de casa ou de prédio comercial
 const buildAnyLot = (h, opts) => h.kind === 'shop' ? buildShopLot(h) : h.kind === 'apt' ? buildAptLot(h) : buildLot(h, opts);
 let world = createWorld({ renderer, buildLot: buildAnyLot, buildResident, yardBuilders: YARD_BUILDERS, pool: POOLS.grid4 });
@@ -71,10 +72,10 @@ let neighborhood = 'grid4';
 //   Bairro 5 (6×6): 1 ou 2 postos (em linhas diferentes), 5 a 8 prédios comerciais e casas sorteadas entre as 32;
 //   Bairro 6 (cidade): 28 prédios residenciais + 8 casas sorteadas entre as 32.
 function composeRound() {
-  const city = neighborhood === 'city6', city7 = neighborhood === 'city7';
+  const city = neighborhood === 'city6', city7 = neighborhood === 'city7', city8 = neighborhood === 'city8';
   const shuffled = a => { a = a.slice(); for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; };
   // postos (2 lotes vizinhos da mesma linha): Bairro 4 tem 1; Bairro 5, 1 ou 2 (em linhas diferentes); a cidade, nenhum
-  const nGas = city ? 0 : neighborhood === 'grid6s' || city7 ? 1 + Math.floor(Math.random() * 2) : 1;
+  const nGas = city ? 0 : neighborhood === 'grid6s' || city7 || city8 ? 1 + Math.floor(Math.random() * 2) : 1;
   const gasList = shuffled([...Array(GRID).keys()]).slice(0, nGas).map(r => {
     const c = Math.floor(Math.random() * (GRID - 1));
     return [r * GRID + c, r * GRID + c + 1];
@@ -87,7 +88,11 @@ function composeRound() {
   }
   const allHouses = [...Array(32).keys()];
   let pool;
-  if (city7) {                                  // Bairro 7: 4–5 prédios comerciais, 4 casas e o resto de prédios residenciais
+  if (city8) {                                  // Bairro 8 (8×8): como o 7, mas só há 28 prédios residenciais: entram todos e as casas completam os lotes
+    const nShops = 4 + Math.floor(Math.random() * 2);
+    const apts = [...Array(28).keys()].map(k => 38 + k);
+    pool = apts.concat(shuffled(allHouses).slice(0, HOUSE_SLOTS.length - nShops - apts.length), shuffled(SHOPS).slice(0, nShops));
+  } else if (city7) {                           // Bairro 7: 4–5 prédios comerciais, 4 casas e o resto de prédios residenciais
     const nShops = 4 + Math.floor(Math.random() * 2), nHouses = 4;
     const apts = [...Array(28).keys()].map(k => 38 + k);
     pool = shuffled(apts).slice(0, HOUSE_SLOTS.length - nShops - nHouses).concat(shuffled(allHouses).slice(0, nHouses), shuffled(SHOPS).slice(0, nShops));
@@ -115,7 +120,7 @@ function refreshBarriers() {
   const lv = gameMode === 'career' ? careerLevel : freeLevel;   // o Livre também usa o bairro escolhido
   if (lv === 2) barriers.randomize(world.scene, { min: 3, max: 5, types: ['barrier'] });
   else if (lv === 3) barriers.randomize(world.scene, { min: 4, max: 6, types: ['barrier', 'truck', 'hole'] });
-  else if (lv === 6) barriers.randomize(world.scene, { min: 4, max: 6, types: ['truck'], jams: { min: 3, max: 4 } });   // Bairro 7: caminhões + engarrafamentos
+  else if (lv === 6 || lv === 7) barriers.randomize(world.scene, { min: 4, max: 6, types: ['truck'], jams: { min: 3, max: 4 } });   // Bairro 7: caminhões + engarrafamentos
   else barriers.clear();
 }
 /** Casa/prédio sem acesso por causa de um engarrafamento (Bairro 7): nunca entra nas entregas. */
@@ -167,7 +172,7 @@ function useNeighborhood(kind) {
   configureGrid(kind);
   let w = worlds[kind];
   if (!w) {                                     // primeira vez: constrói (escondido pelo fade)
-    w = worlds[kind] = createWorld({ renderer, buildLot: buildAnyLot, buildResident, yardBuilders: YARD_BUILDERS, pool: POOLS[kind], dry: kind === 'city6' || kind === 'city7' });
+    w = worlds[kind] = createWorld({ renderer, buildLot: buildAnyLot, buildResident, yardBuilders: YARD_BUILDERS, pool: POOLS[kind], dry: kind === 'city6' || kind === 'city7' || kind === 'city8' });
   } else SOLIDS.push(...w.extraSolids);        // troncos das árvores de fora deste bairro
   world.hideResident();
   world = w;
@@ -276,7 +281,7 @@ function goBack() {
 function startFree(mode = 'free') {
   // Bairro 2: 6×6 com praça; Bairro 4: 5×5 com bloqueios; o resto: 4×4
   const lv = mode === 'career' ? careerLevel : freeLevel;
-  useNeighborhood(lv === 1 ? 'plaza6' : lv === 3 ? 'grid5' : lv === 4 ? 'grid6s' : lv === 5 ? 'city6' : lv === 6 ? 'city7' : 'grid4');
+  useNeighborhood(lv === 1 ? 'plaza6' : lv === 3 ? 'grid5' : lv === 4 ? 'grid6s' : lv === 5 ? 'city6' : lv === 6 ? 'city7' : lv === 7 ? 'city8' : 'grid4');
   gameMode = mode;
   if (mode === 'career') career.startMatch(careerLevel); else career.stop();
   ENTRANCE_WALL.x0 = ENTRANCE.x0; ENTRANCE_WALL.x1 = ENTRANCE.x1;   // a entrada depende do bairro
@@ -563,7 +568,7 @@ function update(dt, t) {
   heli.update(dt, state === 'drive' && heli.on ? input.lift() : 0);
   boom.update(dt);
   { const foot = state === 'walk';              // quem está perto: a van ou, a pé, o personagem
-    jamSound.update(dt, IN_GAME.includes(state) && (gameMode === 'career' ? careerLevel : freeLevel) === 6 && !missions.isOpen,
+    jamSound.update(dt, IN_GAME.includes(state) && [6, 7].includes(gameMode === 'career' ? careerLevel : freeLevel) && !missions.isOpen,
       barriers.jamRects, foot ? walker.x : van.x, foot ? walker.z : van.z); }
   // entregando (campainha/diálogo) ou com o balão "E — Entregar" à vista: a câmera se volta para a casa
   const focusH = (state === 'ring' || state === 'dialog') ? pending : state === 'drive' ? nearHouse : -1;

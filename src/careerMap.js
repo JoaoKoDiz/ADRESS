@@ -44,7 +44,8 @@ function roadGeometry(curve, samples) {
 //   gas      — posto de gasolina, prédio comercial e 1 casinha (Bairro 5)
 //   city     — 3 prédios altos e 1 casinha (Bairro 6)
 //   jam      — como a cidade, com um caminhão na diagonal e uma fila de carros (engarrafamento) (Bairro 7)
-const MINI_KINDS = ['houses', 'plaza', 'barriers', 'trucks', 'gas', 'city', 'jam'];
+//   jam8     — como o jam, com 4 prédios altos (cidade maior: Bairro 8, 8×8)
+const MINI_KINDS = ['houses', 'plaza', 'barriers', 'trucks', 'gas', 'city', 'jam', 'jam8'];
 
 /** Bairro em miniatura do tipo `kind`: base de grama, sebe, ruas e o que caracteriza o bairro. gray = fase bloqueada. */
 function miniNeighborhood(kind, colors, gray = false) {
@@ -131,14 +132,14 @@ function miniNeighborhood(kind, colors, gray = false) {
   add(box(14, 0.42, 2.2, ROADC), 0, 0.22, 0);
   add(box(2.2, 0.42, 14, ROADC), 0, 0.22, 0);
 
-  if (kind === 'city' || kind === 'jam') {       // Bairros 6 e 7: 3 prédios altos e acinzentados + 1 casinha
-    [[-3.5, -3.5, 9], [3.5, -3.5, 7], [-3.5, 3.5, 6]].forEach(([x, z, hh], i) => {
+  if (kind === 'city' || kind === 'jam' || kind === 'jam8') {   // Bairros 6 a 8: prédios altos e acinzentados (+ 1 casinha, exceto no 8)
+    [[-3.5, -3.5, 9], [3.5, -3.5, 7], [-3.5, 3.5, 6]].concat(kind === 'jam8' ? [[3.5, 3.5, 8]] : []).forEach(([x, z, hh], i) => {
       add(box(3.6, hh, 3.2, G(['#9ea2a9', '#aeb1b6', '#8f939a'][i], '#9a9a9a')), x, 0.4 + hh / 2, z);
       for (let f = 1; f < hh / 1.4; f++) add(box(3.0, 0.5, 0.06, G('#4a6a8a', '#7a7a7a')), x, 0.4 + f * 1.4, z + 1.62);
       add(box(0.9, 0.5, 0.9, G('#7d8188', '#8a8a8a')), x + 0.8, 0.65 + hh, z - 0.6);      // casinha de máquinas no topo
     });
-    house(3.5, 3.5, roof(0));
-    if (kind === 'jam') {                        // Bairro 7: caminhão na diagonal na rua vertical + fila de carros na horizontal
+    if (kind !== 'jam8') house(3.5, 3.5, roof(0));
+    if (kind === 'jam' || kind === 'jam8') {                        // Bairro 7: caminhão na diagonal na rua vertical + fila de carros na horizontal
       const car = (x, z, ry, c) => {
         const k = new THREE.Group();
         k.add(at(box(1.5, 0.45, 0.8, G(c, '#9a9a9a')), 0, 0.62, 0), at(box(0.8, 0.35, 0.7, G('#dfe6ee', '#c8c8c8')), -0.1, 1.0, 0));
@@ -211,9 +212,9 @@ function boardTexture(gray = false) {
 }
 
 const PALETTES = [['red', 'blue', 'yellow', 'green'], ['purple', 'red', 'gray', 'yellow', 'blue', 'green', 'red', 'yellow'], ['blue', 'green', 'red', 'purple'],
-  ['yellow', 'gray', 'blue', 'red'], ['green', 'purple', 'yellow', 'blue'], ['red'], ['blue']];
+  ['yellow', 'gray', 'blue', 'red'], ['green', 'purple', 'yellow', 'blue'], ['red'], ['blue'], ['green']];
 
-/** Miniaturas (data URL) dos 7 bairros, desenhadas uma vez num renderizador próprio. Usadas na seleção do modo Livre. */
+/** Miniaturas (data URL) dos 8 bairros, desenhadas uma vez num renderizador próprio. Usadas na seleção do modo Livre. */
 export function renderMiniThumbnails(w = 480, h = 360) {
   const r = new THREE.WebGLRenderer({ antialias: true, alpha: true, preserveDrawingBuffer: true });
   r.setSize(w, h, false);
@@ -275,11 +276,11 @@ export function createCareerMap(stageEl, audio) {
   // fases: bairros em miniatura alternando os lados da estrada, com placa numerada
   const stops = [], boards = [];
   let clock = 0;
-  [0.06, 0.2, 0.34, 0.48, 0.62, 0.76, 0.9].forEach((u, i) => {
+  [0.05, 0.17, 0.29, 0.41, 0.53, 0.65, 0.77, 0.89].forEach((u, i) => {
     curve.getPointAt(u, p); curve.getTangentAt(u, tg);
     const side = i % 2 ? 1 : -1;
     const nx = -tg.z * side, nz = tg.x * side;
-    const kind = MINI_KINDS[i], city = kind === 'city' || kind === 'jam';   // Bairro 6: maquete com prédios altos
+    const kind = MINI_KINDS[i], city = kind === 'city' || kind === 'jam' || kind === 'jam8';   // Bairro 6: maquete com prédios altos
     const hood = miniNeighborhood(kind, PALETTES[i].map(c => ROOF_COL[c]));
     const hoodGray = miniNeighborhood(kind, [], true);
     for (const h of [hood, hoodGray]) {

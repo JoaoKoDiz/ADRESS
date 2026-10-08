@@ -55,8 +55,8 @@ export const SOLIDS = [];
 
 /** Troca a grade do bairro e refaz os obstáculos-base (lotes, praça e sebe). */
 export function configureGrid(kind) {
-  GRID = kind === 'plaza6' || kind === 'grid6s' || kind === 'city6' || kind === 'city7' ? 6 : kind === 'grid5' ? 5 : 4;
-  BUILD_H = kind === 'city6' || kind === 'city7' ? 16.5 : 9.2;
+  GRID = kind === 'plaza6' || kind === 'grid6s' || kind === 'city6' || kind === 'city7' ? 6 : kind === 'city8' ? 8 : kind === 'grid5' ? 5 : 4;
+  BUILD_H = kind === 'city6' || kind === 'city7' || kind === 'city8' ? 16.5 : 9.2;
   // praça: bloco 2×2 central (linhas e colunas 2–3 do 6×6)
   const plazaSlots = kind === 'plaza6' ? [2 * GRID + 2, 2 * GRID + 3, 3 * GRID + 2, 3 * GRID + 3] : [];
   ENTRANCE.road = Math.floor(GRID / 2);            // rua do meio (no 5×5, a 3ª rua: nenhuma cai no centro exato)
