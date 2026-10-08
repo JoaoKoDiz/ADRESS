@@ -77,7 +77,7 @@ export function buildGasStation() {
 
   // totem de preços na frente (à direita)
   const tx = W - 3, tz = LOT - 2.2;
-  root.add(at(box(0.6, 6.4, 0.6, DARK), tx, G + 3.2, tz));
+  root.add(at(box(0.6, 6.4, 0.5, DARK), tx, G + 3.2, tz - 0.3));                          // suporte ATRÁS da placa (não cobre o texto da frente)
   root.add(at(box(3.0, 3.6, 0.4, RED), tx, G + 5.4, tz));
   const precos = textMesh('GASOLINA  5,99', 2.6, 0.6, '#1d1d1f', '#ffd23a', 60);
   precos.position.set(tx, G + 5.0, tz + 0.21);
