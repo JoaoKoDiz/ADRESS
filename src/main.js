@@ -13,8 +13,8 @@ import { buildLot } from './models/house.js';
 import { buildResident } from './models/resident.js';
 import { YARD_BUILDERS } from './models/yard.js';
 import { buildShopLot } from './models/shop.js';
-import { SHOPS } from './data.js';
-import { buildAptLot } from './models/apt.js';
+import { SHOPS, HOUSES } from './data.js';
+import { buildAptLot, APT_ROOF, aptRoofHeight } from './models/apt.js';
 import { createHintArrow } from './hint.js';
 import { createHintButton } from './hintButton.js';
 import { createLockButton } from './lockButton.js';
@@ -120,6 +120,16 @@ const boom = createBoom(world.scene, world, audio);
 boom.attachHatch(van.object);
 const menu = createMenu(stage);
 const heli = createHeli(van, audio);        // tecla H: vira helicóptero
+// Helicóptero: o topo de cada prédio residencial (Bairro 6) é um chão onde dá para pousar
+heli.setGround((x, z) => {
+  for (const s of HOUSE_SLOTS) {
+    const h = game.layout[s];
+    if (h < 0 || HOUSES[h].kind !== 'apt' || boom.isDestroyed(h)) continue;
+    const o = slotOrigin(s), R = APT_ROOF;
+    if (x > o.x + R.x0 + 0.5 && x < o.x + R.x1 - 0.5 && z > o.z + R.z0 + 0.5 && z < o.z + R.z1 - 0.5) return aptRoofHeight(HOUSES[h], x - o.x, z - o.z);
+  }
+  return 0;
+});
 const monster = createMonster(world.scene, stage, audio);   // final secreto: 16 casas destruídas
 const allDestroyed = () => game.pool.every(h => boom.isDestroyed(h));
 
@@ -389,7 +399,8 @@ function update(dt, t) {
       const free = gameMode === 'free';
       if (free && input.heli()) heli.toggle();
       van.setGhost(free && (menu.unstoppable || heli.high));
-      van.update(dt, input.axis(), rig.mode === 'chase' ? 'car' : 'screen');
+      if (heli.landed) van.stop();                // pousado no teto: parado até decolar (H)
+      van.update(dt, heli.landed ? { x: 0, z: 0 } : input.axis(), rig.mode === 'chase' ? 'car' : 'screen');
       if (heli.on && rig.mode === 'chase') {      // no ar, A/D giram mesmo parado
         const ax = input.axis().x;
         if (ax) van.turn(ax * 2.2 * dt * (1 - Math.min(1, Math.abs(van.speed) / 5)));
@@ -542,8 +553,10 @@ function updateHUD() {
     hud.setMain(`${dialog.name}: “${dialog.text}”`, dialog.success ? 'success' : 'dialog');
   } else {
     const extraKeys = gameMode === 'free' ? '  ·  H: helicóptero  ·  F: míssil' : '  ·  M: missões';
-    hud.setSub(heli.on
-      ? 'HELICÓPTERO  ·  W/S: frente e ré  ·  A/D: girar  ·  Espaço: subir  ·  Shift: descer  ·  H: pousar  ·  F: míssil'
+    hud.setSub(heli.landed
+      ? 'POUSADO NO PRÉDIO  ·  H: decolar  ·  F: míssil'
+      : heli.on
+      ? 'HELICÓPTERO  ·  W/S: frente e ré  ·  A/D: girar  ·  Espaço: subir  ·  Shift: descer  ·  H: pousar (em cima de um prédio, pousa no teto)  ·  F: míssil'
       : rig.mode === 'chase'
       ? 'W / ↑: acelerar  ·  S / ↓: frear e ré  ·  A D / ← →: virar  ·  E: entregar  ·  C: bairro  ·  T: dica' + extraKeys
       : 'WASD / Setas: dirigir  ·  E: entregar  ·  C: câmera  ·  T: dica' + extraKeys, 'muted');
