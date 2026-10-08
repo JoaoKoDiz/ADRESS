@@ -67,12 +67,12 @@ export function buildGasStation() {
   }
 
   // lojinha de conveniência nos fundos (à esquerda)
-  root.add(at(box(11, 3.4, 5.4, WHITE), 7.5, G + 1.7, 3.6));
-  root.add(at(box(11.2, 0.5, 5.6, '#3c9d55'), 7.5, G + 3.15, 3.6));
+  root.add(at(box(11, 3.0, 5.4, WHITE), 7.5, G + 1.5, 3.6));             // paredes até 3,0
+  root.add(at(box(11.2, 0.5, 5.6, '#3c9d55'), 7.5, G + 3.25, 3.6));        // teto por cima (3,0–3,5): não atravessa a parede
   root.add(at(box(8, 1.9, 0.1, '#3d5f80'), 7.5, G + 1.2, 6.33));
   root.add(at(box(1.6, 2.3, 0.12, '#5a7fa3'), 10.5, G + 1.15, 6.35));
   const loja = textMesh('CONVENIÊNCIA', 6, 0.45, '#3c9d55', '#ffffff', 56);
-  loja.position.set(7.5, G + 3.15, 6.42);
+  loja.position.set(7.5, G + 3.25, 6.42);
   root.add(loja);
 
   // totem de preços na frente (à direita)
