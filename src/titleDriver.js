@@ -3,7 +3,7 @@
 import * as THREE from 'three';
 import { createVan } from './van.js';
 import { createHeli } from './heli.js';
-import { box, sphere, cyl, at, mat } from './models/kit.js';
+import { box, sphere, cyl, at, mat, mesh } from './models/kit.js';
 
 const SKIN = '#e8b48a', SHIRT = '#2a9df4', CAP = '#e3262e', GLASSES = '#111216';
 const BEAT = 1.8;   // batidas por segundo (~108 bpm)
@@ -44,23 +44,26 @@ export function createTitleDriver(container, audio) {
   head.position.set(0, 1.62, -0.05);
   driver.add(head);
   head.add(at(sphere(0.34, SKIN, 14, 10), 0, 0.3, 0));
-  const cap = at(sphere(0.36, CAP, 12, 8), 0, 0.42, 0.03); cap.scale.set(1, 0.6, 1); head.add(cap);
-  head.add(at(box(0.5, 0.06, 0.3, CAP), 0.08, 0.42, -0.3, -0.15, 0, 0));       // aba do boné
+  // boné: calota que cobre o topo da cabeça (da testa para cima) + aba na frente
+  const cap = at(mesh(new THREE.SphereGeometry(0.375, 14, 8, 0, Math.PI * 2, 0, 1.25), CAP), 0, 0.3, 0); head.add(cap);
+  head.add(at(box(0.5, 0.05, 0.3, CAP), 0, 0.43, -0.4, -0.12, 0, 0));          // aba do boné
   for (const s of [-1, 1]) head.add(at(box(0.2, 0.12, 0.05, GLASSES, { metalness: 0.4, roughness: 0.25 }), s * 0.13, 0.34, -0.3));
   head.add(at(box(0.08, 0.03, 0.04, GLASSES), 0, 0.36, -0.31));
   head.add(at(box(0.16, 0.04, 0.04, '#7a2e1a'), 0, 0.17, -0.31, 0, 0, 0));       // sorriso
   for (const s of [-1, 1]) head.add(at(box(0.06, 0.035, 0.04, '#7a2e1a'), s * 0.09, 0.19, -0.3, 0, 0, s * -0.6));
-  // braço para fora da janela: sai do ombro, apoia o cotovelo na porta e o antebraço desce pelo lado de fora
+  // braço para fora da janela: ombro, braço sobre a porta, cotovelo apoiado e antebraço caindo para a frente
   const arm = new THREE.Group();
-  arm.position.set(0.25, 1.48, 0);
+  arm.position.set(0.22, 1.46, -0.02);
   driver.add(arm);
-  arm.add(at(cyl(0.11, 0.1, 0.5, SHIRT, 8), 0, 0, -0.22, Math.PI / 2, 0, 0));
+  arm.add(at(sphere(0.15, SHIRT, 8, 6), 0, 0, 0));                                  // ombro
+  arm.add(at(cyl(0.14, 0.12, 0.5, SHIRT, 8), 0, 0, -0.25, Math.PI / 2, 0, 0));     // manga/braço
   const forearm = new THREE.Group();
-  forearm.position.set(0, 0, -0.47);
+  forearm.position.set(0, -0.02, -0.5);
+  forearm.rotation.z = 0.7;                                                          // antebraço para a frente da van
   arm.add(forearm);
-  forearm.add(at(sphere(0.11, SKIN, 8, 6), 0, 0, 0));
-  forearm.add(at(cyl(0.09, 0.08, 0.5, SKIN, 8), 0, -0.25, 0));
-  forearm.add(at(sphere(0.11, SKIN, 8, 6), 0, -0.52, 0));
+  forearm.add(at(sphere(0.125, SKIN, 8, 6), 0, 0, 0));                              // cotovelo
+  forearm.add(at(cyl(0.1, 0.085, 0.42, SKIN, 8), 0, -0.21, 0));                     // antebraço
+  forearm.add(at(sphere(0.12, SKIN, 8, 6), 0, -0.45, 0));                           // mão
   driver.traverse(o => { if (o.isMesh) { o.castShadow = false; o.receiveShadow = false; } });
 
   const camera = new THREE.PerspectiveCamera(30, 1, 0.1, 100);
@@ -94,7 +97,7 @@ export function createTitleDriver(container, audio) {
     const b = t * BEAT * Math.PI * 2;
     head.rotation.x = Math.sin(b) * 0.14;                     // acena no ritmo
     head.rotation.z = Math.sin(b / 2) * 0.07;                 // e balança de lado
-    forearm.rotation.x = Math.max(0, Math.sin(b)) * 0.12;     // a mão bate na porta
+    forearm.rotation.z = 0.7 + Math.max(0, Math.sin(b)) * 0.12; // a mão bate na porta
     if (mode === 'idle') van.object.position.y = Math.abs(Math.sin(b / 2)) * 0.03; // a suspensão acompanha
     else if (mode === 'drive') {
       mt += dt;
