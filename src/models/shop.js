@@ -52,9 +52,9 @@ export function buildShopLot(shop) {
 
   // 1º andar: três janelas
   for (const x of [X0 + 1.7, CX, X1 - 1.7]) {
-    root.add(at(box(1.9, 1.5, 0.08, FRAME), x, G + F1 + 1.35, Z1 + 0.04));
-    root.add(at(box(1.6, 1.25, 0.1, GLASS), x, G + F1 + 1.35, Z1 + 0.06));
-    root.add(at(box(2.1, 0.12, 0.3, FRAME), x, G + F1 + 0.55, Z1 + 0.15));
+    root.add(at(box(1.9, 1.2, 0.08, FRAME), x, G + F1 + 1.95, Z1 + 0.04));      // janelas mais acima: sobra espaço para a placa
+    root.add(at(box(1.6, 0.95, 0.1, GLASS), x, G + F1 + 1.95, Z1 + 0.06));
+    root.add(at(box(2.1, 0.12, 0.3, FRAME), x, G + F1 + 1.33, Z1 + 0.15));
   }
   // janelas laterais e dos fundos
   for (const s of [-1, 1]) for (const yy of [G + 1.5, G + F1 + 1.35]) {
@@ -72,10 +72,10 @@ export function buildShopLot(shop) {
     root.add(at(box(sw, 0.35, 0.06, i % 2 ? '#fbf7ef' : awning), x, G + F1 - 0.48, Z1 + 1.72));
   }
 
-  // placa "COMÉRCIO" (igual em todos) entre o toldo e as janelas de cima
+  // placa "COMÉRCIO" (igual em todos) entre o toldo e as janelas de cima (inteira à vista, sem ficar atrás do toldo)
   const sign = new THREE.Mesh(new THREE.PlaneGeometry(4.4, 0.75),
     new THREE.MeshStandardMaterial({ map: textTexture('COMÉRCIO', { width: 512, height: 88, bg: '#2f3236', fg: '#fff3d6', font: 'bold 62px "Trebuchet MS", sans-serif' }), roughness: 0.8 }));
-  sign.position.set(CX, G + F1 + 0.5, Z1 + 0.11);
+  sign.position.set(CX, G + F1 + 0.9, Z1 + 0.11);               // acima do ponto mais alto do toldo (≈ +0,5) e abaixo das janelas (+1,33)
   root.add(dynamic(sign));                                       // fora do merge (precisa das coordenadas de textura)
 
   // o que há no topo
