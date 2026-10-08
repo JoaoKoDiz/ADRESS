@@ -27,6 +27,7 @@ export function createInput(onFirstKey) {
       const p = (...c) => c.some(k => pressed.has(k));
       return { x: (p('KeyD', 'ArrowRight') ? 1 : 0) - (p('KeyA', 'ArrowLeft') ? 1 : 0), y: (p('KeyS', 'ArrowDown') ? 1 : 0) - (p('KeyW', 'ArrowUp') ? 1 : 0) };
     },
+    walk: () => pressed.has('KeyL'),          // sair da van / (E perto dela volta a dirigir)
     toggleCamera: () => pressed.has('KeyC'),
     hint: () => pressed.has('KeyT'),
     heli: () => pressed.has('KeyH'),

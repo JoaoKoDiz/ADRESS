@@ -28,6 +28,7 @@ import { createBarriers } from './barriers.js';
 import { createTitleDriver } from './titleDriver.js';
 import { createCareerMap } from './careerMap.js';
 import { createLevelSelect } from './levelSelect.js';
+import { createWalker } from './walker.js';
 import { createBackButton } from './backButton.js';
 import { createMissions, createMissionsButton, MISSIONS } from './missions.js';
 import { createCareer } from './career.js';
@@ -130,6 +131,19 @@ heli.setGround((x, z) => {
   }
   return 0;
 });
+const walker = createWalker(world.scene);   // tecla L: o motorista desce e anda a pé
+const FOOT = { house: [4.1, 13.1, 1.5, 8.5], shop: [3.8, 13.4, 1.5, 8.5], apt: [3.4, 13.8, 1.2, 8.5] };   // paredes (locais do lote)
+/** Obstáculos de quem anda a pé: tudo menos os lotes inteiros e a praça (dá para entrar nos quintais); só as paredes das casas. */
+function walkSolids() {
+  const out = SOLIDS.slice(HOUSE_SLOTS.length + (PLAZA ? 1 : 0));   // postos, sebe, troncos, parede da entrada, bloqueios
+  for (const s of HOUSE_SLOTS) {
+    const h = game.layout[s];
+    if (h < 0 || boom.isDestroyed(h)) continue;
+    const o = slotOrigin(s), f = FOOT[HOUSES[h].kind] || FOOT.house;
+    out.push({ x0: o.x + f[0], x1: o.x + f[1], z0: o.z + f[2], z1: o.z + f[3] });
+  }
+  return out;
+}
 const monster = createMonster(world.scene, stage, audio);   // final secreto: 16 casas destruídas
 const allDestroyed = () => game.pool.every(h => boom.isDestroyed(h));
 
@@ -146,6 +160,7 @@ function useNeighborhood(kind) {
   world = w;
   neighborhood = kind;
   world.scene.add(van.object);
+  world.scene.add(walker.object); walker.show(false);
   hint.attach(world.scene);
   if (kind === 'grid5' || kind === 'grid6s' || kind === 'city6') composeRound();   // Bairros 4, 5 e 6: composição sorteada a cada partida
   else {
@@ -217,7 +232,7 @@ const missionsBtn = createMissionsButton(stage, () => {
 });
 let careerLevel = 0;                     // fase da Carreira sendo jogada
 let freeLevel = 0;                       // bairro escolhido no modo Livre
-const IN_GAME = ['drive', 'ring', 'dialog', 'missile', 'fuel'];
+const IN_GAME = ['drive', 'ring', 'dialog', 'missile', 'fuel', 'walk'];
 function showPlayPanel() {
   if (rig.mode !== 'overview') rig.toggle();
   rig.snap({ x: van.x, z: van.z, heading: van.heading, speed: 0 });
@@ -362,6 +377,7 @@ function nextDelivery() {
 }
 
 function startNewRound() {
+  walker.show(false);
   if (neighborhood === 'grid5' || neighborhood === 'grid6s' || neighborhood === 'city6') composeRound(); else game.newRound();
   refreshBarriers();                             // Bairro 3: barreiras em lugares novos
   if (gameMode === 'career') career.startMatch(careerLevel);   // nova partida da Carreira
@@ -403,6 +419,16 @@ function update(dt, t) {
         break;
       }
       const free = gameMode === 'free';
+      if (input.walk() && actionLock <= 0) {          // L: o motorista desce da van (só parada e no chão)
+        if (heli.flying) { fuelMsg = 'Pouse o helicóptero antes de descer.'; fuelMsgT = 2.5; }
+        else if (Math.abs(van.speed) > 3.5) { fuelMsg = 'Pare a van para descer (L).'; fuelMsgT = 2.5; }
+        else {
+          van.stop(); nearHouse = -1; nearPump = false;
+          walker.placeBesideVan(van, walkSolids()); walker.show(true);
+          setState('walk');
+          break;
+        }
+      }
       if (free && input.heli()) heli.toggle();
       van.setGhost(free && (menu.unstoppable || heli.high));
       if (heli.landed) van.stop();                // pousado no teto: parado até decolar (H)
@@ -476,6 +502,14 @@ function update(dt, t) {
       fade = Math.min(1, stateT / FADE_TIME);
       if (fade >= 1) { startNewRound(); setState('fadeIn'); }
       break;
+    case 'walk': {                                  // a pé: sem entregas, sem abastecer; E perto da van volta a dirigir
+      if (missions.isOpen) { if (input.missions()) missions.close(); break; }
+      if (gameMode === 'career' && input.missions()) { missions.open(careerLevel); break; }
+      van.stop();
+      walker.update(dt, input.axis(), rig.mode === 'chase' ? 'car' : 'screen', walkSolids(), van);
+      if (walker.nearVan(van) && input.action()) { walker.show(false); actionLock = 0.5; setState('drive'); }
+      break;
+    }
     case 'levelSelect': {
       const n = input.nav();
       if (n.x || n.y) levelSelect.move(n.x, n.y);
@@ -515,7 +549,8 @@ function update(dt, t) {
   boom.update(dt);
   // entregando (campainha/diálogo) ou com o balão "E — Entregar" à vista: a câmera se volta para a casa
   const focusH = (state === 'ring' || state === 'dialog') ? pending : state === 'drive' ? nearHouse : -1;
-  rig.update(dt, { x: van.x, z: van.z, y: heli.altitude, heading: van.heading, speed: van.speed, focus: focusH >= 0 ? focusOf(focusH) : null });
+  const onFoot = state === 'walk';              // a câmera segue o personagem a pé
+  rig.update(dt, onFoot ? { x: walker.x, z: walker.z, y: 0, heading: walker.heading, speed: walker.speed, focus: null } : { x: van.x, z: van.z, y: heli.altitude, heading: van.heading, speed: van.speed, focus: focusH >= 0 ? focusOf(focusH) : null });
   // névoa só na câmera atrás da van (suaviza o horizonte); a visão geral fica nítida
   const fb = rig.blend, fog = world.scene.fog;
   if (fog) { fog.near = 3000 + (130 - 3000) * fb; fog.far = 3200 + (430 - 3200) * fb; }
@@ -558,8 +593,11 @@ function updateHUD() {
       dialog.success ? 'success' : 'cont');
     hud.setMain(`${dialog.name}: “${dialog.text}”`, dialog.success ? 'success' : 'dialog');
   } else {
-    const extraKeys = gameMode === 'free' ? '  ·  H: helicóptero  ·  F: míssil' : '  ·  M: missões';
-    hud.setSub(heli.landed
+    const extraKeys0 = '  ·  L: descer da van';
+    const extraKeys = extraKeys0 + (gameMode === 'free' ? '  ·  H: helicóptero  ·  F: míssil' : '  ·  M: missões');
+    hud.setSub(state === 'walk'
+      ? (rig.mode === 'chase' ? 'A PÉ  ·  W/S: andar  ·  A/D: virar  ·  E (perto da van): entrar  ·  C: bairro  ·  botão direito: olhar em volta' : 'A PÉ  ·  WASD: andar  ·  E (perto da van): entrar  ·  C: câmera')
+      : heli.landed
       ? 'POUSADO NO PRÉDIO  ·  H: decolar  ·  F: míssil'
       : heli.on
       ? 'HELICÓPTERO  ·  W/S: frente e ré  ·  A/D: girar  ·  Espaço: subir  ·  Shift: descer  ·  H: pousar (em cima de um prédio, pousa no teto)  ·  F: míssil'
@@ -571,13 +609,15 @@ function updateHUD() {
     else if (state === 'boss') hud.setMain(monster.phase === 'driveOut' ? 'Todas as casas foram destruídas… algo despertou!' : 'O DEVORADOR DE BAIRROS acordou!', 'dialog');
     else if (state === 'missile') hud.setMain('Míssil disparado!', 'ring');
     else if (state === 'fuel') hud.setMain('⛽ Abastecendo… glub, glub, glub…', 'ring');
+    else if (state === 'walk') hud.setMain(walker.nearVan(van) ? 'Perto da van — aperte E para entrar.' : 'Passeando a pé… (não dá para entregar andando)', 'clue');
     else if (state === 'drive' && fuelMsgT > 0) hud.setMain(fuelMsg, 'dialog');
     else if (state === 'fadeOut') hud.setMain(restartMsg || 'Entrega concluída! Preparando a próxima…', restartMsg ? 'dialog' : 'success');
     else hud.setMain(game.mainText(), 'clue');
   }
 
-  const promptLabel = nearHouse >= 0 ? 'Entregar' : 'Abastecer';
-  if (state === 'drive' && (nearHouse >= 0 || nearPump)) {
+  const walkNear = state === 'walk' && walker.nearVan(van) && !missions.isOpen;
+  const promptLabel = walkNear ? 'Entrar na van' : nearHouse >= 0 ? 'Entregar' : 'Abastecer';
+  if ((state === 'drive' && (nearHouse >= 0 || nearPump)) || walkNear) {
     // Balão AO LADO da van, sobre a rua: acima dela ele cobriria o quintal da frente da casa (onde estão as pistas).
     const w = stage.clientWidth, h = stage.clientHeight;
     const c = Math.abs(Math.cos(van.heading)), s = Math.abs(Math.sin(van.heading));
@@ -691,6 +731,7 @@ window.ADRESS = {
   get careerLevel() { return careerLevel; },
   setCareerLevel(l) { careerLevel = l; },
   setFreeLevel(l) { freeLevel = l; },
+  walker,
   get levelSelect() { return levelSelect; },
   startGame: m => startFree(m),
   get shadowTier() { return shadowTier; },
