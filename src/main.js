@@ -264,6 +264,12 @@ function startFree(mode = 'free') {
   setState('fadeIn');
 }
 
+// Botão direito do mouse (segurado): olhar em volta com a câmera atrás da van; ao soltar, ela volta
+addEventListener('contextmenu', e => { if (IN_GAME.includes(state)) e.preventDefault(); });
+addEventListener('mousedown', e => { if (e.button === 2 && IN_GAME.includes(state) && !missions.isOpen) rig.orbitHold(true); });
+addEventListener('mousemove', e => { if (e.buttons & 2) rig.orbit(e.movementX, e.movementY); });
+addEventListener('mouseup', e => { if (e.button === 2) rig.orbitHold(false); });
+addEventListener('blur', () => rig.orbitHold(false));
 function resize() {
   const w = Math.max(1, stage.clientWidth), h = Math.max(1, stage.clientHeight);
   renderer.setSize(w, h, false);

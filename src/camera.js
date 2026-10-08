@@ -179,7 +179,9 @@ export function createCameraRig() {
     const d = angleDiff(Math.atan2(focus.z - tgt.z, focus.x - tgt.x), yaw);
     return Math.max(-FOCUS_YAW, Math.min(FOCUS_YAW, d)) * focusK;
   }
-  function camYaw() { return yaw + focusOff; }
+  // olhar em volta (botão direito do mouse): desvio de giro/inclinação em torno da van; volta ao soltar
+  let orbYaw = 0, orbPitch = 0, orbGoalYaw = 0, orbGoalPitch = 0, orbK = 0, orbHeld = false;
+  function camYaw() { return yaw + focusOff + orbYaw; }
   const baseDist = () => CHASE_DIST + (SLOW_DIST - CHASE_DIST) * slowK;
   const baseHeight = () => CHASE_HEIGHT + (SLOW_HEIGHT - CHASE_HEIGHT) * slowK;
 
@@ -208,6 +210,11 @@ export function createCameraRig() {
     const D = baseDist(), H = baseHeight();
     const d = D + (BOOM_MIN_DIST - D) * boomU, h = H + (BOOM_TOP_HEIGHT - H) * boomU;
     chasePos.set(tgt.x - fx * d, h, tgt.z - fz * d);
+    if (Math.abs(orbPitch) > 1e-4) {            // inclinação: gira o braço para cima/baixo em torno do pivô
+      const dy = h - PIVOT_Y, r = Math.hypot(d, dy);
+      const el = THREE.MathUtils.clamp(Math.atan2(dy, d) + orbPitch, 0.12, 1.45);
+      chasePos.set(tgt.x - fx * r * Math.cos(el), PIVOT_Y + r * Math.sin(el), tgt.z - fz * r * Math.cos(el));
+    }
     const hx = Math.cos(yaw), hz = Math.sin(yaw);
     chaseLook.set(tgt.x + hx * CHASE_LOOK_AHEAD, CHASE_LOOK_Y, tgt.z + hz * CHASE_LOOK_AHEAD);
     if (focusK > 0) {                          // entregando: olha para o meio do caminho entre a van e a casa
@@ -215,6 +222,10 @@ export function createCameraRig() {
       chaseLook.x += (focus.x - chaseLook.x) * k;
       chaseLook.z += (focus.z - chaseLook.z) * k;
       chaseLook.y += (1.6 - chaseLook.y) * k;
+    }
+    if (orbK > 0) {                            // olhando em volta: mira na van em vez de à frente dela
+      chaseLook.x += (tgt.x - chaseLook.x) * orbK; chaseLook.z += (tgt.z - chaseLook.z) * orbK;
+      chaseLook.y += (PIVOT_Y - chaseLook.y) * orbK;
     }
     chasePos.y += tgtY; chaseLook.y += tgtY;                  // acompanha a altura do helicóptero
     chaseQuat.setFromRotationMatrix(m4.lookAt(chasePos, chaseLook, UP));
@@ -262,6 +273,10 @@ export function createCameraRig() {
     focusK += ((target.focus ? 1 : 0) - focusK) * (1 - Math.exp(-3 * dt));
     if (focusK < 1e-3 && !target.focus) focusK = 0;
     focusOff += (focusGoal() - focusOff) * (1 - Math.exp(-2.5 * dt));
+    const spring = 1 - Math.exp(-(orbHeld ? 14 : 5) * dt);   // segue o mouse; solto, volta para trás da van
+    orbYaw += (orbGoalYaw - orbYaw) * spring; orbPitch += (orbGoalPitch - orbPitch) * spring;
+    orbK += ((orbHeld || Math.abs(orbYaw) + Math.abs(orbPitch) > 0.02 ? 1 : 0) - orbK) * (1 - Math.exp(-6 * dt));
+    if (!orbHeld && Math.abs(orbYaw) + Math.abs(orbPitch) < 1e-3 && orbGoalYaw === 0 && orbGoalPitch === 0) { orbYaw = orbPitch = 0; if (orbK < 1e-3) orbK = 0; }
     // braço: encolhe rápido (nunca atravessa um telhado), volta devagar (sem trancos)
     const want = clearBoom();
     boomU += (want - boomU) * (1 - Math.exp(-(want > boomU ? 18 : 2.5) * dt));
@@ -280,6 +295,14 @@ export function createCameraRig() {
     /** 0 = visão geral … 1 = atrás da van (já suavizado). */
     get blend() { return smooth(blend); },
     toggle, resize, update, snap,
+    /** Botão direito pressionado/solto: começa/termina de olhar em volta (só na câmera atrás da van). */
+    orbitHold(on) { orbHeld = on && mode === 'chase'; if (!orbHeld) { orbGoalYaw = 0; orbGoalPitch = 0; } },
+    /** Arrasto do mouse (pixels) enquanto o botão direito está pressionado. */
+    orbit(dx, dy) {
+      if (!orbHeld) return;
+      orbGoalYaw = THREE.MathUtils.clamp(orbGoalYaw + dx * 0.006, -Math.PI, Math.PI);
+      orbGoalPitch = THREE.MathUtils.clamp(orbGoalPitch + dy * 0.004, -0.6, 0.9);
+    },
     /** O bairro mudou de tamanho (ex.: Bairro 2, 6×6): refaz enquadramento e obstáculos da câmera. */
     refit() { rebuildGrid(); resize(lastW, lastH); },
   };
