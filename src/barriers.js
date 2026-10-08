@@ -185,11 +185,12 @@ export function createBarriers() {
   const build = { barrier: () => buildBarrier(stripes), truck: buildTruck, hole: buildHole };
   let solids = [];
   let current = [];
+  let jamRects = [];
   let jammed = [];                               // lotes (índices) que ficam sem acesso por causa de um engarrafamento
 
   function clear() {
     for (const s of solids) { const i = SOLIDS.indexOf(s); if (i >= 0) SOLIDS.splice(i, 1); }
-    solids = []; current = []; jammed = [];
+    solids = []; current = []; jammed = []; jamRects = [];
     Object.values(pools).forEach(p => p.forEach(b => { b.visible = false; }));
   }
 
@@ -237,7 +238,7 @@ export function createBarriers() {
       const x0 = roadCenter(j) + ROAD / 2 + 0.2, x1 = roadCenter(j + 1) - ROAD / 2 - 0.2, z = roadCenter(i);
       b.position.set((x0 + x1) / 2, 0, z);
       const s = { x0, x1, z0: z - ROAD / 2 - 0.1, z1: z + ROAD / 2 + 0.1 };
-      SOLIDS.push(s); solids.push(s);
+      SOLIDS.push(s); solids.push(s); jamRects.push(s);
       jammed.push((i - 1) * N + j);                // o lote ao norte do trecho (sua porta dá para este trecho)
     });
     const used = { barrier: 0, truck: 0, hole: 0 };
@@ -270,5 +271,5 @@ export function createBarriers() {
     current = chosen;
   }
 
-  return { randomize, clear, get current() { return current; }, get count() { return current.length + jammed.length; }, get jammedSlots() { return jammed; } };
+  return { randomize, clear, get current() { return current; }, get count() { return current.length + jammed.length; }, get jammedSlots() { return jammed; }, get jamRects() { return jamRects; } };
 }

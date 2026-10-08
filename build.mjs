@@ -27,6 +27,7 @@ async function inject(js) {
 const options = {
   entryPoints: [entry], bundle: true, format: 'iife', target: 'es2020',
   minify: !dev, legalComments: 'none', write: false, logLevel: 'warning',
+  loader: { '.ogg': 'dataurl' },            // honk.ogg vai embutido no html (funciona abrindo o arquivo direto)
 };
 
 if (watch) {

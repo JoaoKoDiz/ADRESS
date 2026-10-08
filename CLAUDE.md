@@ -126,6 +126,7 @@ rm -f ADRESS-netlify.zip ADRESS-projeto-completo.zip && /c/Windows/System32/tar.
 | `hint.js`, `boom.js`, `heli.js`, `monster.js` | Seta da dica, explosões/míssil, helicóptero, monstro/robô. |
 | `hud.js`, `title.js`, `titleDriver.js`, `menu.js`, `music.js`, `audio.js` | Interface, tela inicial, motorista, opções, música, sons (WebAudio). |
 | `levelSelect.js` | Seleção de bairro do modo Livre (miniaturas via `renderMiniThumbnails` em `careerMap.js`). |
+| `jamSound.js` | Música `assets/honk.ogg` (embutida no html via loader `dataurl` do esbuild) em loop perfeito (`AudioBufferSourceNode.loop`) só no Bairro 7, a menos de 45 de um engarrafamento, com fade-in/out (~2 s). |
 | `backButton.js`, `hintButton.js`, `lockButton.js`, `input.js` | Botões Voltar / DICA / cadeado; teclado. |
 
 `adress-2d.html` é a primeira versão, em 2D (só histórico).

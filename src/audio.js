@@ -73,6 +73,9 @@ export function createAudio() {
   } catch (e) { /* ignora */ }
 
   return {
+    /** Contexto e saída principal (para sons com arquivo, como a música dos engarrafamentos). null antes do unlock(). */
+    get ctx() { return ac; },
+    get out() { return master; },
     /** Cria/retoma o AudioContext. Idempotente; chamar no primeiro evento de teclado/ponteiro. */
     unlock() {
       if (broken) return;

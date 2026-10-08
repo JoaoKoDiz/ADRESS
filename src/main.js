@@ -27,6 +27,7 @@ import { createTitle } from './title.js';
 import { createBarriers } from './barriers.js';
 import { createTitleDriver } from './titleDriver.js';
 import { createCareerMap } from './careerMap.js';
+import { createJamSound } from './jamSound.js';
 import { createLevelSelect } from './levelSelect.js';
 import { createWalker } from './walker.js';
 import { createBackButton } from './backButton.js';
@@ -148,6 +149,7 @@ function walkSolids() {
   }
   return out;
 }
+const jamSound = createJamSound(audio);     // Bairro 7: música perto dos engarrafamentos (fade-in/out, loop perfeito)
 const monster = createMonster(world.scene, stage, audio);   // final secreto: 16 casas destruídas
 const allDestroyed = () => game.pool.every(h => boom.isDestroyed(h));
 
@@ -553,6 +555,9 @@ function update(dt, t) {
   hint.update(dt);
   heli.update(dt, state === 'drive' && heli.on ? input.lift() : 0);
   boom.update(dt);
+  { const foot = state === 'walk';              // quem está perto: a van ou, a pé, o personagem
+    jamSound.update(dt, IN_GAME.includes(state) && (gameMode === 'career' ? careerLevel : freeLevel) === 6 && !missions.isOpen,
+      barriers.jamRects, foot ? walker.x : van.x, foot ? walker.z : van.z); }
   // entregando (campainha/diálogo) ou com o balão "E — Entregar" à vista: a câmera se volta para a casa
   const focusH = (state === 'ring' || state === 'dialog') ? pending : state === 'drive' ? nearHouse : -1;
   const onFoot = state === 'walk';              // a câmera segue o personagem a pé
@@ -737,7 +742,7 @@ window.ADRESS = {
   get careerLevel() { return careerLevel; },
   setCareerLevel(l) { careerLevel = l; },
   setFreeLevel(l) { freeLevel = l; },
-  walker,
+  walker, jamSound,
   get levelSelect() { return levelSelect; },
   startGame: m => startFree(m),
   get shadowTier() { return shadowTier; },
