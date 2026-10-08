@@ -1,7 +1,7 @@
 // Bloqueios de rua sorteados a cada partida:
 //   Bairro 3 — 3 a 5 cavaletes de obra (amarelos e pretos);
 //   Bairro 4 — 4 a 6 bloqueios misturando cavaletes, caminhões parados na diagonal e buracos no asfalto;
-//   Bairro 7 — só caminhões na diagonal + 2 a 3 ENGARRAFAMENTOS (fila de carros ocupando um trecho inteiro de rua).
+//   Bairro 7 — só caminhões na diagonal + 3 a 4 ENGARRAFAMENTOS (fila de carros ocupando um trecho inteiro de rua).
 //   O engarrafamento tampa o trecho todo: ninguém passa em frente ao lote do lado norte desse trecho (a casa/prédio dele),
 //   por isso `jammedSlots` lista esses lotes e o jogo nunca os sorteia para as entregas.
 // Nunca isolam nada: o sorteio só é aceito se, pelo grafo de ruas, TODOS os cruzamentos e TODOS os portões

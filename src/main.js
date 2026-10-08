@@ -108,7 +108,7 @@ function refreshBarriers() {
   const lv = gameMode === 'career' ? careerLevel : freeLevel;   // o Livre também usa o bairro escolhido
   if (lv === 2) barriers.randomize(world.scene, { min: 3, max: 5, types: ['barrier'] });
   else if (lv === 3) barriers.randomize(world.scene, { min: 4, max: 6, types: ['barrier', 'truck', 'hole'] });
-  else if (lv === 6) barriers.randomize(world.scene, { min: 4, max: 6, types: ['truck'], jams: { min: 2, max: 3 } });   // Bairro 7: caminhões + engarrafamentos
+  else if (lv === 6) barriers.randomize(world.scene, { min: 4, max: 6, types: ['truck'], jams: { min: 3, max: 4 } });   // Bairro 7: caminhões + engarrafamentos
   else barriers.clear();
 }
 /** Casa/prédio sem acesso por causa de um engarrafamento (Bairro 7): nunca entra nas entregas. */
