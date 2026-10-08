@@ -1,6 +1,6 @@
 // Bloqueios de rua sorteados a cada partida:
 //   Bairro 3 — 3 a 5 cavaletes de obra (amarelos e pretos);
-//   Bairro 4 — 4 a 6 bloqueios misturando cavaletes, caminhões parados atravessados e buracos no asfalto.
+//   Bairro 4 — 4 a 6 bloqueios misturando cavaletes, caminhões parados na diagonal e buracos no asfalto.
 // Nunca isolam nada: o sorteio só é aceito se, pelo grafo de ruas, TODOS os cruzamentos e TODOS os portões
 // continuam alcançáveis a partir da entrada — às vezes só é preciso dar uma volta maior.
 //
@@ -17,7 +17,7 @@ const START = () => [ENTRANCE.road, 0];   // cruzamento da entrada (rua central,
 // e meia espessura do obstáculo ao longo da rua. Tudo fica fora do cruzamento e longe do portão (meio do trecho).
 const TYPES = {
   barrier: { offset: ROAD / 2 + 1.0, half: 0.35 },
-  truck: { offset: ROAD / 2 + 1.9, half: 1.45 },
+  truck: { offset: ROAD / 2 + 3.7, half: 3.4 },      // caminhão na diagonal: ocupa ~7 ao longo da rua
   hole: { offset: ROAD / 2 + 2.3, half: 2.1 },
 };
 
@@ -73,7 +73,7 @@ function buildBarrier(stripes) {
   return g;
 }
 
-/** Caminhão baú parado atravessado na rua (comprimento ao longo do X local). */
+/** Caminhão baú parado na diagonal da rua (comprimento ao longo do X local). */
 const TRUCK_COLORS = ['#f2f2f2', '#3a78d4', '#d8473a', '#efbf2a', '#3c9d55'];
 function buildTruck() {
   const g = new THREE.Group();
@@ -194,7 +194,9 @@ export function createBarriers() {
         x = roadCenter(j); z = (roadCenter(i) + roadCenter(i + 1)) / 2; alongX = false;
       }
       b.position.set(x, 0, z);
-      b.rotation.y = (alongX ? Math.PI / 2 : 0) + (type === 'truck' && Math.random() < 0.5 ? Math.PI : 0);
+      b.rotation.y = type === 'truck'
+        ? (Math.random() < 0.5 ? Math.PI / 4 : -Math.PI / 4) + (Math.random() < 0.5 ? Math.PI : 0)   // caminhão parado na diagonal
+        : alongX ? Math.PI / 2 : 0;
       if (type === 'truck') b.userData.cargo.material = mat(TRUCK_COLORS[Math.floor(Math.random() * TRUCK_COLORS.length)]);
       const half = ROAD / 2 + 0.1;
       const s = alongX ? { x0: x - T.half, x1: x + T.half, z0: z - half, z1: z + half }

@@ -40,7 +40,7 @@ function roadGeometry(curve, samples) {
 //   houses   — 4 casinhas e ruas em cruz (Bairro 1)
 //   plaza    — 8 casinhas menores em volta de uma pracinha (Bairro 2)
 //   barriers — 4 casinhas + 2 cavaletes de obra (Bairro 3)
-//   trucks   — 4 casinhas + caminhão parado numa rua e buraco no meio (Bairro 4)
+//   trucks   — 4 casinhas + caminhão na diagonal numa rua e buraco no meio (Bairro 4)
 //   gas      — posto de gasolina, prédio comercial e 1 casinha (Bairro 5)
 //   city     — 3 prédios altos e 1 casinha (Bairro 6)
 const MINI_KINDS = ['houses', 'plaza', 'barriers', 'trucks', 'gas', 'city'];
@@ -164,7 +164,7 @@ function miniNeighborhood(kind, colors, gray = false) {
     for (const wx of [-1.0, 0.0, 1.05]) for (const wz of [-0.55, 0.55]) {
       t.add(at(cyl(0.24, 0.24, 0.16, G('#26272b', '#555555'), 10), wx, 0.67, wz, Math.PI / 2, 0, 0));
     }
-    t.position.set(0, 0, 4.2); t.rotation.y = -Math.PI / 2;   // na rua da frente, de frente para a câmera
+    t.position.set(0, 0, 4.2); t.rotation.y = -Math.PI / 4;   // na rua da frente, na diagonal
     g.add(t);
     add(cyl(1.05, 1.1, 0.06, G('#7a5a3a', '#7d7d7d'), 16), 0, 0.45, 0);                  // terra em volta
     add(cyl(0.8, 0.8, 0.07, G('#1b1714', '#3c3c3c'), 16), 0, 0.47, 0);                   // buraco
