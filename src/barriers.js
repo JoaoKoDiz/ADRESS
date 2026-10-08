@@ -207,7 +207,8 @@ export function createBarriers() {
     const wantJams = jams ? jams.min + Math.floor(Math.random() * (jams.max - jams.min + 1)) : 0;
     // engarrafamentos: trechos horizontais de rua com lotes ao norte (i ≥ 1); tampam o trecho inteiro
     const jamCands = [];
-    for (let i = 1; i <= N; i++) for (let j = 0; j < N; j++) jamCands.push([j, i]);
+    const gasSlots = new Set(GAS_LIST.flatMap(g => g.slots));          // lote de posto não é destino de entrega: engarrafar ali não adiantaria
+    for (let i = 1; i <= N; i++) for (let j = 0; j < N; j++) if (!gasSlots.has((i - 1) * N + j)) jamCands.push([j, i]);
     const shuf = a => { for (let k = a.length - 1; k > 0; k--) { const r = Math.floor(Math.random() * (k + 1)); [a[k], a[r]] = [a[r], a[k]]; } };
     let chosen, jamSegs;
     for (let tries = 0; tries < 60; tries++) {
