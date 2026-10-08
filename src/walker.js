@@ -36,7 +36,8 @@ export function createWalker(scene) {
   let phase = 0;
 
   const hits = (x, z, boxes) => boxes.some(b => x > b.x0 - RADIUS && x < b.x1 + RADIUS && z > b.z0 - RADIUS && z < b.z1 + RADIUS);
-  const hitsVan = (x, z, van) => Math.hypot(x - van.x, z - van.z) < 2.5 + RADIUS;
+  // a van é um círculo; se o personagem já está dentro dele (acabou de descer), só impede de entrar mais fundo
+  const hitsVan = (x, z, van) => { const d = Math.hypot(x - van.x, z - van.z); return d < 2.5 + RADIUS && d < Math.hypot(st.x - van.x, st.z - van.z) - 1e-6; };
   const blocked = (x, z, boxes, van) => hits(x, z, boxes) || hitsVan(x, z, van);
 
   function apply() {
@@ -52,7 +53,7 @@ export function createWalker(scene) {
     /** Põe o personagem ao lado da porta do motorista (tenta os dois lados da van; sem espaço, afasta mais). */
     placeBesideVan(van, boxes) {
       const fx = Math.cos(van.heading), fz = Math.sin(van.heading);
-      for (const d of [2.6, 3.4, 4.4]) for (const side of [1, -1]) {
+      for (const d of [3.4, 4.2, 5.0]) for (const side of [1, -1]) {
         const x = van.x + side * fz * d, z = van.z - side * fx * d;
         if (!hits(x, z, boxes)) { st.x = x; st.z = z; st.heading = van.heading; st.speed = 0; apply(); return; }
       }
