@@ -612,7 +612,7 @@ function updateChurch(dt) {
     if (churchT >= 5) {
       churchShown = true; church.visible = true; setChurchOpacity(church, 0);
       const z0 = M + CHURCH_Z, cx = M / 2;
-      churchSolids.push({ x0: cx - 21, x1: cx + 21, z0: z0 - 2, z1: z0 + 12 }, { x0: cx - 13, x1: cx + 13, z0: z0 + 12, z1: z0 + 58 });
+      churchSolids.push({ x0: cx - 23.6, x1: cx + 23.6, z0: z0 - 2.6, z1: z0 + 13 }, { x0: cx - 16.8, x1: cx + 16.8, z0: z0 + 13, z1: z0 + 44 }, { x0: cx - 13, x1: cx + 13, z0: z0 + 44, z1: z0 + 57 });
       SOLIDS.push(...churchSolids);
     }
   } else if (churchA < 1) {
