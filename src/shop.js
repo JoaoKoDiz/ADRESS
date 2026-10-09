@@ -56,6 +56,12 @@ const CSS = `
 .shop-btn { padding: .5em 1em; border-radius: 10px; border: 3px solid #fff; background: #8a55c4; color: #fff; font: 800 clamp(13px, 1.1vw, 16px) "Trebuchet MS", sans-serif; cursor: pointer; }
 .shop-btn.ghost { background: rgba(0,0,0,.3); }
 .shop-btn:hover { filter: brightness(1.15); }
+.shop-btn:disabled { opacity: .6; cursor: default; filter: none; }
+.shop-savebar { position: sticky; bottom: calc(-1 * clamp(12px, 1.4vw, 22px)); margin: auto calc(-1 * clamp(12px, 1.4vw, 22px)) calc(-1 * clamp(12px, 1.4vw, 22px)); padding: 12px clamp(12px, 1.4vw, 22px);
+  display: flex; align-items: center; gap: 12px; flex-wrap: wrap; background: rgba(38,26,52,.96); border-top: 3px solid rgba(255,243,214,.35); border-radius: 0 0 15px 15px; z-index: 3; }
+.shop-savebar .shop-desc { flex: 1 1 14em; opacity: .9; }
+.shop-savebar .shop-btn { font-size: clamp(15px, 1.3vw, 19px); padding: .6em 1.3em; background: #3c9d55; }
+.shop-savebar.dirty .shop-desc { color: #ffd27a; }
 .shop-prev { position: relative; overflow: hidden; background: rgba(0,0,0,.22); }
 .shop-canvas { position: absolute; inset: 0; }
 .shop-canvas canvas { width: 100%; height: 100%; display: block; }
@@ -129,14 +135,24 @@ export function createShop() {
     const saved = JSON.parse(localStorage.getItem(KEY) || 'null');
     if (saved) for (const k of Object.keys(DEFAULTS)) { const h = normHex(saved[k]); if (h) colors[k] = h; }
   } catch (e) { /* ignora */ }
-  const applyColors = () => { setVanPaint(colors.paint); setCharColors(colors); setWheelColors({ tire: colors.wheelTire, hub: colors.wheelHub }); setDecalChecks(colors.decalCheckA, colors.decalCheckB); };
-  const save = () => { try { localStorage.setItem(KEY, JSON.stringify(colors)); } catch (e) { /* ignora */ } };
+  // draft = cores em teste na pré-visualização; só viram `colors` (salvas, valem no jogo) com o botão Salvar.
+  // Sair da categoria ou do Shop sem salvar volta para as cores salvas.
+  const draft = { ...colors };
+  const applyColors = () => { setVanPaint(draft.paint); setCharColors(draft); setWheelColors({ tire: draft.wheelTire, hub: draft.wheelHub }); setDecalChecks(draft.decalCheckA, draft.decalCheckB); };
+  const save = keys => { for (const k of keys) colors[k] = draft[k]; try { localStorage.setItem(KEY, JSON.stringify(colors)); } catch (e) { /* ignora */ } };
+  const dirtyKeys = keys => keys.some(k => draft[k] !== colors[k]);
+  function revertColors() {                 // descarta o que não foi salvo
+    if (!dirtyKeys(Object.keys(DEFAULTS))) return;
+    const chk = dirtyKeys(['decalCheckA', 'decalCheckB']);
+    Object.assign(draft, colors); applyColors();
+    if (chk) { refreshDecals(); if (pv) pv.van.refreshDecal(); decalThumbs = null; }
+  }
   applyColors();
 
   const el = document.createElement('div');
   el.className = 'shopov';
   el.innerHTML = `
-    <div class="shop-head"><h2>SHOP</h2><span>Ainda não há moedas: tudo é grátis por enquanto. Escolha e salve — a van fica assim no jogo.</span></div>
+    <div class="shop-head"><h2>SHOP</h2><span>Ainda não há moedas: tudo é grátis por enquanto. Escolha e aperte Salvar — fica assim no jogo.</span></div>
     <div class="shop-side"></div>
     <div class="shop-main"></div>
     <div class="shop-prev"><div class="shop-canvas"></div>
@@ -170,8 +186,26 @@ export function createShop() {
     }
   }
 
+  // ---------- barra de salvar (rodapé fixo do meio, igual em todas as categorias) ----------
+  let saveUi = null;                         // { refresh } da barra atual
+  function saveBar(info, isSaved, doSave) {
+    const bar = document.createElement('div'); bar.className = 'shop-savebar';
+    const t = document.createElement('div'); t.className = 'shop-desc';
+    const b = document.createElement('button'); b.type = 'button'; b.className = 'shop-btn shop-save'; b.tabIndex = -1;
+    bar.append(t, b); main.appendChild(bar);
+    const refresh = () => {
+      const st = isSaved(); t.textContent = info(st);
+      b.textContent = st === null ? 'Nada para salvar ainda' : st ? '✔ Salvo' : 'Salvar';
+      b.disabled = st !== false; bar.classList.toggle('dirty', st === false);
+    };
+    b.addEventListener('click', () => { if (isSaved() === false) { doSave(); refresh(); } });
+    saveUi = { refresh }; refresh();
+    return refresh;
+  }
+
   // ---------- conteúdo do meio ----------
   function buildMain() {
+    saveUi = null;
     main.innerHTML = '';
     const h = document.createElement('h3'); h.textContent = (cat.sec === 'van' ? 'Van · ' : 'Personagem · ') + cat.name; main.appendChild(h);
     const d = document.createElement('div'); d.className = 'shop-desc'; d.textContent = cat.desc; main.appendChild(d);
@@ -181,6 +215,7 @@ export function createShop() {
       const g = document.createElement('div'); g.className = 'shop-items';
       for (let i = 0; i < 6; i++) g.insertAdjacentHTML('beforeend', '<div class="shop-item"><div class="img">🔒</div><b>Em breve</b><small>— moedas</small></div>');
       main.appendChild(g);
+      saveBar(() => 'Quando houver itens, escolha um e salve aqui.', () => null, () => {});
       return;
     }
     const wrap = document.createElement('div'); wrap.className = 'shop-color';
@@ -191,14 +226,15 @@ export function createShop() {
     const sw = wrap.querySelector('.shop-sw'), input = wrap.querySelector('input'), [useBtn, resetBtn] = wrap.querySelectorAll('.shop-btn');
     if (cat.id === 'skin') resetBtn.remove();                                        // Tom de pele: sem "Restaurar padrão"
     const paintUi = () => {
-      const c = colors[cat.key];
+      const c = draft[cat.key];
       wrap.querySelector('.shop-chip').style.background = c;
       wrap.querySelector('.shop-curhex').textContent = c.toUpperCase();
       sw.querySelectorAll('button').forEach(b => b.classList.toggle('sel', b.dataset.c === c));
       if (document.activeElement !== input) input.value = c.toUpperCase();
       input.classList.remove('bad');
     };
-    const setColor = hex => { colors[cat.key] = hex; applyColors(); save(); paintUi(); saved('Cor salva: já vale no jogo.'); };
+    const key = cat.key;
+    const setColor = hex => { draft[key] = hex; applyColors(); paintUi(); refreshBar(); };
     for (const c of COLORS[cat.pal]) {
       const b = document.createElement('button'); b.type = 'button'; b.style.background = c; b.dataset.c = c; b.title = c.toUpperCase();
       b.addEventListener('click', () => { input.blur(); setColor(c); });
@@ -210,14 +246,17 @@ export function createShop() {
     input.addEventListener('blur', () => paintUi());
     useBtn.addEventListener('click', () => tryHex(false));
     if (cat.id !== 'skin') resetBtn.addEventListener('click', () => { input.blur(); setColor(DEFAULTS[cat.key]); });
+    wrap.querySelector('.shop-cur .shop-desc').textContent = 'Cor escolhida';
+    const refreshBar = saveBar(st => st ? `Cor salva: ${colors[key].toUpperCase()} (já vale no jogo).` : `Não salva ainda — a salva é ${colors[key].toUpperCase()}.`,
+      () => !dirtyKeys([key]), () => { save([key]); saved('Cor salva: já vale no jogo.'); });
     paintUi();
   }
 
   // ---------- galeria de modelos (Rodas e Bagageiro) ----------
   const GAL = {
-    wheels: { models: WHEEL_MODELS, get: () => wheelSel, set: v => { wheelSel = v; }, key: 'wheels', eq: 'Equipada', msg: 'Clique num modelo para ver na van e use “Equipar e salvar” para jogar com ele. Por enquanto todas as rodas são grátis (ainda não há moedas).' },
-    rack: { models: RACK_MODELS, get: () => rackSel, set: v => { rackSel = v; }, key: 'rack', eq: 'Equipado', msg: n => `Clique num modelo para ver na van e use “Equipar e salvar” para jogar com ele. Por enquanto os ${n + 1} bagageiros são grátis (ainda não há moedas).` },
-    decals: { models: DECALS, get: () => decalSel, set: v => { decalSel = v; }, key: 'decals', eq: 'Equipada', wide: true, msg: n => `Clique numa estampa para ver na van (cada lado é diferente) e use “Equipar e salvar” para jogar com ela. Por enquanto as ${n} estampas são grátis (ainda não há moedas).` },
+    wheels: { models: WHEEL_MODELS, get: () => wheelSel, set: v => { wheelSel = v; }, key: 'wheels', eq: 'Equipada', msg: 'Clique num modelo para ver na van e aperte “Salvar” (embaixo) para jogar com ele. Por enquanto todas as rodas são grátis (ainda não há moedas).' },
+    rack: { models: RACK_MODELS, get: () => rackSel, set: v => { rackSel = v; }, key: 'rack', eq: 'Equipado', msg: n => `Clique num modelo para ver na van e aperte “Salvar” (embaixo) para jogar com ele. Por enquanto os ${n + 1} bagageiros são grátis (ainda não há moedas).` },
+    decals: { models: DECALS, get: () => decalSel, set: v => { decalSel = v; }, key: 'decals', eq: 'Equipada', wide: true, msg: n => `Clique numa estampa para ver na van (cada lado é diferente) e aperte “Salvar” (embaixo) para jogar com ela. Por enquanto as ${n} estampas são grátis (ainda não há moedas).` },
   };
   function gallery() {
     const G = GAL[cat.id], models = G.models, th = thumbs(G.key);
@@ -227,13 +266,13 @@ export function createShop() {
     const g = document.createElement('div'); g.className = 'shop-items' + (G.wide ? ' wide' : '');
     const dsc = document.createElement('div'); dsc.className = 'shop-desc';
     const kind = { wheels: 'wheel', rack: 'rack', decals: 'decal' }[cat.id];
-    const btn = document.createElement('button'); btn.type = 'button'; btn.className = 'shop-btn shop-equip'; btn.tabIndex = -1;
+    const pk = panelKeys;                   // cores do painel da pré-visualização que valem para este item (roda padrão / xadrez)
+    let refreshBar = () => {};
     const show = () => {
       const i = G.get(); dsc.textContent = models[i].name + ' — ' + models[i].desc;
-      const on = look[kind] === i; btn.textContent = on ? '✔ Equipada na sua van' : 'Equipar e salvar'; btn.disabled = on; btn.style.opacity = on ? 0.7 : 1;
-      g.querySelectorAll('.shop-cardw').forEach(x => { x.querySelector('small').textContent = look[kind] === +x.dataset.i ? 'Equipada' : 'Grátis por enquanto'; });
+      g.querySelectorAll('.shop-cardw').forEach(x => { x.querySelector('small').textContent = look[kind] === +x.dataset.i ? G.eq : 'Grátis por enquanto'; });
+      refreshBar();
     };
-    btn.addEventListener('click', () => { equip(kind, G.get()); show(); saved(`${models[G.get()].name} equipada: já vale no jogo.`); });
     models.forEach((m, i) => {
       const c = document.createElement('div'); c.className = 'shop-item shop-cardw' + (i === G.get() ? ' sel' : ''); c.dataset.i = i;
       c.innerHTML = `<div class="img"><img src="${th[i]}" alt=""></div><b>${m.name}</b><small></small>`;
@@ -245,7 +284,21 @@ export function createShop() {
       });
       g.appendChild(c);
     });
-    main.appendChild(g); main.appendChild(dsc); main.appendChild(btn); show();
+    main.appendChild(g); main.appendChild(dsc);
+    refreshBar = saveBar(st => {
+      const m = models[G.get()].name, colorsLeft = dirtyKeys(pk());
+      return st ? `${m}: ${G.eq.toLowerCase()} na sua van.` : look[kind] === G.get() && colorsLeft ? `${m}: cores novas ainda não salvas.` : `${m}: ainda não ${G.eq.toLowerCase()}.`;
+    }, () => look[kind] === G.get() && !dirtyKeys(pk()), () => {
+      const k = pk(); if (k.length) save(k);
+      equip(kind, G.get()); show(); saved(`${models[G.get()].name}: salvo, já vale no jogo.`);
+    });
+    show();
+  }
+  // cores do painel pequeno que pertencem ao item em visualização
+  function panelKeys() {
+    if (cat.id === 'wheels' && wheelSel === 0) return ['wheelTire', 'wheelHub'];
+    if (cat.id === 'decals' && decalSel === CHECK_IDX) return ['decalCheckA', 'decalCheckB'];
+    return [];
   }
 
   // ---------- miniaturas, visualização e cores da roda padrão ----------
@@ -285,22 +338,22 @@ export function createShop() {
   }
   let panelFor = null;
   function colorPanel(kind) {                // painel pequeno no canto da pré-visualização: roda padrão (aro/centro) ou xadrez (cor 1/cor 2)
-    if (panelFor === kind) return;
+    if (panelFor === kind) { wcolor.querySelectorAll('input').forEach(i => i.dispatchEvent(new Event('blur'))); return; }
     panelFor = kind;
     const wheel = kind === 'wheel';
-    wcolor.innerHTML = `<small>${wheel ? 'Cores da roda padrão (só nela)' : 'Cores do xadrez'}</small>`;
+    wcolor.innerHTML = `<small>${wheel ? 'Cores da roda padrão (só nela)' : 'Cores do xadrez'} — salve no botão Salvar</small>`;
     const rows = wheel ? [['Aro', 'wheelTire', COLORS.wTire], ['Centro', 'wheelHub', COLORS.wHub]] : [['Cor 1', 'decalCheckA', COLORS.dCheck], ['Cor 2', 'decalCheckB', COLORS.dCheck]];
     for (const [label, key, pal] of rows) {
       const row = document.createElement('div'); row.className = 'shop-wrow';
       row.innerHTML = `<b>${label}</b>`;
       const input = document.createElement('input'); input.type = 'text'; input.maxLength = 7; input.spellcheck = false; input.placeholder = '#RRGGBB';
       const paint = () => {
-        row.querySelectorAll('button').forEach(b => b.classList.toggle('sel', b.dataset.c === colors[key]));
-        if (document.activeElement !== input) input.value = colors[key].toUpperCase();
+        row.querySelectorAll('button').forEach(b => b.classList.toggle('sel', b.dataset.c === draft[key]));
+        if (document.activeElement !== input) input.value = draft[key].toUpperCase();
         input.classList.remove('bad');
       };
       const set = hex => {
-        colors[key] = hex; applyColors(); save(); paint(); saved('Cor salva.');
+        draft[key] = hex; applyColors(); paint(); saveUi && saveUi.refresh();
         if (!wheel) {
           refreshDecals();                                                  // xadrez: redesenha a estampa na van e a miniatura
           if (pv) pv.van.refreshDecal();
@@ -370,7 +423,7 @@ export function createShop() {
     const rack = new THREE.Group();                                                                 // carga sozinha (modelo escolhido), ampliada
     rack.scale.setScalar(1.15); rack.position.y = 0.3; scene.add(rack);
     const swatch = new THREE.Group();                                                               // gota de tinta: disco na cor escolhida
-    const sMat = new THREE.MeshStandardMaterial({ color: colors.paint, roughness: 0.4 });
+    const sMat = new THREE.MeshStandardMaterial({ color: draft.paint, roughness: 0.4 });
     const disc = new THREE.Mesh(new THREE.CylinderGeometry(1.5, 1.5, 0.3, 40), sMat); disc.position.y = 0.55;
     const drop = new THREE.Mesh(new THREE.SphereGeometry(0.9, 24, 16), sMat); drop.position.y = 1.4;
     swatch.add(disc, drop); scene.add(swatch);
@@ -420,7 +473,7 @@ export function createShop() {
     const dt = Math.min(0.05, Math.max(0, (now - last) / 1000)); last = now;
     if (pv) {
       pv.t += dt;
-      pv.sMat.color.set(colors.paint);
+      pv.sMat.color.set(draft.paint);
       const char = cat.sec === 'char', item = !char && view === 'item';
       if (now >= pv.holdUntil) pv.angle += dt * 0.55;              // gira sozinho, a menos que o jogador tenha mexido há menos de 10 s
       const a = pv.angle;
@@ -444,6 +497,7 @@ export function createShop() {
     arrow.textContent = view === 'van' ? '◀' : '▶';
   }
   function select(c) {
+    revertColors();
     cat = c; view = 'van';
     side.querySelectorAll('.shop-cat').forEach(b => b.classList.toggle('sel', b.dataset.id === c.id));
     if (c.id !== 'wheels') wheelSel = look.wheel;
@@ -472,7 +526,7 @@ export function createShop() {
       pose(); paintView(); itemPreview();
       if (!running) { running = true; last = performance.now(); requestAnimationFrame(frame); }
     },
-    close() { el.classList.remove('on'); running = false; if (document.activeElement && el.contains(document.activeElement)) document.activeElement.blur(); },
+    close() { revertColors(); el.classList.remove('on'); running = false; if (document.activeElement && el.contains(document.activeElement)) document.activeElement.blur(); },
     get isOpen() { return el.classList.contains('on'); },
     get colors() { return { ...colors }; },
     /** Testes: ângulo atual da pré-visualização e se a rotação automática está pausada. */
@@ -483,6 +537,8 @@ export function createShop() {
     _select(id) { select(CATS.find(c => c.id === id)); },
     _toggleView: toggleView,
     _wheel(i) { wheelSel = i; if (cat.id === 'wheels') buildMain(); itemPreview(); },
+    _decal(i) { decalSel = i; if (cat.id === 'decals') buildMain(); itemPreview(); },
+    get _draft() { return { ...draft }; },
     _rack(i) { rackSel = i; if (cat.id === 'rack') buildMain(); itemPreview(); },
     get _view() { return view; },
   };
