@@ -3,6 +3,7 @@
 import * as THREE from 'three';
 import { SOLIDS, BOUNDS, VAN_START } from './layout.js';
 import { mat, mesh, box, cyl, at, group, dynamic, bakeStatic } from './models/kit.js';
+import { buildWheel, WHEEL_R, WHEEL_W } from './models/wheels.js';
 
 // ---------- Física ----------
 const MAX = 21, ACC = 2.2, DEC = 3.5, TURN = 4.6;
@@ -30,7 +31,6 @@ export const setVanPaint = hex => PAINT.color.set(hex);
 export const getVanPaint = () => '#' + PAINT.color.getHexString();
 const BODY_W = 2.5, BEVEL = 0.14;
 const SIDE_Z = BODY_W / 2;                   // face lateral da carroceria
-const WHEEL_R = 0.44, WHEEL_W = 0.36;
 const WHEELS = [[1.5, 1], [1.5, -1], [-1.45, 1], [-1.45, -1]];
 
 // Perfil lateral da carroceria (x, y): traseira alta, para-brisa inclinado, capô curto.
@@ -171,9 +171,7 @@ function buildModel() {
   for (const [x, s] of WHEELS) {
     const pivot = new THREE.Group();
     pivot.position.set(x, WHEEL_R, s * (SIDE_Z - WHEEL_W / 2 + 0.07));
-    const tire = at(cyl(WHEEL_R, WHEEL_R, WHEEL_W, TIRE, 12), 0, 0, 0, Math.PI / 2, 0, 0);
-    const hub = at(cyl(0.22, 0.22, WHEEL_W + 0.04, HUB, 6), 0, 0, 0, Math.PI / 2, 0, 0);
-    pivot.add(tire, hub);
+    pivot.add(buildWheel(0));
     root.add(pivot);
     wheels.push(pivot);
   }
@@ -324,6 +322,8 @@ export function createVan(scene) {
     reset() { teleport(VAN_START.x, VAN_START.z, VAN_START.heading); },
     stop() { speed = 0; prevSpeed = 0; roll = 0; pitch = 0; sync(); },
     setGhost(v) { ghost = !!v; },
+    /** Troca o modelo das rodas (Shop): 0 = padrão. */
+    setWheelModel(m) { wheels.forEach(p => { while (p.children.length) p.remove(p.children[0]); p.add(buildWheel(m)); }); },
     /** Gira a van (usado no voo de helicóptero, que vira mesmo parado). */
     turn(d) { heading = angleDiff(heading + d, 0); sync(); },
     teleport,
