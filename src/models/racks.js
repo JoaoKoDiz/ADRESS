@@ -1,7 +1,7 @@
 // Bagageiros da van (Shop → Bagageiro): o padrão (caixas de entrega) + 3 modelos. Nenhum tem cor editável.
 // Coordenadas no espaço do corpo da van (frente = +X); a carga fica sobre os trilhos do teto (y ≈ 2,47, x de −2,2 a 0,5, z de −0,85 a 0,85).
 import * as THREE from 'three';
-import { box, cyl, sphere, cone, at, group, dynamic, textTexture } from './kit.js';
+import { box, cyl, sphere, torus, at, group, dynamic, textTexture } from './kit.js';
 
 const Y = 2.47;                                    // topo dos trilhos
 const CARD = '#c98a4a', TAPE = '#f3d9a6';
@@ -33,6 +33,59 @@ function crate(w, h, d) {
   const s = label('ESTE LADO', 0.5, 0.16, '#f4efe3', '#2b2d33', 44); s.rotation.y = Math.PI / 2; s.position.set(w / 2 + 0.05, h * 0.35, 0); g.add(s);
   g.add(at(box(0.16, 0.1, 0.02, '#d8473a'), -w * 0.3, h * 0.35, d / 2 + 0.02));                                   // etiqueta de despacho
   return g;
+}
+
+
+/** Gerador pseudo-aleatório determinístico (a carga remendada sempre sai igual). */
+const rng = seed => () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+
+/** Caixa amassada e coberta de fita adesiva por todos os lados (origem no centro da base). */
+function patchedBox(w, h, d, seed) {
+  const r = rng(seed), g = group();
+  g.add(at(box(w, h, d, '#b57a3e'), 0, h / 2, 0));
+  g.add(at(box(w * 0.45, 0.06, d * 0.45, '#9a6a36'), w * 0.28, h + 0.01, d * 0.28, -0.12, 0.3, -0.35));        // tampa afundada/amassada num canto
+  for (const [x, y, z, sx, sy] of [[-w * 0.25, h * 0.55, d / 2 + 0.011, 0.4, 0.35], [w * 0.2, h * 0.3, -d / 2 - 0.011, 0.3, 0.3]]) g.add(at(box(w * sx, h * sy, 0.02, '#8a5a2e'), x, y, z));   // amassados nas faces
+  g.add(at(box(0.02, h * 0.4, d * 0.4, '#8a5a2e'), w / 2 + 0.011, h * 0.5, d * 0.1));
+  let n = 0;
+  const tape = () => (n++ % 3 === 0 ? '#aeb4bb' : n % 3 === 1 ? '#e8d3a0' : '#d9b97a');
+  for (let i = 0; i < 13; i++) {                                                                                 // fita demais: tiras cruzadas em cima e dando a volta
+    const e = 0.004 * (i + 1), wd = 0.09 + r() * 0.07, c = tape();
+    if (i % 3 === 0) {                                                                                           // volta completa em torno da caixa (em X)
+      const px = (r() - 0.5) * w * 0.8;
+      g.add(at(box(wd, 0.012, d + 0.02, c), px, h + e, 0), at(box(wd, h + 0.02, 0.012, c), px, h / 2, d / 2 + e), at(box(wd, h + 0.02, 0.012, c), px, h / 2, -d / 2 - e));
+    } else if (i % 3 === 1) {                                                                                    // volta completa em torno da caixa (em Z)
+      const pz = (r() - 0.5) * d * 0.8;
+      g.add(at(box(w + 0.02, 0.012, wd, c), 0, h + e, pz), at(box(0.012, h + 0.02, wd, c), w / 2 + e, h / 2, pz), at(box(0.012, h + 0.02, wd, c), -w / 2 - e, h / 2, pz));
+    } else {                                                                                                     // tira diagonal torta em cima
+      g.add(at(box(Math.max(w, d) * 0.95, 0.012, wd, c), (r() - 0.5) * 0.2, h + e, (r() - 0.5) * 0.2, 0, (r() < 0.5 ? 1 : -1) * (0.5 + r() * 0.5), 0));
+    }
+  }
+  for (const [x, z] of [[-w * 0.3, -d * 0.2], [w * 0.25, d * 0.3]]) g.add(at(box(0.22, 0.014, 0.16, '#e3a52a'), x, h + 0.07, z, 0, r() * 2, 0));   // remendos amarelos
+  return g;
+}
+
+/** Ursinho de pelúcia enorme (origem no chão, sentado). */
+function bear() {
+  const FUR = '#a8693a', LIGHT = '#d9a56a', g = group();
+  const body = sphere(0.55, FUR, 14, 10); body.scale.set(0.95, 1.05, 0.8); body.position.y = 0.55; g.add(body);
+  g.add(at(sphere(0.34, LIGHT, 12, 8), 0.12, 0.5, 0.0));                                                          // barriga
+  const head = sphere(0.42, FUR, 14, 10); head.position.set(0.05, 1.3, 0); g.add(head);
+  g.add(at(sphere(0.17, FUR, 8, 6), -0.05, 1.68, 0.3), at(sphere(0.17, FUR, 8, 6), -0.05, 1.68, -0.3));              // orelhas
+  g.add(at(sphere(0.1, LIGHT, 8, 6), -0.05, 1.68, 0.3), at(sphere(0.1, LIGHT, 8, 6), -0.05, 1.68, -0.3));
+  const muzzle = sphere(0.19, LIGHT, 10, 8); muzzle.scale.set(1, 0.8, 1.15); muzzle.position.set(0.38, 1.2, 0); g.add(muzzle);
+  g.add(at(sphere(0.06, '#2b1a10', 8, 6), 0.55, 1.26, 0), at(sphere(0.045, '#111111', 8, 6), 0.38, 1.4, 0.15), at(sphere(0.045, '#111111', 8, 6), 0.38, 1.4, -0.15));   // nariz e olhos
+  for (const s of [-1, 1]) {                                                                                      // braços e pernas espremidos para os lados/frente
+    g.add(at(sphere(0.2, FUR, 10, 8), 0.05, 0.85, s * 0.62));
+    g.add(at(sphere(0.23, FUR, 10, 8), 0.5, 0.2, s * 0.32), at(sphere(0.13, LIGHT, 8, 6), 0.72, 0.2, s * 0.32));
+  }
+  g.add(at(box(0.1, 0.14, 0.4, '#d8473a'), 0.05, 1.0, 0, 0, 0, 0.1));                                             // laço no pescoço
+  return g;
+}
+
+/** Caixa colorida de brinquedo com fita (origem no centro da base). */
+function toyBox(w, h, d, color, ribbon = '#ffffff') {
+  return group(at(box(w, h, d, color), 0, h / 2, 0), at(box(w + 0.02, 0.012, 0.1, ribbon), 0, h + 0.005, 0), at(box(0.1, 0.012, d + 0.02, ribbon), 0, h + 0.006, 0),
+    at(box(w + 0.02, h + 0.02, 0.1, ribbon), 0, h / 2, 0), at(sphere(0.07, ribbon, 8, 6), 0.06, h + 0.08, 0), at(sphere(0.07, ribbon, 8, 6), -0.06, h + 0.08, 0));
 }
 
 export const RACK_MODELS = [
@@ -74,6 +127,32 @@ export const RACK_MODELS = [
       const l1 = label('GELADEIRA', 0.62, 0.2, '#f4efe3', '#2b2d33', 46); l1.rotation.x = -Math.PI / 2; l1.position.set(0.05, 0.792, -0.2); fr.add(l1);
       const l2 = label('↑ ESTE LADO', 0.5, 0.16, '#f4efe3', '#c0281e', 40); l2.rotation.x = -Math.PI / 2; l2.position.set(-0.62, 0.792, 0.16); fr.add(l2);
       return group(at(fr, -0.9, Y, 0, 0, 0.04, 0));
+    } },
+  { name: 'Carga toda remendada', desc: 'Caixas amassadas, cobertas por quantidades exageradas de fita adesiva.',
+    build() {
+      return group(at(patchedBox(1.25, 0.62, 1.1, 11), -1.4, Y, 0.0, 0, 0.1, 0), at(patchedBox(0.85, 0.56, 0.8, 23), -0.25, Y, -0.25, 0, -0.3, 0),
+        at(patchedBox(0.6, 0.42, 0.6, 37), -1.35, Y + 0.62, 0.05, -0.1, 0.4, 0.12));
+    } },
+  { name: 'Pneus novos', desc: 'Quatro pneus empilhados, com etiquetas de entrega.',
+    build() {
+      const st = group();
+      for (let i = 0; i < 4; i++) {
+        const t = at(torus(0.33, 0.17, '#1f2023', 10, 24), 0, 0.17 + i * 0.34, 0, Math.PI / 2, 0, 0);
+        st.add(t, at(torus(0.38, 0.022, '#e9e6df', 6, 24), 0, 0.17 + i * 0.34 + 0.165, 0, Math.PI / 2, 0, 0));        // faixa branca da marca
+      }
+      for (const x of [-0.2, 0.2]) {                                                                                  // cintas laranja segurando a pilha
+        st.add(at(box(0.07, 1.4, 0.03, '#ff7a1a'), x, 0.68, 0.51), at(box(0.07, 1.4, 0.03, '#ff7a1a'), x, 0.68, -0.51));
+      }
+      const l1 = label('ENTREGA', 0.34, 0.2, '#f4efe3', '#c0281e', 44); l1.position.set(0, 0.85, 0.53); st.add(l1);
+      const l2 = label('NOVOS ×4', 0.34, 0.2, '#f4efe3', '#2b2d33', 40); l2.rotation.y = Math.PI / 2; l2.position.set(0.53, 0.5, 0); st.add(l2);
+      const l3 = label('PNEU', 0.3, 0.16, '#f4efe3', '#2b2d33', 44); l3.rotation.x = -Math.PI / 2; l3.position.set(0.33, 1.375, 0); st.add(l3);
+      return group(at(st, -0.9, Y, 0.0, 0, 0.3, 0));
+    } },
+  { name: 'Entrega de brinquedos', desc: 'Caixas coloridas, com um ursinho enorme espremido entre elas.',
+    build() {
+      return group(at(toyBox(0.7, 0.55, 0.7, '#e3262e'), -1.75, Y, -0.3, 0, 0.1, 0), at(toyBox(0.7, 0.7, 0.7, '#3a78d4'), -1.7, Y, 0.45, 0, -0.1, 0),
+        at(toyBox(0.62, 0.5, 0.7, '#efbf2a'), 0.05, Y, -0.38, 0, -0.15, 0), at(toyBox(0.6, 0.62, 0.6, '#3c9d55'), 0.05, Y, 0.38, 0, 0.12, 0),
+        at(toyBox(0.5, 0.4, 0.5, '#8a55c4'), -1.72, Y + 0.7, 0.45, 0, 0.5, 0.06), at(bear(), -0.85, Y, 0.02, 0, -0.1, 0));
     } },
 ];
 

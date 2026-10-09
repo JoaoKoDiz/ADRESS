@@ -95,7 +95,7 @@ const COLORS = {
 // sec: 'van' | 'char'. kind: 'items' (à venda; ainda vazio) | 'color' (grátis; key = chave em `colors`)
 const CATS = [
   { id: 'wheels', sec: 'van', name: 'Rodas', kind: 'items', desc: '8 modelos de roda (o primeiro é o padrão). Só a roda padrão tem cores editáveis, no canto da pré-visualização: as outras 7 são únicas.' },
-  { id: 'rack', sec: 'van', name: 'Bagageiro', kind: 'items', desc: 'O que vai em cima da van. O padrão são as caixas de entrega; os outros 3 modelos têm cores fixas (não dá para mudar).' },
+  { id: 'rack', sec: 'van', name: 'Bagageiro', kind: 'items', desc: 'O que vai em cima da van. O padrão são as caixas de entrega; os outros 6 modelos têm cores fixas (não dá para mudar).' },
   { id: 'paint', sec: 'van', name: 'Pintura', kind: 'color', key: 'paint', pal: 'paint', desc: 'A cor da lataria da van.' },
   { id: 'decals', sec: 'van', name: 'Estampas', kind: 'items', desc: 'Detalhes extras na lataria. O texto ADRESS fica sempre lá: as estampas só complementam, não trocam nem cobrem.' },
   { id: 'caps', sec: 'char', name: 'Bonés', kind: 'items', desc: 'Bonés para o seu entregador.' },
@@ -211,7 +211,7 @@ export function createShop() {
     const isW = cat.id === 'wheels', models = isW ? WHEEL_MODELS : RACK_MODELS, th = thumbs(isW ? 'wheels' : 'rack');
     const e = document.createElement('div'); e.className = 'shop-empty';
     e.textContent = isW ? 'Clique num modelo para ver na van. Por enquanto só a roda padrão está equipada; as outras 7 ainda não estão à venda.'
-      : 'Clique num modelo para ver na van. Por enquanto só o padrão (caixas) está equipado; os outros 3 ainda não estão à venda.';
+      : `Clique num modelo para ver na van. Por enquanto só o padrão (caixas) está equipado; os outros ${models.length - 1} ainda não estão à venda.`;
     main.appendChild(e);
     const g = document.createElement('div'); g.className = 'shop-items';
     const dsc = document.createElement('div'); dsc.className = 'shop-desc';
