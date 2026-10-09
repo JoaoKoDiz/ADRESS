@@ -29,6 +29,7 @@ import { createBarriers } from './barriers.js';
 import { createTitleDriver } from './titleDriver.js';
 import { createCareerMap } from './careerMap.js';
 import { createJamSound } from './jamSound.js';
+import { createShop } from './shop.js';
 import { createLevelSelect } from './levelSelect.js';
 import { createWalker } from './walker.js';
 import { createBackButton } from './backButton.js';
@@ -211,8 +212,12 @@ let titleDriver = null;   // motorista curtindo a música (painel "Jogar")
 const title = createTitle({
   onFree: () => { if (state === 'title' && !title.starting) openLevelSelect(); },   // Livre: primeiro escolhe o bairro
   onCareer: () => titleDriver.drive(() => title.fadeOut(enterMap)),     // dá a partida e vai para o mapa da Carreira
+  onShop: () => { if (state === 'title') openShop(); },       // Shop: layout inicial (cores grátis; itens em breve)
   onPlay: el => { titleDriver = titleDriver || createTitleDriver(el, audio); titleDriver.start(); },
 });
+// Shop (painel Jogar): cores da van e do personagem; o resto ainda não está à venda
+const shop = createShop();
+function openShop() { shop.open(); setState('shop'); }
 // Livre: seleção do bairro (todas as miniaturas na tela; setas escolhem, E joga). Depois o helicóptero decola.
 const levelSelect = createLevelSelect(l => confirmLevel(l));
 function openLevelSelect() { levelSelect.open(freeLevel); setState('levelSelect'); }
@@ -268,6 +273,9 @@ function goBack() {
   if (state === 'title' && title.visible && title.screen === 'play' && !title.starting) {
     if (titleDriver) titleDriver.stop();
     title.show('home');
+  } else if (state === 'shop') {
+    shop.close();
+    setState('title');
   } else if (state === 'levelSelect') {
     levelSelect.close();
     setState('title');
@@ -430,7 +438,7 @@ function focusOf(h) {
 // ---------- Atualização ----------
 function update(dt, t) {
   stateT += dt;
-  if (state !== 'title' && state !== 'levelSelect' && state !== 'levelFly' && input.toggleCamera()) rig.toggle();
+  if (state !== 'title' && state !== 'levelSelect' && state !== 'levelFly' && state !== 'shop' && input.toggleCamera()) rig.toggle();
 
   switch (state) {
     case 'drive': {
@@ -600,7 +608,7 @@ function update(dt, t) {
 // ---------- HUD ----------
 const promptPos = new THREE.Vector3();
 function updateHUD() {
-  back.set(state === 'levelSelect' || (state === 'title' && title.visible && title.screen === 'play' && !title.starting) || (state === 'map' && !missions.isOpen) || (IN_GAME.includes(state) && !missions.isOpen));
+  back.set(state === 'levelSelect' || state === 'shop' || (state === 'title' && title.visible && title.screen === 'play' && !title.starting) || (state === 'map' && !missions.isOpen) || (IN_GAME.includes(state) && !missions.isOpen));
   missionsBtn.set(gameMode === 'career' && IN_GAME.includes(state) && !missions.isOpen,
     `MISSÕES ${career.completedCount(careerLevel)}/5`);
   hud.setCounter(game.delivered);
@@ -761,6 +769,7 @@ window.ADRESS = {
   setFreeLevel(l) { freeLevel = l; },
   walker, jamSound,
   get levelSelect() { return levelSelect; },
+  shop,
   startGame: m => startFree(m),
   get shadowTier() { return shadowTier; },
   get pacing() { return { every, refresh }; },

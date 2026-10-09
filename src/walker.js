@@ -3,7 +3,12 @@
 import * as THREE from 'three';
 import { sphere, mesh, mat, at } from './models/kit.js';
 
-const SKIN = '#e8b48a', SHIRT = '#2a9df4', PANTS = '#2f3a55', SHOES = '#1b1b1f', CAP = '#e3262e', GLASSES = '#111216';
+const CAP = '#e3262e', GLASSES = '#111216';
+/** Cores do personagem (Shop): materiais únicos e compartilhados (jogo, tela inicial e Shop). */
+export const CHAR_DEFAULT = { skin: '#e8b48a', shirt: '#2a9df4', pants: '#2f3a55', shoes: '#1b1b1f' };
+export const CHAR_MATS = Object.fromEntries(Object.entries(CHAR_DEFAULT).map(([k, c]) => [k, new THREE.MeshStandardMaterial({ color: c, roughness: 0.6 })]));
+export const setCharColors = c => { for (const k of Object.keys(CHAR_MATS)) if (c && c[k]) CHAR_MATS[k].color.set(c[k]); };
+const SKIN = CHAR_MATS.skin, SHIRT = CHAR_MATS.shirt, PANTS = CHAR_MATS.pants, SHOES = CHAR_MATS.shoes;
 const SPEED = 6.5, BACK_SPEED = 3.5, TURN = 3.2, RADIUS = 0.55;
 
 export function createWalker(scene) {
@@ -16,8 +21,9 @@ export function createWalker(scene) {
   // modelo olha para +X local (rotation.y = −heading). Membros articulados (quadril/joelho/tornozelo, ombro/cotovelo),
   // formas arredondadas e sombreamento liso; balançar = rotation.z.
   const smooth = { flatShading: false, roughness: 0.6 };
-  const cap = (r, len, color) => mesh(new THREE.CapsuleGeometry(r, len, 6, 14), mat(color, smooth));
-  const ball = (r, color, sx = 1, sy = 1, sz = 1) => { const m = sphere(r, color, 20, 14, smooth); m.scale.set(sx, sy, sz); return m; };
+  const mt = c => typeof c === 'string' ? mat(c, smooth) : c;
+  const cap = (r, len, color) => mesh(new THREE.CapsuleGeometry(r, len, 6, 14), mt(color));
+  const ball = (r, color, sx = 1, sy = 1, sz = 1) => { const m = sphere(r, mt(color), 20, 14); m.scale.set(sx, sy, sz); return m; };
   const pelvis = new THREE.Group(); pelvis.position.y = 1.0; body.add(pelvis);
   pelvis.add(at(ball(0.3, PANTS, 1, 0.75, 1.1), 0, 0.02, 0));                          // quadril
   const torso = new THREE.Group(); torso.position.y = 0.08; pelvis.add(torso);          // gira/inclina separado do quadril
@@ -100,6 +106,8 @@ export function createWalker(scene) {
     object: root,
     get x() { return st.x; }, get z() { return st.z; }, get heading() { return st.heading; }, get speed() { return st.speed; },
     get visible() { return root.visible; },
+    /** Põe o personagem num ponto, olhando para `heading` (Shop). */
+    pose(x, z, heading) { st.x = x; st.z = z; st.heading = heading; apply(); },
     show(on) { root.visible = on; if (!on) st.speed = 0; },
     /** Põe o personagem ao lado da porta do motorista (tenta os dois lados da van; sem espaço, afasta mais). */
     placeBesideVan(van, boxes) {

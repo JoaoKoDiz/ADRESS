@@ -23,6 +23,11 @@ const angleDiff = (a, b) => {
 // ---------- Modelo ----------
 const ORANGE = '#ff7a1a', ORANGE_DARK = '#d95f0a', CREAM = '#fff3dc', GLASS = '#2b4a6e', GLASS_HI = '#6f9cc8';
 const DARK = '#3a3d44', TIRE = '#1f2023', HUB = '#c9ced6', CARD = '#c98a4a', TAPE = '#f3d9a6';
+/** Tinta da van (Shop → Cor da van): material único e compartilhado por todas as vans (jogo, tela inicial e Shop). */
+const PAINT = new THREE.MeshStandardMaterial({ color: ORANGE, roughness: 0.85, flatShading: true });
+export const VAN_PAINT_DEFAULT = ORANGE;
+export const setVanPaint = hex => PAINT.color.set(hex);
+export const getVanPaint = () => '#' + PAINT.color.getHexString();
 const BODY_W = 2.5, BEVEL = 0.14;
 const SIDE_Z = BODY_W / 2;                   // face lateral da carroceria
 const WHEEL_R = 0.44, WHEEL_W = 0.36;
@@ -36,7 +41,7 @@ function logoTexture() {
   const c = document.createElement('canvas');
   c.width = 512; c.height = 256;
   const g = c.getContext('2d');
-  g.fillStyle = ORANGE; g.fillRect(0, 0, 512, 256);
+  // (sem fundo: a tinta da carroceria aparece por trás)
   // faixa creme arredondada
   g.fillStyle = CREAM;
   g.beginPath();
@@ -86,7 +91,7 @@ function buildModel() {
   root.add(body);
 
   // carroceria laranja
-  body.add(mesh(bodyGeometry(), ORANGE));
+  body.add(mesh(bodyGeometry(), PAINT));
 
   // teto creme (deixa uma borda laranja à vista)
   body.add(at(box(3.0, 0.08, 1.95, CREAM), -0.85, 2.26, 0));
@@ -127,7 +132,7 @@ function buildModel() {
   // retrovisores
   for (const s of [1, -1]) {
     body.add(at(box(0.08, 0.06, 0.2, DARK), 1.45, 1.52, s * (SIDE_Z + 0.08)));
-    body.add(at(box(0.16, 0.34, 0.12, ORANGE), 1.42, 1.62, s * (SIDE_Z + 0.2)));
+    body.add(at(mesh(new THREE.BoxGeometry(0.16, 0.34, 0.12), PAINT), 1.42, 1.62, s * (SIDE_Z + 0.2)));
     body.add(at(box(0.04, 0.26, 0.09, GLASS_HI), 1.34, 1.62, s * (SIDE_Z + 0.2)));
   }
 
@@ -151,7 +156,7 @@ function buildModel() {
   body.add(at(pkg2, -0.05, 2.47, -0.25, 0, -0.25, 0));
 
   // logotipo nas laterais (textura: fica fora do merge para manter as UVs)
-  const logoMat = new THREE.MeshStandardMaterial({ map: logoTexture(), roughness: 0.85 });
+  const logoMat = new THREE.MeshStandardMaterial({ map: logoTexture(), roughness: 0.85, transparent: true });
   const logoGeo = new THREE.PlaneGeometry(2.62, 1.31);
   for (const s of [1, -1]) {
     const p = dynamic(at(new THREE.Mesh(logoGeo, logoMat), -0.93, 1.42, s * (SIDE_Z + 0.006), 0, s > 0 ? 0 : Math.PI, 0));

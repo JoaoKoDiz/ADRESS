@@ -33,7 +33,7 @@ ADRESS é um jogo 3D de entregas, aconchegante e meio cômico.
 
 **Telas:**
 - **Tela inicial:** bairro desfocado ao fundo + **Jogar / Configurações / Sair**. Configurações ainda não faz nada.
-- **Painel Jogar:** **Carreira | Livre** (metade de cima) e **Shop** (metade de baixo). Shop ainda não faz nada.
+- **Painel Jogar:** **Carreira | Livre** (metade de cima) e **Shop** (metade de baixo; abre a tela do Shop — ver `shop.js`).
 - **Motorista animado:** à direita do painel, na van, com braço para fora e cabeça balançando.
 - **Transições:** Carreira = a van sai dirigindo + fade. Livre = helicóptero decola + fade.
 
@@ -127,6 +127,7 @@ rm -f ADRESS-netlify.zip ADRESS-projeto-completo.zip && /c/Windows/System32/tar.
 | `hud.js`, `title.js`, `titleDriver.js`, `menu.js`, `music.js`, `audio.js` | Interface, tela inicial, motorista, opções, música, sons (WebAudio). |
 | `levelSelect.js` | Seleção de bairro do modo Livre (miniaturas via `renderMiniThumbnails` em `careerMap.js`). |
 | `jamSound.js` | Música `assets/honk.ogg` (embutida no html via loader `dataurl` do esbuild) em loop perfeito (`AudioBufferSourceNode.loop`) só no Bairro 7, a menos de 45 de um engarrafamento, com fade-in/out (~2 s). |
+| `shop.js` | **Shop** (card roxo do painel Jogar): categorias VAN (Rodas, Bagageiro, Pintura, Estampas) e PERSONAGEM (Bonés, Camisas, Calças, Sapatos, Tom de pele); pré-visualização 3D à direita (nas da van, a setinha à esquerda alterna item sozinho × na van). Itens à venda: nenhum ainda (layout). Cores (Pintura, camisa, calça, sapatos, pele) são grátis, têm cores prontas + código HEX, valem no jogo todo (`setVanPaint` em `van.js`, `CHAR_MATS`/`setCharColors` em `walker.js`) e ficam em `adress.shop.v1`. |
 | `backButton.js`, `hintButton.js`, `lockButton.js`, `input.js` | Botões Voltar / DICA / cadeado; teclado. |
 
 `adress-2d.html` é a primeira versão, em 2D (só histórico).
@@ -286,7 +287,7 @@ document.title = 'OK ' + A.dialog.text + ' errs=' + JSON.stringify(window.__errs
 ## 8. Pendências / próximos passos conhecidos
 
 - Missões dos Níveis 5 e 6: aguardando o dono mandar.
-- **Configurações** e **Shop** na tela inicial: ainda sem função.
+- **Configurações** na tela inicial: ainda sem função. **Shop**: só o layout e as cores grátis; nenhum item à venda ainda (não há moeda).
 - Se o GitHub Pages ainda não estiver ligado: Settings → Pages → `main` / `(root)`.
 - A senha do cadeado (`1225`) aparece no código público. O dono foi avisado; é só um "código de trapaça".
 

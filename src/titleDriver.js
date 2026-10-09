@@ -5,7 +5,8 @@ import { createVan } from './van.js';
 import { createHeli } from './heli.js';
 import { box, sphere, cyl, at, mat, mesh } from './models/kit.js';
 
-const SKIN = '#e8b48a', SHIRT = '#2a9df4', CAP = '#e3262e', GLASSES = '#111216';
+import { CHAR_MATS } from './walker.js';
+const SKIN = CHAR_MATS.skin, SHIRT = CHAR_MATS.shirt, CAP = '#e3262e', GLASSES = '#111216';   // pele e camisa seguem o Shop
 const BEAT = 1.8;   // batidas por segundo (~108 bpm)
 
 export function createTitleDriver(container, audio) {

@@ -27,7 +27,8 @@ const CSS = `
 .title-card.career { background: #3a78d4; }
 .title-card.free { background: #3c9d55; cursor: pointer; }
 .title-card.free:hover { filter: brightness(1.1); }
-.title-card.shop { grid-column: 1 / span 2; background: #8a55c4; }
+.title-card.shop { grid-column: 1 / span 2; background: #8a55c4; cursor: pointer; }
+.title-card.shop:hover { filter: brightness(1.1); }
 .title-driver { position: absolute; right: 0; top: 8%; bottom: 8%; width: min(38vw, 640px); display: none; pointer-events: none; }
 .title.playing .title-driver { display: block; }
 .title-driver canvas { width: 100%; height: 100%; display: block; }
@@ -38,7 +39,7 @@ const CSS = `
   text-shadow: 0 3px 0 rgba(0,0,0,.4); text-align: center; }
 `;
 
-export function createTitle({ onFree, onCareer, onPlay }) {
+export function createTitle({ onFree, onCareer, onPlay, onShop }) {
   const style = document.createElement('style');
   style.textContent = CSS;
   document.head.appendChild(style);
@@ -72,6 +73,7 @@ export function createTitle({ onFree, onCareer, onPlay }) {
   const go = fn => () => { if (starting) return; starting = true; fn(); };
   el.querySelector('.title-card.free').addEventListener('click', () => onFree());   // abre a escolha do bairro (não inicia sozinho)
   el.querySelector('.title-card.career').addEventListener('click', go(onCareer));
+  el.querySelector('.title-card.shop').addEventListener('click', () => { if (!starting && onShop) onShop(); });   // abre o Shop (não inicia partida)
   el.querySelector('[data-act="quit"]').addEventListener('click', () => {
     window.close();                                   // só funciona se a aba foi aberta por script
     el.innerHTML = '<div class="title-bye">Até a próxima!<br>Você já pode fechar esta aba.</div>';
