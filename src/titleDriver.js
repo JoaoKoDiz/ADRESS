@@ -6,7 +6,7 @@ import { createHeli } from './heli.js';
 import { box, sphere, cyl, at, mat, mesh } from './models/kit.js';
 
 import { CHAR_MATS } from './models/driver.js';
-import { buildHead } from './models/driver.js';
+import { buildHead, shirtTorso, limb, hand } from './models/driver.js';
 const SKIN = CHAR_MATS.skin, SHIRT = CHAR_MATS.shirt;   // pele e camisa seguem o Shop
 const BEAT = 1.8;   // batidas por segundo (~108 bpm)
 
@@ -37,28 +37,27 @@ export function createTitleDriver(container, audio) {
   opening.scale.x = -1;                       // espelha de volta (a rotação inverte o x)
   van.object.add(opening);
 
-  // motorista: ombro na janela, cabeça para fora, braço apoiado na porta
+  // motorista sentado DENTRO da cabine: tronco atrás da porta, cabeça no vão da janela,
+  // cotovelo apoiado na borda da janela e só o antebraço para fora
+  const S = 0.65;
   const driver = new THREE.Group();
-  driver.position.set(0.9, 0, -1.25);
   van.object.add(driver);
-  driver.add(at(sphere(0.3, SHIRT, 10, 8), 0, 1.5, 0.05));                    // ombro/tronco no vão
+  const torso = shirtTorso(SHIRT); torso.scale.multiplyScalar(S); torso.position.set(0.85, 1.04, -0.95); driver.add(torso);
   const head = new THREE.Group();
-  head.position.set(0, 1.62, -0.05);
+  head.position.set(0.85, 1.5, -1.1);
   driver.add(head);
-  const face = at(buildHead(0.37), 0, 0.32, 0, 0, Math.PI / 2, 0); head.add(face);   // rosto olha para −Z (a câmera)
-  // braço para fora da janela: ombro, braço sobre a porta, cotovelo apoiado e antebraço caindo para a frente
-  const arm = new THREE.Group();
-  arm.position.set(0.22, 1.46, -0.02);
-  driver.add(arm);
-  arm.add(at(sphere(0.15, SHIRT, 8, 6), 0, 0, 0));                                  // ombro
-  arm.add(at(cyl(0.14, 0.12, 0.5, SHIRT, 8), 0, 0, -0.25, Math.PI / 2, 0, 0));     // manga/braço
+  head.add(at(limb(0.065, 0.07, 0.1, SKIN), 0, 0.08, -0.02));                       // pescoço
+  head.add(at(buildHead(0.26), 0, 0.28, -0.07, 0, 1.15, 0));                        // rosto virado para a câmera (−Z) e um pouco para a frente
+  const shoulder = new THREE.Vector3(0.85, 1.04 + 0.56 * S, -0.95 - 0.31 * S), elbowAt = new THREE.Vector3(1.1, 1.57, -1.37);
+  const upper = new THREE.Group(); upper.position.copy(shoulder); driver.add(upper);
+  const dirArm = elbowAt.clone().sub(shoulder), L = dirArm.length();
+  upper.quaternion.setFromUnitVectors(new THREE.Vector3(0, -1, 0), dirArm.normalize());
+  upper.add(limb(0.09, 0.078, 0.09, SHIRT), limb(0.056, 0.05, L, SKIN));          // manga + braço até o cotovelo
   const forearm = new THREE.Group();
-  forearm.position.set(0, -0.02, -0.5);
-  forearm.rotation.z = 0.7;                                                          // antebraço para a frente da van
-  arm.add(forearm);
-  forearm.add(at(sphere(0.125, SKIN, 8, 6), 0, 0, 0));                              // cotovelo
-  forearm.add(at(cyl(0.1, 0.085, 0.42, SKIN, 8), 0, -0.21, 0));                     // antebraço
-  forearm.add(at(sphere(0.12, SKIN, 8, 6), 0, -0.45, 0));                           // mão
+  forearm.position.copy(elbowAt);
+  forearm.rotation.z = 0.7;                                                          // antebraço para fora, caindo junto à porta
+  driver.add(forearm);
+  forearm.add(limb(0.05, 0.042, 0.27, SKIN), at(hand(SKIN, 0.68), 0, -0.27, 0));
   driver.traverse(o => { if (o.isMesh) { o.castShadow = false; o.receiveShadow = false; } });
 
   const camera = new THREE.PerspectiveCamera(30, 1, 0.1, 100);
