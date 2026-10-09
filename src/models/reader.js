@@ -140,7 +140,7 @@ function readerSeated() {
   paper.rotation.z = 0.3;                                                          // inclinado para ele ler
   paper.position.x += 0.07 * Math.cos(0.3); paper.position.y += 0.07 * Math.sin(0.3);   // as mãos ficam do lado de dentro (seguram o jornal por trás)
   g.add(paper);
-  const half = Math.abs(hp[1].z - hp[0].z) / 2 + 0.04, PW = half * 1.3, PH = 0.6;   // jornal um pouco maior
+  const half = Math.abs(hp[1].z - hp[0].z) / 2 + 0.04, PW = half * 1.6, PH = 0.74;   // jornal maior
   const pm = getPaperMats(), pages = [];
   for (const s of [-1, 1]) {
     const page = new THREE.Group(); page.rotation.y = -s * 0.28; paper.add(page); pages.push(page);  // dobra no meio; as bordas vêm na direção dele (o miolo fica de frente para ele)
@@ -148,6 +148,27 @@ function readerSeated() {
     outer.rotation.y = Math.PI / 2; outer.position.set(0.004, 0.02, s * PW / 2); page.add(outer);
     const inner = new THREE.Mesh(new THREE.PlaneGeometry(PW, PH), pm.inner);       // lado de dentro (ele lê)
     inner.rotation.y = -Math.PI / 2; inner.position.set(-0.004, 0.02, s * PW / 2); page.add(inner);
+  }
+  // empurra o jornal para a frente até nenhuma parte das mãos atravessar as páginas (as mãos ficam por trás, segurando)
+  const handVerts = [], v = new THREE.Vector3(), m = new THREE.Matrix4();
+  const outers = pages.map(pg => pg.children[0]);
+  const nrm = new THREE.Vector3(Math.cos(paper.rotation.z), Math.sin(paper.rotation.z), 0);
+  for (let it = 0; it < 40; it++) {
+    g.updateMatrixWorld(true);
+    let worst = 0;
+    for (const w of hands) w.traverse(o => {
+      if (!o.isMesh) return;
+      const pos = o.geometry.attributes.position;
+      for (const pl of outers) {
+        m.copy(pl.matrixWorld).invert().multiply(o.matrixWorld);
+        for (let i = 0; i < pos.count; i++) {
+          v.fromBufferAttribute(pos, i).applyMatrix4(m);           // no plano da página: z = distância para fora
+          if (Math.abs(v.x) < PW / 2 + 0.02 && Math.abs(v.y) < PH / 2 + 0.02) worst = Math.max(worst, v.z + 0.015);
+        }
+      }
+    });
+    if (worst <= 0) break;
+    paper.position.addScaledVector(nrm, Math.min(0.03, worst + 0.003));
   }
   return { group: g, head, paper, torso, arms, pages, PW };
 }

@@ -437,17 +437,17 @@ const parcel = (() => {
   g.name = 'galdino-parcel';
   return g;
 })();
-let carrying = false;
+let carrying = false, parcelGiven = false;   // parcelGiven: já entregue nesta partida (fica ao lado dele, sem poder pegar de volta)
 const isL1 = () => neighborhood === 'grid4' && (gameMode === 'career' ? careerLevel : freeLevel) === 0;
 function resetParcel() {
-  carrying = false;
+  carrying = false; parcelGiven = false;
   if (parcel.parent) parcel.parent.remove(parcel);
   if (!isL1() || parcelDone) return;
   const o = slotOrigin(0);
   parcel.position.set(o.x + PARCEL_AT.x, 0, o.z + PARCEL_AT.z); parcel.rotation.set(0, 0.35, 0);
   world.scene.add(parcel);
 }
-const nearParcel = () => !carrying && parcel.parent && Math.hypot(walker.x - parcel.position.x, walker.z - parcel.position.z) < 1.9;
+const nearParcel = () => !carrying && !parcelGiven && parcel.parent && Math.hypot(walker.x - parcel.position.x, walker.z - parcel.position.z) < 1.9;
 const readerSpot = () => { const lot = world.scene.getObjectByName('lot:' + GALDINO); return lot && lot.visible ? lot.getObjectByName('reader-spot') : null; };
 const _rp = new THREE.Vector3();
 /** Perto do Seu Galdino, na frente dele (a pé). */
@@ -478,7 +478,7 @@ function startTalk() {
   talkCam.pos.set(px - d.x * 1.7 - d.z * 1.75, 1.85, pz - d.z * 1.7 + d.x * 1.75);
   talkCam.look.set(_rp.x * 0.85 + px * 0.15, 0.95, _rp.z * 0.85 + pz * 0.15);
   if (carrying) {                                         // a caixa fica no chão, ao lado da cadeira
-    carrying = false;
+    carrying = false; parcelGiven = true;
     parcel.position.set(_rp.x + f.x * 0.55 - rt.x * 0.95, 0, _rp.z + f.z * 0.55 - rt.z * 0.95); parcel.rotation.set(0, -r + 0.3, 0);
     talkLines = GALDINO_LINES;
   } else talkLines = [GALDINO_LAST];
