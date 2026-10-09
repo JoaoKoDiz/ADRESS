@@ -4,7 +4,7 @@ import * as THREE from 'three';
 import { SOLIDS, BOUNDS, VAN_START } from './layout.js';
 import { mat, mesh, box, cyl, at, group, dynamic, bakeStatic } from './models/kit.js';
 import { buildWheel, WHEEL_R, WHEEL_W } from './models/wheels.js';
-import { buildRack } from './models/racks.js';
+import { buildRack, tickRackBlink } from './models/racks.js';
 
 // ---------- Física ----------
 const MAX = 21, ACC = 2.2, DEC = 3.5, TURN = 4.6;
@@ -145,7 +145,7 @@ function buildModel() {
   // carga do teto (Shop → Bagageiro): grupo próprio, fora do merge do corpo, para poder trocar de modelo
   const rack = dynamic(new THREE.Group());
   body.add(rack);
-  const setRack = i => { while (rack.children.length) rack.remove(rack.children[0]); rack.add(buildRack(i)); bakeStatic(rack); };
+  const setRack = i => { while (rack.children.length) rack.remove(rack.children[0]); const m = buildRack(i); m.name = 'rack-model'; rack.add(m); bakeStatic(rack); };
   setRack(0);
 
   // logotipo nas laterais (textura: fica fora do merge para manter as UVs)
@@ -181,11 +181,17 @@ export function createVan(scene) {
   let spin = 0, roll = 0, pitch = 0, prevSpeed = 0;
   // torre de caixas (Bagageiro "Excesso de encomendas"): pêndulo amortecido que balança nas curvas, freadas e arrancadas
   let sway = null, swR = 0, swVR = 0, swP = 0, swVP = 0;
-  const findSway = () => { sway = body.getObjectByName('sway') || null; swR = swVR = swP = swVP = 0; };
+  let squat = 0;                               // bagageiro pesado demais: a van inteira afunda nas rodas
+  const findSway = () => {
+    sway = body.getObjectByName('sway') || null; swR = swVR = swP = swVP = 0;
+    const m = body.getObjectByName('rack-model');
+    squat = (m && m.userData.squat) || 0; sync();
+  };
 
   function sync() {
     root.position.set(x, 0, z);
     root.rotation.set(0, -heading, 0);
+    body.position.y = -squat;
     body.rotation.set(roll, 0, pitch);
     for (let i = 0; i < wheels.length; i++) wheels[i].rotation.z = spin;
   }
@@ -297,6 +303,7 @@ export function createVan(scene) {
     const pitchGoal = THREE.MathUtils.clamp(accel * 0.0035, -0.045, 0.045);
     roll += (rollGoal - roll) * k;
     pitch += (pitchGoal - pitch) * k;
+    tickRackBlink(performance.now() / 1000);
     if (sway) {
       const inR = THREE.MathUtils.clamp(-turnRate * (speed / MAX), -2.2, 2.2) * 38, inP = THREE.MathUtils.clamp(accel, -22, 22) * 0.6;
       const h = Math.min(dt, 0.03);
@@ -332,12 +339,13 @@ export function createVan(scene) {
     /** Só para a pré-visualização do Shop: balança a torre de caixas sozinha (a van lá não anda). */
     /** Fora da direção (diálogo, a pé, etc.): a torre vai parando sozinha, sem ficar torta. */
     relax(dt) {
+      tickRackBlink(performance.now() / 1000);
       if (!sway) return;
       const h = Math.min(dt, 0.03);
       swVR += (-30 * swR - 3 * swVR) * h; swR += swVR * h; swVP += (-30 * swP - 3 * swVP) * h; swP += swVP * h;
       sway.rotation.set(swR, 0, swP);
     },
-    swayDemo(t) { if (sway) sway.rotation.set(Math.sin(t * 2.1) * 0.13, 0, Math.sin(t * 1.5) * 0.09); },
+    swayDemo(t) { tickRackBlink(t); if (sway) sway.rotation.set(Math.sin(t * 2.1) * 0.13, 0, Math.sin(t * 1.5) * 0.09); },
     setWheelModel(m) { wheels.forEach(p => { while (p.children.length) p.remove(p.children[0]); p.add(buildWheel(m)); }); },
     /** Gira a van (usado no voo de helicóptero, que vira mesmo parado). */
     turn(d) { heading = angleDiff(heading + d, 0); sync(); },

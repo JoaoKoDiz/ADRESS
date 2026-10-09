@@ -6,6 +6,17 @@ import { box, cyl, sphere, cone, torus, at, group, dynamic, textTexture } from '
 const Y = 2.47;                                    // topo dos trilhos
 const CARD = '#c98a4a', TAPE = '#f3d9a6';
 
+/** Luzes que piscam (Equipamento científico): materiais emissivos registrados aqui; `tickRackBlink(t)` os liga/desliga (t em segundos). */
+const blinkMats = [];
+export function tickRackBlink(t) {
+  for (const b of blinkMats) b.m.emissiveIntensity = Math.sin(t * b.f + b.p) > b.th ? 1.8 : 0.08;
+}
+function led(color, f, p, th = 0) {
+  const m = new THREE.MeshStandardMaterial({ color, emissive: color, emissiveIntensity: 1.5, roughness: 0.4 });
+  blinkMats.push({ m, f, p, th });
+  return sphere(0.035, m, 8, 6);
+}
+
 /** Etiqueta (plano com texto). Fica fora do merge (precisa das UVs). */
 function label(text, w, h, bg, fg, px) {
   const m = new THREE.Mesh(new THREE.PlaneGeometry(w, h),
@@ -214,6 +225,75 @@ export const RACK_MODELS = [
       tower.add(at(box(0.05, y * 0.98, 0.03, '#3a3d44'), 0.0, y / 2, 0.62 - 0.0));                         // corda esticada na frente
       tower.position.set(-1.0, Y, 0);
       return group(tower);
+    } },
+  { name: 'Caixa pesada demais', desc: 'Uma caixinha minúscula que afunda visivelmente o teto da van.',
+    build() {
+      const g = group();
+      const steps = [['#e0d3b5', 1.9, 1.5], ['#c2b08a', 1.5, 1.2], ['#9c8a60', 1.15, 0.92], ['#75663f', 0.8, 0.65], ['#4a3f27', 0.5, 0.4]];
+      steps.forEach(([c, w, d], i) => g.add(at(box(w, 0.012, d, c), -0.85, 2.31 + 0.004 * i, 0)));                  // degraus escurecendo para o centro: teto afundado
+      for (const sx of [-1, 1]) g.add(at(box(0.1, 0.05, 1.45, '#f2e9d2'), -0.85 + sx * 0.98, 2.335, 0, 0, 0, -sx * 0.4));   // bordas da lata, amassadas para cima
+      for (const sz of [-1, 1]) g.add(at(box(1.85, 0.05, 0.1, '#f2e9d2'), -0.85, 2.335, sz * 0.78, sz * 0.4, 0, 0));
+      for (let i = 0; i < 8; i++) { const a = (i / 8) * Math.PI * 2 + 0.2; g.add(at(box(0.5, 0.008, 0.02, '#5a4a2e'), -0.85 + Math.cos(a) * 0.45, 2.325, Math.sin(a) * 0.38, 0, -a, 0)); }   // rugas
+      g.add(at(box(0.28, 0.24, 0.28, CARD), -0.85, 2.44, 0, 0, 0.5, 0), at(box(0.3, 0.012, 0.07, TAPE), -0.85, 2.565, 0, 0, 0.5, 0));
+      const t = label('10 t', 0.2, 0.1, '#f4efe3', '#c0281e', 56); t.rotation.x = -Math.PI / 2; t.rotation.z = 0.5; t.position.set(-0.85, 2.572, 0); g.add(t);
+      g.userData.squat = 0.14;                                                                           // a van inteira afunda um pouco nas rodas
+      return g;
+    } },
+  { name: 'Equipamento científico', desc: 'Uma antena, uma mala metálica e aparelhos com luzes piscando.',
+    build() {
+      blinkMats.length = 0;
+      const g = group();
+      // mala metálica
+      const c = group(at(box(1.0, 0.32, 0.6, '#c9ced6'), 0, 0.16, 0), at(box(1.02, 0.02, 0.62, '#9aa1a9'), 0, 0.2, 0), at(box(1.02, 0.02, 0.62, '#9aa1a9'), 0, 0.1, 0));
+      for (const sx of [-1, 1]) for (const sz of [-1, 1]) c.add(at(box(0.09, 0.34, 0.09, '#6f757d'), sx * 0.5, 0.16, sz * 0.3));
+      for (const x of [-0.25, 0.25]) c.add(at(box(0.1, 0.07, 0.04, '#e8c24a'), x, 0.2, 0.31));
+      c.add(at(box(0.3, 0.04, 0.08, '#2b2d33'), 0, 0.34, 0));
+      const lb = label('AMOSTRAS', 0.4, 0.14, '#efbf2a', '#2b2d33', 40); lb.rotation.x = -Math.PI / 2; lb.position.set(0.15, 0.322, 0.1); c.add(lb);
+      g.add(at(c, -1.55, Y, 0.38, 0, 0.1, 0));
+      // aparelhos com luzes piscando
+      const dev = group(at(box(0.85, 0.28, 0.58, '#2b2d33'), 0, 0.14, 0), at(box(0.72, 0.24, 0.5, '#3a3f4a'), 0, 0.4, 0.02));
+      [['#ff3b30', 3.1, 0], ['#3cff6b', 2.3, 1], ['#ffb02e', 4.1, 2], ['#19e3ff', 1.7, 3], ['#ff3b30', 5.3, 4]].forEach(([col, f, p], i) => {
+        const l = led(col, f, p); l.position.set(-0.28 + i * 0.14, 0.535, 0.2); dev.add(l);
+      });
+      for (const x of [-0.2, 0.2]) dev.add(at(cyl(0.07, 0.07, 0.03, '#c9ced6', 12), x, 0.532, -0.08), at(box(0.015, 0.012, 0.06, '#e3262e'), x, 0.55, -0.08));
+      dev.add(at(box(0.24, 0.012, 0.14, '#0d3a22'), 0.2, 0.527, 0.0));
+      const l2 = led('#3cff6b', 6, 1.3, -0.2); l2.position.set(0.4, 0.2, 0.3); dev.add(l2);
+      g.add(at(dev, -1.1, Y, -0.35, 0, -0.1, 0));
+      const spec = group(at(cyl(0.2, 0.22, 0.55, '#d9dde3', 14), 0, 0.28, 0), at(cyl(0.21, 0.21, 0.05, '#2b2d33', 14), 0, 0.5, 0));
+      for (let i = 0; i < 4; i++) { const l = led(['#ff3b30', '#3cff6b', '#19e3ff', '#ffb02e'][i], 2 + i * 0.9, i * 1.5); const a = i * Math.PI / 2; l.position.set(Math.cos(a) * 0.2, 0.5, Math.sin(a) * 0.2); spec.add(l); }
+      g.add(at(spec, -0.35, Y, -0.38));
+      // antena parabólica com mastro, tripé e farol
+      const an = group();
+      for (let i = 0; i < 3; i++) { const a = (i / 3) * Math.PI * 2; an.add(at(cyl(0.025, 0.03, 0.8, '#6f757d', 5), Math.cos(a) * 0.22, 0.34, Math.sin(a) * 0.22, Math.sin(a) * 0.4, 0, -Math.cos(a) * 0.4)); }
+      an.add(at(cyl(0.04, 0.05, 1.4, '#cfd6dd', 6), 0, 0.85, 0));
+      const dish = group(at(cyl(0.5, 0.12, 0.1, '#e9eef2', 18), 0, 0, 0), at(cyl(0.02, 0.02, 0.35, '#6f757d', 5), 0, 0.2, 0), at(sphere(0.05, '#ffb02e', 6, 4), 0, 0.38, 0));
+      dish.position.set(0.04, 1.5, 0); dish.rotation.z = -0.6; an.add(dish);
+      an.add(at(cyl(0.012, 0.012, 1.3, '#cfd6dd', 4), 0.2, 1.3, 0.1));
+      const bc = led('#ff3b30', 3.4, 0, 0.3); bc.scale.setScalar(1.6); bc.position.set(0.2, 1.97, 0.1); an.add(bc);
+      g.add(at(an, -0.05, Y, 0.25));
+      return g;
+    } },
+  { name: 'Entrega medieval', desc: 'Um trono, um escudo e uma espada com etiquetas de destinatário.',
+    build() {
+      const GOLD = '#e8c24a', WOOD = '#6b4526', g = group();
+      const th = group(
+        at(box(0.9, 0.3, 0.9, WOOD), 0, 0.3, 0), at(box(0.7, 0.12, 0.72, '#a8231f'), 0.04, 0.51, 0),           // assento e almofada vermelha
+        at(box(0.18, 1.25, 0.9, WOOD), -0.36, 0.95, 0), at(box(0.2, 0.1, 0.94, GOLD), -0.36, 1.58, 0),
+        at(box(0.8, 0.3, 0.12, WOOD), 0.02, 0.62, 0.45), at(box(0.8, 0.3, 0.12, WOOD), 0.02, 0.62, -0.45),    // braços
+        at(box(0.9, 0.04, 0.96, GOLD), 0, 0.46, 0), at(box(0.04, 1.25, 0.92, GOLD), -0.28, 0.95, 0));
+      for (const z of [-0.4, 0, 0.4]) th.add(at(cone(0.12, 0.3, GOLD, 4), -0.36, 1.75, z), at(sphere(0.05, '#e3262e', 6, 4), -0.36, 1.93, z));   // pontas da coroa do encosto
+      for (const sx of [-1, 1]) for (const sz of [-1, 1]) th.add(at(box(0.1, 0.18, 0.1, WOOD), sx * 0.4, 0.09, sz * 0.4));
+      const tg = label('PARA: REI ARTUR', 0.42, 0.18, '#f4efe3', '#2b2d33', 28); tg.position.set(0.1, 0.62, 0.52); th.add(tg);
+      g.add(at(th, -1.55, Y, 0.0, 0, 0.08, 0));
+      const sh = group(at(cyl(0.42, 0.42, 0.06, '#2e5fa8', 22), 0, 0.03, 0), at(cyl(0.45, 0.45, 0.04, GOLD, 22), 0, 0.02, 0),
+        at(box(0.62, 0.012, 0.1, GOLD), 0, 0.066, 0), at(box(0.1, 0.012, 0.62, GOLD), 0, 0.067, 0), at(sphere(0.1, GOLD, 10, 8), 0, 0.08, 0));
+      const t2 = label('SIR LANCELOT', 0.34, 0.14, '#f4efe3', '#2b2d33', 28); t2.rotation.x = -Math.PI / 2; t2.position.set(0.2, 0.075, 0.28); sh.add(t2);
+      g.add(at(sh, -0.55, Y + 0.02, -0.4, 0.06, 0.3, 0.05));
+      const sw = group(at(box(1.2, 0.025, 0.1, '#d9dde3'), 0.0, 0, 0), at(box(1.2, 0.012, 0.025, '#9aa1a9'), 0, 0.016, 0), at(cone(0.05, 0.2, '#d9dde3', 4), 0.7, 0, 0, 0, 0, -Math.PI / 2),
+        at(box(0.06, 0.05, 0.44, GOLD), -0.62, 0, 0), at(cyl(0.032, 0.032, 0.3, '#5a2f16', 8), -0.82, 0, 0, 0, 0, Math.PI / 2), at(sphere(0.06, GOLD, 8, 6), -0.99, 0, 0));
+      const t3 = label('DAMA GUINEVERE', 0.4, 0.13, '#f4efe3', '#2b2d33', 26); t3.rotation.x = -Math.PI / 2; t3.position.set(0.1, 0.02, 0); sw.add(t3);
+      g.add(at(sw, -0.15, Y + 0.05, 0.4, 0, -0.1, 0));
+      return g;
     } },
 ];
 

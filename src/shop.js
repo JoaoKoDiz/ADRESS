@@ -95,7 +95,7 @@ const COLORS = {
 // sec: 'van' | 'char'. kind: 'items' (à venda; ainda vazio) | 'color' (grátis; key = chave em `colors`)
 const CATS = [
   { id: 'wheels', sec: 'van', name: 'Rodas', kind: 'items', desc: '8 modelos de roda (o primeiro é o padrão). Só a roda padrão tem cores editáveis, no canto da pré-visualização: as outras 7 são únicas.' },
-  { id: 'rack', sec: 'van', name: 'Bagageiro', kind: 'items', desc: 'O que vai em cima da van. O padrão são as caixas de entrega; os outros 9 modelos têm cores fixas (não dá para mudar).' },
+  { id: 'rack', sec: 'van', name: 'Bagageiro', kind: 'items', desc: `O que vai em cima da van. O padrão são as caixas de entrega; os outros ${RACK_MODELS.length - 1} modelos têm cores fixas (não dá para mudar).` },
   { id: 'paint', sec: 'van', name: 'Pintura', kind: 'color', key: 'paint', pal: 'paint', desc: 'A cor da lataria da van.' },
   { id: 'decals', sec: 'van', name: 'Estampas', kind: 'items', desc: 'Detalhes extras na lataria. O texto ADRESS fica sempre lá: as estampas só complementam, não trocam nem cobrem.' },
   { id: 'caps', sec: 'char', name: 'Bonés', kind: 'items', desc: 'Bonés para o seu entregador.' },
