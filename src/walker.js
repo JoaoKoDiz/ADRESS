@@ -25,8 +25,9 @@ export function createWalker(scene) {
   const hitsVan = (x, z, van) => { const d = Math.hypot(x - van.x, z - van.z); return d < 2.5 + RADIUS && d < Math.hypot(st.x - van.x, st.z - van.z) - 1e-6; };
   const blocked = (x, z, boxes, van) => hits(x, z, boxes) || hitsVan(x, z, van);
 
+  let floorY = 0;                              // altura do chão (0; no terraço de um prédio, a laje)
   function apply() {
-    root.position.set(st.x, 0, st.z);
+    root.position.set(st.x, floorY, st.z);
     root.rotation.y = -st.heading;
   }
 
@@ -71,6 +72,9 @@ export function createWalker(scene) {
     object: root,
     get x() { return st.x; }, get z() { return st.z; }, get heading() { return st.heading; }, get speed() { return st.speed; },
     get visible() { return root.visible; },
+    get floor() { return floorY; },
+    /** Muda a altura do chão em que ele anda (terraço de prédio). */
+    setFloor(y) { floorY = y; apply(); },
     /** Põe o personagem num ponto, olhando para `heading` (Shop). */
     pose(x, z, heading) { st.x = x; st.z = z; st.heading = heading; apply(); },
     show(on) { root.visible = on; if (!on) st.speed = 0; },

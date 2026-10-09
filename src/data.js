@@ -104,6 +104,11 @@ export const SHOPS = [32, 33, 34, 35, 36, 37, 66, 67, 68, 69];
 // narrator: ele não atende a porta; as falas das entregas nessa casa são pensamentos do narrador, entre parênteses.
 HOUSES.push({ name: 'Seu Galdino', roof: 'red', f: ['rooster', 'sunflowers', 'bare'], yardZ: { bare: 11.0 },
   reader: { x: 15.0, z: 14.2, rot: -2.2 }, narrator: true });
+// ---- Prédio fixo do Bairro 6 (índice 87): sempre na quadra C5 (lote 16). No terraço, a 2ª espreguiçadeira recebe o
+// Seu Galdino (só depois da conversa do Bairro 1): `lounger`.
+HOUSES.push({ name: 'Dona Ivone', kind: 'apt', balcony: 'red', atop: 'pool', extra: ['fac:plants', 'gnd:moto'], gray: '#9ea2a9', lounger: true });
+/** Bairro 6: { lote: prédio } sempre iguais em todas as partidas (C5 = linha C, coluna 5, contando do canto à direita da entrada). */
+export const L6_FIXED = { 16: 87 };
 /** Bairro 1: { lote: casa } sempre iguais em todas as partidas. */
 export const L1_FIXED = { 15: 86 };
 

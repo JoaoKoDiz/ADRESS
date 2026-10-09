@@ -13,8 +13,8 @@ import { buildLot } from './models/house.js';
 import { buildResident } from './models/resident.js';
 import { YARD_BUILDERS } from './models/yard.js';
 import { buildShopLot } from './models/shop.js';
-import { SHOPS, HOUSES, FUTS, L1_FIXED } from './data.js';
-import { buildAptLot, APT_ROOF, aptRoofHeight, APT_BUILD } from './models/apt.js';
+import { SHOPS, HOUSES, FUTS, L1_FIXED, L6_FIXED } from './data.js';
+import { buildAptLot, APT_ROOF, aptRoofHeight, aptRoofY, APT_BUILD } from './models/apt.js';
 import { buildFutLot, futRoofHeight } from './models/fut.js';
 import { createHintArrow } from './hint.js';
 import { createHintButton } from './hintButton.js';
@@ -63,7 +63,7 @@ const COMPOSED = ['grid5', 'grid6s', 'city6', 'city7', 'city8'];   // bairros co
 const POOLS = { grid4: [...Array(16).keys(), ...Object.values(L1_FIXED)],   // grid4: as 16 casas + a casa fixa do Bairro 1 (só aparece nele)
   plaza6: [...Array(32).keys()], grid5: [...Array(25).keys(), ...SHOPS],   // grid5: Bairro 4 (25 casas + prédios comerciais)
   grid6s: [...Array(32).keys(), ...SHOPS],        // grid6s (Bairro 5): 32 casas + os prédios comerciais
-  city6: [...Array(32).keys()].concat([...Array(28).keys()].map(k => 38 + k)),   // city6 (Bairro 6): 32 casas + 28 prédios residenciais
+  city6: [...Array(32).keys()].concat([...Array(28).keys()].map(k => 38 + k), Object.values(L6_FIXED)),   // + o prédio fixo da quadra C5   // city6 (Bairro 6): 32 casas + 28 prédios residenciais
   city7: [...Array(32).keys()].concat([...Array(28).keys()].map(k => 38 + k), SHOPS),   // city7 (Bairro 7): a cidade com postos e prédios comerciais
   city8: [...Array(32).keys()].concat([...Array(28).keys()].map(k => 38 + k), SHOPS, USE_FUTS ? FUTS : []) };   // city8 (Bairro 8): o mesmo, em 8×8, com prédios mais altos (e os futuristas, se USE_FUTS)
 // lote de casa ou de prédio comercial
@@ -105,7 +105,8 @@ function composeRound() {
     pool = shuffled(apts).slice(0, HOUSE_SLOTS.length - nShops - nHouses).concat(shuffled(allHouses).slice(0, nHouses), shuffled(SHOPS).slice(0, nShops));
   } else if (city) {
     const apts = [...Array(28).keys()].map(k => 38 + k);
-    pool = apts.concat(shuffled(allHouses).slice(0, HOUSE_SLOTS.length - apts.length));
+    const fixed = Object.values(L6_FIXED);                 // Bairro 6: o prédio fixo da quadra C5 + 28 residenciais + casas no resto
+    pool = apts.concat(fixed, shuffled(allHouses).slice(0, HOUSE_SLOTS.length - apts.length - fixed.length));
   } else if (neighborhood === 'grid5') {
     // Bairro 4: as 25 casas de sempre menos algumas (nunca as com galo ou fonte), 2 prédios comerciais e o posto
     const keep = [4, 15, 19, 22, 11, 12, 24], base = [...Array(25).keys()], nShops = 2;
@@ -115,9 +116,10 @@ function composeRound() {
     const nShops = 5 + Math.floor(Math.random() * 4);   // Bairro 5: de 5 a 8 prédios comerciais
     pool = shuffled(allHouses).slice(0, HOUSE_SLOTS.length - nShops).concat(shuffled(SHOPS).slice(0, nShops));
   }
-  game.setNeighborhood(pool, HOUSE_SLOTS, GRID * GRID);
+  game.setNeighborhood(pool, HOUSE_SLOTS, GRID * GRID, city ? L6_FIXED : null);
   world.setLayout(game.layout);
   world.setGas(gasList);
+  if (city) showLounger();
   rig.refit();
 }
 
@@ -494,8 +496,87 @@ function endTalk() {
   setState('walk');
 }
 
+// ---------- Bairro 6: o Seu Galdino no terraço do prédio fixo (C5) ----------
+// Só aparece depois da conversa da caixa no Bairro 1. Chega-se de helicóptero (Livre): pousado no terraço, L desce a pé.
+let roofWalk = null;                                    // { s, h, o, y }: terraço onde o personagem está andando
+function roofUnderVan() {
+  for (const s of HOUSE_SLOTS) {
+    const h = game.layout[s];
+    if (h < 0 || HOUSES[h].kind !== 'apt' || boom.isDestroyed(h)) continue;
+    const o = slotOrigin(s), R = APT_ROOF;
+    if (van.x > o.x + R.x0 && van.x < o.x + R.x1 && van.z > o.z + R.z0 && van.z < o.z + R.z1) return { s, h, o, y: aptRoofY() };
+  }
+  return null;
+}
+/** Bordas da laje (não dá para cair) + piscina/caixa-d'água como obstáculos. */
+function roofSolids() {
+  const o = roofWalk.o, R = APT_ROOF, a = HOUSES[roofWalk.h], B = 1e4, e = 0.25;
+  const out = [
+    { x0: -B, x1: o.x + R.x0 + e, z0: -B, z1: B }, { x0: o.x + R.x1 - e, x1: B, z0: -B, z1: B },
+    { x0: -B, x1: B, z0: -B, z1: o.z + R.z0 + e }, { x0: -B, x1: B, z0: o.z + R.z1 - e, z1: B },
+  ];
+  if (a.atop === 'pool') out.push({ x0: o.x + R.x0 + 1.2, x1: o.x + R.x1 - 1.2, z0: o.z + R.z0 + 1.4, z1: o.z + R.z1 - 1.6 });
+  if (a.atop === 'tank') { const cx = o.x + (R.x0 + R.x1) / 2, cz = o.z + (R.z0 + R.z1) / 2; out.push({ x0: cx - 2, x1: cx + 2, z0: cz - 2, z1: cz + 2 }); }
+  return out;
+}
+const LOUNGER_APT = L6_FIXED[16];
+const loungerSpot = () => { const lot = world.scene.getObjectByName('lot:' + LOUNGER_APT); return lot ? lot.getObjectByName('lounger-reader') : null; };
+function showLounger() { const lr = loungerSpot(); if (lr) lr.visible = parcelDone; }
+function nearLounger() {
+  if (!roofWalk || roofWalk.h !== LOUNGER_APT) return false;
+  const lr = loungerSpot(); if (!lr || !lr.visible) return false;
+  lr.getWorldPosition(_rp);
+  return Math.hypot(walker.x - _rp.x, walker.z - _rp.z) < 2.6;
+}
+const ROOF_LINES = [
+  ['Você veio mesmo até aqui… Não faltou ', { b: 'determinação' }, ', hein?'],
+  ['Dessa vez, parece que a entrega foi a sua presença.'],
+  ['Ou talvez você tenha vindo por vontade própria, sem nenhuma encomenda como desculpa.'],
+  ['Seja como for, acho que nossas conversas já despertaram sua curiosidade.'],
+  ['Se quiser continuar, procure por mim num lugar onde o tempo parece andar mais devagar, além do bairro onde nos conhecemos.'],
+  ['Lá no primeiro bairro, as casas escondem o caminho. ', { b: 'Mas o sol ainda aponta a direção.' }],
+  ['Deixe o bairro para trás e ', { b: 'dirija na direção do sol.' }, ' Depois de algum tempo, verá o lugar no horizonte. ', { b: 'Estarei lá.' }],
+];
+function startRoofTalk() {
+  const lr = loungerSpot(); lr.getWorldPosition(_rp);
+  van.object.visible = false;                           // o helicóptero some só durante esta cena (não tampa nada)
+  const px = _rp.x + 1.45, pz = _rp.z + 0.35;           // em pé ao lado da espreguiçadeira (lado leste), olhando para ele
+  walker.pose(px, pz, Math.atan2(_rp.z - pz, _rp.x - px));
+  const y = walker.floor;
+  talkCam.pos.set(_rp.x - 1.6, y + 2.6, _rp.z + 4.4);    // por cima da beirada, à frente dos dois: ele à esquerda, o jogador à direita
+  talkCam.look.set((_rp.x + px) / 2, y + 0.7, (_rp.z + pz) / 2 - 0.3);
+  talkLines = ROOF_LINES; talkPhase = 'talk';
+  setState('talk');
+  talkBox.show(ROOF_LINES, () => {                      // fim da conversa: some a caixa de fala; aparece o aviso da interface
+    talkPhase = 'note';
+    talkBox.note('ORIENTAÇÃO DO JOGO', ['Use o ', { b: 'Modo Livre' }, ', a qualquer momento, caso tenha interesse.'], () => {
+      talkPhase = 'fade';
+      talkBox.fadeBlack(1, 3000, () => {                  // ~3 s até ficar tudo escuro…
+        endRoofScene();
+        talkBox.fadeBlack(0, 1500);                       // …e ~1,5 s revelando a tela inicial
+      });
+    });
+  });
+}
+/** Encerra a partida e volta para a tela inicial (com a tela preta). */
+function endRoofScene() {
+  talkBox.hide(); talkPhase = '';
+  walker.show(false); walker.setFloor(0); roofWalk = null;
+  van.object.visible = true;
+  heli.reset();
+  startNewRound();
+  game.delivered = 0;
+  if (gameMode === 'career') career.stop && career.stop();
+  if (rig.mode !== 'overview') rig.toggle();
+  rig.snap({ x: van.x, z: van.z, heading: van.heading, speed: 0 });
+  fade = 0;
+  title.show('home');
+  if (titleDriver) titleDriver.stop();
+  setState('title');
+}
+
 function startNewRound() {
-  walker.show(false); talkBox.hide();
+  walker.show(false); talkBox.hide(); walker.setFloor(0); roofWalk = null; van.object.visible = true;
   if (COMPOSED.includes(neighborhood)) composeRound(); else game.newRound();
   refreshBarriers();                             // Bairro 3: barreiras em lugares novos
   applyJams();                                   // Bairro 7: as entregas só entre os lotes que a van consegue alcançar
@@ -540,6 +621,16 @@ function update(dt, t) {
       }
       const free = gameMode === 'free';
       if (input.walk() && actionLock <= 0) {          // L: o motorista desce da van (só parada e no chão)
+        if (heli.landed && roofUnderVan()) {                   // pousado no terraço de um prédio: desce e anda pela laje
+          van.stop(); nearHouse = -1; nearPump = false;
+          roofWalk = roofUnderVan(); walker.setFloor(roofWalk.y);
+          walker.placeBesideVan(van, roofSolids());
+          const R = APT_ROOF, o = roofWalk.o;                 // sem espaço ao lado: fica dentro da laje
+          walker.pose(Math.min(Math.max(walker.x, o.x + R.x0 + 0.9), o.x + R.x1 - 0.9), Math.min(Math.max(walker.z, o.z + R.z0 + 0.9), o.z + R.z1 - 0.9), walker.heading);
+          walker.show(true);
+          setState('walk');
+          break;
+        }
         if (heli.flying) { fuelMsg = 'Pouse o helicóptero antes de descer.'; fuelMsgT = 2.5; }
         else if (Math.abs(van.speed) > 3.5) { fuelMsg = 'Pare a van para descer (L).'; fuelMsgT = 2.5; }
         else {
@@ -626,14 +717,15 @@ function update(dt, t) {
       if (missions.isOpen) { if (input.missions()) missions.close(); break; }
       if (gameMode === 'career' && input.missions()) { missions.open(careerLevel); break; }
       van.stop();
-      walker.update(dt, input.axis(), rig.mode === 'chase' ? 'car' : 'screen', walkSolids(), van);
+      walker.update(dt, input.axis(), rig.mode === 'chase' ? 'car' : 'screen', roofWalk ? roofSolids() : walkSolids(), van);
       if (carrying) {                               // caixa nas mãos, na frente do peito
         const hc = Math.cos(walker.heading), hs = Math.sin(walker.heading);
         parcel.position.set(walker.x + hc * 0.62, 0.62, walker.z + hs * 0.62); parcel.rotation.set(0, -walker.heading, 0);
       }
       actionLock = Math.max(0, actionLock - dt);
       if (actionLock > 0 || !input.action()) break;
-      if (walker.nearVan(van)) { if (carrying) resetParcel(); walker.show(false); actionLock = 0.5; setState('drive'); }   // a caixa volta ao lugar
+      if (nearLounger()) startRoofTalk();             // no terraço a van fica perto: falar com ele tem prioridade
+      else if (walker.nearVan(van)) { if (carrying) resetParcel(); walker.show(false); walker.setFloor(0); roofWalk = null; actionLock = 0.5; setState('drive'); }   // a caixa volta ao lugar
       else if (nearParcel()) carrying = true;
       else if (nearGaldino()) startTalk();
       break;
@@ -643,6 +735,7 @@ function update(dt, t) {
       const sp = readerSpot();
       if (talkPhase === 'aside' && (!sp || sp.userData.asideDone())) { talkPhase = 'talk'; talkBox.show(talkLines, endTalk); }
       else if (talkPhase === 'talk') { talkBox.update(dt); if (input.action()) talkBox.press(); }
+      else if (talkPhase === 'note') { if (input.action()) talkBox.pressNote(); }
       break;
     }
     case 'levelSelect': {
@@ -689,7 +782,7 @@ function update(dt, t) {
   // entregando (campainha/diálogo) ou com o balão "E — Entregar" à vista: a câmera se volta para a casa
   const focusH = (state === 'ring' || state === 'dialog') ? pending : state === 'drive' ? nearHouse : -1;
   const onFoot = state === 'walk';              // a câmera segue o personagem a pé
-  rig.update(dt, onFoot ? { x: walker.x, z: walker.z, y: 0, heading: walker.heading, speed: walker.speed, focus: null } : { x: van.x, z: van.z, y: heli.altitude, heading: van.heading, speed: van.speed, focus: null });   // sem câmera automática: quem controla é o jogador
+  rig.update(dt, onFoot ? { x: walker.x, z: walker.z, y: walker.floor, heading: walker.heading, speed: walker.speed, focus: null } : { x: van.x, z: van.z, y: heli.altitude, heading: van.heading, speed: van.speed, focus: null });   // sem câmera automática: quem controla é o jogador
   if (state === 'talk') { rig.camera.position.copy(talkCam.pos); rig.camera.lookAt(talkCam.look); }   // enquadramento fixo da conversa
   // névoa só na câmera atrás da van (suaviza o horizonte); a visão geral fica nítida
   const fb = rig.blend, fog = world.scene.fog;
@@ -757,12 +850,12 @@ function updateHUD() {
     else hud.setMain(game.mainText(), 'clue');
   }
 
-  const walkNear = state === 'walk' && walker.nearVan(van) && !missions.isOpen;
+  const walkNear = state === 'walk' && walker.nearVan(van) && !nearLounger() && !missions.isOpen;
   // a pé no Bairro 1: pegar a caixa / entregar ao Seu Galdino / conversar (balão em cima do personagem)
-  const walkAct = state === 'walk' && !walkNear && !missions.isOpen ? (nearParcel() ? 'Pegar a caixa' : nearGaldino() ? (carrying ? 'Entregar a caixa' : 'Conversar') : '') : '';
+  const walkAct = state === 'walk' && !walkNear && !missions.isOpen ? (nearParcel() ? 'Pegar a caixa' : nearGaldino() ? (carrying ? 'Entregar a caixa' : 'Conversar') : nearLounger() ? 'Conversar' : '') : '';
   if (walkAct) {
     rig.camera.updateMatrixWorld();
-    promptPos.set(walker.x, 2.7, walker.z).project(rig.camera);
+    promptPos.set(walker.x, walker.floor + 2.7, walker.z).project(rig.camera);
     hud.setPrompt(true, (promptPos.x + 1) / 2 * stage.clientWidth, (1 - promptPos.y) / 2 * stage.clientHeight, 'up', walkAct);
     hud.setFade(fade);
     return;

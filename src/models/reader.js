@@ -62,7 +62,7 @@ function rockingChair() {
 }
 
 /** Cabeça (raio r, centro na origem, rosto para +X): loiro, óculos, expressão séria. */
-function readerHead(r) {
+function readerHead(r, { sun = false } = {}) {
   const h = new THREE.Group();
   h.add(lowBall(r, M.skin, 1, 0.98, 1.02));
   const face = (y, z) => Math.sqrt(Math.max(0, r * r - y * y - z * z));            // x da superfície do rosto
@@ -74,6 +74,10 @@ function readerHead(r) {
     // óculos: aro octogonal (fino), haste até a orelha
     const ring = mesh(new THREE.TorusGeometry(r * 0.27, r * 0.035, 4, 8), M.frame);
     ring.position.set(face(ey, ez) + r * 0.08, ey, ez); ring.rotation.set(0, Math.PI / 2 + s * 0.35, Math.PI / 8); h.add(ring);
+    if (sun) {                                                                    // óculos de sol: lente escura dentro do mesmo aro
+      const lens = mesh(new THREE.CircleGeometry(r * 0.27, 8), mat('#141619', { side: THREE.DoubleSide, roughness: 0.2, metalness: 0.3 }));
+      lens.position.copy(ring.position); lens.rotation.copy(ring.rotation); h.add(lens);
+    }
     h.add(at(box(r * 0.75, r * 0.05, r * 0.05, M.frame), r * 0.45, ey + 0.02 * r, s * r * 0.72, 0, s * 0.55, 0));
     // sobrancelhas grossas, retas e um pouco franzidas (sério)
     const by = r * 0.42, bz = s * r * 0.36;
@@ -216,6 +220,57 @@ export function buildReaderSpot() {
       a.elbow.rotation.set(h.el.x + (r.el.x - h.el.x) * e, 0, h.el.z + (r.el.z - h.el.z) * e);
     });
     rd.torso.scale.y = 1 + 0.01 * Math.sin(t * 1.9);                               // respiração
+  };
+  return root;
+}
+
+/**
+ * Seu Galdino reclinado numa espreguiçadeira (terraço do prédio fixo do Bairro 6), de óculos de sol, sem jornal.
+ * Origem no tampo da espreguiçadeira (comprimento ao longo de X, cabeceira em −X), frente = +X. Inclui o encosto levantado.
+ */
+export function buildLoungerReader() {
+  const root = dynamic(new THREE.Group());
+  root.name = 'lounger-reader';
+  const g = new THREE.Group(); g.scale.setScalar(0.9); root.add(g);
+  // encosto levantado (almofada branca inclinada na cabeceira)
+  g.add(at(box(1.0, 0.09, 0.98, mat('#ffffff')), -0.62, 0.32, 0, 0, 0, -0.62));
+  // quadril e pernas esticadas para a frente (pés para cima)
+  g.add(at(lowBall(0.27, M.pants, 1.05, 0.62, 1.15), -0.12, 0.17, 0));
+  for (const s of [-1, 1]) {
+    const thigh = new THREE.Group(); thigh.position.set(-0.12, 0.16, s * 0.14); thigh.rotation.z = Math.PI / 2 + 0.04; g.add(thigh);
+    thigh.add(limb(0.15, 0.13, 0.3, M.pants));
+    const knee = new THREE.Group(); knee.position.y = -0.3; knee.rotation.z = -0.06; thigh.add(knee);
+    knee.add(limb(0.13, 0.12, 0.27, M.pants));
+    const foot = new THREE.Group(); foot.position.y = -0.27; knee.add(foot);
+    const shoe = at(mesh(new THREE.CapsuleGeometry(0.11, 0.16, 4, 8), M.shoe), 0.07, -0.03, 0, 0, 0, Math.PI / 2); shoe.scale.set(0.95, 1, 1.05); foot.add(shoe);
+    const sole = at(mesh(new THREE.CapsuleGeometry(0.122, 0.18, 4, 8), M.sole), 0.07, -0.1, 0, 0, 0, Math.PI / 2); sole.scale.set(0.32, 1, 1.1); foot.add(sole);
+  }
+  // tronco deitado no encosto: camisa branca + casaco vermelho aberto
+  const torso = new THREE.Group(); torso.position.set(-0.16, 0.22, 0); torso.rotation.z = 0.95; g.add(torso);
+  torso.add(shirtTorso(M.white));
+  const jacket = shirtTorso(JACKET, 0.32); jacket.scale.multiplyScalar(1.05); jacket.position.y = -0.03; torso.add(jacket);
+  for (const s of [-1, 1]) {
+    torso.add(at(box(0.05, 0.62, 0.04, M.white), 0.235, 0.32, s * 0.1, 0, 0, 0.05));
+    torso.add(at(box(0.12, 0.2, 0.1, M.red), 0.17, 0.63, s * 0.14, s * 0.5, 0, -0.5));
+    // braços relaxados ao lado do corpo, mangas dobradas
+    const sh = new THREE.Group(); sh.position.set(0, 0.56, s * 0.31); sh.rotation.set(-s * 0.2, 0, -0.15); torso.add(sh);
+    sh.add(limb(0.14, 0.12, 0.27, M.red));
+    sh.add(limb(0.085, 0.075, 0.28, M.skin));
+    const elbow = new THREE.Group(); elbow.position.y = -0.28; elbow.rotation.set(-s * 0.1, 0, 0.35); sh.add(elbow);
+    elbow.add(limb(0.12, 0.11, 0.06, M.red));
+    elbow.add(at(mesh(new THREE.TorusGeometry(0.1, 0.04, 5, 10), M.red), 0, -0.08, 0, Math.PI / 2, 0, 0));
+    elbow.add(limb(0.072, 0.06, 0.2, M.skin));
+    const wrist = new THREE.Group(); wrist.position.y = -0.2; elbow.add(wrist);
+    wrist.add(flatHand(M.skin));
+  }
+  const head = new THREE.Group(); head.position.y = 0.7; torso.add(head);
+  head.add(at(limb(0.095, 0.1, 0.12, M.skin), 0, 0.12, 0));
+  const face = readerHead(0.42, { sun: true }); face.position.y = 0.44; head.add(face);
+  head.rotation.z = -0.55;                                                     // olha para a frente, por cima dos pés (para o sol)
+  root.traverse(o => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = false; } });
+  root.userData.update = t => {
+    torso.scale.y = 1 + 0.012 * Math.sin(t * 1.6);                               // respiração tranquila
+    head.rotation.y = 0.05 * Math.sin(t * 0.3);
   };
   return root;
 }

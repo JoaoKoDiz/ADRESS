@@ -5,6 +5,7 @@ import * as THREE from 'three';
 import { mat, box, cyl, sphere, cone, at, bakeStatic } from './kit.js';
 import { LOT, WALK, LOT_ANCHORS as A } from '../layout.js';
 import { BALCONY_COL } from '../data.js';
+import { buildLoungerReader } from './reader.js';
 
 const G = 0.12, WALK_TOP = 0.17;
 const X0 = 3.4, X1 = 13.8, Z0 = 1.2, Z1 = A.house.z1;
@@ -161,10 +162,17 @@ export function buildAptLot(apt) {
     for (const dx of [-3.5, -1.5]) root.add(at(box(1.0, 0.25, 2.0, '#ffffff'), CX + dx, top + 0.15, Z1 - 0.6));
     root.add(at(cone(1.2, 0.5, '#ff6fa5', 10), CX + 3.5, top + 2.0, Z1 - 0.8));                  // guarda-sol
     root.add(at(cyl(0.05, 0.05, 1.8, '#ffffff', 6), CX + 3.5, top + 0.9, Z1 - 0.8));
+    if (apt.lounger) {                                          // prédio fixo do Bairro 6: o Seu Galdino na 2ª espreguiçadeira (main.js decide se aparece)
+      const lr = buildLoungerReader();
+      lr.position.set(CX - 1.5, top + 0.275, Z1 - 0.6); lr.rotation.y = -Math.PI / 2;   // cabeceira para a piscina, pés para a beirada (sul)
+      lr.visible = false;
+      root.add(lr);
+    }
   }
 
   root.traverse(o => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
   bakeStatic(root);
-  root.userData.update = () => {};
+  const lr = root.getObjectByName('lounger-reader');
+  root.userData.update = lr ? t => { if (lr.visible) lr.userData.update(t); } : () => {};
   return root;
 }
