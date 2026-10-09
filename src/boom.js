@@ -175,7 +175,7 @@ export function createBoom(scene, world, audio) {
   // Escotilha no teto da van + míssil. Fases: open → rise → fly → boom → done.
   const MISSILE_SPEED = 55;
   const hatch = new THREE.Group();                 // filho da van: dobradiça na borda traseira da escotilha
-  const lid = at(box(1.1, 0.1, 1.25, '#ff7a1a'), 0.55, 0, 0);
+  const lid = at(box(1.1, 0.1, 1.25, '#fff3dc'), 0.55, 0, 0);   // mesma cor do teto creme que segura o bagageiro
   hatch.add(lid);
   hatch.visible = false;                           // só aparece enquanto o míssil é disparado (senão ficava flutuando sobre a van)
   const missile = new THREE.Group();
