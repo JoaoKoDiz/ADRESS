@@ -99,8 +99,10 @@ const UP = new THREE.Vector3(0, 1, 0);
 // e a placa da entrada. Caixas [x0, z0, x1, z1, yTopo], já com folga (plano near = 1).
 const CAM_PAD = 1.0;
 const CAM_BOXES = [];
+const EXTRA_BOXES = [];          // caixas extras fora do bairro (ex.: paredes da igreja), sem folga: [x0, z0, x1, z1, yTopo]
 function buildCamBoxes() {
   CAM_BOXES.length = 0;
+  for (const b of EXTRA_BOXES) CAM_BOXES.push([b[0] - CAM_PAD * 0.6, b[1] - CAM_PAD * 0.6, b[2] + CAM_PAD * 0.6, b[3] + CAM_PAD * 0.6, b[4]]);
   for (const s of HOUSE_SLOTS) {
     const o = slotOrigin(s), H = LOT_ANCHORS.house;
     CAM_BOXES.push([o.x + H.x0 - 0.7 - CAM_PAD, o.z + H.z0 - 0.7 - CAM_PAD, o.x + H.x1 + 0.7 + CAM_PAD, o.z + H.z1 + 1.1 + CAM_PAD, BUILD_H + CAM_PAD]);
@@ -292,5 +294,7 @@ export function createCameraRig() {
     resetView() { goalYaw = goalPitch = 0; zoomGoal = 1; },
     /** O bairro mudou de tamanho (ex.: Bairro 2, 6×6): refaz enquadramento e obstáculos da câmera. */
     refit() { rebuildGrid(); resize(lastW, lastH); },
+    /** Caixas extras que seguram o braço da câmera ([x0, z0, x1, z1, yTopo]); [] tira. */
+    setExtraBoxes(list) { EXTRA_BOXES.length = 0; EXTRA_BOXES.push(...list); buildCamBoxes(); },
   };
 }

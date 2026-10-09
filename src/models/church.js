@@ -8,13 +8,35 @@ import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 
 // pedra bege quente; recuos um pouco mais escuros que as partes salientes
-const COL = { stone: '#e8dcbe', stone2: '#ddcfab', stone3: '#c9b994', shade: '#b3a37f', dark: '#2a2622', wood: '#4a3322', roof: '#5d636c', roof2: '#4d525a' };
+const COL = { stone: '#e8dcbe', stone2: '#ddcfab', stone3: '#c9b994', shade: '#b3a37f', dark: '#2a2622', wood: '#4a3322', roof: '#5d636c', roof2: '#4d525a',
+  // interior: mesma pedra bege, mas na penumbra (sem brilho próprio); a luz vem da porta e dos vitrais
+  iStone: '#9c8063', iStone2: '#b0937a', iShade: '#6e5845', iFloor: '#7c6450', iLight: '#a08670', iRib: '#c2a689', pew: '#3a2417', carpet: '#6a1626',
+  cloth: '#ece7da', cross: '#231c17', lead: '#1c1a18', gR: '#8e2a33', gB: '#2d4f8e', gG: '#b98a35', gV: '#3e6f4a', gP: '#5d4288' };
+const GLASS = ['gR', 'gB', 'gG', 'gV', 'gP'];
+const EMI = { dark: 0, shade: 0.18, cloth: 0.12, gR: 0.42, gB: 0.42, gG: 0.42, gV: 0.42, gP: 0.42 };   // brilho próprio (o resto da pedra de fora: 0,3)
+const NI = 11.8;                                                     // meia-largura interna da igreja
+/** Paredes e móveis (coordenadas locais da igreja: frente em z = 0, corpo para −z). main.js converte para o mundo. */
+export const CHURCH_SOLIDS = (() => {
+  const out = [], b = (x0, x1, z0, z1) => out.push({ x0, x1, z0, z1 }), m = (x0, x1, z0, z1) => { b(x0, x1, z0, z1); b(-x1, -x0, z0, z1); };
+  m(4.5, 23.6, -3.2, 2.6);                                // fachada (a porta do meio fica livre: 9 de largura)
+  m(NI, 23.6, -13, -3.2);                                  // base das torres
+  m(NI, 16.8, -44, -13);                                   // paredes laterais com contrafortes
+  b(-13, 13, -57, -44);                                    // parede do fundo + ábside
+  for (const z of [-13, -19.2, -25.4, -31.6, -37.8]) m(5.9, 8.1, z - 1.1, z + 1.1);   // pilares
+  m(1.35, 4.25, -36.0, -15.6);                             // bancos (o corredor e as passagens laterais ficam livres)
+  m(4.25, 4.55, -7.5, -3.0);                               // folhas da porta abertas
+  b(-2.1, 2.1, -42.6, -41.0);                              // altar
+  return out;
+})();
+/** Caixas que seguram o braço da câmera (para não atravessar as paredes): [x0, x1, z0, z1, topo]. */
+export const CHURCH_CAM = [[-23.6, 23.6, -3.2, 2.6, 70], [-23.6, -NI, -13, -3.2, 70], [NI, 23.6, -13, -3.2, 70],
+  [-16.8, -NI, -44, -13, 26], [NI, 16.8, -44, -13, 26], [-13, 13, -57, -44, 30]];
 
 export function buildChurch() {
   const mats = {};
   // um pouco de brilho próprio: a fachada fica virada para o bairro (de costas para o sol) e não pode ficar apagada
   const M = c => mats[c] || (mats[c] = new THREE.MeshStandardMaterial({ color: COL[c] || c, roughness: 0.9, flatShading: true,
-    emissive: COL[c] || c, emissiveIntensity: c === 'dark' ? 0 : c === 'shade' ? 0.18 : 0.3 }));
+    emissive: COL[c] || c, emissiveIntensity: c in EMI ? EMI[c] : c[0] === 'i' ? 0.06 : c === 'pew' || c === 'carpet' || c === 'cross' || c === 'lead' ? 0 : 0.3 }));
   const root = new THREE.Group();
   root.name = 'church';
   const add = (geo, c, x = 0, y = 0, z = 0, rx = 0, ry = 0, rz = 0, parent = root) => {
@@ -90,7 +112,7 @@ export function buildChurch() {
 
   // ===== térreo: três portais largos e fundos =====
   const PD = 3.0;                                                      // profundidade dos portais
-  block(-XH, XH, 0, Y_PORT, -DEPTH, -PD, 'stone');                     // massa atrás
+  for (const s of [-1, 1]) block(s * XH, s * NI, 0, Y_PORT, -DEPTH, -PD, 'stone');   // massa atrás (no meio fica o vestíbulo)
   const PORT = [[SECT[0], 7.6, 7.0], [SECT[1], 13, 8.2], [SECT[2], 7.6, 7.0]];   // [seção, largura externa, nascença]
   for (const [sec, wo, sp] of PORT) {
     const x = SECX(sec), f = 0.75;
@@ -117,6 +139,13 @@ export function buildChurch() {
       const n = Math.max(2, Math.floor(inner * frac / 0.8)), span = inner * frac;
       for (let j = 0; j < n; j++) { const xx = x - span / 2 + (j + 0.5) * span / n; if (Math.abs(xx - x) > 0.7) figure(xx, yy, back + 0.45, h, 0.22, 'stone'); }
     }
+    if (sec === SECT[1]) {                                                                         // porta do meio ABERTA: folhas encostadas nas laterais, para dentro
+      for (const s of [-1, 1]) {
+        block(s * (inner / 2 - 0.25), s * inner / 2, 0, sp - 1.9, back - 4.5, back - 0.05, 'wood');
+        for (const yy of [1.2, sp - 3.1]) block(s * (inner / 2 - 0.3), s * (inner / 2 - 0.25), yy - 0.09, yy + 0.09, back - 4.3, back - 0.3, 'dark');
+      }
+      continue;
+    }
     block(x - inner / 2, x + inner / 2, 0, sp - 1.9, back, back + 0.15, 'wood');                  // portas de madeira
     block(x - 0.3, x + 0.3, 0, sp - 1.9, back, back + 0.5, 'stone2');                             // pilar central (tremó)
     for (const s of [-1, 1]) for (const yy of [1.2, (sp - 1.9) - 1.2]) block(x + s * inner / 4 - 0.6, x + s * inner / 4 + 0.6, yy - 0.08, yy + 0.08, back + 0.15, back + 0.22, 'dark');   // ferragens
@@ -132,7 +161,7 @@ export function buildChurch() {
   }
 
   // ===== galeria dos reis: figuras individuais em nichos =====
-  block(-XH - 0.2, XH + 0.2, Y_PORT - 0.2, Y_PORT + 0.6, -DEPTH - 0.2, 1.3, 'stone2');        // cornija (dá a volta nas laterais)
+  block(-XH - 0.2, XH + 0.2, Y_PORT - 0.2, Y_PORT + 0.6, -DEPTH + 0.05, 1.3, 'stone2');        // cornija (dá a volta nas laterais)
   block(-XH + 1, XH - 1, Y_PORT + 0.6, Y_K1, -2.5, -1.2, 'shade');                            // fundo recuado (só a face da frente)
   block(-XH, XH, Y_PORT + 0.6, Y_K1, -DEPTH, -2.5, 'stone');
   for (const s of [-1, 1]) block(s * (XH - 1), s * XH, Y_PORT + 0.6, Y_K1, -2.5, -1.2, 'stone');
@@ -146,7 +175,7 @@ export function buildChurch() {
       cyl(0.2, 0.2, 'stone3', cx, y0 + 0.1 + 2.2 + 0.5, -0.65, 5);                                 // coroa
     }
   }
-  block(-XH - 0.2, XH + 0.2, Y_K1, Y_K1 + 0.6, -DEPTH - 0.2, 1.5, 'stone2');                   // cornija
+  block(-XH - 0.2, XH + 0.2, Y_K1, Y_K1 + 0.6, -DEPTH + 0.05, 1.5, 'stone2');                   // cornija
   balustrade(-XH, XH, Y_K1 + 0.6, 1.0, 1.1, 0.45);
 
   // ===== nível da rosácea =====
@@ -239,10 +268,11 @@ export function buildChurch() {
 
   // ===== corpo (encurtado): paredes, contrafortes salientes até o beiral, janelas, telhado escuro, flecha =====
   const BX = 13, B0 = -DEPTH, B1 = -44, BH = 24;
-  block(-BX, BX, 0, BH, B1, B0, 'stone');
-  block(-BX - 0.5, BX + 0.5, BH - 0.7, BH, B1, B0, 'stone2');                                // beiral
-  { const sh = new THREE.Shape(); sh.moveTo(-BX - 1, 0); sh.lineTo(BX + 1, 0); sh.lineTo(0, 11); sh.lineTo(-BX - 1, 0);
-    add(extrude(sh, B0 - B1 + 1), 'roof', 0, BH, B1 - 0.5); }
+  for (const s of [-1, 1]) block(s * BX, s * NI, 0, BH, B1, B0, 'stone');                 // paredes (o corpo é oco: ver INTERIOR)
+  for (const s of [-1, 1]) block(s * (BX + 0.5), s * (NI + 0.1), BH - 0.7, BH, B1, B0, 'stone2');                                // beiral
+  { const R = BX + 1, k = 11 / R, t = 1.2;                         // telhado oco (duas águas com espessura): por dentro fica a abóbada
+    add(extrude(shapeOf([[-R, 0], [0, 11], [R, 0], [R - t, 0], [0, (R - t) * k], [-(R - t), 0]]), B0 - B1 + 1), 'roof', 0, BH, B1 - 0.5);
+    piece(shapeOf([[-R, 0], [R, 0], [0, 11]]), 0.4, 'stone', 0, BH, -44.1); }   // empena do fundo (fechada)
   add(new THREE.CylinderGeometry(BX, BX, BH, 10, 1, false, Math.PI / 2, Math.PI), 'stone', 0, BH / 2, B1);   // ábside
   add(new THREE.ConeGeometry(BX + 0.8, 10, 10, 1, false, Math.PI / 2, Math.PI), 'roof2', 0, BH + 5, B1);
   for (const s of [-1, 1]) {
@@ -262,6 +292,122 @@ export function buildChurch() {
   add(new THREE.CylinderGeometry(1.3, 1.7, 5, 8), 'roof2', 0, BH + 11 + 6.5, SZ);
   add(new THREE.ConeGeometry(1.3, 11, 8), 'roof2', 0, BH + 11 + 14.5, SZ);
   for (const sx of [-1, 1]) for (const sz of [-1, 1]) cone(0.45, 3.5, 'roof2', sx * 1.6, BH + 11 + 4, SZ + sz * 1.6);
+
+  // ===== INTERIOR: vestíbulo, nave alta com abóbada de nervuras, bancos, tapete, altar e vitrais =====
+  {
+    const PZ = [-13, -19.2, -25.4, -31.6, -37.8, -44];                   // linhas dos pilares (alinhadas com os contrafortes de fora)
+    const PX = 7, YC = 10.3, YV = 19, F = 0.66;                          // pilares em x = ±7; capitel; nascença da abóbada
+    const DOOR_H = 8.2 - 1.9;                                            // vão da porta do meio
+    // revestimento interno (pedra na penumbra) sobre as faces de dentro
+    block(-NI, NI, 0, 0.06, -44, -3, 'iFloor');
+    block(-4.5, 4.5, 0.06, 0.07, -9, -3, 'iLight');                     // chão mais claro onde entra a luz da porta
+    for (const s of [-1, 1]) {
+      block(s * NI, s * (NI - 0.08), 0, 17.8, -44, -3.1, 'iStone');
+      block(s * NI, s * 4.5, 0, 17.8, -3.1, -3.0, 'iStone');             // parede da entrada, dos lados da porta
+      block(s * NI, s * (PX + 0.6), 15, 15.4, -44, -13, 'iShade');      // teto das naves laterais
+      block(s * NI, s * (PX + 0.6), 15.4, 17.8, -13.1, -13, 'iStone');
+    }
+    block(-4.5, 4.5, DOOR_H, 17.8, -3.1, -3.0, 'iStone');
+    block(-NI, NI, 17.7, 17.8, -13, -3, 'iShade');                       // teto do vestíbulo (sob a fachada)
+    // parede da entrada vista de dentro, acima do vestíbulo: rosácea com vitral
+    block(-PX - 0.6, PX + 0.6, 17.8, YV, -13.1, -13, 'iStone');
+    piece(shapeOf(archTop(14.6, F)), 0.1, 'iStone', 0, YV, -13, root);
+    const rose = (y, z, r, dir) => {
+      add(new THREE.CylinderGeometry(r, r, 0.1, 20), 'lead', 0, y, z, Math.PI / 2);
+      for (let i = 0; i < 12; i++) for (const [rr, sz] of [[r * 0.72, r * 0.28], [r * 0.36, r * 0.2]]) {
+        const a = (i + (rr < r * 0.5 ? 0.5 : 0)) / 12 * Math.PI * 2;
+        if (rr < r * 0.5 && i % 2) continue;
+        box(sz, sz, 0.06, GLASS[i % GLASS.length], Math.cos(a) * rr, y + Math.sin(a) * rr, z + dir * 0.06);
+      }
+      add(new THREE.TorusGeometry(r, 0.22, 4, 20), 'iStone2', 0, y, z + dir * 0.1);
+      cyl(0.35, 0.1, 'iStone2', 0, y - 0.05, z + dir * 0.09, 8);
+    };
+    rose(23.2, -13.15, 3.0, -1);
+    // pilares compostos (núcleo + 4 colunas, base larga, capitel) e arcos ogivais repetidos ao longo da nave
+    const pillar = (x, z) => {
+      block(x - 1.2, x + 1.2, 0, 0.6, z - 1.2, z + 1.2, 'iShade');
+      cyl(0.6, YC - 1.3, 'iStone', x, 0.6, z, 8);
+      for (const [ox, oz] of [[0.72, 0], [-0.72, 0], [0, 0.72], [0, -0.72]]) cyl(0.28, YC - 1.3, 'iStone2', x + ox, 0.6, z + oz, 6);
+      block(x - 1.1, x + 1.1, YC - 0.7, YC, z - 1.1, z + 1.1, 'iStone2');
+      block(x - 1.25, x + 1.25, YC - 0.15, YC + 0.05, z - 1.25, z + 1.25, 'iStone');
+    };
+    for (const s of [-1, 1]) {
+      const x = s * PX;
+      PZ.forEach(z => pillar(x, z));
+      for (let i = 0; i < PZ.length - 1; i++) {
+        const zc = (PZ[i] + PZ[i + 1]) / 2, L = PZ[i] - PZ[i + 1];
+        const g = face(x, zc, -s * Math.PI / 2);                         // local +z = para o meio da nave
+        piece(topPanel(L, YV - YC, archTop(L - 2.2, 0.8)), 1.2, 'iStone', 0, YC, 0.6, g);   // arco ogival + parede alta (trifório)
+        piece(ring(arch(L - 1.6, 0, 0.8).slice(1, -1), arch(L - 2.2, 0, 0.8).slice(1, -1)), 0.25, 'iStone2', 0, YC, 0.85, g);   // moldura do arco
+        block(-L / 2, L / 2, 14.4, 14.75, 0.6, 1.0, 'iStone2', g);       // frisos
+        block(-L / 2, L / 2, 18.4, 18.75, 0.6, 1.0, 'iStone2', g);
+        for (const nx of [-1.8, 0, 1.8]) {                               // nichos com figurinhas
+          piece(shapeOf(arch(0.9, 1.7, 0.7)), 0.1, 'iShade', nx, 15.4, 0.7, g);
+          piece(ring(arch(1.3, 1.7, 0.7), arch(0.9, 1.7, 0.7)), 0.3, 'iStone2', nx, 15.2, 0.95, g);
+          figure(nx, 15.45, 0.85, 1.25, 0.2, 'iStone2', g);
+        }
+        // vitral da nave lateral (na parede de fora, entre os contrafortes)
+        const gw = face(s * (NI - 0.08), zc, -s * Math.PI / 2);
+        stained(0, 3.4, 0, 1.6, 5.4, 0.8, gw);
+      }
+      for (const z of PZ) { const g = face(x, z, -s * Math.PI / 2); cyl(0.26, YV - YC, 'iStone2', 0, YC, 0.75, 8, g); }   // colunas que sobem até as nervuras
+    }
+    // abóbada alta: casca ogival + nervuras transversais, diagonais (em X) e cumeeira
+    piece(ring(archTop(14.6, F), archTop(14, F)), 31, 'iShade', 0, YV, -13);
+    const vy = x => 14 * F * Math.sqrt(Math.max(0, 1 - ((-Math.abs(x) - 7) / 14) ** 2));
+    for (const z of PZ) piece(ring(archTop(14, F), archTop(13.1, F)), 0.5, 'iRib', 0, YV, z + 0.25);
+    const beam = (a, b, t, c) => { const v = new THREE.Vector3().subVectors(b, a); const m = add(new THREE.BoxGeometry(t, t, v.length()), c); m.position.copy(a).addScaledVector(v, 0.5); m.lookAt(b); };
+    for (let i = 0; i < PZ.length - 1; i++) {
+      const za = PZ[i], zb = PZ[i + 1];
+      for (const sx of [-1, 1]) {
+        let prev = null;
+        for (let k = 0; k <= 10; k++) {
+          const t = k / 10, xx = sx * (-7 + 14 * t) * 0.97, p = new THREE.Vector3(xx, YV + vy(xx) - 0.2, za + (zb - za) * t);
+          if (prev) beam(prev, p, 0.34, 'iRib');
+          prev = p;
+        }
+      }
+      cyl(0.45, 0.35, 'iRib', 0, YV + 8 - 0.55, (za + zb) / 2, 8);   // chave da abóbada
+    }
+    block(-0.16, 0.16, YV + 7.72, YV + 7.95, -44, -13, 'iRib');       // nervura da cumeeira
+    // parede do fundo (atrás do altar), com janelas altas e estreitas de vitral
+    block(-NI, NI, 0, YV, -44.6, -44, 'iStone');
+    piece(shapeOf(archTop(14.6, F)), 0.6, 'iStone', 0, YV, -44);
+    stained(0, 6.6, -44, 1.8, 8.4, 0.8, root, 1);
+    for (const s of [-1, 1]) stained(s * 3.6, 7.4, -44, 1.3, 6.4, 0.8, root, 1);
+    for (const s of [-1, 1]) stained(s * 8.6, 4.0, -44, 1.3, 6.4, 0.8, root, 1);
+    rose(23.0, -43.95, 2.2, 1);
+    // altar: plataforma com 3 degraus, mesa com toalha branca, cruz escura
+    for (let k = 0; k < 3; k++) block(-6.2 + k * 0.5, 6.2 - k * 0.5, k * 0.22, (k + 1) * 0.22, -44, -38.6 - k * 0.9, k % 2 ? 'iStone' : 'iStone2');
+    block(-1.9, 1.9, 0.66, 1.66, -42.4, -41.2, 'iStone2');
+    block(-2.0, 2.0, 1.66, 1.74, -42.5, -41.1, 'cloth');
+    block(-2.0, 2.0, 1.2, 1.74, -41.1, -41.04, 'cloth');
+    for (const s of [-1, 1]) block(s * 2.0, s * 2.06, 1.2, 1.74, -42.5, -41.04, 'cloth');
+    block(-0.16, 0.16, 0.66, 5.6, -43.7, -43.4, 'cross');
+    block(-1.05, 1.05, 4.05, 4.37, -43.7, -43.4, 'cross');
+    // tapete vinho contínuo da entrada até os degraus
+    block(-1.0, 1.0, 0.06, 0.1, -38.6, -3.2, 'carpet');
+    // bancos: duas fileiras alinhadas voltadas para o altar (assento, encosto, apoios laterais e pés)
+    const pew = (x0, x1, z) => {
+      block(x0, x1, 0.5, 0.62, z - 0.3, z + 0.3, 'pew');
+      block(x0, x1, 0.62, 1.2, z + 0.24, z + 0.34, 'pew');
+      block(x0, x1, 0.12, 0.2, z - 0.05, z + 0.05, 'pew');                     // travessa entre os pés
+      for (const xe of [x0, x1 - 0.12]) block(xe, xe + 0.12, 0, 1.28, z - 0.34, z + 0.36, 'pew');   // apoios laterais
+      for (const xl of [x0 + 1.1, x1 - 1.1]) block(xl - 0.06, xl + 0.06, 0, 0.5, z - 0.2, z + 0.2, 'pew');   // pés
+    };
+    for (let r = 0; r < 15; r++) { const z = -16 - r * 1.4; pew(1.4, 4.2, z); pew(-4.2, -1.4, z); }
+  }
+  function stained(x, y, z, w, sp, f, parent, dir = 1) {                    // vitral: chumbo escuro + quadradinhos coloridos dentro do arco
+    piece(shapeOf(arch(w + 0.5, sp, f)), 0.12, 'iStone2', x, y - 0.25, z + 0.12 * dir, parent);
+    piece(shapeOf(arch(w, sp, f)), 0.06, 'lead', x, y, z + 0.18 * dir, parent);
+    const c = 0.24, top = sp + 0.866 * w * f;
+    for (let yy = c / 2 + 0.06, r = 0; yy < top - 0.15; yy += c + 0.06, r++) {
+      let half = w / 2;
+      if (yy > sp) { const st = Math.min(1, (yy - sp) / (w * f)); half = Math.max(0, w * Math.sqrt(1 - st * st) - w / 2); }   // largura do arco nessa altura
+      for (let xx = -half + c / 2 + 0.06, k = 0; xx < half - c / 2; xx += c + 0.06, k++)
+        box(c, c, 0.04, GLASS[(((r * 3 + k * 2 + Math.round(x)) % 5) + 5) % 5], x + xx, y + yy, z + 0.23 * dir, parent);
+    }
+  }
 
   // ===== funde tudo em 1 malha por material =====
   root.updateMatrixWorld(true);

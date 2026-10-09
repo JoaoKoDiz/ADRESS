@@ -33,7 +33,7 @@ import { createShop } from './shop.js';
 import { createLevelSelect } from './levelSelect.js';
 import { createWalker } from './walker.js';
 import { createTalkBox } from './talkBox.js';
-import { buildChurch, setChurchOpacity } from './models/church.js';
+import { buildChurch, setChurchOpacity, CHURCH_SOLIDS, CHURCH_CAM } from './models/church.js';
 import { createBackButton } from './backButton.js';
 import { createMissions, createMissionsButton, MISSIONS } from './missions.js';
 import { createCareer } from './career.js';
@@ -588,6 +588,7 @@ let church = null, churchOn = false, churchT = 0, churchA = 0, churchShown = fal
 const churchSolids = [];
 function setupChurch() {
   for (const b of churchSolids) { const i = SOLIDS.indexOf(b); if (i >= 0) SOLIDS.splice(i, 1); }
+  rig.setExtraBoxes([]);
   churchSolids.length = 0;
   let pd = parcelDone; try { pd = pd || localStorage.getItem(PARCEL_KEY) === '1'; } catch (e) { /* */ }
   churchOn = isL1() && gameMode === 'free' && pd && roofDone();   // as duas conversas, lidas do progresso salvo
@@ -612,7 +613,8 @@ function updateChurch(dt) {
     if (churchT >= 5) {
       churchShown = true; church.visible = true; setChurchOpacity(church, 0);
       const z0 = M + CHURCH_Z, cx = M / 2;
-      churchSolids.push({ x0: cx - 23.6, x1: cx + 23.6, z0: z0 - 2.6, z1: z0 + 13 }, { x0: cx - 16.8, x1: cx + 16.8, z0: z0 + 13, z1: z0 + 44 }, { x0: cx - 13, x1: cx + 13, z0: z0 + 44, z1: z0 + 57 });
+      for (const b of CHURCH_SOLIDS) churchSolids.push({ x0: cx - b.x1, x1: cx - b.x0, z0: z0 - b.z1, z1: z0 - b.z0 });   // igreja girada 180°: (x, z) → (cx − x, z0 − z)
+      rig.setExtraBoxes(CHURCH_CAM.map(([x0, x1, a, b, top]) => [cx - x1, z0 - b, cx - x0, z0 - a, top]));          // a câmera não atravessa as paredes
       SOLIDS.push(...churchSolids);
     }
   } else if (churchA < 1) {
