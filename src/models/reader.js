@@ -114,7 +114,7 @@ function readerSeated() {
     torso.add(at(box(0.12, 0.2, 0.1, M.red), 0.17, 0.63, s * 0.14, s * 0.5, 0, -0.5));  // gola do casaco
   }
   // braços: mangas do casaco puxadas até o meio do antebraço (dobra grossa), segurando o jornal na frente do peito
-  const hands = [];
+  const hands = [], arms = [];
   for (const s of [-1, 1]) {
     const sh = new THREE.Group(); sh.position.set(0, 0.56, s * 0.31); sh.rotation.set(-s * 0.12, 0, 0.55); torso.add(sh);
     sh.add(limb(0.14, 0.12, 0.27, M.red));
@@ -125,7 +125,7 @@ function readerSeated() {
     elbow.add(limb(0.072, 0.06, 0.2, M.skin));
     const wrist = new THREE.Group(); wrist.position.y = -0.2; elbow.add(wrist);
     wrist.add(flatHand(M.skin));
-    hands.push(wrist);
+    hands.push(wrist); arms.push({ s, sh, elbow });
   }
   const head = new THREE.Group(); head.position.y = 0.7; torso.add(head);
   head.add(at(limb(0.095, 0.1, 0.12, M.skin), 0, 0.12, 0));
@@ -141,15 +141,15 @@ function readerSeated() {
   paper.position.x += 0.07 * Math.cos(0.3); paper.position.y += 0.07 * Math.sin(0.3);   // as mãos ficam do lado de dentro (seguram o jornal por trás)
   g.add(paper);
   const half = Math.abs(hp[1].z - hp[0].z) / 2 + 0.04, PW = half * 1.3, PH = 0.6;   // jornal um pouco maior
-  const pm = getPaperMats();
+  const pm = getPaperMats(), pages = [];
   for (const s of [-1, 1]) {
-    const page = new THREE.Group(); page.rotation.y = -s * 0.28; paper.add(page);  // dobra no meio; as bordas vêm na direção dele (o miolo fica de frente para ele)
+    const page = new THREE.Group(); page.rotation.y = -s * 0.28; paper.add(page); pages.push(page);  // dobra no meio; as bordas vêm na direção dele (o miolo fica de frente para ele)
     const outer = new THREE.Mesh(new THREE.PlaneGeometry(PW, PH), s > 0 ? pm.front : pm.inner);   // lado de fora: capa (manchete) numa página, contracapa na outra
     outer.rotation.y = Math.PI / 2; outer.position.set(0.004, 0.02, s * PW / 2); page.add(outer);
     const inner = new THREE.Mesh(new THREE.PlaneGeometry(PW, PH), pm.inner);       // lado de dentro (ele lê)
     inner.rotation.y = -Math.PI / 2; inner.position.set(-0.004, 0.02, s * PW / 2); page.add(inner);
   }
-  return { group: g, head, paper, torso };
+  return { group: g, head, paper, torso, arms, pages, PW };
 }
 
 /** Cadeira + leitor, com a animação (balanço leve + leitura). Origem no chão, frente +X. */
@@ -163,14 +163,37 @@ export function buildReaderSpot() {
   const rd = readerSeated();
   content.add(rd.group);
   root.traverse(o => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = false; } });
-  const paperY = rd.paper.position.y;
+  // pose "lendo" e pose "jornal de lado" (dobrado em cima do braço da cadeira, do lado direito dele, +Z); k = 0..1 entre elas
+  const hold = { pos: rd.paper.position.clone(), q: rd.paper.quaternion.clone() };
+  const aside = { pos: new THREE.Vector3(0.02, 0.69, 0.47),
+    q: new THREE.Quaternion().setFromEuler(new THREE.Euler(Math.PI, 0, Math.PI / 2)) };   // deitado no braço, por fora da cadeira
+  const ARM_HOLD = rd.arms.map(a => ({ sh: a.sh.rotation.clone(), el: a.elbow.rotation.clone() }));
+  const ARM_REST = rd.arms.map(a => ({ sh: new THREE.Euler(-a.s * 0.05, 0, 0.3), el: new THREE.Euler(0, 0, 0.95) }));
+  let k = 0, goal = 0, lastT = null;
+  const ease = x => x * x * (3 - 2 * x);
+  /** true: coloca o jornal de lado (para conversar); false: volta a ler. */
+  root.userData.setAside = on => { goal = on ? 1 : 0; };
+  root.userData.asideDone = () => k === goal;
   root.userData.update = t => {
+    const dt = lastT === null ? 0 : Math.min(0.1, Math.max(0, t - lastT)); lastT = t;
+    k = goal > k ? Math.min(goal, k + dt / 1.1) : Math.max(goal, k - dt / 1.1);
+    const e = ease(k), read = 1 - e;
     pivot.rotation.z = 0.035 * Math.sin(t * 1.4);                                  // balanço bem leve
-    rd.head.rotation.y = 0.12 * Math.sin(t * 0.55);                                // os olhos correm pelas colunas
+    rd.head.rotation.y = 0.12 * Math.sin(t * 0.55) * read - 0.55 * e;              // lendo: os olhos correm pelas colunas; conversando: olha para quem chegou
     rd.head.rotation.x = 0.03 * Math.sin(t * 0.37);
-    const turn = Math.max(0, Math.sin(t * 0.21) - 0.96) * 25;                      // de vez em quando ajeita o jornal
-    rd.paper.position.y = paperY + 0.01 * Math.sin(t * 1.1) + turn * 0.02;
-    rd.paper.rotation.x = turn * 0.08;
+    rd.head.rotation.z = -0.34 * read - 0.05 * e;
+    const turn = Math.max(0, Math.sin(t * 0.21) - 0.96) * 25 * read;               // de vez em quando ajeita o jornal
+    // jornal: sai das mãos num arco curto, fecha a dobra e fica deitado no braço da cadeira
+    rd.paper.position.lerpVectors(hold.pos, aside.pos, e);
+    rd.paper.position.y += (0.01 * Math.sin(t * 1.1) + turn * 0.02) * read + Math.sin(e * Math.PI) * 0.25;
+    rd.paper.quaternion.slerpQuaternions(hold.q, aside.q, e);
+    if (read > 0.999) rd.paper.rotation.x = turn * 0.08;
+    rd.pages[0].rotation.y = 0.28 + (Math.PI - 0.56) * e;                          // a página da esquerda dobra por cima da outra
+    rd.arms.forEach((a, i) => {
+      const h = ARM_HOLD[i], r = ARM_REST[i];
+      a.sh.rotation.set(h.sh.x + (r.sh.x - h.sh.x) * e, 0, h.sh.z + (r.sh.z - h.sh.z) * e);
+      a.elbow.rotation.set(h.el.x + (r.el.x - h.el.x) * e, 0, h.el.z + (r.el.z - h.el.z) * e);
+    });
     rd.torso.scale.y = 1 + 0.01 * Math.sin(t * 1.9);                               // respiração
   };
   return root;
