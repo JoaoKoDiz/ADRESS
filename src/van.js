@@ -5,6 +5,7 @@ import { SOLIDS, BOUNDS, VAN_START } from './layout.js';
 import { mat, mesh, box, cyl, at, group, dynamic, bakeStatic } from './models/kit.js';
 import { buildWheel, WHEEL_R, WHEEL_W } from './models/wheels.js';
 import { buildRack, tickRackBlink } from './models/racks.js';
+import { PAINT, setVanPaint, getVanPaint, VAN_PAINT_DEFAULT } from './models/paint.js';
 
 // ---------- Física ----------
 const MAX = 21, ACC = 2.2, DEC = 3.5, TURN = 4.6;
@@ -25,11 +26,7 @@ const angleDiff = (a, b) => {
 // ---------- Modelo ----------
 const ORANGE = '#ff7a1a', ORANGE_DARK = '#d95f0a', CREAM = '#fff3dc', GLASS = '#2b4a6e', GLASS_HI = '#6f9cc8';
 const DARK = '#3a3d44', TIRE = '#1f2023', HUB = '#c9ced6', CARD = '#c98a4a', TAPE = '#f3d9a6';
-/** Tinta da van (Shop → Cor da van): material único e compartilhado por todas as vans (jogo, tela inicial e Shop). */
-const PAINT = new THREE.MeshStandardMaterial({ color: ORANGE, roughness: 0.85, flatShading: true });
-export const VAN_PAINT_DEFAULT = ORANGE;
-export const setVanPaint = hex => PAINT.color.set(hex);
-export const getVanPaint = () => '#' + PAINT.color.getHexString();
+export { setVanPaint, getVanPaint, VAN_PAINT_DEFAULT };
 const BODY_W = 2.5, BEVEL = 0.14;
 const SIDE_Z = BODY_W / 2;                   // face lateral da carroceria
 const WHEELS = [[1.5, 1], [1.5, -1], [-1.45, 1], [-1.45, -1]];

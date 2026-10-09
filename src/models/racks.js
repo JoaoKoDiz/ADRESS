@@ -1,16 +1,45 @@
 // Bagageiros da van (Shop → Bagageiro): o padrão (caixas de entrega) + 3 modelos. Nenhum tem cor editável.
 // Coordenadas no espaço do corpo da van (frente = +X); a carga fica sobre os trilhos do teto (y ≈ 2,47, x de −2,2 a 0,5, z de −0,85 a 0,85).
 import * as THREE from 'three';
-import { box, cyl, sphere, cone, torus, at, group, dynamic, textTexture } from './kit.js';
+import { box, cyl, sphere, cone, torus, at, group, dynamic, textTexture, mesh } from './kit.js';
+import { PAINT } from './paint.js';
 
 const Y = 2.47;                                    // topo dos trilhos
 const CARD = '#c98a4a', TAPE = '#f3d9a6';
 
 /** Luzes que piscam (Equipamento científico): materiais emissivos registrados aqui; `tickRackBlink(t)` os liga/desliga (t em segundos). */
 const blinkMats = [];
+const rackAnims = [];                              // animações por quadro de alguns modelos (ex.: objeto flutuando), fn(t)
 export function tickRackBlink(t) {
   for (const b of blinkMats) b.m.emissiveIntensity = Math.sin(t * b.f + b.p) > b.th ? 1.8 : 0.08;
+  for (const f of rackAnims) f(t);
 }
+/** Corda entre dois pontos (espaço do corpo da van). */
+function rope(a, b, color = '#c9a96a', th = 0.028) {
+  const A = new THREE.Vector3(...a), B = new THREE.Vector3(...b), d = B.clone().sub(A), len = d.length();
+  const m = box(len, th, th, color);
+  m.position.copy(A).add(B).multiplyScalar(0.5);
+  m.quaternion.setFromUnitVectors(new THREE.Vector3(1, 0, 0), d.normalize());
+  return m;
+}
+// perfil lateral da carroceria da van (igual ao de van.js), usado na mini van
+const PROFILE = [[-2.4, 0.42], [2.4, 0.42], [2.4, 1.16], [2.2, 1.34], [1.55, 1.44], [0.85, 2.22], [-2.4, 2.22]];
+function miniVan() {
+  const sh = new THREE.Shape();
+  PROFILE.forEach(([x, y], i) => (i ? sh.lineTo(x, y) : sh.moveTo(x, y))); sh.closePath();
+  const geo = new THREE.ExtrudeGeometry(sh, { depth: 2.2, bevelEnabled: true, bevelThickness: 0.14, bevelSize: 0.14, bevelOffset: -0.14, bevelSegments: 2 });
+  geo.translate(0, 0, -1.1);
+  const v = group(mesh(geo, PAINT), at(box(3.0, 0.08, 1.95, '#fff3dc'), -0.85, 2.26, 0), at(box(4.5, 0.16, 2.52, '#fff3dc'), -0.05, 0.62, 0),
+    at(box(0.3, 0.3, 2.4, '#3a3d44'), 2.42, 0.56, 0), at(box(0.26, 0.28, 2.4, '#3a3d44'), -2.42, 0.56, 0),
+    at(box(0.9, 0.55, 2.3, '#2b4a6e'), 0.98, 1.78, 0));                                                         // vidros da cabine
+  for (const [x, z] of [[1.5, 1.2], [1.5, -1.2], [-1.45, 1.2], [-1.45, -1.2]]) v.add(at(cyl(0.44, 0.44, 0.36, '#1f2023', 10), x, 0.44, z, Math.PI / 2, 0, 0), at(cyl(0.22, 0.22, 0.4, '#c9ced6', 6), x, 0.44, z, Math.PI / 2, 0, 0));
+  for (const sz of [-1, 1]) v.add(at(box(2.6, 0.9, 0.02, '#fff3dc'), -0.93, 1.42, sz * 1.27), at(box(2.0, 0.34, 0.02, '#e8661a'), -0.93, 1.42, sz * 1.285));   // faixa do logotipo
+  // caixinhas no teto da mini van
+  v.add(at(box(1.35, 0.62, 1.25, '#c98a4a'), -1.25, 2.6, 0.05, 0, 0.12, 0), at(box(0.8, 0.5, 0.75, '#d9a066'), -0.05, 2.55, -0.25, 0, -0.25, 0),
+    at(box(1.37, 0.02, 0.24, '#f3d9a6'), -1.25, 2.92, 0.05, 0, 0.12, 0));
+  return v;
+}
+
 function led(color, f, p, th = 0) {
   const m = new THREE.MeshStandardMaterial({ color, emissive: color, emissiveIntensity: 1.5, roughness: 0.4 });
   blinkMats.push({ m, f, p, th });
@@ -293,6 +322,65 @@ export const RACK_MODELS = [
         at(box(0.06, 0.05, 0.44, GOLD), -0.62, 0, 0), at(cyl(0.032, 0.032, 0.3, '#5a2f16', 8), -0.82, 0, 0, 0, 0, Math.PI / 2), at(sphere(0.06, GOLD, 8, 6), -0.99, 0, 0));
       const t3 = label('DAMA GUINEVERE', 0.4, 0.13, '#f4efe3', '#2b2d33', 26); t3.rotation.x = -Math.PI / 2; t3.position.set(0.1, 0.02, 0); sw.add(t3);
       g.add(at(sw, -0.15, Y + 0.05, 0.4, 0, -0.1, 0));
+      return g;
+    } },
+  { name: 'Van dentro da van', desc: 'Uma miniatura da própria van sendo entregue, com suas próprias caixinhas no teto.',
+    build() {
+      const mv = miniVan();
+      mv.scale.setScalar(0.4);
+      const g = group(at(mv, -0.85, Y, 0, 0, 0, 0));
+      for (const x of [-1.4, -0.3]) g.add(at(box(0.08, 0.03, 1.15, '#e3262e'), x, Y + 1.08, 0));            // cintas de fixação
+      for (const x of [-1.4, -0.3]) for (const sz of [-1, 1]) g.add(at(box(0.08, 0.92, 0.03, '#e3262e'), x, Y + 0.62, sz * 0.58));
+      return g;
+    } },
+  { name: 'Baú de tesouro', desc: 'Um baú antigo entreaberto, com moedas aparecendo.',
+    build() {
+      const WOOD = '#6b4526', IRON = '#3a3d44', GOLD = '#f1c93b', ch = group();
+      ch.add(at(box(1.1, 0.55, 0.7, WOOD), 0, 0.275, 0), at(box(1.04, 0.02, 0.64, '#2a1a0e'), 0, 0.555, 0));
+      for (const y of [0.14, 0.28, 0.42]) ch.add(at(box(1.11, 0.012, 0.71, '#4d3119'), 0, y, 0));
+      for (const x of [-0.36, 0.36]) ch.add(at(box(0.1, 0.57, 0.72, IRON), x, 0.285, 0));                      // cintas de ferro
+      for (const sx of [-1, 1]) for (const sz of [-1, 1]) ch.add(at(box(0.12, 0.14, 0.12, IRON), sx * 0.52, 0.5, sz * 0.32));
+      ch.add(at(box(0.16, 0.2, 0.04, GOLD), 0, 0.46, 0.355), at(box(0.05, 0.08, 0.05, '#2a1a0e'), 0, 0.44, 0.38));   // fechadura
+      // moedas empilhadas dentro e algumas caídas na frente
+      const r = rng(7);
+      for (let i = 0; i < 46; i++) {
+        const a = r() * Math.PI * 2, rad = Math.sqrt(r()) * 0.4, x = Math.cos(a) * rad * 1.15, z = Math.sin(a) * rad * 0.75;
+        const hgt = 0.56 + (0.2 * Math.max(0, 1 - rad / 0.45)) + r() * 0.04;
+        ch.add(at(cyl(0.07, 0.07, 0.016, GOLD, 10), x, hgt, z, (r() - 0.5) * 0.7, 0, (r() - 0.5) * 0.7));
+      }
+      ch.add(at(sphere(0.07, '#e3262e', 8, 6), 0.2, 0.78, -0.05), at(sphere(0.06, '#3a78d4', 8, 6), -0.25, 0.74, 0.1), at(box(0.28, 0.02, 0.05, '#c9ced6'), 0.0, 0.82, 0.05, 0.3, 0.8, 0.2));   // gemas e um colar
+      for (const [x, z, a] of [[0.3, 0.55, 0.2], [0.05, 0.62, 1.1], [-0.3, 0.5, 0.6], [0.5, 0.66, 0.3], [-0.15, 0.7, 0.9]]) ch.add(at(cyl(0.07, 0.07, 0.016, GOLD, 10), x, 0.01, z, 0, a, 0));
+      // tampa abaulada, aberta para trás
+      const sh = new THREE.Shape(); sh.moveTo(-0.35, 0); sh.absarc(0, 0, 0.35, Math.PI, 0, true); sh.lineTo(-0.35, 0);
+      const lg = new THREE.ExtrudeGeometry(sh, { depth: 1.1, bevelEnabled: false }); lg.translate(0, 0, -0.55); lg.rotateY(-Math.PI / 2); lg.translate(0, 0, 0.35);
+      const lid = group(mesh(lg, WOOD), at(box(1.12, 0.02, 0.04, IRON), 0, 0.01, 0.7));
+      for (const x of [-0.36, 0.36]) lid.add(at(box(0.1, 0.02, 0.7, IRON), x, 0.35, 0.35));
+      lid.position.set(0, 0.55, -0.35); lid.rotation.x = -1.2;
+      ch.add(lid);
+      return group(at(ch, -0.95, Y, 0.0, 0, 0.12, 0));
+    } },
+  { name: 'Encomenda alienígena', desc: 'Um objeto flutuando alguns centímetros acima do bagageiro, preso por cordas.',
+    build() {
+      rackAnims.length = 0;
+      const g = group();
+      const alien = dynamic(group());                                    // flutua e gira devagar
+      const hull = sphere(0.42, '#2b2f3a', 14, 10, { metalness: 0.5, roughness: 0.35 }); hull.scale.set(1, 1.25, 1); alien.add(hull);
+      const gm = c => new THREE.MeshStandardMaterial({ color: c, emissive: c, emissiveIntensity: 1.4, roughness: 0.4 });
+      const glow = gm('#6dff5a'), glow2 = gm('#c46bff');
+      for (const [y, rr] of [[-0.25, 0.4], [0.05, 0.43], [0.35, 0.34]]) alien.add(at(torus(rr, 0.03, glow, 6, 28), 0, y, 0, Math.PI / 2, 0, 0));
+      alien.add(at(sphere(0.14, glow2, 10, 8), 0.36, 0.1, 0), at(sphere(0.07, glow, 8, 6), 0, 0.75, 0));
+      for (let i = 0; i < 3; i++) { const a = (i / 3) * Math.PI * 2; alien.add(at(box(0.05, 0.4, 0.05, '#4a4f5c'), Math.cos(a) * 0.3, -0.62, Math.sin(a) * 0.3)); }   // pernas finas
+      alien.position.set(-0.85, Y + 0.12 + 0.5, 0);
+      g.add(alien);
+      rackAnims.push(t => {
+        alien.position.y = Y + 0.17 + 0.5 + Math.sin(t * 1.6) * 0.04; alien.rotation.y = t * 0.5;
+        glow.emissiveIntensity = 1.4 + Math.sin(t * 3.2) * 0.7; glow2.emissiveIntensity = 1.3 + Math.sin(t * 2.1 + 1) * 0.8;
+      });
+      // cordas esticadas do objeto até os trilhos do teto
+      for (const [ax, sx] of [[-1.55, -1], [-0.15, 1]]) for (const sz of [-1, 1]) {
+        g.add(rope([ax, 2.44, sz * 0.8], [-0.85 + sx * 0.28, Y + 0.55, sz * 0.2]));
+        g.add(at(box(0.07, 0.06, 0.07, '#3a3d44'), ax, 2.44, sz * 0.8));
+      }
       return g;
     } },
 ];
