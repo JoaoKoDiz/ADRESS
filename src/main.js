@@ -2,7 +2,7 @@
 // Este arquivo define como cada módulo é usado (o "contrato" entre eles).
 import * as THREE from 'three';
 import { Game, ROUTE_LEN } from './logic.js';
-import { doorPoint, slotOrigin, DELIVERY_RADIUS, DELIVERY_MAX_SPEED, VAN, LOT_ANCHORS, SOLIDS, ENTRANCE, HEDGE, GRID, PLAZA, HOUSE_SLOTS, configureGrid, setGasStations, GAS_LIST, GAS_CANOPY, GAS_ISLANDS, GAS_PARTS } from './layout.js';
+import { MAP, doorPoint, slotOrigin, DELIVERY_RADIUS, DELIVERY_MAX_SPEED, VAN, LOT_ANCHORS, SOLIDS, ENTRANCE, HEDGE, GRID, PLAZA, HOUSE_SLOTS, configureGrid, setGasStations, GAS_LIST, GAS_CANOPY, GAS_ISLANDS, GAS_PARTS } from './layout.js';
 import { createInput } from './input.js';
 import { createWorld } from './world.js';
 import { createVan } from './van.js';
@@ -33,6 +33,7 @@ import { createShop } from './shop.js';
 import { createLevelSelect } from './levelSelect.js';
 import { createWalker } from './walker.js';
 import { createTalkBox } from './talkBox.js';
+import { buildChurch, setChurchOpacity } from './models/church.js';
 import { createBackButton } from './backButton.js';
 import { createMissions, createMissionsButton, MISSIONS } from './missions.js';
 import { createCareer } from './career.js';
@@ -306,6 +307,7 @@ function startFree(mode = 'free') {
   useNeighborhood(lv === 1 ? 'plaza6' : lv === 3 ? 'grid5' : lv === 4 ? 'grid6s' : lv === 5 ? 'city6' : lv === 6 ? 'city7' : lv === 7 ? 'city8' : 'grid4');
   gameMode = mode;
   if (!COMPOSED.includes(neighborhood)) setupGrid4();   // Bairro 1 tem a casa fixa; o 3 (mesma grade) não
+  setupChurch();
   if (mode === 'career') career.startMatch(careerLevel); else career.stop();
   ENTRANCE_WALL.x0 = ENTRANCE.x0; ENTRANCE_WALL.x1 = ENTRANCE.x1;   // a entrada depende do bairro
   const w = SOLIDS.indexOf(ENTRANCE_WALL);
@@ -549,6 +551,7 @@ function startRoofTalk() {
   setState('talk');
   talkBox.show(ROOF_LINES, () => {                      // fim da conversa: some a caixa de fala; aparece o aviso da interface
     talkPhase = 'note';
+    try { localStorage.setItem(ROOF_KEY, '1'); } catch (e) { /* */ }   // conversa do terraço concluída (libera a igreja)
     talkBox.note('ORIENTAÇÃO DO JOGO', ['Use o ', { b: 'Modo Livre' }, ', a qualquer momento, caso tenha interesse.'], () => {
       talkPhase = 'fade';
       talkBox.fadeBlack(1, 3000, () => {                  // ~3 s até ficar tudo escuro…
@@ -575,6 +578,47 @@ function endRoofScene() {
   setState('title');
 }
 
+// ---------- Bairro 1 (Livre): a igreja na direção do sol ----------
+// Só existe depois das DUAS conversas (caixa no Bairro 1 + terraço no Bairro 6), só no Bairro 1 e só no Modo Livre.
+// Fica escondida (nem a silhueta) até o jogador, fora do bairro, dirigir ~5 s na direção do sol (sul); aí surge aos poucos.
+const ROOF_KEY = 'adress.l6.roofTalk';
+const roofDone = () => { try { return localStorage.getItem(ROOF_KEY) === '1'; } catch (e) { return false; } };
+const CHURCH_Z = 230;                                   // distância ao sul da sebe
+let church = null, churchOn = false, churchT = 0, churchA = 0, churchShown = false;
+const churchSolids = [];
+function setupChurch() {
+  for (const b of churchSolids) { const i = SOLIDS.indexOf(b); if (i >= 0) SOLIDS.splice(i, 1); }
+  churchSolids.length = 0;
+  let pd = parcelDone; try { pd = pd || localStorage.getItem(PARCEL_KEY) === '1'; } catch (e) { /* */ }
+  churchOn = isL1() && gameMode === 'free' && pd && roofDone();   // as duas conversas, lidas do progresso salvo
+  churchT = 0; churchA = 0; churchShown = false;
+  if (church && church.parent) church.parent.remove(church);
+  if (!churchOn) return;
+  if (!church) church = buildChurch();
+  church.position.set(MAP_W() / 2, 0, MAP_W() + CHURCH_Z); church.rotation.y = Math.PI;   // fachada virada para o bairro (norte)
+  church.visible = false;
+  world.scene.add(church);
+}
+const MAP_W = () => MAP;                                // largura do bairro (lado do quadrado, com a sebe)
+function updateChurch(dt) {
+  if (!churchOn) return;
+  const M = MAP_W();
+  if (!churchShown) {
+    const outside = van.x < 0 || van.x > M || van.z < 0 || van.z > M;
+    const southSpeed = Math.sin(van.heading) * van.speed;          // velocidade na direção do sol (+Z)
+    if (state === 'drive' && outside && southSpeed > 4 && Math.sin(van.heading) * Math.sign(van.speed) > 0.6) churchT += dt;
+    if (churchT >= 5) {
+      churchShown = true; church.visible = true; setChurchOpacity(church, 0);
+      const z0 = M + CHURCH_Z, cx = M / 2;
+      churchSolids.push({ x0: cx - 21, x1: cx + 21, z0: z0 - 2, z1: z0 + 12 }, { x0: cx - 13, x1: cx + 13, z0: z0 + 12, z1: z0 + 58 });
+      SOLIDS.push(...churchSolids);
+    }
+  } else if (churchA < 1) {
+    churchA = Math.min(1, churchA + dt / 3.5);                       // surge devagar, como através de uma névoa distante
+    setChurchOpacity(church, churchA * churchA * (3 - 2 * churchA));
+  }
+}
+
 function startNewRound() {
   walker.show(false); talkBox.hide(); walker.setFloor(0); roofWalk = null; van.object.visible = true;
   if (COMPOSED.includes(neighborhood)) composeRound(); else game.newRound();
@@ -589,7 +633,7 @@ function startNewRound() {
   world.hideResident();
   van.reset();
   rig.snap({ x: van.x, z: van.z, heading: van.heading, speed: 0 });
-  resetParcel();
+  resetParcel(); setupChurch();
   dialog = null; pending = -1; nearHouse = -1; actionLock = 0;
   nearPump = false; fuelArmed = true; fuelMsgT = 0;
   qualityWarm = 120;                           // a troca de rodada remonta o bairro: não conta como lentidão
@@ -774,6 +818,7 @@ function update(dt, t) {
 
   if (state !== 'drive') van.relax(dt);          // torre de caixas do bagageiro: para de balançar quando a van não está sendo dirigida
   world.update(t, dt);
+  updateChurch(dt);
   world.updateGas(van.x, van.z, dt);
   fuelMsgT = Math.max(0, fuelMsgT - dt);
   if ((state === 'drive' || state === 'missile') && allDestroyed()) startBoss();
@@ -973,6 +1018,8 @@ window.ADRESS = {
   get dialog() { return dialog; },
   get pixelRatio() { return pixelRatio; },
   get titleDriver() { return titleDriver; },
+  get church() { return church; },
+  get churchState() { return { on: churchOn, t: churchT, a: churchA, shown: churchShown }; },
   get gameMode() { return gameMode; },
   career, missions,
   get careerMap() { return careerMap; },
