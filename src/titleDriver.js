@@ -42,22 +42,22 @@ export function createTitleDriver(container, audio) {
   const S = 0.65;
   const driver = new THREE.Group();
   van.object.add(driver);
-  const torso = shirtTorso(SHIRT); torso.scale.multiplyScalar(S); torso.position.set(0.85, 1.04, -0.95); driver.add(torso);
+  const torso = shirtTorso(SHIRT); torso.scale.multiplyScalar(S); torso.position.set(0.85, 1.04, -0.85); driver.add(torso);
   const head = new THREE.Group();
   head.position.set(0.85, 1.5, -1.1);
   driver.add(head);
   head.add(at(limb(0.065, 0.07, 0.1, SKIN), 0, 0.08, -0.02));                       // pescoço
   head.add(at(buildHead(0.26), 0, 0.28, -0.07, 0, 1.15, 0));                        // rosto virado para a câmera (−Z) e um pouco para a frente
-  const shoulder = new THREE.Vector3(0.85, 1.04 + 0.56 * S, -0.95 - 0.31 * S), elbowAt = new THREE.Vector3(1.1, 1.57, -1.37);
+  const shoulder = new THREE.Vector3(0.85, 1.04 + 0.56 * S, -0.85 - 0.31 * S), elbowAt = new THREE.Vector3(0.98, 1.56, -1.35);   // cotovelo em cima da borda de baixo da janela
   const upper = new THREE.Group(); upper.position.copy(shoulder); driver.add(upper);
   const dirArm = elbowAt.clone().sub(shoulder), L = dirArm.length();
   upper.quaternion.setFromUnitVectors(new THREE.Vector3(0, -1, 0), dirArm.normalize());
   upper.add(limb(0.09, 0.078, 0.09, SHIRT), limb(0.056, 0.05, L, SKIN));          // manga + braço até o cotovelo
   const forearm = new THREE.Group();
   forearm.position.copy(elbowAt);
-  forearm.rotation.z = 0.7;                                                          // antebraço para fora, caindo junto à porta
+  forearm.rotation.set(0.12, 0, 0.06);                                              // pendurado para baixo, por fora da porta
   driver.add(forearm);
-  forearm.add(limb(0.05, 0.042, 0.27, SKIN), at(hand(SKIN, 0.68), 0, -0.27, 0));
+  forearm.add(limb(0.05, 0.036, 0.24, SKIN), at(hand(SKIN, 0.62), 0, -0.235, 0, 0, Math.PI / 2, 0));   // punho afinando + mão relaxada (polegar para a frente)
   driver.traverse(o => { if (o.isMesh) { o.castShadow = false; o.receiveShadow = false; } });
 
   const camera = new THREE.PerspectiveCamera(30, 1, 0.1, 100);
@@ -91,7 +91,6 @@ export function createTitleDriver(container, audio) {
     const b = t * BEAT * Math.PI * 2;
     head.rotation.x = Math.sin(b) * 0.14;                     // acena no ritmo
     head.rotation.z = Math.sin(b / 2) * 0.07;                 // e balança de lado
-    forearm.rotation.z = 0.7 + Math.max(0, Math.sin(b)) * 0.12; // a mão bate na porta
     if (mode === 'idle') van.object.position.y = Math.abs(Math.sin(b / 2)) * 0.03; // a suspensão acompanha
     else if (mode === 'drive') {
       mt += dt;
