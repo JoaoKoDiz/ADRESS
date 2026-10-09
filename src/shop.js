@@ -64,6 +64,7 @@ const CSS = `
 `;
 
 const KEY = 'adress.shop.v1';
+const HOLD_MS = 10000;                       // depois de mexer com o mouse, a rotação automática espera 10 s
 const DEFAULTS = { paint: VAN_PAINT_DEFAULT, ...CHAR_DEFAULT };
 const COLORS = {
   paint: ['#ff7a1a', '#e3262e', '#3a78d4', '#3c9d55', '#efbf2a', '#f2f2f2', '#2b2d33', '#8a55c4', '#e86aa0', '#19b5b0', '#8c9199', '#8a5a36'],
@@ -218,7 +219,28 @@ export function createShop() {
       renderer.setSize(w, h, false); camera.aspect = w / h; camera.updateProjectionMatrix();
     };
     new ResizeObserver(resize).observe(canvasBox); resize();
-    pv = { renderer, scene, camera, van, walker, wheel, rack, swatch, decal, sMat, t: 0, base };
+    pv = { renderer, scene, camera, van, walker, wheel, rack, swatch, decal, sMat, t: 0, base, angle: 0.9, holdUntil: 0 };
+    // girar com o mouse: arrastar (botão esquerdo) gira a van/personagem; ao mexer, a rotação automática pausa por 10 s
+    // (a cada novo movimento o prazo recomeça) e depois continua de onde parou
+    let drag = null;
+    const c = renderer.domElement;
+    c.style.cursor = 'grab'; c.style.touchAction = 'none';
+    c.addEventListener('contextmenu', e => e.preventDefault());
+    c.addEventListener('pointerdown', e => {
+      if (e.button !== 0 && e.button !== 2) return;
+      drag = { id: e.pointerId, x: e.clientX };
+      pv.holdUntil = performance.now() + HOLD_MS;
+      try { c.setPointerCapture(e.pointerId); } catch (err) { /* ignora */ }
+      c.style.cursor = 'grabbing';
+    });
+    c.addEventListener('pointermove', e => {
+      if (!drag || e.pointerId !== drag.id) return;
+      pv.angle += (e.clientX - drag.x) * 0.012;                    // arrastar para a direita leva a frente do objeto para a direita
+      drag.x = e.clientX;
+      pv.holdUntil = performance.now() + HOLD_MS;
+    });
+    const end = e => { if (drag && e.pointerId === drag.id) { drag = null; c.style.cursor = 'grab'; pv.holdUntil = performance.now() + HOLD_MS; } };
+    c.addEventListener('pointerup', end); c.addEventListener('pointercancel', end);
   }
   function pose() {                          // o que aparece, conforme categoria e visão
     if (!pv) return;
@@ -238,7 +260,8 @@ export function createShop() {
       pv.t += dt;
       pv.sMat.color.set(colors.paint);
       const char = cat.sec === 'char', item = !char && view === 'item';
-      const a = pv.t * 0.55 + 0.9;
+      if (now >= pv.holdUntil) pv.angle += dt * 0.55;              // gira sozinho, a menos que o jogador tenha mexido há menos de 10 s
+      const a = pv.angle;
       const d = char ? 6.4 : item ? 8 : 15, hgt = char ? 2.0 : item ? 2.6 : 4.6, ty = char ? 1.15 : item ? 1.4 : 1.2;
       pv.camera.position.set(Math.cos(a) * d, hgt + ty - 1, Math.sin(a) * d);
       pv.camera.lookAt(0, ty, 0);
@@ -285,6 +308,10 @@ export function createShop() {
     close() { el.classList.remove('on'); running = false; if (document.activeElement && el.contains(document.activeElement)) document.activeElement.blur(); },
     get isOpen() { return el.classList.contains('on'); },
     get colors() { return { ...colors }; },
+    /** Testes: ângulo atual da pré-visualização e se a rotação automática está pausada. */
+    get _angle() { return pv ? pv.angle : 0; },
+    get _held() { return !!pv && performance.now() < pv.holdUntil; },
+    _hold(ms) { if (pv) pv.holdUntil = performance.now() + ms; },
     /** Testes: escolhe categoria / alterna a visão. */
     _select(id) { select(CATS.find(c => c.id === id)); },
     _toggleView: toggleView,
