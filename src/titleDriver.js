@@ -42,22 +42,29 @@ export function createTitleDriver(container, audio) {
   const S = 0.65;
   const driver = new THREE.Group();
   van.object.add(driver);
-  const torso = shirtTorso(SHIRT); torso.scale.multiplyScalar(S); torso.position.set(0.85, 1.04, -0.85); driver.add(torso);
+  const torso = shirtTorso(SHIRT); torso.scale.multiplyScalar(S); torso.position.set(0.9, 1.08, -0.82); driver.add(torso);   // escondido pela porta
   const head = new THREE.Group();
-  head.position.set(0.85, 1.5, -1.1);
+  head.position.set(0.8, 1.5, -1.1);
   driver.add(head);
   head.add(at(limb(0.065, 0.07, 0.1, SKIN), 0, 0.08, -0.02));                       // pescoço
   head.add(at(buildHead(0.26), 0, 0.28, -0.07, 0, 1.15, 0));                        // rosto virado para a câmera (−Z) e um pouco para a frente
-  const shoulder = new THREE.Vector3(0.85, 1.04 + 0.56 * S, -0.85 - 0.31 * S), elbowAt = new THREE.Vector3(0.98, 1.56, -1.35);   // cotovelo em cima da borda de baixo da janela
+  // braço da janela (refeito): ombro dentro da cabine → manga aparecendo na borda da janela → braço → cotovelo no peitoril
+  // → antebraço curto pendurado por fora da porta → mão de desenho (palma achatada, dedos juntos, polegar)
+  const shoulder = new THREE.Vector3(0.97, 1.5, -1.05), elbowAt = new THREE.Vector3(1.2, 1.55, -1.36);
   const upper = new THREE.Group(); upper.position.copy(shoulder); driver.add(upper);
   const dirArm = elbowAt.clone().sub(shoulder), L = dirArm.length();
   upper.quaternion.setFromUnitVectors(new THREE.Vector3(0, -1, 0), dirArm.normalize());
-  upper.add(limb(0.09, 0.078, 0.09, SHIRT), limb(0.056, 0.05, L, SKIN));          // manga + braço até o cotovelo
+  upper.add(limb(0.085, 0.08, L * 0.84, SHIRT), limb(0.055, 0.05, L, SKIN));       // manga (passa um pouco da janela) + braço até o cotovelo
   const forearm = new THREE.Group();
   forearm.position.copy(elbowAt);
-  forearm.rotation.set(0.12, 0, 0.06);                                              // pendurado para baixo, por fora da porta
+  forearm.rotation.set(0.05, 0, 0);                                                 // cai reto, rente à porta, por fora
   driver.add(forearm);
-  forearm.add(limb(0.05, 0.036, 0.24, SKIN), at(hand(SKIN, 0.62), 0, -0.235, 0, 0, Math.PI / 2, 0));   // punho afinando + mão relaxada (polegar para a frente)
+  forearm.add(limb(0.05, 0.036, 0.19, SKIN));                                       // antebraço curto, punho mais fino
+  const palm = new THREE.Group(); palm.position.y = -0.2; forearm.add(palm);
+  palm.add(at(sphere(0.05, SKIN, 16, 12), 0, -0.035, 0)); palm.children[0].scale.set(1.15, 1.0, 0.55);          // palma achatada
+  const fingers = at(mesh(new THREE.CapsuleGeometry(0.04, 0.035, 6, 12), SKIN), 0, -0.095, 0.005);
+  fingers.scale.set(1.3, 1, 0.6); palm.add(fingers);                                // dedos juntos
+  palm.add(at(mesh(new THREE.CapsuleGeometry(0.018, 0.04, 6, 10), SKIN), 0.058, -0.04, -0.01, 0, 0, 0.55));       // polegar
   driver.traverse(o => { if (o.isMesh) { o.castShadow = false; o.receiveShadow = false; } });
 
   const camera = new THREE.PerspectiveCamera(30, 1, 0.1, 100);
