@@ -4,7 +4,8 @@ import * as THREE from 'three';
 import { SOLIDS, BOUNDS, VAN_START } from './layout.js';
 import { mat, mesh, box, cyl, at, group, dynamic, bakeStatic } from './models/kit.js';
 import { buildWheel, WHEEL_R, WHEEL_W } from './models/wheels.js';
-import { buildRack, tickRackBlink } from './models/racks.js';
+import { buildRack, tickRack } from './models/racks.js';
+import { registerVan } from './models/vanLook.js';
 import { PAINT, setVanPaint, getVanPaint, VAN_PAINT_DEFAULT } from './models/paint.js';
 import { decalTexture } from './models/decals.js';
 
@@ -84,16 +85,59 @@ function prism(points, width) {
   return g;
 }
 
+// ---- teto com cavidade de verdade ("Caixa pesada demais"): a face de cima da carroceria e a chapa creme viram uma malha fina, com a depressão deslocada para baixo
+const PIT = { cx: -0.85, cz: 0, rx: 0.9, rz: 0.55, depth: 0.34 };
+function pitDisp(x, z) {
+  const dx = (x - PIT.cx) / PIT.rx, dz = (z - PIT.cz) / PIT.rz, r = Math.hypot(dx, dz);
+  if (r < 1) { const t = 1 - r; return -PIT.depth * t * t * (3 - 2 * t); }
+  if (r < 1.35) return 0.03 * Math.sin(((r - 1) / 0.35) * Math.PI);               // bordas da lata, levemente amassadas para cima
+  return 0;
+}
+/** Malha de triângulos virados para cima cobrindo [x0,x1]×[z0,z1] em y (+ deslocamento da cavidade). */
+function topGrid(out, x0, x1, z0, z1, y, ox, cell = 0.06) {
+  const nx = Math.max(1, Math.round((x1 - x0) / cell)), nz = Math.max(1, Math.round((z1 - z0) / cell));
+  const H = (i, j) => { const x = x0 + (x1 - x0) * i / nx, z = z0 + (z1 - z0) * j / nz; return [x, y + pitDisp(x + ox, z), z]; };
+  for (let i = 0; i < nx; i++) for (let j = 0; j < nz; j++) {
+    const a = H(i, j), b = H(i, j + 1), c = H(i + 1, j + 1), d = H(i + 1, j);
+    out.push(...a, ...b, ...c, ...a, ...c, ...d);
+  }
+}
+function makePitBody(geo) {
+  const g = geo.index ? geo.toNonIndexed() : geo.clone(), p = g.attributes.position.array, out = [];
+  let x0 = 1e9, x1 = -1e9, z0 = 1e9, z1 = -1e9;
+  for (let i = 0; i < p.length; i += 9) {
+    if (Math.abs(p[i + 1] - 2.22) < 1e-3 && Math.abs(p[i + 4] - 2.22) < 1e-3 && Math.abs(p[i + 7] - 2.22) < 1e-3) {   // triângulo da face de cima (plana, y = 2,22)
+      for (const k of [0, 3, 6]) { x0 = Math.min(x0, p[i + k]); x1 = Math.max(x1, p[i + k]); z0 = Math.min(z0, p[i + k + 2]); z1 = Math.max(z1, p[i + k + 2]); }
+    } else for (let k = 0; k < 9; k++) out.push(p[i + k]);
+  }
+  topGrid(out, x0, x1, z0, z1, 2.22, 0);
+  const o = new THREE.BufferGeometry(); o.setAttribute('position', new THREE.Float32BufferAttribute(out, 3)); o.computeVertexNormals(); return o;
+}
+function makePitRoof() {                          // chapa creme 3,0 × 1,95 × 0,08 (centro em x = −0,85, y = 2,26): lados e fundo originais, topo em malha
+  const g = new THREE.BoxGeometry(3.0, 0.08, 1.95).toNonIndexed(), p = g.attributes.position.array, out = [];
+  for (let i = 0; i < p.length; i += 9) {
+    if (p[i + 1] > 0.039 && p[i + 4] > 0.039 && p[i + 7] > 0.039) continue;          // topo (y = +0,04): refeito em malha
+    for (let k = 0; k < 9; k++) out.push(p[i + k]);
+  }
+  topGrid(out, -1.5, 1.5, -0.975, 0.975, 0.04, -0.85);
+  const o = new THREE.BufferGeometry(); o.setAttribute('position', new THREE.Float32BufferAttribute(out, 3)); o.computeVertexNormals(); return o;
+}
+
 function buildModel() {
   const root = new THREE.Group();
   const body = new THREE.Group();            // tudo que balança sobre a suspensão
   root.add(body);
 
   // carroceria laranja
-  body.add(mesh(bodyGeometry(), PAINT));
+  // carroceria e chapa do teto são objetos separados (fora do merge) para poder trocar por versões com uma cavidade (Bagageiro "Caixa pesada demais")
+  const bodyGeoDefault = bodyGeometry();
+  const bodyMesh = dynamic(mesh(bodyGeoDefault, PAINT));
+  body.add(bodyMesh);
 
   // teto creme (deixa uma borda laranja à vista)
-  body.add(at(box(3.0, 0.08, 1.95, CREAM), -0.85, 2.26, 0));
+  const roofMesh = dynamic(at(box(3.0, 0.08, 1.95, CREAM), -0.85, 2.26, 0));
+  const roofGeoDefault = roofMesh.geometry;
+  body.add(roofMesh);
   // faixa creme na base das laterais e para-choques
   body.add(at(box(4.5, 0.16, BODY_W + 0.02, CREAM), -0.05, 0.62, 0));
   body.add(at(box(0.3, 0.3, BODY_W - 0.1, DARK), 2.42, 0.56, 0));
@@ -173,12 +217,12 @@ function buildModel() {
     root.add(pivot);
     wheels.push(pivot);
   }
-  return { root, body, wheels, setRack, decals };
+  return { root, body, wheels, setRack, decals, bodyMesh, roofMesh, bodyGeoDefault, roofGeoDefault };
 }
 
 // ---------- API ----------
-export function createVan(scene) {
-  const { root, body, wheels, setRack, decals } = buildModel();
+export function createVan(scene, opts) {
+  const { root, body, wheels, setRack, decals, bodyMesh, roofMesh, bodyGeoDefault, roofGeoDefault } = buildModel();
   let decalModel = 0;
   root.name = 'van';
   scene.add(root);
@@ -187,8 +231,14 @@ export function createVan(scene) {
   let spin = 0, roll = 0, pitch = 0, prevSpeed = 0;
   // torre de caixas (Bagageiro "Excesso de encomendas"): pêndulo amortecido que balança nas curvas, freadas e arrancadas
   let sway = null, swR = 0, swVR = 0, swP = 0, swVP = 0;
-  let squat = 0;                               // bagageiro pesado demais: a van inteira afunda nas rodas
+  let squat = 0, rackModel = null, pitBody = null, pitRoof = null;   // bagageiro pesado demais: a van afunda nas rodas e o teto ganha uma cavidade
+  const setRoofPit = on => {
+    bodyMesh.geometry = on ? (pitBody = pitBody || makePitBody(bodyGeoDefault)) : bodyGeoDefault;
+    roofMesh.geometry = on ? (pitRoof = pitRoof || makePitRoof()) : roofGeoDefault;
+  };
   const findSway = () => {
+    rackModel = body.getObjectByName('rack-model');
+    setRoofPit(!!(rackModel && rackModel.userData.pit));
     sway = body.getObjectByName('sway') || null; swR = swVR = swP = swVP = 0;
     const m = body.getObjectByName('rack-model');
     squat = (m && m.userData.squat) || 0; sync();
@@ -309,7 +359,7 @@ export function createVan(scene) {
     const pitchGoal = THREE.MathUtils.clamp(accel * 0.0035, -0.045, 0.045);
     roll += (rollGoal - roll) * k;
     pitch += (pitchGoal - pitch) * k;
-    tickRackBlink(performance.now() / 1000);
+    tickRack(rackModel, performance.now() / 1000);
     if (sway) {
       const inR = THREE.MathUtils.clamp(-turnRate * (speed / MAX), -2.2, 2.2) * 38, inP = THREE.MathUtils.clamp(accel, -22, 22) * 0.6;
       const h = Math.min(dt, 0.03);
@@ -329,7 +379,7 @@ export function createVan(scene) {
 
   teleport(VAN_START.x, VAN_START.z, VAN_START.heading);
 
-  return {
+  const api = {
     object: root,
     get x() { return x; },
     get z() { return z; },
@@ -356,17 +406,19 @@ export function createVan(scene) {
     /** Só para a pré-visualização do Shop: balança a torre de caixas sozinha (a van lá não anda). */
     /** Fora da direção (diálogo, a pé, etc.): a torre vai parando sozinha, sem ficar torta. */
     relax(dt) {
-      tickRackBlink(performance.now() / 1000);
+      tickRack(rackModel, performance.now() / 1000);
       if (!sway) return;
       const h = Math.min(dt, 0.03);
       swVR += (-30 * swR - 3 * swVR) * h; swR += swVR * h; swVP += (-30 * swP - 3 * swVP) * h; swP += swVP * h;
       sway.rotation.set(swR, 0, swP);
     },
-    swayDemo(t) { tickRackBlink(t); if (sway) sway.rotation.set(Math.sin(t * 2.1) * 0.13, 0, Math.sin(t * 1.5) * 0.09); },
+    swayDemo(t) { tickRack(rackModel, t); if (sway) sway.rotation.set(Math.sin(t * 2.1) * 0.13, 0, Math.sin(t * 1.5) * 0.09); },
     setWheelModel(m) { wheels.forEach(p => { while (p.children.length) p.remove(p.children[0]); p.add(buildWheel(m)); }); },
     /** Gira a van (usado no voo de helicóptero, que vira mesmo parado). */
     turn(d) { heading = angleDiff(heading + d, 0); sync(); },
     teleport,
     update,
   };
+  if (!(opts && opts.look === false)) registerVan(api);   // recebe o visual salvo no Shop (a van de pré-visualização do Shop não)
+  return api;
 }

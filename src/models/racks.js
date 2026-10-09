@@ -4,15 +4,32 @@ import * as THREE from 'three';
 import { box, cyl, sphere, cone, torus, at, group, dynamic, textTexture, mesh } from './kit.js';
 import { PAINT } from './paint.js';
 
-const Y = 2.47;                                    // topo dos trilhos
+const Y = 2.30;                                    // teto da van (topo da chapa creme): todas as cargas encostam aqui
+const YA = 2.47;                                   // altura dos trilhos (só a encomenda alienígena, que flutua, usa)
 const CARD = '#c98a4a', TAPE = '#f3d9a6';
 
 /** Luzes que piscam (Equipamento científico): materiais emissivos registrados aqui; `tickRackBlink(t)` os liga/desliga (t em segundos). */
-const blinkMats = [];
-const rackAnims = [];                              // animações por quadro de alguns modelos (ex.: objeto flutuando), fn(t)
-export function tickRackBlink(t) {
-  for (const b of blinkMats) b.m.emissiveIntensity = Math.sin(t * b.f + b.p) > b.th ? 1.8 : 0.08;
-  for (const f of rackAnims) f(t);
+let curBlink = null, curAnims = null;                // registros do modelo que está sendo construído
+/** Anima a carga (luzes que piscam, objetos flutuando). `g` = modelo devolvido por buildRack; t em segundos. */
+export function tickRack(g, t) {
+  if (!g) return;
+  const bl = g.userData.blink, an = g.userData.anims;
+  if (bl) for (const b of bl) b.m.emissiveIntensity = Math.sin(t * b.f + b.p) > b.th ? 1.8 : 0.08;
+  if (an) for (const f of an) f(t);
+}
+const glowTexCache = {};
+/** Brilho suave (sprite aditivo com gradiente radial). */
+function glowSprite(color, size) {
+  let tex = glowTexCache[color];
+  if (!tex) {
+    const c = document.createElement('canvas'); c.width = c.height = 128;
+    const x = c.getContext('2d'), gr = x.createRadialGradient(64, 64, 0, 64, 64, 64);
+    gr.addColorStop(0, color); gr.addColorStop(0.35, color + 'aa'); gr.addColorStop(1, color + '00');
+    x.fillStyle = gr; x.fillRect(0, 0, 128, 128);
+    tex = glowTexCache[color] = new THREE.CanvasTexture(c); tex.colorSpace = THREE.SRGBColorSpace;
+  }
+  const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending }));
+  sp.scale.set(size, size, 1); return sp;
 }
 /** Corda entre dois pontos (espaço do corpo da van). */
 function rope(a, b, color = '#c9a96a', th = 0.028) {
@@ -42,7 +59,7 @@ function miniVan() {
 
 function led(color, f, p, th = 0) {
   const m = new THREE.MeshStandardMaterial({ color, emissive: color, emissiveIntensity: 1.5, roughness: 0.4 });
-  blinkMats.push({ m, f, p, th });
+  curBlink.push({ m, f, p, th });
   return sphere(0.035, m, 8, 6);
 }
 
@@ -156,8 +173,8 @@ export const RACK_MODELS = [
     } },
   { name: 'Eletrodoméstico', desc: 'Uma geladeira embalada, deitada e presa no teto.',
     build() {
-      const fr = group(at(box(1.95, 0.78, 0.82, '#d9c29a'), 0, 0.39, 0));
-      for (const sx of [-1, 1]) fr.add(at(box(0.12, 0.72, 0.78, '#f4f1ea'), sx * 0.99, 0.39, 0));       // cantoneiras de isopor
+      const fr = group(at(box(1.95, 0.78, 0.82, '#f3f4f2'), 0, 0.39, 0));
+      for (const sx of [-1, 1]) fr.add(at(box(0.12, 0.72, 0.78, '#e2e6ea'), sx * 0.99, 0.39, 0));       // cantoneiras de isopor
       for (const x of [-0.5, 0.5]) {                                                                   // cintas de fixação
         fr.add(at(box(0.08, 0.03, 0.86, '#e3262e'), x, 0.8, 0));
         for (const sz of [-1, 1]) fr.add(at(box(0.08, 0.82, 0.03, '#e3262e'), x, 0.39, sz * 0.43));
@@ -173,20 +190,13 @@ export const RACK_MODELS = [
       return group(at(patchedBox(1.25, 0.62, 1.1, 11), -1.4, Y, 0.0, 0, 0.1, 0), at(patchedBox(0.85, 0.56, 0.8, 23), -0.25, Y, -0.25, 0, -0.3, 0),
         at(patchedBox(0.6, 0.42, 0.6, 37), -1.35, Y + 0.62, 0.05, -0.1, 0.4, 0.12));
     } },
-  { name: 'Pneus novos', desc: 'Quatro pneus empilhados, com etiquetas de entrega.',
+  { name: 'Pneus novos', desc: 'Quatro pneus espalhados pelo teto, alguns ainda parcialmente empilhados.',
     build() {
-      const st = group();
-      for (let i = 0; i < 4; i++) {
-        const t = at(torus(0.33, 0.17, '#1f2023', 10, 24), 0, 0.17 + i * 0.34, 0, Math.PI / 2, 0, 0);
-        st.add(t, at(torus(0.38, 0.022, '#e9e6df', 6, 24), 0, 0.17 + i * 0.34 + 0.165, 0, Math.PI / 2, 0, 0));        // faixa branca da marca
-      }
-      for (const x of [-0.2, 0.2]) {                                                                                  // cintas laranja segurando a pilha
-        st.add(at(box(0.07, 1.4, 0.03, '#ff7a1a'), x, 0.68, 0.51), at(box(0.07, 1.4, 0.03, '#ff7a1a'), x, 0.68, -0.51));
-      }
-      const l1 = label('ENTREGA', 0.34, 0.2, '#f4efe3', '#c0281e', 44); l1.position.set(0, 0.85, 0.53); st.add(l1);
-      const l2 = label('NOVOS ×4', 0.34, 0.2, '#f4efe3', '#2b2d33', 40); l2.rotation.y = Math.PI / 2; l2.position.set(0.53, 0.5, 0); st.add(l2);
-      const l3 = label('PNEU', 0.3, 0.16, '#f4efe3', '#2b2d33', 44); l3.rotation.x = -Math.PI / 2; l3.position.set(0.33, 1.375, 0); st.add(l3);
-      return group(at(st, -0.9, Y, 0.0, 0, 0.3, 0));
+      const tire = (x, y, z, rx = Math.PI / 2, rz = 0) => group(at(torus(0.33, 0.17, '#1f2023', 10, 24), x, y, z, rx, 0, rz), at(torus(0.38, 0.022, '#e9e6df', 6, 24), x, y + 0.165 * Math.cos(rx - Math.PI / 2), z, rx, 0, rz));
+      return group(
+        tire(-1.7, Y + 0.17, 0.16), tire(-1.63, Y + 0.51, 0.1, Math.PI / 2, 0.03),                      // dois empilhados, o de cima meio torto
+        tire(-0.75, Y + 0.17, -0.42),                                                                    // um deitado sozinho
+        tire(-0.35, Y + 0.36, 0.22, Math.PI / 2 - 0.33, 0.05));                                          // e um escorado de lado, apoiado no teto e no vizinho
     } },
   { name: 'Entrega de brinquedos', desc: 'Caixas coloridas, com um ursinho enorme espremido entre elas.',
     build() {
@@ -232,12 +242,15 @@ export const RACK_MODELS = [
       const top = label('NÃO ABRIR', 1.15, 0.42, '#f4efe3', '#c0281e', 40); top.rotation.x = -Math.PI / 2; top.position.set(-0.1, 1.012, 0.25); b.add(top);
       const side = label('NÃO ABRIR', 0.95, 0.34, '#f4efe3', '#c0281e', 36); side.position.set(-0.1, 0.38, 0.635); b.add(side);
       const side2 = label('NÃO ABRIR', 0.95, 0.34, '#f4efe3', '#c0281e', 36); side2.rotation.y = Math.PI; side2.position.set(0.1, 0.38, -0.635); b.add(side2);
-      for (const z of [-0.28, 0.28]) {                                                                 // dois buracos na frente, com olhos espiando
-        b.add(at(cyl(0.19, 0.19, 0.04, '#0a0a0a', 18), 0.76, 0.68, z, 0, 0, Math.PI / 2));
-        b.add(at(sphere(0.14, '#fbfbf7', 12, 10), 0.74, 0.68, z), at(sphere(0.065, '#111111', 8, 6), 0.86, 0.68, z + 0.05), at(sphere(0.02, '#ffffff', 6, 4), 0.9, 0.71, z + 0.07));
-        b.add(at(box(0.04, 0.05, 0.3, '#2b2d33'), 0.77, 0.9, z + (z < 0 ? 0.03 : -0.03), (z < 0 ? 1 : -1) * 0.35, 0, 0));   // sobrancelha desconfiada
+      const flat = (r, h, c, x, y, z) => at(cyl(r, r, h, c, 20), x, y, z, 0, 0, Math.PI / 2);           // disco fino com o eixo em X (visto de frente = 2D)
+      for (const z of [-0.28, 0.28]) {                                                                 // dois furinhos na frente; os olhos são "desenhos" achatados lá dentro
+        b.add(flat(0.19, 0.02, '#0a0a0a', 0.755, 0.68, z));                                            // o furo (escuro)
+        b.add(flat(0.145, 0.004, '#fbfbf7', 0.7655, 0.68, z));                                         // branco do olho (dentro do furo, rente à parede)
+        b.add(flat(0.07, 0.004, '#111111', 0.7695, 0.69, z + 0.05));                                   // pupila, olhando de lado
+        b.add(flat(0.022, 0.004, '#ffffff', 0.7735, 0.715, z + 0.075));                                // brilho
+        b.add(at(box(0.004, 0.045, 0.3, '#2b2d33'), 0.768, 0.915, z + (z < 0 ? 0.03 : -0.03), (z < 0 ? 1 : -1) * 0.35, 0, 0));   // sobrancelha desconfiada (achatada)
       }
-      return group(at(b, -1.0, Y, 0, 0, 0.04, 0));
+      return group(at(b, -0.85, Y, 0, 0, 0.04, 0));
     } },
   { name: 'Excesso de encomendas', desc: 'Uma torre absurda de caixas, balançando nas curvas.',
     build() {
@@ -257,20 +270,15 @@ export const RACK_MODELS = [
     } },
   { name: 'Caixa pesada demais', desc: 'Uma caixinha minúscula que afunda visivelmente o teto da van.',
     build() {
-      const g = group();
-      const steps = [['#e0d3b5', 1.9, 1.5], ['#c2b08a', 1.5, 1.2], ['#9c8a60', 1.15, 0.92], ['#75663f', 0.8, 0.65], ['#4a3f27', 0.5, 0.4]];
-      steps.forEach(([c, w, d], i) => g.add(at(box(w, 0.012, d, c), -0.85, 2.31 + 0.004 * i, 0)));                  // degraus escurecendo para o centro: teto afundado
-      for (const sx of [-1, 1]) g.add(at(box(0.1, 0.05, 1.45, '#f2e9d2'), -0.85 + sx * 0.98, 2.335, 0, 0, 0, -sx * 0.4));   // bordas da lata, amassadas para cima
-      for (const sz of [-1, 1]) g.add(at(box(1.85, 0.05, 0.1, '#f2e9d2'), -0.85, 2.335, sz * 0.78, sz * 0.4, 0, 0));
-      for (let i = 0; i < 8; i++) { const a = (i / 8) * Math.PI * 2 + 0.2; g.add(at(box(0.5, 0.008, 0.02, '#5a4a2e'), -0.85 + Math.cos(a) * 0.45, 2.325, Math.sin(a) * 0.38, 0, -a, 0)); }   // rugas
-      g.add(at(box(0.28, 0.24, 0.28, CARD), -0.85, 2.44, 0, 0, 0.5, 0), at(box(0.3, 0.012, 0.07, TAPE), -0.85, 2.565, 0, 0, 0.5, 0));
-      const t = label('10 t', 0.2, 0.1, '#f4efe3', '#c0281e', 56); t.rotation.x = -Math.PI / 2; t.rotation.z = 0.5; t.position.set(-0.85, 2.572, 0); g.add(t);
-      g.userData.squat = 0.14;                                                                           // a van inteira afunda um pouco nas rodas
+      const g = group(), floor = Y - 0.34;                                                              // fundo da cavidade
+      g.add(at(box(0.28, 0.24, 0.28, CARD), -0.85, floor + 0.12, 0, 0, 0.5, 0), at(box(0.3, 0.012, 0.07, TAPE), -0.85, floor + 0.246, 0, 0, 0.5, 0));
+      const t = label('10 t', 0.2, 0.1, '#f4efe3', '#c0281e', 56); t.rotation.x = -Math.PI / 2; t.rotation.z = 0.5; t.position.set(-0.85, floor + 0.252, 0); g.add(t);
+      g.userData.pit = true;                                                                             // a van troca o teto por um com uma cavidade de verdade
+      g.userData.squat = 0.14;                                                                           // e afunda um pouco nas rodas
       return g;
     } },
   { name: 'Equipamento científico', desc: 'Uma antena, uma mala metálica e aparelhos com luzes piscando.',
     build() {
-      blinkMats.length = 0;
       const g = group();
       // mala metálica
       const c = group(at(box(1.0, 0.32, 0.6, '#c9ced6'), 0, 0.16, 0), at(box(1.02, 0.02, 0.62, '#9aa1a9'), 0, 0.2, 0), at(box(1.02, 0.02, 0.62, '#9aa1a9'), 0, 0.1, 0));
@@ -299,7 +307,7 @@ export const RACK_MODELS = [
       dish.position.set(0.04, 1.5, 0); dish.rotation.z = -0.6; an.add(dish);
       an.add(at(cyl(0.012, 0.012, 1.3, '#cfd6dd', 4), 0.2, 1.3, 0.1));
       const bc = led('#ff3b30', 3.4, 0, 0.3); bc.scale.setScalar(1.6); bc.position.set(0.2, 1.97, 0.1); an.add(bc);
-      g.add(at(an, -0.05, Y, 0.25));
+      g.add(at(an, -0.05, Y + 0.045, 0.25));                                                              // pernas do tripé apoiadas no teto
       return g;
     } },
   { name: 'Entrega medieval', desc: 'Um trono, um escudo e uma espada com etiquetas de destinatário.',
@@ -313,55 +321,72 @@ export const RACK_MODELS = [
       for (const z of [-0.4, 0, 0.4]) th.add(at(cone(0.12, 0.3, GOLD, 4), -0.36, 1.75, z), at(sphere(0.05, '#e3262e', 6, 4), -0.36, 1.93, z));   // pontas da coroa do encosto
       for (const sx of [-1, 1]) for (const sz of [-1, 1]) th.add(at(box(0.1, 0.18, 0.1, WOOD), sx * 0.4, 0.09, sz * 0.4));
       const tg = label('PARA: REI ARTUR', 0.42, 0.18, '#f4efe3', '#2b2d33', 28); tg.position.set(0.1, 0.62, 0.52); th.add(tg);
-      g.add(at(th, -1.55, Y, 0.0, 0, 0.08, 0));
+      g.add(at(th, -0.7, Y, 0.0, 0, 0, 0));                                                              // trono no meio do teto
+      // escudo em pé, encostado no braço direito do trono (a borda de cima toca o braço)
       const sh = group(at(cyl(0.42, 0.42, 0.06, '#2e5fa8', 22), 0, 0.03, 0), at(cyl(0.45, 0.45, 0.04, GOLD, 22), 0, 0.02, 0),
         at(box(0.62, 0.012, 0.1, GOLD), 0, 0.066, 0), at(box(0.1, 0.012, 0.62, GOLD), 0, 0.067, 0), at(sphere(0.1, GOLD, 10, 8), 0, 0.08, 0));
-      const t2 = label('SIR LANCELOT', 0.34, 0.14, '#f4efe3', '#2b2d33', 28); t2.rotation.x = -Math.PI / 2; t2.position.set(0.2, 0.075, 0.28); sh.add(t2);
-      g.add(at(sh, -0.55, Y + 0.02, -0.4, 0.06, 0.3, 0.05));
-      const sw = group(at(box(1.2, 0.025, 0.1, '#d9dde3'), 0.0, 0, 0), at(box(1.2, 0.012, 0.025, '#9aa1a9'), 0, 0.016, 0), at(cone(0.05, 0.2, '#d9dde3', 4), 0.7, 0, 0, 0, 0, -Math.PI / 2),
-        at(box(0.06, 0.05, 0.44, GOLD), -0.62, 0, 0), at(cyl(0.032, 0.032, 0.3, '#5a2f16', 8), -0.82, 0, 0, 0, 0, Math.PI / 2), at(sphere(0.06, GOLD, 8, 6), -0.99, 0, 0));
-      const t3 = label('DAMA GUINEVERE', 0.4, 0.13, '#f4efe3', '#2b2d33', 26); t3.rotation.x = -Math.PI / 2; t3.position.set(0.1, 0.02, 0); sw.add(t3);
-      g.add(at(sw, -0.15, Y + 0.05, 0.4, 0, -0.1, 0));
+      const t2 = label('SIR LANCELOT', 0.34, 0.14, '#f4efe3', '#2b2d33', 28); t2.rotation.x = -Math.PI / 2; t2.position.set(0.0, 0.1, 0.27); sh.add(t2);
+      const tilt = 0.3;                                                                                  // quanto o escudo está inclinado para trás
+      sh.rotation.x = Math.PI / 2 - tilt; sh.rotation.y = 0;
+      sh.position.set(-0.7, Y + 0.45 * Math.cos(tilt) + 0.03, 0.51 + 0.45 * Math.sin(tilt) + 0.03);
+      g.add(sh);
+      // espada em pé, com o punho no teto e a lâmina escorada no encosto do trono
+      const sw = group(at(sphere(0.06, GOLD, 8, 6), 0, 0, 0), at(cyl(0.032, 0.032, 0.3, '#5a2f16', 8), 0.18, 0, 0, 0, 0, Math.PI / 2), at(box(0.06, 0.05, 0.44, GOLD), 0.36, 0, 0),
+        at(box(1.2, 0.025, 0.1, '#d9dde3'), 0.98, 0, 0), at(box(1.2, 0.012, 0.025, '#9aa1a9'), 0.98, 0.016, 0), at(cone(0.05, 0.2, '#d9dde3', 4), 1.68, 0, 0, 0, 0, -Math.PI / 2));
+      const t3 = label('DAMA GUINEVERE', 0.4, 0.13, '#f4efe3', '#2b2d33', 26); t3.rotation.x = -Math.PI / 2; t3.rotation.z = Math.PI / 2; t3.position.set(0.95, 0.02, 0); sw.add(t3);
+      sw.rotation.z = Math.PI / 2 - 0.42; sw.rotation.y = -0.15;
+      sw.position.set(-1.38, Y + 0.07, -0.25);
+      g.add(sw);
       return g;
     } },
   { name: 'Van dentro da van', desc: 'Uma miniatura da própria van sendo entregue, com suas próprias caixinhas no teto.',
     build() {
       const mv = miniVan();
       mv.scale.setScalar(0.4);
-      const g = group(at(mv, -0.85, Y, 0, 0, 0, 0));
-      for (const x of [-1.4, -0.3]) g.add(at(box(0.08, 0.03, 1.15, '#e3262e'), x, Y + 1.08, 0));            // cintas de fixação
-      for (const x of [-1.4, -0.3]) for (const sz of [-1, 1]) g.add(at(box(0.08, 0.92, 0.03, '#e3262e'), x, Y + 0.62, sz * 0.58));
-      return g;
+      return group(at(mv, -0.85, Y, 0, 0, 0, 0));
     } },
   { name: 'Baú de tesouro', desc: 'Um baú antigo entreaberto, com moedas aparecendo.',
     build() {
-      const WOOD = '#6b4526', IRON = '#3a3d44', GOLD = '#f1c93b', ch = group();
+      const WOOD = '#6b4526', IRON = '#3a3d44', ch = group();
+      const gold = new THREE.MeshStandardMaterial({ color: '#f1c93b', emissive: '#ffb400', emissiveIntensity: 0.4, roughness: 0.35, metalness: 0.6, flatShading: true });
       ch.add(at(box(1.1, 0.55, 0.7, WOOD), 0, 0.275, 0), at(box(1.04, 0.02, 0.64, '#2a1a0e'), 0, 0.555, 0));
       for (const y of [0.14, 0.28, 0.42]) ch.add(at(box(1.11, 0.012, 0.71, '#4d3119'), 0, y, 0));
       for (const x of [-0.36, 0.36]) ch.add(at(box(0.1, 0.57, 0.72, IRON), x, 0.285, 0));                      // cintas de ferro
       for (const sx of [-1, 1]) for (const sz of [-1, 1]) ch.add(at(box(0.12, 0.14, 0.12, IRON), sx * 0.52, 0.5, sz * 0.32));
-      ch.add(at(box(0.16, 0.2, 0.04, GOLD), 0, 0.46, 0.355), at(box(0.05, 0.08, 0.05, '#2a1a0e'), 0, 0.44, 0.38));   // fechadura
+      ch.add(at(box(0.16, 0.2, 0.04, '#f1c93b'), 0, 0.46, 0.355), at(box(0.05, 0.08, 0.05, '#2a1a0e'), 0, 0.44, 0.38));   // fechadura
       // moedas empilhadas dentro e algumas caídas na frente
       const r = rng(7);
       for (let i = 0; i < 46; i++) {
         const a = r() * Math.PI * 2, rad = Math.sqrt(r()) * 0.4, x = Math.cos(a) * rad * 1.15, z = Math.sin(a) * rad * 0.75;
         const hgt = 0.56 + (0.2 * Math.max(0, 1 - rad / 0.45)) + r() * 0.04;
-        ch.add(at(cyl(0.07, 0.07, 0.016, GOLD, 10), x, hgt, z, (r() - 0.5) * 0.7, 0, (r() - 0.5) * 0.7));
+        ch.add(at(cyl(0.07, 0.07, 0.016, gold, 10), x, hgt, z, (r() - 0.5) * 0.7, 0, (r() - 0.5) * 0.7));
       }
-      ch.add(at(sphere(0.07, '#e3262e', 8, 6), 0.2, 0.78, -0.05), at(sphere(0.06, '#3a78d4', 8, 6), -0.25, 0.74, 0.1), at(box(0.28, 0.02, 0.05, '#c9ced6'), 0.0, 0.82, 0.05, 0.3, 0.8, 0.2));   // gemas e um colar
-      for (const [x, z, a] of [[0.3, 0.55, 0.2], [0.05, 0.62, 1.1], [-0.3, 0.5, 0.6], [0.5, 0.66, 0.3], [-0.15, 0.7, 0.9]]) ch.add(at(cyl(0.07, 0.07, 0.016, GOLD, 10), x, 0.01, z, 0, a, 0));
-      // tampa abaulada, aberta para trás
-      const sh = new THREE.Shape(); sh.moveTo(-0.35, 0); sh.absarc(0, 0, 0.35, Math.PI, 0, true); sh.lineTo(-0.35, 0);
-      const lg = new THREE.ExtrudeGeometry(sh, { depth: 1.1, bevelEnabled: false }); lg.translate(0, 0, -0.55); lg.rotateY(-Math.PI / 2); lg.translate(0, 0, 0.35);
-      const lid = group(mesh(lg, WOOD), at(box(1.12, 0.02, 0.04, IRON), 0, 0.01, 0.7));
-      for (const x of [-0.36, 0.36]) lid.add(at(box(0.1, 0.02, 0.7, IRON), x, 0.35, 0.35));
+      ch.add(at(sphere(0.07, '#e3262e', 8, 6), 0.2, 0.78, -0.05), at(sphere(0.06, '#3a78d4', 8, 6), -0.25, 0.74, 0.1), at(box(0.28, 0.02, 0.05, '#f1c93b'), 0.0, 0.82, 0.05, 0.3, 0.8, 0.2));   // gemas e um colar dourado
+      for (const [x, z, a] of [[0.3, 0.55, 0.2], [0.05, 0.62, 1.1], [-0.3, 0.5, 0.6], [0.5, 0.66, 0.3], [-0.15, 0.7, 0.9]]) ch.add(at(cyl(0.07, 0.07, 0.016, gold, 10), x, 0.01, z, 0, a, 0));
+      // tampa abaulada, aberta para trás, com as cintas de ferro acompanhando a curva da tampa
+      const arch = (ro, ri, depth) => {
+        const sh = new THREE.Shape(); sh.moveTo(-ro, 0); sh.absarc(0, 0, ro, Math.PI, 0, true);
+        if (ri) { sh.lineTo(ri, 0); sh.absarc(0, 0, ri, 0, Math.PI, false); } sh.lineTo(-ro, 0);
+        const lg = new THREE.ExtrudeGeometry(sh, { depth, bevelEnabled: false }); lg.translate(0, 0, -depth / 2); lg.rotateY(-Math.PI / 2); lg.translate(0, 0, 0.35); return lg;
+      };
+      const lid = group(mesh(arch(0.35, 0, 1.1), WOOD));
+      for (const x of [-0.36, 0.36]) { const band = mesh(arch(0.365, 0.34, 0.1), IRON); band.position.x = x; lid.add(band); }
+      lid.add(at(box(1.12, 0.04, 0.03, '#4d3119'), 0, 0.02, 0.7));                                              // borda de madeira da frente da tampa
       lid.position.set(0, 0.55, -0.35); lid.rotation.x = -1.2;
       ch.add(lid);
-      return group(at(ch, -0.95, Y, 0.0, 0, 0.12, 0));
+      // brilho amarelo do tesouro (cresce e diminui) + moedas que cintilam
+      const halo = glowSprite('#ffd24a', 1.8); halo.position.set(0, 0.85, 0.0); ch.add(halo);
+      const g = group(at(ch, -0.85, Y, 0.0, 0, 0.12, 0));
+      const hw = new THREE.Vector3(-0.85, Y + 0.85, 0.0);
+      g.add(halo); halo.position.copy(hw);
+      curAnims.push(t => {
+        const k = 0.5 + 0.5 * Math.sin(t * 2.2);
+        halo.material.opacity = 0.35 + 0.55 * k; halo.scale.setScalar(1.5 + 0.7 * k); gold.emissiveIntensity = 0.25 + 0.7 * k;
+      });
+      return g;
     } },
   { name: 'Encomenda alienígena', desc: 'Um objeto flutuando alguns centímetros acima do bagageiro, preso por cordas.',
     build() {
-      rackAnims.length = 0;
       const g = group();
       const alien = dynamic(group());                                    // flutua e gira devagar
       const hull = sphere(0.42, '#2b2f3a', 14, 10, { metalness: 0.5, roughness: 0.35 }); hull.scale.set(1, 1.25, 1); alien.add(hull);
@@ -369,25 +394,55 @@ export const RACK_MODELS = [
       const glow = gm('#6dff5a'), glow2 = gm('#c46bff');
       for (const [y, rr] of [[-0.25, 0.4], [0.05, 0.43], [0.35, 0.34]]) alien.add(at(torus(rr, 0.03, glow, 6, 28), 0, y, 0, Math.PI / 2, 0, 0));
       alien.add(at(sphere(0.14, glow2, 10, 8), 0.36, 0.1, 0), at(sphere(0.07, glow, 8, 6), 0, 0.75, 0));
-      for (let i = 0; i < 3; i++) { const a = (i / 3) * Math.PI * 2; alien.add(at(box(0.05, 0.4, 0.05, '#4a4f5c'), Math.cos(a) * 0.3, -0.62, Math.sin(a) * 0.3)); }   // pernas finas
-      alien.position.set(-0.85, Y + 0.12 + 0.5, 0);
+      const Y0 = YA + 0.12 + 0.5;                                        // altura de repouso do centro (alguns centímetros acima do bagageiro)
+      alien.position.set(-0.85, Y0, 0);
       g.add(alien);
-      rackAnims.push(t => {
-        alien.position.y = Y + 0.17 + 0.5 + Math.sin(t * 1.6) * 0.04; alien.rotation.y = t * 0.5;
-        glow.emissiveIntensity = 1.4 + Math.sin(t * 3.2) * 0.7; glow2.emissiveIntensity = 1.3 + Math.sin(t * 2.1 + 1) * 0.8;
-      });
-      // cordas esticadas do objeto até os trilhos do teto
-      for (const [ax, sx] of [[-1.55, -1], [-0.15, 1]]) for (const sz of [-1, 1]) {
-        g.add(rope([ax, 2.44, sz * 0.8], [-0.85 + sx * 0.28, Y + 0.55, sz * 0.2]));
+      // brilho verde pulsando (no objeto e projetado no teto)
+      const halo = glowSprite('#6dff5a', 2.2); halo.position.set(-0.85, Y0 + 0.1, 0); g.add(halo);
+      const pool = new THREE.Mesh(new THREE.PlaneGeometry(2.4, 2.4), new THREE.MeshBasicMaterial({ map: halo.material.map, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending }));
+      pool.rotation.x = -Math.PI / 2; pool.position.set(-0.85, Y + 0.012, 0); g.add(dynamic(pool));
+      // 4 cordas: ficam esticadas quando o objeto sobe e afrouxam (caem em curva) quando ele desce
+      const SEG = 8, anchors = [], locals = [], ropes = [];
+      for (const [ax, lx] of [[-1.55, -0.3], [-0.15, 0.3]]) for (const sz of [-1, 1]) {
+        anchors.push(new THREE.Vector3(ax, 2.44, sz * 0.8)); locals.push([lx, 0.12, sz * 0.2]);
+        const r = dynamic(group()); for (let k = 0; k < SEG; k++) r.add(box(1, 0.028, 0.028, '#c9a96a')); g.add(r); ropes.push(r);
         g.add(at(box(0.07, 0.06, 0.07, '#3a3d44'), ax, 2.44, sz * 0.8));
       }
+      const AMP = 0.09, topY = Y0 + 2 * AMP;
+      const attach = (i, ay, yaw) => { const [lx, ly, lz] = locals[i], c = Math.cos(yaw), s = Math.sin(yaw); return new THREE.Vector3(-0.85 + lx * c + lz * s, ay + ly, lz * c - lx * s); };
+      const L0 = anchors.map((a, i) => a.distanceTo(attach(i, topY, 0)));   // comprimento das cordas: esticadas no ponto mais alto
+      const A = new THREE.Vector3(), B = new THREE.Vector3(), P = new THREE.Vector3(), Q = new THREE.Vector3(), dir = new THREE.Vector3(), ex = new THREE.Vector3(1, 0, 0);
+      const update = t => {
+        const y = Y0 + AMP + AMP * Math.sin(t * 1.15), yaw = t * 0.45;       // sobe e desce devagar (~5,5 s por ciclo) e gira
+        alien.position.y = y; alien.rotation.y = yaw;
+        halo.position.y = y + 0.1;
+        const k = 0.5 + 0.5 * Math.sin(t * 2.4);
+        halo.material.opacity = 0.3 + 0.5 * k; halo.scale.setScalar(1.9 + 0.7 * k); pool.material.opacity = 0.18 + 0.4 * k; glow.emissiveIntensity = 1.0 + 1.2 * k;
+        glow2.emissiveIntensity = 1.3 + 0.8 * Math.sin(t * 2.1 + 1);
+        ropes.forEach((r, i) => {
+          A.copy(anchors[i]); B.copy(attach(i, y, yaw));
+          const dist = A.distanceTo(B), slack = Math.max(0, L0[i] - dist), sag = Math.min(0.32, Math.sqrt(slack) * 0.9);
+          P.copy(A);
+          for (let k2 = 0; k2 < SEG; k2++) {
+            const t1 = (k2 + 1) / SEG, t0 = k2 / SEG;
+            Q.lerpVectors(A, B, t1); Q.y -= sag * 4 * t1 * (1 - t1);
+            if (k2 === 0) { P.lerpVectors(A, B, 0); }
+            const seg = r.children[k2]; dir.subVectors(Q, P); const len = dir.length() || 1e-4;
+            seg.position.copy(P).addScaledVector(dir, 0.5); seg.scale.x = len; seg.quaternion.setFromUnitVectors(ex, dir.divideScalar(len));
+            P.copy(Q);
+          }
+        });
+      };
+      update(0); curAnims.push(update);
       return g;
     } },
 ];
 
-/** Bagageiro `i` (0 = padrão): grupo no espaço do corpo da van. */
+/** Bagageiro `i` (0 = padrão): grupo no espaço do corpo da van. Traz userData.blink / anims (usados por tickRack), pit e squat quando o modelo pede. */
 export function buildRack(i = 0) {
+  curBlink = []; curAnims = [];
   const g = RACK_MODELS[i].build();
+  g.userData.blink = curBlink; g.userData.anims = curAnims; curBlink = null; curAnims = null;
   g.traverse(o => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
   return g;
 }

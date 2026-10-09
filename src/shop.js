@@ -10,6 +10,7 @@ import { box, cyl, sphere, at, mat } from './models/kit.js';
 import { WHEEL_MODELS, WHEEL_DEFAULT, buildWheel, setWheelColors } from './models/wheels.js';
 import { RACK_MODELS, buildRack } from './models/racks.js';
 import { DECALS, decalSheet, setDecalChecks, DECAL_CHECK_DEFAULT } from './models/decals.js';
+import { look, equip, refreshDecals } from './models/vanLook.js';
 
 const CSS = `
 .shopov { position: fixed; inset: 0; z-index: 25; display: none; padding: 62px clamp(14px, 2vw, 32px) clamp(14px, 2vw, 28px);
@@ -110,7 +111,7 @@ const CATS = [
   { id: 'skin', sec: 'char', name: 'Tom de pele', kind: 'color', key: 'skin', pal: 'skin', desc: 'O tom de pele do entregador.' },
 ];
 const SECTIONS = [['van', 'VAN'], ['char', 'PERSONAGEM']];
-const isFree = c => c.kind === 'color';
+const isFree = c => c.kind === 'color' || ['wheels', 'rack', 'decals'].includes(c.id);   // ainda não há moedas: o que já existe é grátis (Bonés ainda não foram feitos)
 const normHex = s => {
   s = String(s || '').trim().replace(/^#/, '');
   if (/^[0-9a-f]{3}$/i.test(s)) s = s.split('').map(ch => ch + ch).join('');
@@ -135,7 +136,7 @@ export function createShop() {
   const el = document.createElement('div');
   el.className = 'shopov';
   el.innerHTML = `
-    <div class="shop-head"><h2>SHOP</h2><span>Nada à venda por enquanto — por ora, só as cores (grátis).</span></div>
+    <div class="shop-head"><h2>SHOP</h2><span>Ainda não há moedas: tudo é grátis por enquanto. Escolha e salve — a van fica assim no jogo.</span></div>
     <div class="shop-side"></div>
     <div class="shop-main"></div>
     <div class="shop-prev"><div class="shop-canvas"></div>
@@ -148,10 +149,10 @@ export function createShop() {
   el.querySelectorAll('button').forEach(b => { b.tabIndex = -1; });
 
   let cat = CATS[0], view = 'van';
-  let wheelSel = 0;                         // roda em visualização (0 = padrão; as outras ainda não estão à venda)
+  let wheelSel = look.wheel;                // roda em visualização (começa na equipada)
   let wheelThumbs = null, rackThumbs = null;
-  let decalSel = 0, decalThumbs = null;     // estampa em visualização (0 = sem estampa)
-  let rackSel = 0;                          // bagageiro em visualização (0 = caixas, o padrão)          // view (categorias da van): 'van' = item na van atual | 'item' = item sozinho
+  let decalSel = look.decal, decalThumbs = null;   // estampa em visualização (começa na equipada)
+  let rackSel = look.rack;                          // bagageiro em visualização (0 = caixas, o padrão)          // view (categorias da van): 'van' = item na van atual | 'item' = item sozinho
 
   // ---------- lista de categorias ----------
   function buildSide() {
@@ -197,7 +198,7 @@ export function createShop() {
       if (document.activeElement !== input) input.value = c.toUpperCase();
       input.classList.remove('bad');
     };
-    const setColor = hex => { colors[cat.key] = hex; applyColors(); save(); paintUi(); };
+    const setColor = hex => { colors[cat.key] = hex; applyColors(); save(); paintUi(); saved('Cor salva: já vale no jogo.'); };
     for (const c of COLORS[cat.pal]) {
       const b = document.createElement('button'); b.type = 'button'; b.style.background = c; b.dataset.c = c; b.title = c.toUpperCase();
       b.addEventListener('click', () => { input.blur(); setColor(c); });
@@ -214,9 +215,9 @@ export function createShop() {
 
   // ---------- galeria de modelos (Rodas e Bagageiro) ----------
   const GAL = {
-    wheels: { models: WHEEL_MODELS, get: () => wheelSel, set: v => { wheelSel = v; }, key: 'wheels', eq: 'Equipada', msg: 'Clique num modelo para ver na van. Por enquanto só a roda padrão está equipada; as outras 7 ainda não estão à venda.' },
-    rack: { models: RACK_MODELS, get: () => rackSel, set: v => { rackSel = v; }, key: 'rack', eq: 'Equipado', msg: n => `Clique num modelo para ver na van. Por enquanto só o padrão (caixas) está equipado; os outros ${n} ainda não estão à venda.` },
-    decals: { models: DECALS, get: () => decalSel, set: v => { decalSel = v; }, key: 'decals', eq: 'Equipada', wide: true, msg: n => `Clique numa estampa para ver na van (cada lado é diferente). Por enquanto nenhuma está equipada nem à venda; as ${n} estampas só podem ser vistas.` },
+    wheels: { models: WHEEL_MODELS, get: () => wheelSel, set: v => { wheelSel = v; }, key: 'wheels', eq: 'Equipada', msg: 'Clique num modelo para ver na van e use “Equipar e salvar” para jogar com ele. Por enquanto todas as rodas são grátis (ainda não há moedas).' },
+    rack: { models: RACK_MODELS, get: () => rackSel, set: v => { rackSel = v; }, key: 'rack', eq: 'Equipado', msg: n => `Clique num modelo para ver na van e use “Equipar e salvar” para jogar com ele. Por enquanto os ${n + 1} bagageiros são grátis (ainda não há moedas).` },
+    decals: { models: DECALS, get: () => decalSel, set: v => { decalSel = v; }, key: 'decals', eq: 'Equipada', wide: true, msg: n => `Clique numa estampa para ver na van (cada lado é diferente) e use “Equipar e salvar” para jogar com ela. Por enquanto as ${n} estampas são grátis (ainda não há moedas).` },
   };
   function gallery() {
     const G = GAL[cat.id], models = G.models, th = thumbs(G.key);
@@ -225,10 +226,17 @@ export function createShop() {
     main.appendChild(e);
     const g = document.createElement('div'); g.className = 'shop-items' + (G.wide ? ' wide' : '');
     const dsc = document.createElement('div'); dsc.className = 'shop-desc';
-    const show = () => { const i = G.get(); dsc.textContent = models[i].name + ' — ' + models[i].desc; };
+    const kind = { wheels: 'wheel', rack: 'rack', decals: 'decal' }[cat.id];
+    const btn = document.createElement('button'); btn.type = 'button'; btn.className = 'shop-btn shop-equip'; btn.tabIndex = -1;
+    const show = () => {
+      const i = G.get(); dsc.textContent = models[i].name + ' — ' + models[i].desc;
+      const on = look[kind] === i; btn.textContent = on ? '✔ Equipada na sua van' : 'Equipar e salvar'; btn.disabled = on; btn.style.opacity = on ? 0.7 : 1;
+      g.querySelectorAll('.shop-cardw').forEach(x => { x.querySelector('small').textContent = look[kind] === +x.dataset.i ? 'Equipada' : 'Grátis por enquanto'; });
+    };
+    btn.addEventListener('click', () => { equip(kind, G.get()); show(); saved(`${models[G.get()].name} equipada: já vale no jogo.`); });
     models.forEach((m, i) => {
       const c = document.createElement('div'); c.className = 'shop-item shop-cardw' + (i === G.get() ? ' sel' : ''); c.dataset.i = i;
-      c.innerHTML = `<div class="img"><img src="${th[i]}" alt=""></div><b>${m.name}</b><small>${i === 0 ? (cat.id === 'decals' ? 'Padrão' : G.eq) : 'Em breve — moedas'}</small>`;
+      c.innerHTML = `<div class="img"><img src="${th[i]}" alt=""></div><b>${m.name}</b><small></small>`;
       c.title = m.desc;
       c.addEventListener('click', () => {
         G.set(i);
@@ -237,7 +245,7 @@ export function createShop() {
       });
       g.appendChild(c);
     });
-    main.appendChild(g); main.appendChild(dsc); show();
+    main.appendChild(g); main.appendChild(dsc); main.appendChild(btn); show();
   }
 
   // ---------- miniaturas, visualização e cores da roda padrão ----------
@@ -270,6 +278,11 @@ export function createShop() {
     return out;
   }
   const wcolor = el.querySelector('.shop-wcolor');
+  const headNote = el.querySelector('.shop-head span'), noteDefault = headNote.textContent; let noteTimer = 0;
+  function saved(msg) {                      // aviso de que a edição foi salva (cores e equipamentos valem no jogo na hora)
+    headNote.textContent = '✔ ' + msg; headNote.style.color = '#8be89a';
+    clearTimeout(noteTimer); noteTimer = setTimeout(() => { headNote.textContent = noteDefault; headNote.style.color = ''; }, 3200);
+  }
   let panelFor = null;
   function colorPanel(kind) {                // painel pequeno no canto da pré-visualização: roda padrão (aro/centro) ou xadrez (cor 1/cor 2)
     if (panelFor === kind) return;
@@ -287,8 +300,9 @@ export function createShop() {
         input.classList.remove('bad');
       };
       const set = hex => {
-        colors[key] = hex; applyColors(); save(); paint();
-        if (!wheel) {                                                  // xadrez: redesenha a estampa na van e a miniatura
+        colors[key] = hex; applyColors(); save(); paint(); saved('Cor salva.');
+        if (!wheel) {
+          refreshDecals();                                                  // xadrez: redesenha a estampa na van e a miniatura
           if (pv) pv.van.refreshDecal();
           decalThumbs = null;
           const img = main.querySelector(`.shop-cardw[data-i="${CHECK_IDX}"] img`);
@@ -323,7 +337,7 @@ export function createShop() {
     if (showWheel) colorPanel('wheel'); else if (showCheck) colorPanel('check');
     wcolor.classList.toggle('on', showWheel || showCheck);
     if (!pv) return;
-    const w = cat.id === 'wheels' ? wheelSel : 0, rk = cat.id === 'rack' ? rackSel : 0, dcl = cat.id === 'decals' ? decalSel : 0;
+    const w = cat.id === 'wheels' ? wheelSel : look.wheel, rk = cat.id === 'rack' ? rackSel : look.rack, dcl = cat.id === 'decals' ? decalSel : look.decal;
     if (pv.shown.d !== dcl) { pv.van.setDecalModel(dcl); pv.shown.d = dcl; }
     if (cat.id === 'decals') decalItem();
     if (pv.shown.w !== w) { pv.van.setWheelModel(w); pv.shown.w = w; }
@@ -348,7 +362,7 @@ export function createShop() {
     const sun = new THREE.DirectionalLight('#ffffff', 2.2); sun.position.set(-4, 8, 6); scene.add(sun);
     const base = at(cyl(4.2, 4.4, 0.2, '#3a2f4a', 40), 0, -0.1, 0); scene.add(base);           // palquinho
     scene.add(at(cyl(4.3, 4.3, 0.06, '#8a55c4', 40), 0, 0.02, 0));
-    const van = createVan(scene); van.teleport(0, 0, 0); van.setGhost(true);
+    const van = createVan(scene, { look: false }); van.teleport(0, 0, 0); van.setGhost(true);          // a pré-visualização controla o próprio visual
     const walker = createWalker(scene); walker.pose(0, 0, 0); walker.show(true);
     // itens "sozinhos"
     const wheel = new THREE.Group();                                                                // roda sozinha (modelo escolhido), ampliada
@@ -432,9 +446,9 @@ export function createShop() {
   function select(c) {
     cat = c; view = 'van';
     side.querySelectorAll('.shop-cat').forEach(b => b.classList.toggle('sel', b.dataset.id === c.id));
-    if (c.id !== 'wheels') wheelSel = 0;
-    if (c.id !== 'rack') rackSel = 0;
-    if (c.id !== 'decals') decalSel = 0;
+    if (c.id !== 'wheels') wheelSel = look.wheel;
+    if (c.id !== 'rack') rackSel = look.rack;
+    if (c.id !== 'decals') decalSel = look.decal;
     buildMain(); paintView(); pose(); itemPreview();
   }
   const toggleView = () => { if (cat.sec !== 'van') return; view = view === 'van' ? 'item' : 'van'; paintView(); pose(); };
