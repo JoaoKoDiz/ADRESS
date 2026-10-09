@@ -95,7 +95,7 @@ const COLORS = {
 // sec: 'van' | 'char'. kind: 'items' (à venda; ainda vazio) | 'color' (grátis; key = chave em `colors`)
 const CATS = [
   { id: 'wheels', sec: 'van', name: 'Rodas', kind: 'items', desc: '8 modelos de roda (o primeiro é o padrão). Só a roda padrão tem cores editáveis, no canto da pré-visualização: as outras 7 são únicas.' },
-  { id: 'rack', sec: 'van', name: 'Bagageiro', kind: 'items', desc: 'O que vai em cima da van. O padrão são as caixas de entrega; os outros 6 modelos têm cores fixas (não dá para mudar).' },
+  { id: 'rack', sec: 'van', name: 'Bagageiro', kind: 'items', desc: 'O que vai em cima da van. O padrão são as caixas de entrega; os outros 9 modelos têm cores fixas (não dá para mudar).' },
   { id: 'paint', sec: 'van', name: 'Pintura', kind: 'color', key: 'paint', pal: 'paint', desc: 'A cor da lataria da van.' },
   { id: 'decals', sec: 'van', name: 'Estampas', kind: 'items', desc: 'Detalhes extras na lataria. O texto ADRESS fica sempre lá: as estampas só complementam, não trocam nem cobrem.' },
   { id: 'caps', sec: 'char', name: 'Bonés', kind: 'items', desc: 'Bonés para o seu entregador.' },
@@ -245,7 +245,7 @@ export function createShop() {
       cam.position.set(0, 0, 2.3); cam.lookAt(0, 0, 0);
       out = WHEEL_MODELS.map((m, i) => { const w = buildWheel(i); w.rotation.y = -0.55; sc.add(w); r.render(sc, cam); sc.remove(w); return r.domElement.toDataURL('image/png'); });
     } else {
-      cam.position.set(3.3, 2.6, 3.9); cam.lookAt(0, 0.45, 0);
+      cam.position.set(4.6, 3.6, 5.4); cam.lookAt(0, 1.0, 0);
       out = RACK_MODELS.map((m, i) => {
         const w = new THREE.Group(), body = buildRack(i); body.position.set(0.85, -2.47, 0); w.add(body);   // centralizado na origem
         sc.add(w); r.render(sc, cam); sc.remove(w); return r.domElement.toDataURL('image/png');
@@ -290,6 +290,8 @@ export function createShop() {
     pv.wheel.add(buildWheel(w));
     while (pv.rack.children.length) pv.rack.remove(pv.rack.children[0]);
     const body = buildRack(rk); body.position.set(0.85, -2.47, 0); pv.rack.add(body);
+    pv.rackH = new THREE.Box3().setFromObject(body).getSize(new THREE.Vector3()).y;           // altura da carga (a torre é bem alta)
+    pv.rack.scale.setScalar(THREE.MathUtils.clamp(3.0 / Math.max(pv.rackH, 0.1), 0.45, 1.15));
   }
 
   // ---------- pré-visualização 3D ----------
@@ -328,7 +330,7 @@ export function createShop() {
       renderer.setSize(w, h, false); camera.aspect = w / h; camera.updateProjectionMatrix();
     };
     new ResizeObserver(resize).observe(canvasBox); resize();
-    pv = { renderer, scene, camera, van, walker, wheel, rack, swatch, decal, sMat, t: 0, base, angle: 0.9, holdUntil: 0, shown: { w: 0, r: 0 } };
+    pv = { renderer, scene, camera, van, walker, wheel, rack, swatch, decal, sMat, t: 0, base, angle: 0.9, holdUntil: 0, shown: { w: 0, r: 0 }, rackH: 1 };
     // girar com o mouse: arrastar (botão esquerdo) gira a van/personagem; ao mexer, a rotação automática pausa por 10 s
     // (a cada novo movimento o prazo recomeça) e depois continua de onde parou
     let drag = null;
@@ -371,10 +373,12 @@ export function createShop() {
       const char = cat.sec === 'char', item = !char && view === 'item';
       if (now >= pv.holdUntil) pv.angle += dt * 0.55;              // gira sozinho, a menos que o jogador tenha mexido há menos de 10 s
       const a = pv.angle;
-      const d = char ? 6.4 : item ? 8 : 15, hgt = char ? 2.0 : item ? 2.6 : 4.6, ty = char ? 1.15 : item ? 1.4 : 1.2;
+      const tall = !char && !item && cat.id === 'rack' ? Math.max(0, pv.rackH - 1.6) : 0;           // carga alta: afasta e sobe a câmera
+      const d = char ? 6.4 : item ? 8 : 15 + tall * 1.6, hgt = char ? 2.0 : item ? 2.6 : 4.6 + tall * 1.2, ty = char ? 1.15 : item ? 1.4 : 1.2 + tall * 0.5;
       pv.camera.position.set(Math.cos(a) * d, hgt + ty - 1, Math.sin(a) * d);
       pv.camera.lookAt(0, ty, 0);
       if (char) pv.walker.update(dt, { x: 0, z: 0 }, 'car', [], { x: 1e6, z: 1e6 });
+      pv.van.swayDemo(pv.t);                                       // a torre de caixas balança na pré-visualização
       pv.wheel.rotation.z = pv.t * 0.9;                            // gira em torno do próprio eixo
       pv.decal.rotation.y = pv.t * 0.8;
       pv.renderer.render(pv.scene, pv.camera);

@@ -1,7 +1,7 @@
 // Bagageiros da van (Shop → Bagageiro): o padrão (caixas de entrega) + 3 modelos. Nenhum tem cor editável.
 // Coordenadas no espaço do corpo da van (frente = +X); a carga fica sobre os trilhos do teto (y ≈ 2,47, x de −2,2 a 0,5, z de −0,85 a 0,85).
 import * as THREE from 'three';
-import { box, cyl, sphere, torus, at, group, dynamic, textTexture } from './kit.js';
+import { box, cyl, sphere, cone, torus, at, group, dynamic, textTexture } from './kit.js';
 
 const Y = 2.47;                                    // topo dos trilhos
 const CARD = '#c98a4a', TAPE = '#f3d9a6';
@@ -153,6 +153,67 @@ export const RACK_MODELS = [
       return group(at(toyBox(0.7, 0.55, 0.7, '#e3262e'), -1.75, Y, -0.3, 0, 0.1, 0), at(toyBox(0.7, 0.7, 0.7, '#3a78d4'), -1.7, Y, 0.45, 0, -0.1, 0),
         at(toyBox(0.62, 0.5, 0.7, '#efbf2a'), 0.05, Y, -0.38, 0, -0.15, 0), at(toyBox(0.6, 0.62, 0.6, '#3c9d55'), 0.05, Y, 0.38, 0, 0.12, 0),
         at(toyBox(0.5, 0.4, 0.5, '#8a55c4'), -1.72, Y + 0.7, 0.45, 0, 0.5, 0.06), at(bear(), -0.85, Y, 0.02, 0, -0.1, 0));
+    } },
+  { name: 'Jardim portátil', desc: 'Vasos de flores, folhagens e uma pequena árvore.',
+    build() {
+      const g = group();
+      const pot = (x, z, r, h) => {
+        const p = group(at(cyl(r, r * 0.72, h, '#b8582f', 10), 0, h / 2, 0), at(cyl(r * 1.1, r * 1.05, 0.07, '#c9683a', 10), 0, h, 0), at(cyl(r * 0.95, r * 0.95, 0.02, '#4b3320', 10), 0, h + 0.03, 0));
+        p.position.set(x, Y, z); g.add(p); return h + 0.04;
+      };
+      const flowers = (x, z, r, h, color, n = 4) => {
+        const base = Y + pot(x, z, r, h);
+        for (let i = 0; i < n; i++) {
+          const a = (i / n) * Math.PI * 2, fx = x + Math.cos(a) * r * 0.45, fz = z + Math.sin(a) * r * 0.45, fh = 0.35 + (i % 3) * 0.1;
+          g.add(at(cyl(0.015, 0.018, fh, '#3f8f3a', 5), fx, base + fh / 2, fz), at(sphere(0.1, color, 8, 6), fx, base + fh + 0.04, fz), at(sphere(0.05, '#ffd23a', 6, 4), fx, base + fh + 0.1, fz));
+          g.add(at(sphere(0.07, '#4fa848', 6, 4), fx + 0.07, base + 0.12, fz), at(sphere(0.07, '#4fa848', 6, 4), fx - 0.07, base + 0.1, fz));
+        }
+      };
+      const leaves = (x, z, r, h, color) => {
+        const base = Y + pot(x, z, r, h);
+        for (let i = 0; i < 6; i++) { const a = (i / 6) * Math.PI * 2; g.add(at(cone(0.1, 0.55 + (i % 2) * 0.15, color, 5), x + Math.cos(a) * r * 0.4, base + 0.3, z + Math.sin(a) * r * 0.4, Math.sin(a) * 0.35, 0, -Math.cos(a) * 0.35)); }
+      };
+      // pequena árvore num vaso grande
+      pot(-1.65, 0.05, 0.36, 0.42);
+      g.add(at(cyl(0.05, 0.08, 0.95, '#6b4526', 7), -1.65, Y + 0.9, 0.05), at(sphere(0.5, '#3f8f3a', 10, 8), -1.65, Y + 1.55, 0.05), at(sphere(0.34, '#57a84a', 9, 7), -1.45, Y + 1.8, 0.2), at(sphere(0.3, '#4fa848', 9, 7), -1.9, Y + 1.7, -0.1));
+      flowers(-0.95, 0.5, 0.26, 0.3, '#e3262e');
+      flowers(-0.95, -0.5, 0.24, 0.28, '#efbf2a');
+      leaves(-0.4, 0.55, 0.25, 0.3, '#2f8a3a');
+      flowers(-0.35, -0.5, 0.25, 0.3, '#e86aa0', 5);
+      flowers(0.1, 0.05, 0.3, 0.34, '#8a55c4', 5);
+      leaves(-0.95, 0.0, 0.22, 0.26, '#4fa848');
+      return g;
+    } },
+  { name: 'Encomenda suspeita', desc: 'Uma caixa maior, única, marcada “NÃO ABRIR”, com dois olhos espiando por buracos.',
+    build() {
+      const b = group(at(box(1.5, 1.0, 1.25, '#a56a36'), 0, 0.5, 0));
+      for (const x of [-0.45, 0.2]) b.add(at(box(0.1, 1.02, 1.27, '#e8d3a0'), x, 0.5, 0), at(box(0.1, 0.012, 1.27, '#e8d3a0'), x, 1.005, 0));    // fitas
+      b.add(at(box(1.52, 0.012, 0.12, '#e8d3a0'), 0, 1.008, 0));
+      const top = label('NÃO ABRIR', 1.15, 0.42, '#f4efe3', '#c0281e', 40); top.rotation.x = -Math.PI / 2; top.position.set(-0.1, 1.012, 0.25); b.add(top);
+      const side = label('NÃO ABRIR', 0.95, 0.34, '#f4efe3', '#c0281e', 36); side.position.set(-0.1, 0.38, 0.635); b.add(side);
+      const side2 = label('NÃO ABRIR', 0.95, 0.34, '#f4efe3', '#c0281e', 36); side2.rotation.y = Math.PI; side2.position.set(0.1, 0.38, -0.635); b.add(side2);
+      for (const z of [-0.28, 0.28]) {                                                                 // dois buracos na frente, com olhos espiando
+        b.add(at(cyl(0.19, 0.19, 0.04, '#0a0a0a', 18), 0.76, 0.68, z, 0, 0, Math.PI / 2));
+        b.add(at(sphere(0.14, '#fbfbf7', 12, 10), 0.74, 0.68, z), at(sphere(0.065, '#111111', 8, 6), 0.86, 0.68, z + 0.05), at(sphere(0.02, '#ffffff', 6, 4), 0.9, 0.71, z + 0.07));
+        b.add(at(box(0.04, 0.05, 0.3, '#2b2d33'), 0.77, 0.9, z + (z < 0 ? 0.03 : -0.03), (z < 0 ? 1 : -1) * 0.35, 0, 0));   // sobrancelha desconfiada
+      }
+      return group(at(b, -1.0, Y, 0, 0, 0.04, 0));
+    } },
+  { name: 'Excesso de encomendas', desc: 'Uma torre absurda de caixas, balançando nas curvas.',
+    build() {
+      const tower = dynamic(group());                                  // pivô na base: a van o balança nas curvas, freadas e arrancadas
+      tower.name = 'sway';
+      const cols = ['#c98a4a', '#d9a066', '#b57a3e', '#e0b27a', '#c98a4a', '#d9a066', '#b57a3e', '#e0b27a', '#c98a4a', '#d9a066'];
+      const dims = [[1.4, 0.55, 1.2], [1.2, 0.5, 1.1], [1.3, 0.55, 1.0], [1.0, 0.5, 1.0], [1.1, 0.55, 0.9], [0.9, 0.5, 0.85], [0.8, 0.5, 0.8], [0.7, 0.45, 0.7], [0.6, 0.42, 0.6], [0.45, 0.4, 0.45]];
+      let y = 0;
+      dims.forEach(([w, h, d], i) => {
+        const c = group(at(box(w, h, d, cols[i]), 0, h / 2, 0), at(box(w + 0.02, h + 0.02, 0.1, TAPE), 0, h / 2, 0), at(box(0.1, 0.012, d + 0.02, TAPE), 0, h + 0.006, 0));
+        c.position.set(Math.sin(i * 1.7) * 0.1, y, Math.cos(i * 2.3) * 0.08); c.rotation.y = Math.sin(i * 2.9) * 0.22;
+        tower.add(c); y += h;
+      });
+      tower.add(at(box(0.05, y * 0.98, 0.03, '#3a3d44'), 0.0, y / 2, 0.62 - 0.0));                         // corda esticada na frente
+      tower.position.set(-1.0, Y, 0);
+      return group(tower);
     } },
 ];
 

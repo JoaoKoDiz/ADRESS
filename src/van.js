@@ -179,6 +179,9 @@ export function createVan(scene) {
 
   let x = VAN_START.x, z = VAN_START.z, heading = VAN_START.heading, speed = 0;
   let spin = 0, roll = 0, pitch = 0, prevSpeed = 0;
+  // torre de caixas (Bagageiro "Excesso de encomendas"): pêndulo amortecido que balança nas curvas, freadas e arrancadas
+  let sway = null, swR = 0, swVR = 0, swP = 0, swVP = 0;
+  const findSway = () => { sway = body.getObjectByName('sway') || null; swR = swVR = swP = swVP = 0; };
 
   function sync() {
     root.position.set(x, 0, z);
@@ -294,12 +297,20 @@ export function createVan(scene) {
     const pitchGoal = THREE.MathUtils.clamp(accel * 0.0035, -0.045, 0.045);
     roll += (rollGoal - roll) * k;
     pitch += (pitchGoal - pitch) * k;
+    if (sway) {
+      const inR = THREE.MathUtils.clamp(-turnRate * (speed / MAX), -2.2, 2.2) * 38, inP = THREE.MathUtils.clamp(accel, -22, 22) * 0.6;
+      const h = Math.min(dt, 0.03);
+      swVR += (inR - 30 * swR - 1.5 * swVR) * h; swR += swVR * h;
+      swVP += (inP - 30 * swP - 1.5 * swVP) * h; swP += swVP * h;
+      swR = THREE.MathUtils.clamp(swR, -0.3, 0.3); swP = THREE.MathUtils.clamp(swP, -0.3, 0.3);
+      sway.rotation.set(swR, 0, swP);
+    }
     sync();
   }
 
   function teleport(nx, nz, nh) {
     x = nx; z = nz; heading = angleDiff(nh, 0);
-    speed = 0; prevSpeed = 0; roll = 0; pitch = 0;
+    speed = 0; prevSpeed = 0; roll = 0; pitch = 0; swR = swVR = swP = swVP = 0; if (sway) sway.rotation.set(0, 0, 0);
     sync();
   }
 
@@ -317,7 +328,16 @@ export function createVan(scene) {
     setGhost(v) { ghost = !!v; },
     /** Troca o modelo das rodas (Shop): 0 = padrão. */
     /** Troca a carga do teto (Shop): 0 = caixas. */
-    setRackModel(m) { setRack(m); },
+    setRackModel(m) { setRack(m); findSway(); },
+    /** Só para a pré-visualização do Shop: balança a torre de caixas sozinha (a van lá não anda). */
+    /** Fora da direção (diálogo, a pé, etc.): a torre vai parando sozinha, sem ficar torta. */
+    relax(dt) {
+      if (!sway) return;
+      const h = Math.min(dt, 0.03);
+      swVR += (-30 * swR - 3 * swVR) * h; swR += swVR * h; swVP += (-30 * swP - 3 * swVP) * h; swP += swVP * h;
+      sway.rotation.set(swR, 0, swP);
+    },
+    swayDemo(t) { if (sway) sway.rotation.set(Math.sin(t * 2.1) * 0.13, 0, Math.sin(t * 1.5) * 0.09); },
     setWheelModel(m) { wheels.forEach(p => { while (p.children.length) p.remove(p.children[0]); p.add(buildWheel(m)); }); },
     /** Gira a van (usado no voo de helicóptero, que vira mesmo parado). */
     turn(d) { heading = angleDiff(heading + d, 0); sync(); },

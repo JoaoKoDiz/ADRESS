@@ -574,6 +574,7 @@ function update(dt, t) {
       break;
   }
 
+  if (state !== 'drive') van.relax(dt);          // torre de caixas do bagageiro: para de balançar quando a van não está sendo dirigida
   world.update(t, dt);
   world.updateGas(van.x, van.z, dt);
   fuelMsgT = Math.max(0, fuelMsgT - dt);
