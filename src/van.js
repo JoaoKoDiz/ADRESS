@@ -4,6 +4,7 @@ import * as THREE from 'three';
 import { SOLIDS, BOUNDS, VAN_START } from './layout.js';
 import { mat, mesh, box, cyl, at, group, dynamic, bakeStatic } from './models/kit.js';
 import { buildWheel, WHEEL_R, WHEEL_W } from './models/wheels.js';
+import { buildRack } from './models/racks.js';
 
 // ---------- Física ----------
 const MAX = 21, ACC = 2.2, DEC = 3.5, TURN = 4.6;
@@ -141,19 +142,11 @@ function buildModel() {
     body.add(at(box(2.7, 0.07, 0.07, DARK), -0.85, 2.44, s * 0.8));
     for (const x of [-2.0, 0.3]) body.add(at(box(0.07, 0.16, 0.07, DARK), x, 2.34, s * 0.8));
   }
-  const pkg = group(
-    at(box(1.35, 0.62, 1.25, CARD), 0, 0.31, 0),
-    at(box(1.37, 0.02, 0.24, TAPE), 0, 0.625, 0),
-    at(box(0.24, 0.02, 1.27, TAPE), 0, 0.625, 0),
-    at(box(1.37, 0.62, 0.24, TAPE), 0, 0.31, 0),
-  );
-  body.add(at(pkg, -1.25, 2.47, 0.05, 0, 0.12, 0));
-  const pkg2 = group(
-    at(box(0.8, 0.5, 0.75, '#d9a066'), 0, 0.25, 0),
-    at(box(0.82, 0.02, 0.18, TAPE), 0, 0.505, 0),
-    at(box(0.82, 0.5, 0.18, TAPE), 0, 0.25, 0),
-  );
-  body.add(at(pkg2, -0.05, 2.47, -0.25, 0, -0.25, 0));
+  // carga do teto (Shop → Bagageiro): grupo próprio, fora do merge do corpo, para poder trocar de modelo
+  const rack = dynamic(new THREE.Group());
+  body.add(rack);
+  const setRack = i => { while (rack.children.length) rack.remove(rack.children[0]); rack.add(buildRack(i)); bakeStatic(rack); };
+  setRack(0);
 
   // logotipo nas laterais (textura: fica fora do merge para manter as UVs)
   const logoMat = new THREE.MeshStandardMaterial({ map: logoTexture(), roughness: 0.85, transparent: true });
@@ -175,12 +168,12 @@ function buildModel() {
     root.add(pivot);
     wheels.push(pivot);
   }
-  return { root, body, wheels };
+  return { root, body, wheels, setRack };
 }
 
 // ---------- API ----------
 export function createVan(scene) {
-  const { root, body, wheels } = buildModel();
+  const { root, body, wheels, setRack } = buildModel();
   root.name = 'van';
   scene.add(root);
 
@@ -323,6 +316,8 @@ export function createVan(scene) {
     stop() { speed = 0; prevSpeed = 0; roll = 0; pitch = 0; sync(); },
     setGhost(v) { ghost = !!v; },
     /** Troca o modelo das rodas (Shop): 0 = padrão. */
+    /** Troca a carga do teto (Shop): 0 = caixas. */
+    setRackModel(m) { setRack(m); },
     setWheelModel(m) { wheels.forEach(p => { while (p.children.length) p.remove(p.children[0]); p.add(buildWheel(m)); }); },
     /** Gira a van (usado no voo de helicóptero, que vira mesmo parado). */
     turn(d) { heading = angleDiff(heading + d, 0); sync(); },
