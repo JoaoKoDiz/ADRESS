@@ -177,6 +177,7 @@ export function createBoom(scene, world, audio) {
   const hatch = new THREE.Group();                 // filho da van: dobradiça na borda traseira da escotilha
   const lid = at(box(1.1, 0.1, 1.25, '#ff7a1a'), 0.55, 0, 0);
   hatch.add(lid);
+  hatch.visible = false;                           // só aparece enquanto o míssil é disparado (senão ficava flutuando sobre a van)
   const missile = new THREE.Group();
   missile.add(at(cyl(0.22, 0.22, 1.9, '#f2f2f2', 10), 0, 0, 0, 0, 0, -Math.PI / 2));
   missile.add(at(cone(0.22, 0.6, '#e3262e', 10), 1.25, 0, 0, 0, 0, -Math.PI / 2));
@@ -190,7 +191,7 @@ export function createBoom(scene, world, audio) {
   let flyDur = 1;
 
   function attachHatch(vanObj) {
-    hatch.position.set(-0.2, 3.1, 0);
+    hatch.position.set(-0.2, 2.33, 0);              // rente ao teto da van
     vanObj.add(hatch);
   }
 
@@ -213,7 +214,7 @@ export function createBoom(scene, world, audio) {
 
   function fire(v, slotOf) {
     van = v; target = aimTarget(v, slotOf); targetSlot = slotOf[target];
-    mPhase = 'open'; mT = 0;
+    mPhase = 'open'; mT = 0; hatch.visible = true;
     audio.hatch && audio.hatch();
     return target;
   }
@@ -262,7 +263,7 @@ export function createBoom(scene, world, audio) {
       }
     } else if (mPhase === 'boom') {
       hatch.rotation.z = Math.max(0, 1.9 - mT * 3);
-      if (mT > 2.4) mPhase = 'done';
+      if (mT > 2.4) { mPhase = 'done'; hatch.visible = false; }
     }
     flameM.scale.setScalar(0.8 + Math.random() * 0.5);
   }
@@ -278,7 +279,7 @@ export function createBoom(scene, world, audio) {
   }
 
   function resetMissile() {
-    mPhase = 'idle'; missile.visible = false; hatch.rotation.z = 0; target = -1;
+    mPhase = 'idle'; missile.visible = false; hatch.rotation.z = 0; hatch.visible = false; target = -1;
   }
 
   return {
