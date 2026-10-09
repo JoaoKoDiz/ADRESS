@@ -274,3 +274,49 @@ export function buildLoungerReader() {
   };
   return root;
 }
+
+/**
+ * Seu Galdino sentado num banco da igreja, de óculos normais, sem jornal, mãos nas pernas. Só fica sentado (sem animação).
+ * Origem no chão, no meio do assento; frente = +X. `seatY` = altura do assento.
+ */
+export function buildPewReader(seatY = 0.62) {
+  const root = new THREE.Group();
+  root.name = 'pew-reader';
+  const S = 0.9, g = new THREE.Group(); g.scale.setScalar(S); root.add(g);
+  const HY = (seatY + 0.14 * S) / S;                                               // altura do quadril (coxas apoiadas no assento)
+  g.add(at(lowBall(0.27, M.pants, 1.05, 0.62, 1.15), 0.02, HY, 0));
+  for (const s of [-1, 1]) {
+    const thigh = new THREE.Group(); thigh.position.set(0.02, HY, s * 0.14); thigh.rotation.z = Math.PI / 2 + 0.04; g.add(thigh);
+    thigh.add(limb(0.15, 0.13, 0.32, M.pants));
+    const knee = new THREE.Group(); knee.position.y = -0.32; knee.rotation.z = -Math.PI / 2 + 0.04; thigh.add(knee);
+    const shin = HY - 0.17;                                                         // canela até o chão
+    knee.add(limb(0.13, 0.11, shin, M.pants));
+    const foot = new THREE.Group(); foot.position.y = -shin; foot.rotation.z = -0.04; knee.add(foot);
+    const shoe = at(mesh(new THREE.CapsuleGeometry(0.11, 0.16, 4, 8), M.shoe), 0.07, -0.03, 0, 0, 0, Math.PI / 2); shoe.scale.set(0.95, 1, 1.05); foot.add(shoe);
+    const sole = at(mesh(new THREE.CapsuleGeometry(0.122, 0.18, 4, 8), M.sole), 0.07, -0.1, 0, 0, 0, Math.PI / 2); sole.scale.set(0.32, 1, 1.1); foot.add(sole);
+  }
+  // tronco reto (encostado de leve): camisa branca + casaco vermelho aberto
+  const torso = new THREE.Group(); torso.position.set(-0.04, HY + 0.06, 0); torso.rotation.z = 0.06; g.add(torso);
+  torso.add(shirtTorso(M.white));
+  const jacket = shirtTorso(JACKET, 0.32); jacket.scale.multiplyScalar(1.05); jacket.position.y = -0.03; torso.add(jacket);
+  for (const s of [-1, 1]) {
+    torso.add(at(box(0.05, 0.62, 0.04, M.white), 0.235, 0.32, s * 0.1, 0, 0, 0.05));
+    torso.add(at(box(0.12, 0.2, 0.1, M.red), 0.17, 0.63, s * 0.14, s * 0.5, 0, -0.5));
+    // braços descansando: mãos em cima das coxas, mangas dobradas
+    const sh = new THREE.Group(); sh.position.set(0, 0.56, s * 0.31); sh.rotation.set(-s * 0.05, 0, 0.22); torso.add(sh);
+    sh.add(limb(0.14, 0.12, 0.27, M.red));
+    sh.add(limb(0.085, 0.075, 0.28, M.skin));
+    const elbow = new THREE.Group(); elbow.position.y = -0.28; elbow.rotation.set(s * 0.12, 0, 1.2); sh.add(elbow);
+    elbow.add(limb(0.12, 0.11, 0.06, M.red));
+    elbow.add(at(mesh(new THREE.TorusGeometry(0.1, 0.04, 5, 10), M.red), 0, -0.08, 0, Math.PI / 2, 0, 0));
+    elbow.add(limb(0.072, 0.06, 0.2, M.skin));
+    const wrist = new THREE.Group(); wrist.position.y = -0.2; elbow.add(wrist);
+    wrist.add(flatHand(M.skin));
+  }
+  const head = new THREE.Group(); head.position.y = 0.7; torso.add(head);
+  head.add(at(limb(0.095, 0.1, 0.12, M.skin), 0, 0.12, 0));
+  const face = readerHead(0.42); face.position.y = 0.44; head.add(face);           // óculos redondos normais (sem lente escura)
+  head.rotation.z = -0.1;                                                           // olha para a frente (para o altar)
+  root.traverse(o => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = false; } });
+  return root;
+}

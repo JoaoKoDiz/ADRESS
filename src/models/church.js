@@ -6,6 +6,7 @@
 // Materiais PRÓPRIOS (não usa o cache do kit): a revelação muda a opacidade só da igreja.
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
+import { buildPewReader } from './reader.js';
 
 // pedra bege quente; recuos um pouco mais escuros que as partes salientes
 const COL = { stone: '#e8dcbe', stone2: '#ddcfab', stone3: '#c9b994', shade: '#b3a37f', dark: '#2a2622', wood: '#4a3322', roof: '#5d636c', roof2: '#4d525a',
@@ -426,6 +427,9 @@ export function buildChurch() {
     mesh.castShadow = true; mesh.receiveShadow = true; root.add(mesh);
     geos.forEach(g => g.dispose());
   }
+  // Seu Galdino sentado no 6º banco (contando da entrada para o altar), à direita de quem entra (+x), olhando para o altar (−z).
+  // Fica fora da fusão (materiais dele são os do personagem); a colisão do banco já cobre ele.
+  const pr = buildPewReader(0.62); pr.position.set(2.3, 0, -16 - 5 * 1.4); pr.rotation.y = Math.PI / 2; root.add(pr);
   root.userData.materials = Object.values(mats);
   return root;
 }
