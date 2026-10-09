@@ -84,6 +84,9 @@ const SLOW_DIST = 9;            // parada/devagar: mais perto e mais alta, olhan
 const SLOW_HEIGHT = 13;         //   (dá para ver os quintais da frente mesmo estando atrás das casas)
 const BOOM_MIN_DIST = 4.5;      // braço encolhido ao máximo (quando algo fica entre a van e a câmera)
 const BOOM_TOP_HEIGHT = 14.5;   //   … e a altura correspondente: encolher = subir e olhar mais para baixo
+const FIXED_DIST = 11.5, FIXED_HEIGHT = 10;   // braço da câmera (fixo; a van parada ou em movimento tem o mesmo enquadramento)
+const MIN_RADIUS = 3.2, MIN_ZOOM = 0.28;      // aproximação máxima
+const MIN_ELEV = 0.1, MAX_ELEV = 1.5;         // inclinação mínima/máxima do braço (rad)
 const CHASE_LOOK_AHEAD = 6;     // ponto olhado fica um pouco à frente da van
 const CHASE_LOOK_Y = 1.2;
 const CHASE_YAW_SMOOTH = 3.2;   // rapidez com que a câmera alcança a direção da van nas curvas
@@ -181,17 +184,28 @@ export function createCameraRig() {
   }
   // olhar em volta (botão direito do mouse): desvio de giro/inclinação em torno da van; volta ao soltar
   let orbYaw = 0, orbPitch = 0, orbGoalYaw = 0, orbGoalPitch = 0, orbK = 0, orbHeld = false;
+  let zoom = 1, zoomGoal = 1;                  // 1 = distância normal (máximo); só dá para aproximar
+  const tmpPos = new THREE.Vector3();
   function camYaw() { return yaw + focusOff + orbYaw; }
-  const baseDist = () => CHASE_DIST + (SLOW_DIST - CHASE_DIST) * slowK;
-  const baseHeight = () => CHASE_HEIGHT + (SLOW_HEIGHT - CHASE_HEIGHT) * slowK;
+  // pose fixa do braço (sem variar com a velocidade): quem controla a câmera é o jogador (botão direito = girar/inclinar, roda = zoom)
+  const baseDist = () => FIXED_DIST;
+  const baseHeight = () => FIXED_HEIGHT;
+  /** Posição da câmera para o encolhimento u do braço, já com a inclinação e o zoom do jogador. */
+  function camPos(u, out) {
+    const cy = camYaw(), fx = Math.cos(cy), fz = Math.sin(cy);
+    const D = baseDist(), H = baseHeight();
+    const d = D + (BOOM_MIN_DIST - D) * u, h = H + (BOOM_TOP_HEIGHT - H) * u;
+    const dy = h - PIVOT_Y;
+    const r = Math.max(MIN_RADIUS, Math.hypot(d, dy) * zoom);
+    const el = THREE.MathUtils.clamp(Math.atan2(dy, d) + orbPitch, MIN_ELEV, MAX_ELEV);
+    return out.set(tgt.x - fx * r * Math.cos(el), PIVOT_Y + r * Math.sin(el), tgt.z - fz * r * Math.cos(el));
+  }
 
   /** Menor encolhimento u (0..1) do braço que deixa a linha van→câmera livre de casas e dentro do mapa. */
   function clearBoom() {
-    const cy = camYaw(), fx = Math.cos(cy), fz = Math.sin(cy);
-    const D = baseDist(), H = baseHeight();
     const free = u => {
-      const d = D + (BOOM_MIN_DIST - D) * u, h = H + (BOOM_TOP_HEIGHT - H) * u;
-      const cx = tgt.x - fx * d, cz = tgt.z - fz * d;
+      camPos(u, tmpPos);
+      const cx = tmpPos.x, cz = tmpPos.z, h = tmpPos.y;
       // só segura a câmera dentro da sebe enquanto a van está no bairro (fora dele, o mundo é livre)
       const inside = tgt.x > 0 && tgt.x < MAP && tgt.z > 0 && tgt.z < MAP;
       if (inside && (cx < CAM_LIM0 || cx > CAM_LIM1 || cz < CAM_LIM0 || cz > CAM_LIM1)) return false;
@@ -206,23 +220,9 @@ export function createCameraRig() {
   }
 
   function apply() {
-    const cy = camYaw(), fx = Math.cos(cy), fz = Math.sin(cy);
-    const D = baseDist(), H = baseHeight();
-    const d = D + (BOOM_MIN_DIST - D) * boomU, h = H + (BOOM_TOP_HEIGHT - H) * boomU;
-    chasePos.set(tgt.x - fx * d, h, tgt.z - fz * d);
-    if (Math.abs(orbPitch) > 1e-4) {            // inclinação: gira o braço para cima/baixo em torno do pivô
-      const dy = h - PIVOT_Y, r = Math.hypot(d, dy);
-      const el = THREE.MathUtils.clamp(Math.atan2(dy, d) + orbPitch, 0.12, 1.45);
-      chasePos.set(tgt.x - fx * r * Math.cos(el), PIVOT_Y + r * Math.sin(el), tgt.z - fz * r * Math.cos(el));
-    }
+    camPos(boomU, chasePos);
     const hx = Math.cos(yaw), hz = Math.sin(yaw);
     chaseLook.set(tgt.x + hx * CHASE_LOOK_AHEAD, CHASE_LOOK_Y, tgt.z + hz * CHASE_LOOK_AHEAD);
-    if (focusK > 0) {                          // entregando: olha para o meio do caminho entre a van e a casa
-      const k = 0.55 * focusK;
-      chaseLook.x += (focus.x - chaseLook.x) * k;
-      chaseLook.z += (focus.z - chaseLook.z) * k;
-      chaseLook.y += (1.6 - chaseLook.y) * k;
-    }
     if (orbK > 0) {                            // olhando em volta: mira na van em vez de à frente dela
       chaseLook.x += (tgt.x - chaseLook.x) * orbK; chaseLook.z += (tgt.z - chaseLook.z) * orbK;
       chaseLook.y += (PIVOT_Y - chaseLook.y) * orbK;
@@ -256,10 +256,7 @@ export function createCameraRig() {
   function snap(target) {
     tgt.x = target.x; tgt.z = target.z; tgtY = target.y || 0;
     if (target.heading !== undefined) yaw = target.heading;
-    slowK = slowGoal(target.speed);
-    setFocus(target.focus);
-    focusK = target.focus ? 1 : 0;
-    focusOff = focusGoal();
+    orbYaw = orbGoalYaw = orbPitch = orbGoalPitch = 0; orbK = 0; zoom = zoomGoal = 1;   // partida/tela nova: câmera padrão
     blend = mode === 'chase' ? 1 : 0;
     boomU = clearBoom();
     apply();
@@ -268,15 +265,11 @@ export function createCameraRig() {
   function update(dt, target) {
     tgt.x = target.x; tgt.z = target.z; tgtY = target.y || 0;
     if (target.heading !== undefined) yaw += angleDiff(target.heading, yaw) * (1 - Math.exp(-CHASE_YAW_SMOOTH * dt));
-    slowK += (slowGoal(target.speed) - slowK) * (1 - Math.exp(-2.5 * dt));
-    setFocus(target.focus);
-    focusK += ((target.focus ? 1 : 0) - focusK) * (1 - Math.exp(-3 * dt));
-    if (focusK < 1e-3 && !target.focus) focusK = 0;
-    focusOff += (focusGoal() - focusOff) * (1 - Math.exp(-2.5 * dt));
-    const spring = 1 - Math.exp(-(orbHeld ? 14 : 5) * dt);   // segue o mouse; solto, volta para trás da van
-    orbYaw += (orbGoalYaw - orbYaw) * spring; orbPitch += (orbGoalPitch - orbPitch) * spring;
-    orbK += ((orbHeld || Math.abs(orbYaw) + Math.abs(orbPitch) > 0.02 ? 1 : 0) - orbK) * (1 - Math.exp(-6 * dt));
-    if (!orbHeld && Math.abs(orbYaw) + Math.abs(orbPitch) < 1e-3 && orbGoalYaw === 0 && orbGoalPitch === 0) { orbYaw = orbPitch = 0; if (orbK < 1e-3) orbK = 0; }
+    // câmera do jogador: segue o mouse de perto e FICA onde foi deixada (não volta sozinha)
+    const follow = 1 - Math.exp(-16 * dt);
+    orbYaw += (orbGoalYaw - orbYaw) * follow; orbPitch += (orbGoalPitch - orbPitch) * follow;
+    zoom += (zoomGoal - zoom) * (1 - Math.exp(-12 * dt));
+    orbK += ((Math.abs(orbYaw) + Math.abs(orbPitch) > 0.02 ? 1 : 0) - orbK) * (1 - Math.exp(-6 * dt));   // girada: mira na van
     // braço: encolhe rápido (nunca atravessa um telhado), volta devagar (sem trancos)
     const want = clearBoom();
     boomU += (want - boomU) * (1 - Math.exp(-(want > boomU ? 18 : 2.5) * dt));
@@ -296,13 +289,21 @@ export function createCameraRig() {
     get blend() { return smooth(blend); },
     toggle, resize, update, snap,
     /** Botão direito pressionado/solto: começa/termina de olhar em volta (só na câmera atrás da van). */
-    orbitHold(on) { orbHeld = on && mode === 'chase'; if (!orbHeld) { orbGoalYaw = 0; orbGoalPitch = 0; } },
+    orbitHold(on) { orbHeld = on && mode === 'chase'; },
     /** Arrasto do mouse (pixels) enquanto o botão direito está pressionado. */
     orbit(dx, dy) {
       if (!orbHeld) return;
-      orbGoalYaw = THREE.MathUtils.clamp(orbGoalYaw + dx * 0.006, -Math.PI, Math.PI);
-      orbGoalPitch = THREE.MathUtils.clamp(orbGoalPitch + dy * 0.004, -0.6, 0.9);
+      orbGoalYaw += dx * 0.0055;                                               // volta completa permitida (sem limite)
+      if (Math.abs(orbGoalYaw) > Math.PI * 4) orbGoalYaw %= Math.PI * 2;
+      orbGoalPitch = THREE.MathUtils.clamp(orbGoalPitch + dy * 0.0045, -0.7, 1.0);
     },
+    /** Roda do mouse: aproxima (deltaY < 0) ou afasta de volta (deltaY > 0), sem passar da distância normal. */
+    zoom(deltaY) {
+      if (mode !== 'chase') return;
+      zoomGoal = THREE.MathUtils.clamp(zoomGoal * (deltaY < 0 ? 0.88 : 1 / 0.88), MIN_ZOOM, 1);
+    },
+    /** Volta à câmera padrão (sem giro nem zoom). */
+    resetView() { orbGoalYaw = orbGoalPitch = 0; zoomGoal = 1; },
     /** O bairro mudou de tamanho (ex.: Bairro 2, 6×6): refaz enquadramento e obstáculos da câmera. */
     refit() { rebuildGrid(); resize(lastW, lastH); },
   };

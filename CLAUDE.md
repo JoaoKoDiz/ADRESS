@@ -63,7 +63,8 @@ ADRESS é um jogo 3D de entregas, aconchegante e meio cômico.
 | E / Espaço / Enter | entregar, abastecer (no posto), continuar o diálogo, jogar (no mapa) |
 | L | descer da van e andar a pé (van parada, fora do helicóptero); **E** perto da van volta a dirigir. A pé não há entregas, mas dá para entrar nos quintais e na praça (`walker.js`) |
 | C | câmera: atrás da van ↔ bairro inteiro |
-| botão direito do mouse (segurar e arrastar) | olhar em volta com a câmera atrás da van; ao soltar, volta |
+| botão direito do mouse (segurar e arrastar) | girar (volta completa) e inclinar a câmera atrás da van/personagem; **a câmera fica onde você deixar** (não volta sozinha; nova partida/tela volta ao padrão) |
+| roda do mouse | zoom: só aproxima (e desfaz); nunca afasta além da distância normal. A câmera não muda sozinha com a van parada/andando nem se vira para as casas (braço fixo; só encolhe para não atravessar casas) |
 | T ou botão DICA | seta gigante cai do céu na casa indicada e quebra o telhado (1× por entrega) |
 | M | missões (Carreira) |
 | H / F | helicóptero / míssil (só Livre) |

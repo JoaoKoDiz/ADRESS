@@ -316,6 +316,7 @@ addEventListener('contextmenu', e => { if (IN_GAME.includes(state)) e.preventDef
 addEventListener('mousedown', e => { if (e.button === 2 && IN_GAME.includes(state) && !missions.isOpen) rig.orbitHold(true); });
 addEventListener('mousemove', e => { if (e.buttons & 2) rig.orbit(e.movementX, e.movementY); });
 addEventListener('mouseup', e => { if (e.button === 2) rig.orbitHold(false); });
+addEventListener('wheel', e => { if (IN_GAME.includes(state) && rig.mode === 'chase' && !missions.isOpen) { e.preventDefault(); rig.zoom(e.deltaY); } }, { passive: false });   // roda: zoom (só aproxima)
 addEventListener('blur', () => rig.orbitHold(false));
 function resize() {
   const w = Math.max(1, stage.clientWidth), h = Math.max(1, stage.clientHeight);
@@ -586,7 +587,7 @@ function update(dt, t) {
   // entregando (campainha/diálogo) ou com o balão "E — Entregar" à vista: a câmera se volta para a casa
   const focusH = (state === 'ring' || state === 'dialog') ? pending : state === 'drive' ? nearHouse : -1;
   const onFoot = state === 'walk';              // a câmera segue o personagem a pé
-  rig.update(dt, onFoot ? { x: walker.x, z: walker.z, y: 0, heading: walker.heading, speed: walker.speed, focus: null } : { x: van.x, z: van.z, y: heli.altitude, heading: van.heading, speed: van.speed, focus: focusH >= 0 ? focusOf(focusH) : null });
+  rig.update(dt, onFoot ? { x: walker.x, z: walker.z, y: 0, heading: walker.heading, speed: walker.speed, focus: null } : { x: van.x, z: van.z, y: heli.altitude, heading: van.heading, speed: van.speed, focus: null });   // sem câmera automática: quem controla é o jogador
   // névoa só na câmera atrás da van (suaviza o horizonte); a visão geral fica nítida
   const fb = rig.blend, fog = world.scene.fog;
   if (fog) { fog.near = 3000 + (130 - 3000) * fb; fog.far = 3200 + (430 - 3200) * fb; }
