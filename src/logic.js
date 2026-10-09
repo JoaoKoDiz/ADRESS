@@ -1,6 +1,6 @@
 // Lógica das rodadas, independente de renderização.
 import {
-  HOUSES, PHRASE, REF, COMPLAINTS, FEATURE_COMPLAINTS, HINTS, REPEATS, NOHINT, NOHINT_AGAIN, SUCCESS,
+  HOUSES, PHRASE, REF, COMPLAINTS, NARRATOR, FEATURE_COMPLAINTS, HINTS, REPEATS, NOHINT, NOHINT_AGAIN, SUCCESS,
 } from './data.js';
 
 const rand = n => Math.floor(Math.random() * n);
@@ -87,6 +87,7 @@ export class Game {
     this.route = route;                       // rota planejada; o último é o destinatário
     this.clues = route.map(h => makeClue(h, this.pool));   // clues[i] descreve route[i]
     this.step = 0;                            // índice da casa indicada atualmente
+    this.hintByNarrator = false;
     this.noHintVisited = new Set();
     this.usedComplaints = new Set();
     this.prevPerm = perm;
@@ -109,6 +110,7 @@ export class Game {
     this.route = route;
     this.clues = route.map(h => makeClue(h, this.pool));
     this.step = 0;
+    this.hintByNarrator = false;
     this.noHintVisited = new Set();
     this.usedComplaints = new Set();
     this.prevRoute = route.slice();
@@ -118,9 +120,9 @@ export class Game {
 
   /** Texto principal do topo durante a direção. */
   mainText() {
-    return this.step === 0
-      ? `Entrega para ${ref(this.route[0]).a} com ${phrase(this.clues[0])}.`
-      : `Palpite do morador: ${ref(this.route[this.step]).n} com ${phrase(this.clues[this.step])}.`;
+    if (this.step === 0) return `Entrega para ${ref(this.route[0]).a} com ${phrase(this.clues[0])}.`;
+    const r = ref(this.route[this.step]), p = phrase(this.clues[this.step]);
+    return this.hintByNarrator ? `(Talvez seja ${r.a} com ${p}...)` : `Palpite do morador: ${r.n} com ${p}.`;   // palpite do narrador: entre parênteses
   }
 
   complaintFor(h) {
@@ -135,15 +137,30 @@ export class Game {
     return c;
   }
 
+  /** Casa cujo morador não atende (Seu Galdino): mesma lógica da rota, mas o texto é um pensamento do narrador. */
+  narratorVisit(h) {
+    let text, success = false;
+    if (h === this.recipient) { success = true; text = pick(NARRATOR.success); this.delivered++; }
+    else {
+      const idx = this.route.indexOf(h);
+      if (idx === this.step) { this.step++; this.hintByNarrator = true; text = pick(NARRATOR.hint)(phrase(this.clues[this.step]), ref(this.route[this.step])); }
+      else if (idx >= 0 && idx < this.step) text = pick(NARRATOR.repeat)(phrase(this.clues[idx + 1]), ref(this.route[idx + 1]));
+      else if (this.noHintVisited.has(h)) text = pick(NARRATOR.nohintAgain);
+      else { this.noHintVisited.add(h); text = pick(NARRATOR.nohint); }
+    }
+    return { h, name: HOUSES[h].name, text, success, narrator: true };
+  }
+
   /** Tentativa de entrega na casa h. Retorna { h, name, text, success }. */
   visit(h) {
     let text, success = false;
+    if (HOUSES[h].narrator) return this.narratorVisit(h);
     if (h === this.recipient) {
       success = true; text = pick(SUCCESS); this.delivered++;
     } else {
       const idx = this.route.indexOf(h);
       if (idx === this.step) {                          // casa indicada: reclama e dá o próximo palpite
-        this.step++;
+        this.step++; this.hintByNarrator = false;
         text = this.complaintFor(h) + ' ' + pick(HINTS)(phrase(this.clues[this.step]), ref(this.route[this.step]));
       } else if (idx >= 0 && idx < this.step) {         // já deu palpite: só repete, sem pista nova
         text = pick(REPEATS)(phrase(this.clues[idx + 1]), ref(this.route[idx + 1]));

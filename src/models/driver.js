@@ -16,7 +16,9 @@ const LENS = mat('#101218', { flatShading: false, roughness: 0.18, metalness: 0.
 
 /** Esfera esticada (material pronto). */
 export const ball = (r, m, sx = 1, sy = 1, sz = 1) => { const o = sphere(r, m, 22, 16); o.scale.set(sx, sy, sz); return o; };
-const lathe = (pts, m, seg = 28) => mesh(new THREE.LatheGeometry(pts.map(([x, y]) => new THREE.Vector2(Math.max(0, x), y)), seg), m);
+// gap > 0: deixa uma abertura na frente (+X) de ±gap rad (ex.: casaco aberto)
+const lathe = (pts, m, seg = 28, gap = 0) => mesh(new THREE.LatheGeometry(pts.map(([x, y]) => new THREE.Vector2(Math.max(0, x), y)), seg,
+  gap ? Math.PI / 2 + gap : 0, gap ? Math.PI * 2 - 2 * gap : Math.PI * 2), m);
 /** Membro contínuo e afinando: junta de cima na origem (raio r0), junta de baixo em y = −len (raio r1), pontas arredondadas. */
 export function limb(r0, r1, len, m) {
   const pts = [], N = 8;
@@ -25,8 +27,8 @@ export function limb(r0, r1, len, m) {
   return lathe(pts, m);
 }
 /** Tronco da camisa (base da barra em y = 0, gola em y ≈ 0.71): peito cheio, cintura leve, ombros caídos. */
-export function shirtTorso(m) {
-  const t = lathe([[0, -0.06], [0.2, -0.05], [0.27, 0], [0.262, 0.07], [0.25, 0.16], [0.27, 0.3], [0.288, 0.42], [0.288, 0.52], [0.26, 0.6], [0.2, 0.66], [0.12, 0.7], [0, 0.71]], m);
+export function shirtTorso(m, gap = 0) {
+  const t = lathe([[0, -0.06], [0.2, -0.05], [0.27, 0], [0.262, 0.07], [0.25, 0.16], [0.27, 0.3], [0.288, 0.42], [0.288, 0.52], [0.26, 0.6], [0.2, 0.66], [0.12, 0.7], [0, 0.71]], m, 28, gap);
   t.scale.set(0.86, 1, 1.2); return t;
 }
 /** Mão simples (luva arredondada + polegar), pendurada em y = 0 (punho). */

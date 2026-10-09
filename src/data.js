@@ -100,7 +100,10 @@ export const SHOPS = [32, 33, 34, 35, 36, 37, 66, 67, 68, 69];
 
 // ---- Casa fixa do Bairro 1 (índice 86): sempre no canto mais longe da entrada, à esquerda de quem entra (lote 15) ----
 // yardZ: posição própria de um item do quintal (a árvore sem folhas fica mais perto da casa, deixando a frente livre)
-HOUSES.push({ name: 'Seu Galdino', roof: 'red', f: ['rooster', 'sunflowers', 'bare'], yardZ: { bare: 11.0 } });
+// reader: cadeira de balanço com ele lendo jornal no espaço livre do quintal (lado direito, na frente da árvore).
+// narrator: ele não atende a porta; as falas das entregas nessa casa são pensamentos do narrador, entre parênteses.
+HOUSES.push({ name: 'Seu Galdino', roof: 'red', f: ['rooster', 'sunflowers', 'bare'], yardZ: { bare: 11.0 },
+  reader: { x: 15.0, z: 14.2, rot: -2.2 }, narrator: true });
 /** Bairro 1: { lote: casa } sempre iguais em todas as partidas. */
 export const L1_FIXED = { 15: 86 };
 
@@ -213,6 +216,26 @@ export const NOHINT_AGAIN = [
   'Ainda não é meu! Segue a pista que você tem.',
   'Voltou? Continua não sendo meu.',
 ];
+// Narrador (casa do Seu Galdino, que nunca larga o jornal): sempre entre parênteses
+export const NARRATOR = {
+  success: [
+    '(Ele nem tirou os olhos do jornal. Mas o endereço confere: a encomenda era dele mesmo!)',
+    '(Nenhuma palavra, nenhum olhar... só o rangido da cadeira. Pelo menos desta vez, a casa era a certa.)',
+  ],
+  hint: [
+    (p, r) => `(Ele continua lendo o jornal, como se você nem estivesse ali... Essa não parece ser a casa certa. Talvez seja ${r.a} com ${p}?)`,
+    (p, r) => `(A cadeira balança, a página vira, e mais nada. Não deve ser aqui... Quem sabe ${r.a} com ${p}?)`,
+  ],
+  repeat: [
+    (p, r) => `(Ele segue lendo, balançando de leve. Você já tinha pensado nisso: talvez seja ${r.a} com ${p}...)`,
+  ],
+  nohint: [
+    '(Ele nem levantou os olhos do jornal... E essa casa nem estava na pista. Melhor seguir a pista.)',
+  ],
+  nohintAgain: [
+    '(De novo aqui? Ele continua lendo, balançando na cadeira. Não é aqui.)',
+  ],
+};
 export const SUCCESS = [
   'Finalmente, era essa mesmo! Muito obrigado!',
   'Ah, minha encomenda, achei que tinha fugido! Obrigado!',

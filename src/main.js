@@ -506,13 +506,13 @@ function update(dt, t) {
       if (stateT > FUEL_TIME) { fuelMsgT = 3; fuelMsg = FUEL_LINES[Math.floor(Math.random() * FUEL_LINES.length)]; actionLock = 0.3; setState('drive'); }
       break;
     case 'ring':
-      if (stateT > RESIDENT_APPEAR) world.showResident(pending, 'angry');
+      if (stateT > RESIDENT_APPEAR && !HOUSES[pending].narrator) world.showResident(pending, 'angry');   // Seu Galdino não atende: continua lendo
       if (stateT > RING_TIME) {
         const stepBefore = game.step, indicated = game.route[game.step] === pending;
         dialog = game.visit(pending);
         if (gameMode === 'career') career.visit(pending, dialog.success, indicated, stepBefore, game);
-        world.showResident(pending, dialog.success ? 'happy' : 'angry');
-        dialog.success ? audio.success() : audio.grumble();
+        if (!dialog.narrator) world.showResident(pending, dialog.success ? 'happy' : 'angry');
+        dialog.success ? audio.success() : dialog.narrator ? null : audio.grumble();
         setState('dialog');
       }
       break;
@@ -637,7 +637,7 @@ function updateHUD() {
   if (state === 'dialog') {
     hud.setSub(dialog.success ? '✔ Entrega concluída!  ·  [E] continuar' : '[E] ou Espaço: continuar',
       dialog.success ? 'success' : 'cont');
-    hud.setMain(`${dialog.name}: “${dialog.text}”`, dialog.success ? 'success' : 'dialog');
+    hud.setMain(dialog.narrator ? dialog.text : `${dialog.name}: “${dialog.text}”`, dialog.success ? 'success' : 'dialog');   // narrador: só o pensamento, entre parênteses
   } else {
     const extraKeys0 = '  ·  L: descer da van';
     const extraKeys = extraKeys0 + (gameMode === 'free' ? '  ·  H: helicóptero  ·  F: míssil' : '  ·  M: missões');
