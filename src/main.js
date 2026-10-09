@@ -13,7 +13,7 @@ import { buildLot } from './models/house.js';
 import { buildResident } from './models/resident.js';
 import { YARD_BUILDERS } from './models/yard.js';
 import { buildShopLot } from './models/shop.js';
-import { SHOPS, HOUSES, FUTS } from './data.js';
+import { SHOPS, HOUSES, FUTS, L1_FIXED } from './data.js';
 import { buildAptLot, APT_ROOF, aptRoofHeight, APT_BUILD } from './models/apt.js';
 import { buildFutLot, futRoofHeight } from './models/fut.js';
 import { createHintArrow } from './hint.js';
@@ -59,7 +59,8 @@ const game = new Game();
 // 'city7' (a mesma cidade, com 1–2 postos e 4–5 prédios comerciais — Bairro 7), 'city8' (igual ao Bairro 7, porém 8×8 — Bairro 8).
 const COMPOSED = ['grid5', 'grid6s', 'city6', 'city7', 'city8'];   // bairros com composição sorteada a cada partida
 // Cada um tem sua própria cena, construída só na primeira vez que for jogado.
-const POOLS = { grid4: [...Array(16).keys()], plaza6: [...Array(32).keys()], grid5: [...Array(25).keys(), ...SHOPS],   // grid5: Bairro 4 (25 casas + prédios comerciais)
+const POOLS = { grid4: [...Array(16).keys(), ...Object.values(L1_FIXED)],   // grid4: as 16 casas + a casa fixa do Bairro 1 (só aparece nele)
+  plaza6: [...Array(32).keys()], grid5: [...Array(25).keys(), ...SHOPS],   // grid5: Bairro 4 (25 casas + prédios comerciais)
   grid6s: [...Array(32).keys(), ...SHOPS],        // grid6s (Bairro 5): 32 casas + os prédios comerciais
   city6: [...Array(32).keys()].concat([...Array(28).keys()].map(k => 38 + k)),   // city6 (Bairro 6): 32 casas + 28 prédios residenciais
   city7: [...Array(32).keys()].concat([...Array(28).keys()].map(k => 38 + k), SHOPS),   // city7 (Bairro 7): a cidade com postos e prédios comerciais
@@ -171,6 +172,14 @@ const monster = createMonster(world.scene, stage, audio);   // final secreto: 16
 const allDestroyed = () => game.pool.every(h => boom.isDestroyed(h));
 
 /** Troca o bairro jogado (grade, casas, cena, câmera e obstáculos). Começa uma rodada nova nele. */
+/** Bairros 4×4 (1 e 3) e praça: as casas de sempre; só o Bairro 1 tem a casa fixa do canto (L1_FIXED). */
+function setupGrid4() {
+  const lv = gameMode === 'career' ? careerLevel : freeLevel;
+  const l1 = neighborhood === 'grid4' && lv === 0;
+  const pool = POOLS[neighborhood].filter(h => l1 || !Object.values(L1_FIXED).includes(h));
+  game.setNeighborhood(pool, HOUSE_SLOTS, GRID * GRID, l1 ? L1_FIXED : null);
+  world.setLayout(game.layout);
+}
 function useNeighborhood(kind) {
   if (kind === neighborhood) return;
   boom.reset(); hint.clear(); heli.reset(); monster.reset();
@@ -187,10 +196,7 @@ function useNeighborhood(kind) {
   world.scene.add(walker.object); walker.show(false);
   hint.attach(world.scene);
   if (COMPOSED.includes(kind)) composeRound();   // Bairros 4 a 7: composição sorteada a cada partida
-  else {
-    game.setNeighborhood(POOLS[kind], HOUSE_SLOTS, GRID * GRID);
-    world.setLayout(game.layout);
-  }
+  else setupGrid4();
   van.reset();
   rig.refit();
   rig.snap({ x: van.x, z: van.z, heading: van.heading, speed: 0 });
@@ -296,6 +302,7 @@ function startFree(mode = 'free') {
   const lv = mode === 'career' ? careerLevel : freeLevel;
   useNeighborhood(lv === 1 ? 'plaza6' : lv === 3 ? 'grid5' : lv === 4 ? 'grid6s' : lv === 5 ? 'city6' : lv === 6 ? 'city7' : lv === 7 ? 'city8' : 'grid4');
   gameMode = mode;
+  if (!COMPOSED.includes(neighborhood)) setupGrid4();   // Bairro 1 tem a casa fixa; o 3 (mesma grade) não
   if (mode === 'career') career.startMatch(careerLevel); else career.stop();
   ENTRANCE_WALL.x0 = ENTRANCE.x0; ENTRANCE_WALL.x1 = ENTRANCE.x1;   // a entrada depende do bairro
   const w = SOLIDS.indexOf(ENTRANCE_WALL);

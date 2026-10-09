@@ -54,8 +54,9 @@ export class Game {
    * Define o bairro: `pool` = casas presentes, `slots` = lotes que recebem casa, `slotCount` = total de lotes
    * (lotes sem casa, como os da praça, ficam com -1 em layout). Começa uma rodada nova.
    */
-  setNeighborhood(pool, slots, slotCount) {
-    this.pool = pool.slice();
+  setNeighborhood(pool, slots, slotCount, fixed = null) {
+    this.candidates = pool.slice();           // casas que podem entrar no bairro
+    this.fixed = fixed || {};                 // { lote: casa } que nunca mudam (ex.: a casa do canto do Bairro 1)
     this.slots = slots.slice();
     this.slotCount = slotCount;
     this.prevRoute = null;
@@ -65,12 +66,16 @@ export class Game {
 
   /** Embaralha as casas nos lotes e sorteia uma nova rota de ROUTE_LEN casas (4 erradas + a certa). */
   newRound() {
+    const fixedHouses = Object.values(this.fixed);
+    const free = this.slots.filter(s => !(s in this.fixed));
     let perm;
-    do { perm = shuffle(this.pool.slice()); }
+    do { perm = shuffle(this.candidates.filter(h => !fixedHouses.includes(h))).slice(0, free.length); }
     while (this.prevPerm && perm.every((v, i) => v === this.prevPerm[i]));
     this.layout = Array(this.slotCount).fill(-1);   // layout[lote] = índice da casa (-1 = sem casa)
     this.slotOf = [];                               // slotOf[casa] = lote
-    this.slots.forEach((s, i) => { this.layout[s] = perm[i]; this.slotOf[perm[i]] = s; });
+    for (const s in this.fixed) { this.layout[s] = this.fixed[s]; this.slotOf[this.fixed[s]] = +s; }
+    free.forEach((s, i) => { this.layout[s] = perm[i]; this.slotOf[perm[i]] = s; });
+    this.pool = this.layout.filter(h => h >= 0);    // casas presentes nesta partida (as fixas também entram nas entregas)
 
     const len = ROUTE_LEN;
     let route;

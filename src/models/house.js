@@ -627,7 +627,7 @@ export function buildLot(house, { yardBuilders } = {}) {
   house.yardItems.forEach((key, i) => {
     const slot = A.yardSlots[i];
     if (!slot) return;
-    const z = key === 'bike' ? A.bikeZ : slot.z;
+    const z = key === 'bike' ? A.bikeZ : (house.yardZ && house.yardZ[key]) || slot.z;
     yardRects.push(key === 'bike'
       ? { x0: slot.x - 2.4, x1: slot.x + 2.4, z0: z - 1.2, z1: LOT }
       : { x0: slot.x - 2.3, x1: slot.x + 2.3, z0: z - 2.3, z1: z + 2.3 });

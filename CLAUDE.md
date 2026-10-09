@@ -183,7 +183,7 @@ Casas especiais usadas em missões:
 
 | Bairro | Grade | Como é |
 |---|---|---|
-| 1 | `grid4` 4×4 | 16 casas (também o modo Livre) |
+| 1 | `grid4` 4×4 | 16 lotes: o lote 15 (canto mais longe da entrada, à esquerda de quem entra) tem SEMPRE a casa fixa 86 "Seu Galdino" (telhado vermelho, galo, girassóis à esquerda, árvore sem folhas à direita mais perto da casa; `L1_FIXED` em `data.js`, `yardZ` muda a posição de um item do quintal); os outros 15 lotes sorteiam 15 das casas 0–15 (uma fica de fora a cada partida). A fixa entra normalmente nas entregas (falsas ou a certa). Vale na Carreira e no Livre do Bairro 1; o Bairro 3 (mesma grade) não tem |
 | 2 | `plaza6` 6×6 | praça 2×2 central (lotes 14, 15, 20, 21, a van não entra) + 32 casas |
 | 3 | `grid4` 4×4 | + 3 a 5 cavaletes de obra por partida |
 | 4 | `grid5` 5×5 | 1 posto, 2 prédios comerciais, casas (sempre com as de galo/fonte) + 4 a 6 bloqueios (cavalete/caminhão/buraco) |

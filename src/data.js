@@ -98,6 +98,12 @@ export const FUTS = [...Array(16).keys()].map(k => 70 + k);
 /** Índices de todos os prédios comerciais em HOUSES. */
 export const SHOPS = [32, 33, 34, 35, 36, 37, 66, 67, 68, 69];
 
+// ---- Casa fixa do Bairro 1 (índice 86): sempre no canto mais longe da entrada, à esquerda de quem entra (lote 15) ----
+// yardZ: posição própria de um item do quintal (a árvore sem folhas fica mais perto da casa, deixando a frente livre)
+HOUSES.push({ name: 'Seu Galdino', roof: 'red', f: ['rooster', 'sunflowers', 'bare'], yardZ: { bare: 11.0 } });
+/** Bairro 1: { lote: casa } sempre iguais em todas as partidas. */
+export const L1_FIXED = { 15: 86 };
+
 export const ROOF_ITEMS = ['chimney', 'dish', 'solar', 'tank', 'rooster', 'kite', 'patch'];
 export const YARD_ITEMS = ['fruit', 'bare', 'cactus', 'sunflowers', 'ballbush', 'doghouse', 'pool', 'trampoline',
   'swing', 'bike', 'flamingo', 'gnome', 'clothesline', 'tires', 'fountain'];
