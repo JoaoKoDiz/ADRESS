@@ -117,7 +117,7 @@ rm -f ADRESS-netlify.zip ADRESS-projeto-completo.zip && /c/Windows/System32/tar.
 | `layout.js` | Geometria e grade **configurável** (seção 5). |
 | `logic.js` | `Game` (rodada, rota, `visit`), `makeClue(h, pool)` (pista única no bairro), `ref(h)` ("a casa"/"o prédio"), `phrase`. |
 | `data.js` | `HOUSES` (casas, prédios comerciais, prédios residenciais), cores, `PHRASE` (texto de cada característica), falas `HINTS`/`REPEATS`, `REF`, `SHOPS`. |
-| `world.js` | Cena de um bairro: céu, luz, chão, sebe com portal "VILA ADRESS", árvores, lotes, praça, moradores, postos. |
+| `world.js` | Cena de um bairro: céu, **sol fixo** (`buildSun`: sprite a ~18° de altura na direção de quem entra, sul; aparece inclinando a câmera com o botão direito), luz, chão, sebe com portal "VILA ADRESS", árvores, lotes, praça, moradores, postos. |
 | `models/` | Modelos: `house.js`, `yard.js` (objetos de quintal), `shop.js`, `apt.js`, `gas.js` (posto), `resident.js`, `kit.js` (`box`, `cyl`, `cone`, `sphere`, `at`, `mat`, `dynamic`, `bakeStatic`, `textTexture`). |
 | `van.js`, `camera.js` | Física da van e colisão com `SOLIDS`; câmera chase/overview (braço desvia de casas via `CAM_BOXES`). |
 | `career.js` | Progresso das missões (localStorage), desbloqueio, regras de cada missão (`tick`, `visit`, `refuel`, `hint`), avisos (toasts). |

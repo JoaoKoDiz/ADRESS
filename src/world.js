@@ -256,6 +256,24 @@ function buildOutskirts(ground) {
 }
 
 // ---------- Luz ----------
+/** Sol fixo no céu: na direção de quem acaba de entrar no bairro (sul, +Z), ~18° acima do horizonte. */
+function buildSun() {
+  const cv = document.createElement('canvas'); cv.width = cv.height = 256;
+  const g = cv.getContext('2d'), c = 128;
+  const glow = g.createRadialGradient(c, c, 0, c, c, c);
+  glow.addColorStop(0, 'rgba(255,253,235,1)'); glow.addColorStop(0.17, 'rgba(255,247,200,1)');   // disco
+  glow.addColorStop(0.2, 'rgba(255,240,170,0.75)'); glow.addColorStop(0.45, 'rgba(255,236,160,0.22)');   // brilho em volta
+  glow.addColorStop(1, 'rgba(255,236,160,0)');
+  g.fillStyle = glow; g.fillRect(0, 0, 256, 256);
+  const tex = new THREE.CanvasTexture(cv); tex.colorSpace = THREE.SRGBColorSpace;
+  const sun = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, fog: false, depthWrite: false, toneMapped: false }));
+  const el = THREE.MathUtils.degToRad(18), D = 1200;
+  sun.position.set(MAP / 2, D * Math.sin(el), MAP / 2 + D * Math.cos(el));
+  sun.scale.setScalar(260);
+  sun.name = 'sun';
+  return sun;
+}
+
 function buildLights(scene) {
   const hemi = new THREE.HemisphereLight('#e6f3ff', '#8aa66a', 1.7);
   scene.add(hemi);
@@ -366,6 +384,7 @@ export function createWorld({ renderer, buildLot, buildResident, yardBuilders, p
   // névoa leve na cor do céu: o horizonte fica suave na câmera atrás da van (main.js a afasta na visão geral)
   scene.fog = new THREE.Fog(SKY, 3000, 3200);
   buildLights(scene);
+  scene.add(buildSun());
 
   const solidsStart = SOLIDS.length;          // os troncos das árvores de fora entram em SOLIDS aqui
   const ground = buildGround();
