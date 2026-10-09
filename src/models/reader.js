@@ -81,13 +81,9 @@ function readerHead(r) {
   }
   h.add(at(box(r * 0.08, r * 0.05, r * 0.3, M.frame), face(r * 0.14, 0) + r * 0.08, r * 0.14, 0));   // ponte dos óculos
   h.add(at(box(r * 0.05, r * 0.04, r * 0.34, M.mouth), face(-r * 0.42, 0) - 0.005, -r * 0.42, 0));  // boca reta
-  // cabelo loiro: calota + nuca + mechas caindo na testa e nos lados (formas chapadas, um pouco bagunçado)
-  h.add(at(mesh(new THREE.SphereGeometry(r * 1.07, 10, 6, 0, Math.PI * 2, 0, 1.25), M.hair), -r * 0.04, r * 0.04, 0));
+  // cabelo loiro: calota (puxada para trás, testa livre, sem franja) + nuca + mechas nos lados (formas chapadas)
+  h.add(at(mesh(new THREE.SphereGeometry(r * 1.07, 10, 6, 0, Math.PI * 2, 0, 1.25), M.hair), -r * 0.04, r * 0.04, 0, 0, 0, 0.42));
   h.add(mesh(new THREE.SphereGeometry(r * 1.05, 10, 7, -1.5, 3.0, 1.0, 0.95), M.hairD));
-  for (const [z, y, s] of [[-0.55, 0.42, 1], [-0.28, 0.5, 1.1], [0, 0.52, 1.15], [0.28, 0.5, 1.05], [0.55, 0.42, 1]]) {
-    const t = cone(r * 0.2 * s, r * 0.5, M.hair, 5);
-    t.position.set(face(y * r, z * r) - r * 0.02, y * r, z * r); t.rotation.set(z * 0.6, 0, Math.PI + 0.75); h.add(t);
-  }
   for (const s of [-1, 1]) for (const [x, y] of [[0.25, 0.25], [-0.15, 0.2]]) {
     const t = cone(r * 0.2, r * 0.55, M.hairD, 5);
     t.position.set(x * r, y * r, s * r * 0.92); t.rotation.set(s * (Math.PI - 0.4), 0, 0); h.add(t);
@@ -142,11 +138,12 @@ function readerSeated() {
   const paper = new THREE.Group();
   paper.position.copy(hp[0]).add(hp[1]).multiplyScalar(0.5);
   paper.rotation.z = 0.3;                                                          // inclinado para ele ler
+  paper.position.x += 0.07 * Math.cos(0.3); paper.position.y += 0.07 * Math.sin(0.3);   // as mãos ficam do lado de dentro (seguram o jornal por trás)
   g.add(paper);
-  const half = Math.abs(hp[1].z - hp[0].z) / 2 + 0.04, PW = half, PH = 0.46;
+  const half = Math.abs(hp[1].z - hp[0].z) / 2 + 0.04, PW = half * 1.3, PH = 0.6;   // jornal um pouco maior
   const pm = getPaperMats();
   for (const s of [-1, 1]) {
-    const page = new THREE.Group(); page.rotation.y = s * 0.28; paper.add(page);   // dobra no meio, abrindo para ele
+    const page = new THREE.Group(); page.rotation.y = -s * 0.28; paper.add(page);  // dobra no meio; as bordas vêm na direção dele (o miolo fica de frente para ele)
     const outer = new THREE.Mesh(new THREE.PlaneGeometry(PW, PH), s > 0 ? pm.front : pm.inner);   // lado de fora: capa (manchete) numa página, contracapa na outra
     outer.rotation.y = Math.PI / 2; outer.position.set(0.004, 0.02, s * PW / 2); page.add(outer);
     const inner = new THREE.Mesh(new THREE.PlaneGeometry(PW, PH), pm.inner);       // lado de dentro (ele lê)
