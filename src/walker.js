@@ -1,7 +1,7 @@
 // O motorista a pé (tecla L na van): anda livremente pelo bairro — entra nos quintais e na praça —, mas não entrega.
 // Colisão simples com caixas (AABB), deslizando nas paredes. Mesmo modelo/cores do motorista da tela inicial.
 import * as THREE from 'three';
-import { box, sphere, mesh, at } from './models/kit.js';
+import { sphere, mesh, mat, at } from './models/kit.js';
 
 const SKIN = '#e8b48a', SHIRT = '#2a9df4', PANTS = '#2f3a55', SHOES = '#1b1b1f', CAP = '#e3262e', GLASSES = '#111216';
 const SPEED = 6.5, BACK_SPEED = 3.5, TURN = 3.2, RADIUS = 0.55;
@@ -11,25 +11,32 @@ export function createWalker(scene) {
   root.visible = false;
   scene.add(root);
   const body = new THREE.Group();
-  body.scale.setScalar(0.85);                                  // ~2,1 de altura (a van tem 2,6)
+  body.scale.setScalar(0.9);                                   // ~2,1 de altura (a van tem 2,6)
   root.add(body);
-  // modelo olha para +X local (rotation.y = −heading)
+  // modelo olha para +X local (rotation.y = −heading). Formas arredondadas e sombreamento liso (nada de "caixinha")
+  const smooth = { flatShading: false, roughness: 0.6 };
+  const cap = (r, len, color, rs = 8) => mesh(new THREE.CapsuleGeometry(r, len, 6, 14), mat(color, smooth));
+  const ball = (r, color, sx = 1, sy = 1, sz = 1) => { const m = sphere(r, color, 20, 14, smooth); m.scale.set(sx, sy, sz); return m; };
   const legs = [], arms = [];
   for (const s of [-1, 1]) {
-    const leg = new THREE.Group(); leg.position.set(0, 0.95, s * 0.2);
-    leg.add(at(box(0.3, 0.95, 0.3, PANTS), 0, -0.47, 0), at(box(0.46, 0.2, 0.34, SHOES), 0.08, -0.9, 0));
+    const leg = new THREE.Group(); leg.position.set(0, 1.0, s * 0.2);
+    leg.add(at(cap(0.17, 0.55, PANTS), 0, -0.5, 0));
+    leg.add(at(ball(0.2, SHOES, 1.5, 0.7, 1), 0.1, -0.98, 0));                       // tênis
     body.add(leg); legs.push(leg);
-    const arm = new THREE.Group(); arm.position.set(0, 1.85, s * 0.5);
-    arm.add(at(box(0.26, 0.85, 0.26, SHIRT), 0, -0.4, 0), at(sphere(0.15, SKIN, 8, 6), 0, -0.9, 0));
+    const arm = new THREE.Group(); arm.position.set(0, 1.78, s * 0.46);
+    arm.add(at(cap(0.12, 0.5, SHIRT), 0, -0.36, 0));
+    arm.add(at(ball(0.14, SKIN), 0, -0.76, 0));                                      // mão
     body.add(arm); arms.push(arm);
   }
-  body.add(at(box(0.5, 0.95, 0.8, SHIRT), 0, 1.42, 0));
+  body.add(at(cap(0.36, 0.5, SHIRT), 0, 1.45, 0));                                   // tronco arredondado
+  body.add(at(ball(0.3, PANTS, 1, 0.8, 1.1), 0, 1.08, 0));                           // quadril
   const head = new THREE.Group(); head.position.set(0, 2.05, 0); body.add(head);
-  head.add(at(sphere(0.34, SKIN, 14, 10), 0, 0.3, 0));
-  head.add(at(mesh(new THREE.SphereGeometry(0.375, 14, 8, 0, Math.PI * 2, 0, 1.25), CAP), 0, 0.3, 0));
-  head.add(at(box(0.3, 0.05, 0.5, CAP), 0.4, 0.43, 0, 0, 0, 0.12));                  // aba para a frente (+X)
-  for (const s of [-1, 1]) head.add(at(box(0.05, 0.12, 0.2, GLASSES, { metalness: 0.4, roughness: 0.25 }), 0.3, 0.34, s * 0.13));
-  head.add(at(box(0.04, 0.03, 0.16, '#7a2e1a'), 0.31, 0.17, 0));                    // sorriso
+  head.add(at(ball(0.38, SKIN), 0, 0.3, 0));
+  head.add(at(ball(0.07, SKIN), 0.37, 0.28, 0));                                     // nariz
+  head.add(at(mesh(new THREE.SphereGeometry(0.41, 20, 12, 0, Math.PI * 2, 0, 1.2), mat(CAP, smooth)), 0, 0.3, 0));   // boné: calota lisa
+  head.add(at(ball(0.3, CAP, 1.15, 0.12, 1), 0.38, 0.45, 0, 0, 0, 0.1));             // aba arredondada
+  for (const s of [-1, 1]) head.add(at(ball(0.11, GLASSES, 0.4, 0.8, 1), 0.34, 0.35, s * 0.15));   // óculos
+  head.add(at(ball(0.06, '#7a2e1a', 0.5, 0.5, 2.2), 0.35, 0.17, 0));                // sorriso
   root.traverse(o => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = false; } });
 
   const st = { x: 0, z: 0, heading: 0, speed: 0 };
