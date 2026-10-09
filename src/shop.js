@@ -9,6 +9,7 @@ import { createWalker, setCharColors, CHAR_DEFAULT, CHAR_MATS } from './walker.j
 import { box, cyl, sphere, at, mat } from './models/kit.js';
 import { WHEEL_MODELS, WHEEL_DEFAULT, buildWheel, setWheelColors } from './models/wheels.js';
 import { RACK_MODELS, buildRack } from './models/racks.js';
+import { DECALS, decalSheet, setDecalChecks, DECAL_CHECK_DEFAULT } from './models/decals.js';
 
 const CSS = `
 .shopov { position: fixed; inset: 0; z-index: 25; display: none; padding: 62px clamp(14px, 2vw, 32px) clamp(14px, 2vw, 28px);
@@ -72,6 +73,8 @@ const CSS = `
 .shop-cardw { cursor: pointer; opacity: 1; border-style: solid; border-color: rgba(255,243,214,.35); }
 .shop-cardw:hover { border-color: #fff; }
 .shop-cardw.sel { border-color: #fff; background: rgba(138,85,196,.45); box-shadow: 0 0 0 3px #8a55c4; }
+.shop-items.wide { grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); }
+.shop-items.wide .img { aspect-ratio: 420 / 193; }
 .shop-cardw .img { padding: 0; overflow: hidden; }
 .shop-cardw img { width: 100%; height: 100%; object-fit: cover; display: block; }
 .shop-arrow { position: absolute; left: 10px; top: 50%; transform: translateY(-50%); width: 2.6em; height: 2.6em; border-radius: 50%; border: 3px solid #fff;
@@ -83,13 +86,15 @@ const CSS = `
 
 const KEY = 'adress.shop.v1';
 const HOLD_MS = 10000;                       // depois de mexer com o mouse, a rotação automática espera 10 s
-const DEFAULTS = { paint: VAN_PAINT_DEFAULT, ...CHAR_DEFAULT, wheelTire: WHEEL_DEFAULT.tire, wheelHub: WHEEL_DEFAULT.hub };
+const DEFAULTS = { paint: VAN_PAINT_DEFAULT, ...CHAR_DEFAULT, wheelTire: WHEEL_DEFAULT.tire, wheelHub: WHEEL_DEFAULT.hub, decalCheckA: DECAL_CHECK_DEFAULT.a, decalCheckB: DECAL_CHECK_DEFAULT.b };
+const CHECK_IDX = DECALS.findIndex(d => d.name === 'Faixa xadrez');
 const COLORS = {
   paint: ['#ff7a1a', '#e3262e', '#3a78d4', '#3c9d55', '#efbf2a', '#f2f2f2', '#2b2d33', '#8a55c4', '#e86aa0', '#19b5b0', '#8c9199', '#8a5a36'],
   cloth: ['#2a9df4', '#e3262e', '#3c9d55', '#efbf2a', '#8a55c4', '#e86aa0', '#ff7a1a', '#f2f2f2', '#2b2d33', '#2f3a55', '#8a5a36', '#19b5b0'],
   shoes: ['#1b1b1f', '#f2f2f2', '#e3262e', '#3a78d4', '#efbf2a', '#3c9d55', '#8a5a36', '#ff7a1a', '#8a55c4', '#e86aa0', '#8c9199', '#2f3a55'],
   wTire: ['#1f2023', '#3a3d44', '#8c9199', '#f2f2f2', '#e3262e', '#3a78d4', '#efbf2a', '#3c9d55'],
   wHub: ['#c9ced6', '#f2f2f2', '#efbf2a', '#e3262e', '#3a78d4', '#19b5b0', '#8a55c4', '#1f2023'],
+  dCheck: ['#1b1b1f', '#f2f2f2', '#e3262e', '#3a78d4', '#efbf2a', '#3c9d55', '#8a55c4', '#e86aa0'],
   skin: ['#ffe0c7', '#f6cfa8', '#e8b48a', '#d39a6f', '#b9784f', '#8d5a3b', '#6b4128', '#4a2c1a', '#f3d2c0', '#e0ac9a'],
 };
 // sec: 'van' | 'char'. kind: 'items' (à venda; ainda vazio) | 'color' (grátis; key = chave em `colors`)
@@ -97,7 +102,7 @@ const CATS = [
   { id: 'wheels', sec: 'van', name: 'Rodas', kind: 'items', desc: '8 modelos de roda (o primeiro é o padrão). Só a roda padrão tem cores editáveis, no canto da pré-visualização: as outras 7 são únicas.' },
   { id: 'rack', sec: 'van', name: 'Bagageiro', kind: 'items', desc: `O que vai em cima da van. O padrão são as caixas de entrega; os outros ${RACK_MODELS.length - 1} modelos têm cores fixas (não dá para mudar).` },
   { id: 'paint', sec: 'van', name: 'Pintura', kind: 'color', key: 'paint', pal: 'paint', desc: 'A cor da lataria da van.' },
-  { id: 'decals', sec: 'van', name: 'Estampas', kind: 'items', desc: 'Detalhes extras na lataria. O texto ADRESS fica sempre lá: as estampas só complementam, não trocam nem cobrem.' },
+  { id: 'decals', sec: 'van', name: 'Estampas', kind: 'items', desc: `Desenhos na lataria, feitos à mão e diferentes em cada lado. O texto ADRESS fica sempre lá (só as asas chegam a cobrir um pouco). ${DECALS.length - 1} estampas.` },
   { id: 'caps', sec: 'char', name: 'Bonés', kind: 'items', desc: 'Bonés para o seu entregador.' },
   { id: 'shirt', sec: 'char', name: 'Camisas', kind: 'color', key: 'shirt', pal: 'cloth', desc: 'A cor da camisa.' },
   { id: 'pants', sec: 'char', name: 'Calças', kind: 'color', key: 'pants', pal: 'cloth', desc: 'A cor da calça.' },
@@ -123,7 +128,7 @@ export function createShop() {
     const saved = JSON.parse(localStorage.getItem(KEY) || 'null');
     if (saved) for (const k of Object.keys(DEFAULTS)) { const h = normHex(saved[k]); if (h) colors[k] = h; }
   } catch (e) { /* ignora */ }
-  const applyColors = () => { setVanPaint(colors.paint); setCharColors(colors); setWheelColors({ tire: colors.wheelTire, hub: colors.wheelHub }); };
+  const applyColors = () => { setVanPaint(colors.paint); setCharColors(colors); setWheelColors({ tire: colors.wheelTire, hub: colors.wheelHub }); setDecalChecks(colors.decalCheckA, colors.decalCheckB); };
   const save = () => { try { localStorage.setItem(KEY, JSON.stringify(colors)); } catch (e) { /* ignora */ } };
   applyColors();
 
@@ -145,6 +150,7 @@ export function createShop() {
   let cat = CATS[0], view = 'van';
   let wheelSel = 0;                         // roda em visualização (0 = padrão; as outras ainda não estão à venda)
   let wheelThumbs = null, rackThumbs = null;
+  let decalSel = 0, decalThumbs = null;     // estampa em visualização (0 = sem estampa)
   let rackSel = 0;                          // bagageiro em visualização (0 = caixas, o padrão)          // view (categorias da van): 'van' = item na van atual | 'item' = item sozinho
 
   // ---------- lista de categorias ----------
@@ -168,7 +174,7 @@ export function createShop() {
     main.innerHTML = '';
     const h = document.createElement('h3'); h.textContent = (cat.sec === 'van' ? 'Van · ' : 'Personagem · ') + cat.name; main.appendChild(h);
     const d = document.createElement('div'); d.className = 'shop-desc'; d.textContent = cat.desc; main.appendChild(d);
-    if (cat.id === 'wheels' || cat.id === 'rack') { gallery(); return; }
+    if (cat.id === 'wheels' || cat.id === 'rack' || cat.id === 'decals') { gallery(); return; }
     if (cat.kind === 'items') {
       const e = document.createElement('div'); e.className = 'shop-empty'; e.textContent = 'Nada à venda por enquanto. Os itens vão aparecer aqui.'; main.appendChild(e);
       const g = document.createElement('div'); g.className = 'shop-items';
@@ -207,21 +213,25 @@ export function createShop() {
   }
 
   // ---------- galeria de modelos (Rodas e Bagageiro) ----------
+  const GAL = {
+    wheels: { models: WHEEL_MODELS, get: () => wheelSel, set: v => { wheelSel = v; }, key: 'wheels', eq: 'Equipada', msg: 'Clique num modelo para ver na van. Por enquanto só a roda padrão está equipada; as outras 7 ainda não estão à venda.' },
+    rack: { models: RACK_MODELS, get: () => rackSel, set: v => { rackSel = v; }, key: 'rack', eq: 'Equipado', msg: n => `Clique num modelo para ver na van. Por enquanto só o padrão (caixas) está equipado; os outros ${n} ainda não estão à venda.` },
+    decals: { models: DECALS, get: () => decalSel, set: v => { decalSel = v; }, key: 'decals', eq: 'Equipada', wide: true, msg: n => `Clique numa estampa para ver na van (cada lado é diferente). Por enquanto nenhuma está equipada nem à venda; as ${n} estampas só podem ser vistas.` },
+  };
   function gallery() {
-    const isW = cat.id === 'wheels', models = isW ? WHEEL_MODELS : RACK_MODELS, th = thumbs(isW ? 'wheels' : 'rack');
+    const G = GAL[cat.id], models = G.models, th = thumbs(G.key);
     const e = document.createElement('div'); e.className = 'shop-empty';
-    e.textContent = isW ? 'Clique num modelo para ver na van. Por enquanto só a roda padrão está equipada; as outras 7 ainda não estão à venda.'
-      : `Clique num modelo para ver na van. Por enquanto só o padrão (caixas) está equipado; os outros ${models.length - 1} ainda não estão à venda.`;
+    e.textContent = typeof G.msg === 'function' ? G.msg(models.length - 1) : G.msg;
     main.appendChild(e);
-    const g = document.createElement('div'); g.className = 'shop-items';
+    const g = document.createElement('div'); g.className = 'shop-items' + (G.wide ? ' wide' : '');
     const dsc = document.createElement('div'); dsc.className = 'shop-desc';
-    const show = () => { const i = isW ? wheelSel : rackSel; dsc.textContent = models[i].name + ' — ' + models[i].desc; };
+    const show = () => { const i = G.get(); dsc.textContent = models[i].name + ' — ' + models[i].desc; };
     models.forEach((m, i) => {
-      const c = document.createElement('div'); c.className = 'shop-item shop-cardw' + (i === (isW ? wheelSel : rackSel) ? ' sel' : ''); c.dataset.i = i;
-      c.innerHTML = `<div class="img"><img src="${th[i]}" alt=""></div><b>${m.name}</b><small>${i === 0 ? 'Equipado' : 'Em breve — moedas'}</small>`;
+      const c = document.createElement('div'); c.className = 'shop-item shop-cardw' + (i === G.get() ? ' sel' : ''); c.dataset.i = i;
+      c.innerHTML = `<div class="img"><img src="${th[i]}" alt=""></div><b>${m.name}</b><small>${i === 0 ? (cat.id === 'decals' ? 'Padrão' : G.eq) : 'Em breve — moedas'}</small>`;
       c.title = m.desc;
       c.addEventListener('click', () => {
-        if (isW) wheelSel = i; else rackSel = i;
+        G.set(i);
         g.querySelectorAll('.shop-cardw').forEach(x => x.classList.toggle('sel', +x.dataset.i === i));
         show(); itemPreview();
       });
@@ -234,6 +244,10 @@ export function createShop() {
   function thumbs(kind) {
     if (kind === 'wheels' && wheelThumbs) return wheelThumbs;
     if (kind === 'rack' && rackThumbs) return rackThumbs;
+    if (kind === 'decals') {                                          // miniaturas 2D (lateral direita da van com a estampa); refeitas ao trocar a pintura/xadrez
+      if (!decalThumbs) decalThumbs = DECALS.map((d, i) => decalSheet(i, 1, 420).toDataURL('image/png'));
+      return decalThumbs;
+    }
     const r = new THREE.WebGLRenderer({ antialias: true, alpha: true, preserveDrawingBuffer: true });
     r.setSize(160, 120, false);
     const sc = new THREE.Scene();
@@ -256,9 +270,13 @@ export function createShop() {
     return out;
   }
   const wcolor = el.querySelector('.shop-wcolor');
-  function buildWheelColors() {
-    wcolor.innerHTML = '<small>Cores da roda padrão (só nela)</small>';
-    const rows = [['Aro', 'wheelTire', COLORS.wTire], ['Centro', 'wheelHub', COLORS.wHub]];
+  let panelFor = null;
+  function colorPanel(kind) {                // painel pequeno no canto da pré-visualização: roda padrão (aro/centro) ou xadrez (cor 1/cor 2)
+    if (panelFor === kind) return;
+    panelFor = kind;
+    const wheel = kind === 'wheel';
+    wcolor.innerHTML = `<small>${wheel ? 'Cores da roda padrão (só nela)' : 'Cores do xadrez'}</small>`;
+    const rows = wheel ? [['Aro', 'wheelTire', COLORS.wTire], ['Centro', 'wheelHub', COLORS.wHub]] : [['Cor 1', 'decalCheckA', COLORS.dCheck], ['Cor 2', 'decalCheckB', COLORS.dCheck]];
     for (const [label, key, pal] of rows) {
       const row = document.createElement('div'); row.className = 'shop-wrow';
       row.innerHTML = `<b>${label}</b>`;
@@ -268,7 +286,16 @@ export function createShop() {
         if (document.activeElement !== input) input.value = colors[key].toUpperCase();
         input.classList.remove('bad');
       };
-      const set = hex => { colors[key] = hex; applyColors(); save(); paint(); };
+      const set = hex => {
+        colors[key] = hex; applyColors(); save(); paint();
+        if (!wheel) {                                                  // xadrez: redesenha a estampa na van e a miniatura
+          if (pv) pv.van.refreshDecal();
+          decalThumbs = null;
+          const img = main.querySelector(`.shop-cardw[data-i="${CHECK_IDX}"] img`);
+          if (img) img.src = thumbs('decals')[CHECK_IDX];
+          decalItem();
+        }
+      };
       for (const c of pal) {
         const b = document.createElement('button'); b.type = 'button'; b.style.background = c; b.dataset.c = c; b.title = c.toUpperCase();
         b.addEventListener('click', () => { input.blur(); set(c); });
@@ -280,10 +307,25 @@ export function createShop() {
       row.appendChild(input); wcolor.appendChild(row); paint();
     }
   }
-  function itemPreview() {                  // atualiza van e itens sozinhos da pré-visualização; painel de cores só na roda padrão
-    wcolor.classList.toggle('on', cat.id === 'wheels' && wheelSel === 0);
+  function decalItem() {                     // estampa "sozinha" (lateral da van com a estampa), um lado em cada face do cartaz
     if (!pv) return;
-    const w = cat.id === 'wheels' ? wheelSel : 0, rk = cat.id === 'rack' ? rackSel : 0;
+    while (pv.decal.children.length) { const o = pv.decal.children[0]; if (o.material.map) o.material.map.dispose(); pv.decal.remove(o); }
+    const dc = cat.id === 'decals' ? decalSel : 0;
+    for (const side of [1, -1]) {
+      const t = new THREE.CanvasTexture(decalSheet(dc, side)); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 4;
+      const pl = new THREE.Mesh(new THREE.PlaneGeometry(4.8 * 0.52, 2.2 * 0.52), new THREE.MeshStandardMaterial({ map: t, roughness: 0.8, transparent: true }));
+      if (side < 0) pl.rotation.y = Math.PI;
+      pl.position.z = side * 0.01; pv.decal.add(pl);
+    }
+  }
+  function itemPreview() {                  // atualiza van e itens sozinhos da pré-visualização; painel de cores só na roda padrão
+    const showWheel = cat.id === 'wheels' && wheelSel === 0, showCheck = cat.id === 'decals' && decalSel === CHECK_IDX;
+    if (showWheel) colorPanel('wheel'); else if (showCheck) colorPanel('check');
+    wcolor.classList.toggle('on', showWheel || showCheck);
+    if (!pv) return;
+    const w = cat.id === 'wheels' ? wheelSel : 0, rk = cat.id === 'rack' ? rackSel : 0, dcl = cat.id === 'decals' ? decalSel : 0;
+    if (pv.shown.d !== dcl) { pv.van.setDecalModel(dcl); pv.shown.d = dcl; }
+    if (cat.id === 'decals') decalItem();
     if (pv.shown.w !== w) { pv.van.setWheelModel(w); pv.shown.w = w; }
     if (pv.shown.r !== rk) { pv.van.setRackModel(rk); pv.shown.r = rk; }
     while (pv.wheel.children.length) pv.wheel.remove(pv.wheel.children[0]);
@@ -318,19 +360,14 @@ export function createShop() {
     const disc = new THREE.Mesh(new THREE.CylinderGeometry(1.5, 1.5, 0.3, 40), sMat); disc.position.y = 0.55;
     const drop = new THREE.Mesh(new THREE.SphereGeometry(0.9, 24, 16), sMat); drop.position.y = 1.4;
     swatch.add(disc, drop); scene.add(swatch);
-    const dc = document.createElement('canvas'); dc.width = 256; dc.height = 256;
-    const g2 = dc.getContext('2d'); g2.fillStyle = '#f4efe3'; g2.fillRect(0, 0, 256, 256); g2.strokeStyle = '#8a55c4'; g2.lineWidth = 8; g2.setLineDash([18, 12]); g2.strokeRect(14, 14, 228, 228);
-    g2.fillStyle = '#8a55c4'; g2.font = 'bold 34px "Trebuchet MS", sans-serif'; g2.textAlign = 'center'; g2.fillText('ESTAMPA', 128, 150);
-    const dTex = new THREE.CanvasTexture(dc); dTex.colorSpace = THREE.SRGBColorSpace;
-    const decal = new THREE.Mesh(new THREE.PlaneGeometry(3, 3), new THREE.MeshStandardMaterial({ map: dTex, roughness: 0.8, side: THREE.DoubleSide }));
-    decal.position.y = 1.8; scene.add(decal);
+    const decal = new THREE.Group(); decal.position.y = 1.8; scene.add(decal);                       // cartaz com a lateral da van + estampa (itemPreview preenche)
     const camera = new THREE.PerspectiveCamera(32, 1, 0.1, 100);
     const resize = () => {
       const w = Math.max(1, canvasBox.clientWidth), h = Math.max(1, canvasBox.clientHeight);
       renderer.setSize(w, h, false); camera.aspect = w / h; camera.updateProjectionMatrix();
     };
     new ResizeObserver(resize).observe(canvasBox); resize();
-    pv = { renderer, scene, camera, van, walker, wheel, rack, swatch, decal, sMat, t: 0, base, angle: 0.9, holdUntil: 0, shown: { w: 0, r: 0 }, rackH: 1 };
+    pv = { renderer, scene, camera, van, walker, wheel, rack, swatch, decal, sMat, t: 0, base, angle: 0.9, holdUntil: 0, shown: { w: 0, r: 0, d: 0 }, rackH: 1 };
     // girar com o mouse: arrastar (botão esquerdo) gira a van/personagem; ao mexer, a rotação automática pausa por 10 s
     // (a cada novo movimento o prazo recomeça) e depois continua de onde parou
     let drag = null;
@@ -380,7 +417,7 @@ export function createShop() {
       if (char) pv.walker.update(dt, { x: 0, z: 0 }, 'car', [], { x: 1e6, z: 1e6 });
       pv.van.swayDemo(pv.t);                                       // a torre de caixas balança na pré-visualização
       pv.wheel.rotation.z = pv.t * 0.9;                            // gira em torno do próprio eixo
-      pv.decal.rotation.y = pv.t * 0.8;
+      pv.decal.rotation.y = Math.sin(pv.t * 0.6) * 0.9;                // o cartaz balança mostrando um lado e o outro
       pv.renderer.render(pv.scene, pv.camera);
     }
     requestAnimationFrame(frame);
@@ -397,6 +434,7 @@ export function createShop() {
     side.querySelectorAll('.shop-cat').forEach(b => b.classList.toggle('sel', b.dataset.id === c.id));
     if (c.id !== 'wheels') wheelSel = 0;
     if (c.id !== 'rack') rackSel = 0;
+    if (c.id !== 'decals') decalSel = 0;
     buildMain(); paintView(); pose(); itemPreview();
   }
   const toggleView = () => { if (cat.sec !== 'van') return; view = view === 'van' ? 'item' : 'van'; paintView(); pose(); };
@@ -412,7 +450,7 @@ export function createShop() {
     }
   });
 
-  buildSide(); buildMain(); paintView(); buildWheelColors();
+  buildSide(); buildMain(); paintView();
   return {
     open() {
       el.classList.add('on');

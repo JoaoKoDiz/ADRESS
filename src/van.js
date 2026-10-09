@@ -6,6 +6,7 @@ import { mat, mesh, box, cyl, at, group, dynamic, bakeStatic } from './models/ki
 import { buildWheel, WHEEL_R, WHEEL_W } from './models/wheels.js';
 import { buildRack, tickRackBlink } from './models/racks.js';
 import { PAINT, setVanPaint, getVanPaint, VAN_PAINT_DEFAULT } from './models/paint.js';
+import { decalTexture } from './models/decals.js';
 
 // ---------- Física ----------
 const MAX = 21, ACC = 2.2, DEC = 3.5, TURN = 4.6;
@@ -154,6 +155,13 @@ function buildModel() {
     body.add(p);
   }
 
+  // estampas (Shop → Estampas): um plano transparente por lado, por cima do logotipo (que nunca é trocado nem coberto, salvo pelas asas)
+  const decals = [1, -1].map(s => {
+    const m = new THREE.MeshStandardMaterial({ transparent: true, roughness: 0.85, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 });
+    const p = dynamic(at(new THREE.Mesh(new THREE.PlaneGeometry(4.8, 1.8), m), 0, 1.3, s * (SIDE_Z + 0.013), 0, s > 0 ? 0 : Math.PI, 0));
+    p.visible = false; p.renderOrder = 2; body.add(p); return p;
+  });
+
   bakeStatic(body);
 
   // rodas (giram com a distância percorrida)
@@ -165,12 +173,13 @@ function buildModel() {
     root.add(pivot);
     wheels.push(pivot);
   }
-  return { root, body, wheels, setRack };
+  return { root, body, wheels, setRack, decals };
 }
 
 // ---------- API ----------
 export function createVan(scene) {
-  const { root, body, wheels, setRack } = buildModel();
+  const { root, body, wheels, setRack, decals } = buildModel();
+  let decalModel = 0;
   root.name = 'van';
   scene.add(root);
 
@@ -333,6 +342,17 @@ export function createVan(scene) {
     /** Troca o modelo das rodas (Shop): 0 = padrão. */
     /** Troca a carga do teto (Shop): 0 = caixas. */
     setRackModel(m) { setRack(m); findSway(); },
+    /** Estampa da lateral (Shop): 0 = sem estampa. */
+    setDecalModel(m) {
+      decalModel = m;
+      decals.forEach((p, k) => {
+        const t = decalTexture(m, k === 0 ? 1 : -1), mt = p.material;
+        if (mt.map) mt.map.dispose();
+        mt.map = t; mt.needsUpdate = true; p.visible = !!t;
+      });
+    },
+    /** Redesenha a estampa atual (ex.: depois de trocar as cores do xadrez). */
+    refreshDecal() { if (decalModel) this.setDecalModel(decalModel); },
     /** Só para a pré-visualização do Shop: balança a torre de caixas sozinha (a van lá não anda). */
     /** Fora da direção (diálogo, a pé, etc.): a torre vai parando sozinha, sem ficar torta. */
     relax(dt) {
