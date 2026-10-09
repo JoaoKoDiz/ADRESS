@@ -55,7 +55,7 @@ function buildGround() {
   const cx = (ENTRANCE.x0 + ENTRANCE.x1) / 2;
 
   // grama até o horizonte
-  g.add(at(plane(1600, 1600, GRASS), MAP / 2, -0.04, MAP / 2));
+  g.add(at(plane(4000, 4000, GRASS), MAP / 2, -0.04, MAP / 2));
   // manchas de grama fora do bairro (quebram a monotonia)
   const disc = new THREE.CylinderGeometry(1, 1, 0.02, 9);
   for (let i = 0; i < 70; i++) {

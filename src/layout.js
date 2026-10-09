@@ -105,8 +105,8 @@ function rebuildBaseSolids() {
 }
 configureGrid('grid4');
 
-// limite do mundo (o gramado vai até ~800 unidades do centro)
-export const BOUNDS = { min: -680, max: 110 + 680 };
+// limite do mundo; ao sul vai bem mais longe, até depois da igreja do Bairro 1 (o gramado vai até ~2000 do centro)
+export const BOUNDS = { min: -680, max: 110 + 680, zMax: 110 + 1500 };
 
 // ---- Pontos de referência DENTRO do lote (coordenadas locais: origem no canto noroeste, 0..LOT) ----
 export const LOT_ANCHORS = {

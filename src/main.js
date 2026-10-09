@@ -583,7 +583,7 @@ function endRoofScene() {
 // Fica escondida (nem a silhueta) até o jogador, fora do bairro, dirigir ~5 s na direção do sol (sul); aí surge aos poucos.
 const ROOF_KEY = 'adress.l6.roofTalk';
 const roofDone = () => { try { return localStorage.getItem(ROOF_KEY) === '1'; } catch (e) { return false; } };
-const CHURCH_Z = 230;                                   // distância ao sul da sebe
+const CHURCH_Z = 1150;                                  // distância ao sul da sebe (bem longe: ~1 min dirigindo)
 let church = null, churchOn = false, churchT = 0, churchA = 0, churchShown = false;
 const churchSolids = [];
 function setupChurch() {
@@ -599,6 +599,8 @@ function setupChurch() {
   church.visible = false;
   world.scene.add(church);
 }
+let sunSprite = null; const SUN_OFS = new THREE.Vector3();
+function grabSun() { sunSprite = world.scene.getObjectByName('sun'); if (sunSprite) SUN_OFS.set(0, sunSprite.position.y, sunSprite.position.z - MAP / 2); }
 const MAP_W = () => MAP;                                // largura do bairro (lado do quadrado, com a sebe)
 function updateChurch(dt) {
   if (!churchOn) return;
@@ -836,6 +838,8 @@ function update(dt, t) {
   // névoa só na câmera atrás da van (suaviza o horizonte); a visão geral fica nítida
   const fb = rig.blend, fog = world.scene.fog;
   if (fog) { fog.near = 3000 + (130 - 3000) * fb; fog.far = 3200 + (430 - 3200) * fb; }
+  if (!sunSprite || sunSprite.parent !== world.scene) grabSun();
+  if (sunSprite) sunSprite.position.set(rig.camera.position.x, 0, rig.camera.position.z).add(SUN_OFS);   // sol acompanha a câmera (fica sempre no mesmo lugar do céu, por mais longe que se dirija)
   const shake = Math.max(hint.shake, boom.shake);
   if (shake > 0) {                                       // tremor da câmera no impacto
     const s = shake * shake * 0.9;

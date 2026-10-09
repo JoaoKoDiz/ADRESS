@@ -256,7 +256,7 @@ export function createVan(scene, opts) {
   let ghost = false;                 // "van imparável" (menu): atravessa tudo
   function collide() {
     let hit = false;
-    const lo = BOUNDS.min + R, hi = BOUNDS.max - R;
+    const lo = BOUNDS.min + R, hi = BOUNDS.max - R, hiZ = BOUNDS.zMax - R;
     for (let it = 0; it < 3; it++) {
       for (let k = 0; k < OFFS.length; k++) {
         const c = Math.cos(heading), s = Math.sin(heading);
@@ -281,7 +281,7 @@ export function createVan(scene, opts) {
         if (cx < lo) { x += lo - cx; hit = true; }
         if (cx > hi) { x -= cx - hi; hit = true; }
         if (cz < lo) { z += lo - cz; hit = true; }
-        if (cz > hi) { z -= cz - hi; hit = true; }
+        if (cz > hiZ) { z -= cz - hiZ; hit = true; }
       }
     }
     return hit;
