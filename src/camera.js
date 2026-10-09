@@ -28,7 +28,7 @@ function buildFit() {
   const pts = [];
   for (const x of [0, MAP]) {
     for (const z of [0, MAP]) pts.push([x, 0, z], [x, 1.6, z]);
-    pts.push([x, 4.6, 0], [x, 9, 10]);
+    pts.push([x, 4.6, 0], [x, BUILD_H > 20 ? BUILD_H * 0.75 : 9, 10]);
   }
   // coordenadas de cada ponto na base da câmera
   FIT_A = pts.map(p => p[0]);

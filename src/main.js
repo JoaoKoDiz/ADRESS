@@ -13,8 +13,9 @@ import { buildLot } from './models/house.js';
 import { buildResident } from './models/resident.js';
 import { YARD_BUILDERS } from './models/yard.js';
 import { buildShopLot } from './models/shop.js';
-import { SHOPS, HOUSES } from './data.js';
-import { buildAptLot, APT_ROOF, aptRoofHeight } from './models/apt.js';
+import { SHOPS, HOUSES, FUTS } from './data.js';
+import { buildAptLot, APT_ROOF, aptRoofHeight, APT_BUILD } from './models/apt.js';
+import { buildFutLot, futRoofHeight } from './models/fut.js';
 import { createHintArrow } from './hint.js';
 import { createHintButton } from './hintButton.js';
 import { createLockButton } from './lockButton.js';
@@ -61,9 +62,10 @@ const POOLS = { grid4: [...Array(16).keys()], plaza6: [...Array(32).keys()], gri
   grid6s: [...Array(32).keys(), ...SHOPS],        // grid6s (Bairro 5): 32 casas + os prédios comerciais
   city6: [...Array(32).keys()].concat([...Array(28).keys()].map(k => 38 + k)),   // city6 (Bairro 6): 32 casas + 28 prédios residenciais
   city7: [...Array(32).keys()].concat([...Array(28).keys()].map(k => 38 + k), SHOPS),   // city7 (Bairro 7): a cidade com postos e prédios comerciais
-  city8: [...Array(32).keys()].concat([...Array(28).keys()].map(k => 38 + k), SHOPS) };   // city8 (Bairro 8): o mesmo, em 8×8
+  city8: [...Array(32).keys()].concat([...Array(28).keys()].map(k => 38 + k), SHOPS, FUTS) };   // city8 (Bairro 8): o mesmo, em 8×8, com prédios mais altos e os futuristas
 // lote de casa ou de prédio comercial
-const buildAnyLot = (h, opts) => h.kind === 'shop' ? buildShopLot(h) : h.kind === 'apt' ? buildAptLot(h) : buildLot(h, opts);
+const buildAnyLot = (h, opts) => h.kind === 'shop' ? buildShopLot(h) : h.kind === 'apt' ? buildAptLot(h) : h.kind === 'fut' ? buildFutLot(h) : buildLot(h, opts);
+const TALL_FLOORS = 9;                         // Bairro 8: prédios residenciais mais altos (os outros bairros têm 5 andares)
 let world = createWorld({ renderer, buildLot: buildAnyLot, buildResident, yardBuilders: YARD_BUILDERS, pool: POOLS.grid4 });
 const worlds = { grid4: world };
 let neighborhood = 'grid4';
@@ -91,7 +93,7 @@ function composeRound() {
   if (city8) {                                  // Bairro 8 (8×8): como o 7, mas só há 28 prédios residenciais: entram todos e as casas completam os lotes
     const nShops = 4 + Math.floor(Math.random() * 2);
     const apts = [...Array(28).keys()].map(k => 38 + k);
-    pool = apts.concat(shuffled(allHouses).slice(0, HOUSE_SLOTS.length - nShops - apts.length), shuffled(SHOPS).slice(0, nShops));
+    pool = apts.concat(FUTS, shuffled(allHouses).slice(0, HOUSE_SLOTS.length - nShops - apts.length - FUTS.length), shuffled(SHOPS).slice(0, nShops));
   } else if (city7) {                           // Bairro 7: 4–5 prédios comerciais, 4 casas e o resto de prédios residenciais
     const nShops = 4 + Math.floor(Math.random() * 2), nHouses = 4;
     const apts = [...Array(28).keys()].map(k => 38 + k);
@@ -142,14 +144,14 @@ const heli = createHeli(van, audio);        // tecla H: vira helicóptero
 heli.setGround((x, z) => {
   for (const s of HOUSE_SLOTS) {
     const h = game.layout[s];
-    if (h < 0 || HOUSES[h].kind !== 'apt' || boom.isDestroyed(h)) continue;
+    if (h < 0 || !['apt', 'fut'].includes(HOUSES[h].kind) || boom.isDestroyed(h)) continue;
     const o = slotOrigin(s), R = APT_ROOF;
-    if (x > o.x + R.x0 + 0.5 && x < o.x + R.x1 - 0.5 && z > o.z + R.z0 + 0.5 && z < o.z + R.z1 - 0.5) return aptRoofHeight(HOUSES[h], x - o.x, z - o.z);
+    if (x > o.x + R.x0 + 0.5 && x < o.x + R.x1 - 0.5 && z > o.z + R.z0 + 0.5 && z < o.z + R.z1 - 0.5) return HOUSES[h].kind === 'fut' ? futRoofHeight(HOUSES[h], x - o.x, z - o.z) : aptRoofHeight(HOUSES[h], x - o.x, z - o.z);
   }
   return 0;
 });
 const walker = createWalker(world.scene);   // tecla L: o motorista desce e anda a pé
-const FOOT = { house: [4.1, 13.1, 1.5, 8.5], shop: [3.8, 13.4, 1.5, 8.5], apt: [3.4, 13.8, 1.2, 8.5] };   // paredes (locais do lote)
+const FOOT = { house: [4.1, 13.1, 1.5, 8.5], shop: [3.8, 13.4, 1.5, 8.5], apt: [3.4, 13.8, 1.2, 8.5], fut: [3.4, 13.8, 1.2, 8.5] };   // paredes (locais do lote)
 /** Obstáculos de quem anda a pé: tudo menos os lotes inteiros e a praça (dá para entrar nos quintais); só as paredes das casas. */
 function walkSolids() {
   const out = SOLIDS.slice(HOUSE_SLOTS.length + (PLAZA ? 1 : 0));   // postos, sebe, troncos, parede da entrada, bloqueios
@@ -169,6 +171,7 @@ const allDestroyed = () => game.pool.every(h => boom.isDestroyed(h));
 function useNeighborhood(kind) {
   if (kind === neighborhood) return;
   boom.reset(); hint.clear(); heli.reset(); monster.reset();
+  APT_BUILD.floors = kind === 'city8' ? TALL_FLOORS : 5;   // antes de construir a cena do bairro
   configureGrid(kind);
   let w = worlds[kind];
   if (!w) {                                     // primeira vez: constrói (escondido pelo fade)

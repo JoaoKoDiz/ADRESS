@@ -6,7 +6,8 @@ import { mat, cone, cyl, box, at } from './models/kit.js';
 import { HOUSES, ROOF_COL } from './data.js';
 import { LOT_ANCHORS, slotOrigin } from './layout.js';
 import { GROUND_Y } from './models/house.js';
-import { APT_HEIGHT } from './models/apt.js';
+import { aptHeight } from './models/apt.js';
+import { futTopY } from './models/fut.js';
 
 const A = LOT_ANCHORS, HS = A.house;
 const HX = (HS.x0 + HS.x1) / 2, HZ = (HS.z0 + HS.z1) / 2, HALF = (HS.z1 - HS.z0) / 2;
@@ -150,7 +151,7 @@ export function createHintArrow(scene, audio) {
       cx = o.x + HX; cz = o.z + HZ;
       roofColor = ROOF_COL[HOUSES[h].roof] || '#8f8a82';      // prédios: laje cinza
       const kind = HOUSES[h].kind;
-      surf = kind === 'apt' ? GROUND_Y + APT_HEIGHT + 0.1 : kind === 'shop' ? GROUND_Y + 6.7 : ROOF_SURF;
+      surf = kind === 'apt' ? GROUND_Y + aptHeight() + 0.1 : kind === 'fut' ? GROUND_Y + futTopY(HOUSES[h]) + 0.1 : kind === 'shop' ? GROUND_Y + 6.7 : ROOF_SURF;
       tan = kind === 'house' ? TAN : 0; slope = kind === 'house' ? THETA : 0;
       arrow.position.set(cx, START_Y, cz);
       arrow.rotation.set(0, 0, 0);

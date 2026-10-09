@@ -85,6 +85,16 @@ HOUSES.push(
   { name: 'Seu Damião',    kind: 'shop', awning: 'red',    facade: 'white', top: 'antenna' },
   { name: 'Dona Iolanda',  kind: 'shop', awning: 'blue',   facade: 'mint',  top: 'ac' },
 );
+// ---- Prédios futuristas (Bairro 8): 4 cores de neon × 4 coroas = 16, depois dos comerciais (índices 70–85) ----
+export const GLOW_COL = { cyan: '#19e3ff', magenta: '#ff3fd0', lime: '#9dff3a', amber: '#ffb02e' };
+{
+  const names = ['Dr. Orion', 'Dra. Vega', 'Seu Nexus', 'Dona Lyra', 'Seu Quark', 'Dona Nova', 'Seu Atlas', 'Dona Zênite',
+    'Seu Pixel', 'Dona Ártemis', 'Seu Vector', 'Dona Íris-7', 'Seu Cosmo', 'Dona Aurora', 'Seu Ion', 'Dona Stella'];
+  const GL = ['cyan', 'magenta', 'lime', 'amber'], CR = ['spire', 'ring', 'dish', 'orb'];
+  for (let i = 0; i < 16; i++) HOUSES.push({ name: names[i], kind: 'fut', glow: GL[i % 4], crown: CR[Math.floor(i / 4)], tone: (i + Math.floor(i / 4)) % 2 });
+}
+/** Índices dos prédios futuristas em HOUSES. */
+export const FUTS = [...Array(16).keys()].map(k => 70 + k);
 /** Índices de todos os prédios comerciais em HOUSES. */
 export const SHOPS = [32, 33, 34, 35, 36, 37, 66, 67, 68, 69];
 
@@ -97,6 +107,12 @@ HOUSES.forEach((h, i) => {
   if (h.kind === 'apt') {
     h.f = [];
     h.tags = ['balcony:' + h.balcony, 'atop:' + h.atop].concat(h.extra);
+    h.roofItems = []; h.yardItems = [];
+    return;
+  }
+  if (h.kind === 'fut') {
+    h.f = [];
+    h.tags = ['glow:' + h.glow, 'crown:' + h.crown];
     h.roofItems = []; h.yardItems = [];
     return;
   }
@@ -128,6 +144,9 @@ export const PHRASE = {
   'awning:red': 'toldo vermelho', 'awning:blue': 'toldo azul', 'awning:green': 'toldo verde', 'awning:yellow': 'toldo amarelo',
   'facade:brick': 'fachada de tijolinhos', 'facade:white': 'fachada branca', 'facade:mint': 'fachada verde-clara',
   'top:ac': 'aparelhos de ar-condicionado no topo', 'top:billboard': 'um outdoor no topo', 'top:antenna': 'uma antena de rádio no topo',
+  // prédios futuristas
+  'glow:cyan': 'luzes de neon ciano', 'glow:magenta': 'luzes de neon rosa', 'glow:lime': 'luzes de neon verde-limão', 'glow:amber': 'luzes de neon âmbar',
+  'crown:spire': 'uma antena luminosa no topo', 'crown:ring': 'anéis flutuando no topo', 'crown:dish': 'um domo de vidro no topo', 'crown:orb': 'uma esfera brilhante no topo',
   // prédios residenciais
   'balcony:red': 'sacadas vermelhas', 'balcony:blue': 'sacadas azuis', 'balcony:yellow': 'sacadas amarelas', 'balcony:green': 'sacadas verdes',
   'atop:tank': 'uma caixa-d’água grande no terraço', 'atop:antenna': 'antenas no terraço', 'atop:garden': 'um jardim no terraço',

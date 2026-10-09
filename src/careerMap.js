@@ -133,8 +133,8 @@ function miniNeighborhood(kind, colors, gray = false) {
   add(box(2.2, 0.42, 14, ROADC), 0, 0.22, 0);
 
   if (kind === 'city' || kind === 'jam' || kind === 'jam8') {   // Bairros 6 a 8: prédios altos e acinzentados (+ 1 casinha, exceto no 8)
-    [[-3.5, -3.5, 9], [3.5, -3.5, 7], [-3.5, 3.5, 6]].concat(kind === 'jam8' ? [[3.5, 3.5, 8]] : []).forEach(([x, z, hh], i) => {
-      add(box(3.6, hh, 3.2, G(['#9ea2a9', '#aeb1b6', '#8f939a'][i], '#9a9a9a')), x, 0.4 + hh / 2, z);
+    (kind === 'jam8' ? [[-3.5, -3.5, 16], [3.5, -3.5, 12], [-3.5, 3.5, 10], [3.5, 3.5, 14]] : [[-3.5, -3.5, 9], [3.5, -3.5, 7], [-3.5, 3.5, 6]]).forEach(([x, z, hh], i) => {   // Bairro 8: mais altos
+      add(box(3.6, hh, 3.2, G(['#9ea2a9', '#aeb1b6', '#8f939a'][i % 3], '#9a9a9a')), x, 0.4 + hh / 2, z);
       for (let f = 1; f < hh / 1.4; f++) add(box(3.0, 0.5, 0.06, G('#4a6a8a', '#7a7a7a')), x, 0.4 + f * 1.4, z + 1.62);
       add(box(0.9, 0.5, 0.9, G('#7d8188', '#8a8a8a')), x + 0.8, 0.65 + hh, z - 0.6);      // casinha de máquinas no topo
     });
@@ -294,13 +294,13 @@ export function createCareerMap(stageEl, audio) {
     const signTexGray = textTexture(`BAIRRO ${i + 1}`, { width: 512, height: 160, bg: '#8a8a8a', fg: '#e6e6e6', font: signFont });
     const sign = new THREE.Sprite(new THREE.SpriteMaterial({ map: signTex }));
     sign.scale.set(9, 2.8, 1);
-    sign.position.set(p.x + nx * 14, city ? 12.5 : 9, p.z + nz * 14);   // na cidade, acima dos prédios da maquete
+    sign.position.set(p.x + nx * 14, kind === 'jam8' ? 19.5 : city ? 12.5 : 9, p.z + nz * 14);   // na cidade, acima dos prédios da maquete
     scene.add(sign);
     // quadro "MISSÕES" flutuando acima da maquete (M perto dela abre a lista)
     const boardTex = boardTexture(), boardTexGray = boardTexture(true);
     const board = new THREE.Sprite(new THREE.SpriteMaterial({ map: boardTex }));
     board.scale.set(10, 4, 1);
-    board.position.set(p.x + nx * 14, city ? 18.5 : 15, p.z + nz * 14);
+    board.position.set(p.x + nx * 14, kind === 'jam8' ? 25.5 : city ? 18.5 : 15, p.z + nz * 14);
     board.userData.baseY = board.position.y;
     scene.add(board);
     boards.push(board);

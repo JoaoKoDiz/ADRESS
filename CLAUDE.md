@@ -170,6 +170,7 @@ rm -f ADRESS-netlify.zip ADRESS-projeto-completo.zip && /c/Windows/System32/tar.
 |---|---|---|
 | 0–31 | casas | `roof`, `door`, `f` (características) |
 | 32–37 e 66–69 | prédios comerciais (`kind: 'shop'`; lista em `SHOPS`) | `awning`, `facade`, `top` |
+| 70–85 | prédios futuristas (`kind: 'fut'`; lista em `FUTS`, só no Bairro 8) | `glow`, `crown`, `tone` |
 | 38–65 | prédios residenciais (`kind: 'apt'`) | `balcony`, `atop`, `extra` |
 
 Casas especiais usadas em missões:
@@ -187,7 +188,7 @@ Casas especiais usadas em missões:
 | 5 | `grid6s` 6×6 | 1 ou 2 postos (linhas diferentes), 5 a 8 prédios comerciais, resto casas |
 | 6 | `city6` 6×6 | 28 prédios residenciais cinza e altos + 8 casas; grama seca amarelada fora do bairro |
 | 7 | `city7` 6×6 (grade `city6`, cena própria) | cidade como a do Bairro 6, mas com **1 ou 2 postos** (2 lotes cada), **4 ou 5 prédios comerciais**, 4 casas e o resto de prédios residenciais; 4 a 6 caminhões na diagonal (sem buracos nem cavaletes) e **3 a 4 engarrafamentos** (`barriers.js`, tipo `jam`): fila de carros que tampa um trecho inteiro de rua (só trechos horizontais com lote ao norte). O lote ao norte do trecho fica sem acesso, então `barriers.jammedSlots` o exclui das entregas (`applyJams` em `main.js`, via `game.newDelivery`). Missões ainda são modelos vazios |
-| 8 | `city8` 8×8 | exatamente como o Bairro 7 (1–2 postos, 4–5 prédios comerciais, 4–6 caminhões, 3–4 engarrafamentos, música `honk.ogg`), só que 8×8. Como só existem 28 prédios residenciais, entram todos e as casas completam os lotes (~29 casas). Missões são modelos vazios |
+| 8 | `city8` 8×8 | como o Bairro 7 (1–2 postos, 4–5 prédios comerciais, 4–6 caminhões, 3–4 engarrafamentos, música `honk.ogg`), só que 8×8 e com **prédios mais altos** (residenciais com 9 andares: `APT_BUILD.floors` em `models/apt.js`, definido em `useNeighborhood`; câmera `BUILD_H` = 31) e um **2º tipo de prédio, futurista** (`kind: 'fut'`, `models/fut.js`, índices 70–85 = `FUTS`: 4 cores de neon × 4 coroas — antena, anéis, domo, esfera; tags `glow:*` e `crown:*`). Entram os 28 residenciais, os 16 futuristas, 4–5 comerciais e casas nos lotes que sobram. O helicóptero pousa no terraço dos residenciais e no topo dos futuristas. Missões são modelos vazios |
 
 - **Bloqueios de rua** (`barriers.js`): o sorteio só é aceito se, pelo grafo de ruas (cruzamentos + meio de cada trecho, onde ficam os portões), **todas** as casas continuam alcançáveis. Nunca ficam na rua por dentro de um posto.
 - **Composição a cada partida:** `composeRound()` sorteia a composição dos Bairros 4–6; os demais usam `game.newRound()`. O botão Voltar sempre começa uma partida nova.
