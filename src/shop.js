@@ -157,6 +157,7 @@ export function createShop() {
       <div class="shop-hex"><label>Código HEX</label><input type="text" maxlength="7" spellcheck="false" placeholder="#RRGGBB"><button type="button" class="shop-btn">Usar</button><button type="button" class="shop-btn ghost">Restaurar padrão</button></div>`;
     main.appendChild(wrap);
     const sw = wrap.querySelector('.shop-sw'), input = wrap.querySelector('input'), [useBtn, resetBtn] = wrap.querySelectorAll('.shop-btn');
+    if (cat.id === 'skin') resetBtn.remove();                                        // Tom de pele: sem "Restaurar padrão"
     const paintUi = () => {
       const c = colors[cat.key];
       wrap.querySelector('.shop-chip').style.background = c;
@@ -176,7 +177,7 @@ export function createShop() {
     input.addEventListener('keydown', e => { e.stopPropagation(); if (e.key === 'Enter') { tryHex(false); input.blur(); } });
     input.addEventListener('blur', () => paintUi());
     useBtn.addEventListener('click', () => tryHex(false));
-    resetBtn.addEventListener('click', () => { input.blur(); setColor(DEFAULTS[cat.key]); });
+    if (cat.id !== 'skin') resetBtn.addEventListener('click', () => { input.blur(); setColor(DEFAULTS[cat.key]); });
     paintUi();
   }
 
