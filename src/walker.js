@@ -1,14 +1,9 @@
 // O motorista a pé (tecla L na van): anda livremente pelo bairro — entra nos quintais e na praça —, mas não entrega.
 // Colisão simples com caixas (AABB), deslizando nas paredes. Mesmo modelo/cores do motorista da tela inicial.
 import * as THREE from 'three';
-import { sphere, mesh, mat, at } from './models/kit.js';
+import { buildBody, CHAR_DEFAULT, CHAR_MATS, setCharColors } from './models/driver.js';
+export { CHAR_DEFAULT, CHAR_MATS, setCharColors };
 
-const CAP = '#e3262e', GLASSES = '#111216';
-/** Cores do personagem (Shop): materiais únicos e compartilhados (jogo, tela inicial e Shop). */
-export const CHAR_DEFAULT = { skin: '#e8b48a', shirt: '#2a9df4', pants: '#2f3a55', shoes: '#1b1b1f' };
-export const CHAR_MATS = Object.fromEntries(Object.entries(CHAR_DEFAULT).map(([k, c]) => [k, new THREE.MeshStandardMaterial({ color: c, roughness: 0.6 })]));
-export const setCharColors = c => { for (const k of Object.keys(CHAR_MATS)) if (c && c[k]) CHAR_MATS[k].color.set(c[k]); };
-const SKIN = CHAR_MATS.skin, SHIRT = CHAR_MATS.shirt, PANTS = CHAR_MATS.pants, SHOES = CHAR_MATS.shoes;
 const SPEED = 6.5, BACK_SPEED = 3.5, TURN = 3.2, RADIUS = 0.55;
 
 export function createWalker(scene) {
@@ -18,38 +13,8 @@ export function createWalker(scene) {
   const body = new THREE.Group();
   body.scale.setScalar(0.9);                                   // ~2,1 de altura (a van tem 2,6)
   root.add(body);
-  // modelo olha para +X local (rotation.y = −heading). Membros articulados (quadril/joelho/tornozelo, ombro/cotovelo),
-  // formas arredondadas e sombreamento liso; balançar = rotation.z.
-  const smooth = { flatShading: false, roughness: 0.6 };
-  const mt = c => typeof c === 'string' ? mat(c, smooth) : c;
-  const cap = (r, len, color) => mesh(new THREE.CapsuleGeometry(r, len, 6, 14), mt(color));
-  const ball = (r, color, sx = 1, sy = 1, sz = 1) => { const m = sphere(r, mt(color), 20, 14); m.scale.set(sx, sy, sz); return m; };
-  const pelvis = new THREE.Group(); pelvis.position.y = 1.0; body.add(pelvis);
-  pelvis.add(at(ball(0.3, PANTS, 1, 0.75, 1.1), 0, 0.02, 0));                          // quadril
-  const torso = new THREE.Group(); torso.position.y = 0.08; pelvis.add(torso);          // gira/inclina separado do quadril
-  torso.add(at(cap(0.33, 0.4, SHIRT), 0, 0.42, 0));                                    // tronco (um pouco mais estreito na cintura)
-  const legs = [], arms = [];
-  for (const s of [-1, 1]) {
-    const hip = new THREE.Group(); hip.position.set(0, -0.02, s * 0.19); pelvis.add(hip);
-    hip.add(at(cap(0.17, 0.2, PANTS), 0, -0.25, 0));                                   // coxa
-    const knee = new THREE.Group(); knee.position.y = -0.5; hip.add(knee);
-    knee.add(at(ball(0.15, PANTS), 0, 0, 0), at(cap(0.14, 0.2, PANTS), 0, -0.25, 0));  // joelho + canela
-    const foot = new THREE.Group(); foot.position.y = -0.5; knee.add(foot);
-    foot.add(at(ball(0.2, SHOES, 1.5, 0.7, 1), 0.1, -0.04, 0));                        // tênis
-    legs.push({ hip, knee, foot });
-    const sh = new THREE.Group(); sh.position.set(0, 0.74, s * 0.46); torso.add(sh);
-    sh.add(at(ball(0.15, SHIRT), 0, 0, 0), at(cap(0.12, 0.14, SHIRT), 0, -0.19, 0));   // ombro + braço
-    const elbow = new THREE.Group(); elbow.position.y = -0.38; sh.add(elbow);
-    elbow.add(at(ball(0.115, SKIN), 0, 0, 0), at(cap(0.1, 0.16, SKIN), 0, -0.19, 0), at(ball(0.13, SKIN), 0, -0.42, 0));   // antebraço + mão
-    arms.push({ sh, elbow });
-  }
-  const head = new THREE.Group(); head.position.y = 1.02; torso.add(head);
-  head.add(at(ball(0.38, SKIN), 0, 0.3, 0));
-  head.add(at(ball(0.07, SKIN), 0.37, 0.28, 0));                                       // nariz
-  head.add(at(mesh(new THREE.SphereGeometry(0.41, 20, 12, 0, Math.PI * 2, 0, 1.2), mat(CAP, smooth)), 0, 0.3, 0));   // boné: calota lisa
-  head.add(at(ball(0.3, CAP, 1.15, 0.12, 1), 0.38, 0.45, 0, 0, 0, 0.1));               // aba arredondada
-  for (const s of [-1, 1]) head.add(at(ball(0.11, GLASSES, 0.4, 0.8, 1), 0.34, 0.35, s * 0.15));   // óculos
-  head.add(at(ball(0.06, '#7a2e1a', 0.5, 0.5, 2.2), 0.35, 0.17, 0));                  // sorriso
+  // modelo olha para +X local (rotation.y = −heading). Detalhes do desenho em models/driver.js; balançar = rotation.z.
+  const { pelvis, torso, legs, arms, head } = buildBody(body);
   root.traverse(o => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = false; } });
 
   const st = { x: 0, z: 0, heading: 0, speed: 0 };

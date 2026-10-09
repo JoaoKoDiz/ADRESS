@@ -5,8 +5,9 @@ import { createVan } from './van.js';
 import { createHeli } from './heli.js';
 import { box, sphere, cyl, at, mat, mesh } from './models/kit.js';
 
-import { CHAR_MATS } from './walker.js';
-const SKIN = CHAR_MATS.skin, SHIRT = CHAR_MATS.shirt, CAP = '#e3262e', GLASSES = '#111216';   // pele e camisa seguem o Shop
+import { CHAR_MATS } from './models/driver.js';
+import { buildHead } from './models/driver.js';
+const SKIN = CHAR_MATS.skin, SHIRT = CHAR_MATS.shirt;   // pele e camisa seguem o Shop
 const BEAT = 1.8;   // batidas por segundo (~108 bpm)
 
 export function createTitleDriver(container, audio) {
@@ -44,14 +45,7 @@ export function createTitleDriver(container, audio) {
   const head = new THREE.Group();
   head.position.set(0, 1.62, -0.05);
   driver.add(head);
-  head.add(at(sphere(0.34, SKIN, 14, 10), 0, 0.3, 0));
-  // boné: calota que cobre o topo da cabeça (da testa para cima) + aba na frente
-  const cap = at(mesh(new THREE.SphereGeometry(0.375, 14, 8, 0, Math.PI * 2, 0, 1.25), CAP), 0, 0.3, 0); head.add(cap);
-  head.add(at(box(0.5, 0.05, 0.3, CAP), 0, 0.43, -0.4, -0.12, 0, 0));          // aba do boné
-  for (const s of [-1, 1]) head.add(at(box(0.2, 0.12, 0.05, GLASSES, { metalness: 0.4, roughness: 0.25 }), s * 0.13, 0.34, -0.3));
-  head.add(at(box(0.08, 0.03, 0.04, GLASSES), 0, 0.36, -0.31));
-  head.add(at(box(0.16, 0.04, 0.04, '#7a2e1a'), 0, 0.17, -0.31, 0, 0, 0));       // sorriso
-  for (const s of [-1, 1]) head.add(at(box(0.06, 0.035, 0.04, '#7a2e1a'), s * 0.09, 0.19, -0.3, 0, 0, s * -0.6));
+  const face = at(buildHead(0.37), 0, 0.32, 0, 0, Math.PI / 2, 0); head.add(face);   // rosto olha para −Z (a câmera)
   // braço para fora da janela: ombro, braço sobre a porta, cotovelo apoiado e antebraço caindo para a frente
   const arm = new THREE.Group();
   arm.position.set(0.22, 1.46, -0.02);
