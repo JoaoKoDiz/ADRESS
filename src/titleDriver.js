@@ -3,7 +3,7 @@
 import * as THREE from 'three';
 import { createVan } from './van.js';
 import { createHeli } from './heli.js';
-import { buildBody } from './models/driver.js';
+import { buildSeatedDriver } from './models/seatedDriver.js';
 const BEAT = 1.8;   // batidas por segundo (~108 bpm)
 
 export function createTitleDriver(container, audio) {
@@ -24,59 +24,8 @@ export function createTitleDriver(container, audio) {
   van.setGhost(true);                         // a van da tela inicial não colide com o bairro
   const heli = createHeli(van, audio);        // "Livre": vira helicóptero e decola
 
-  // janela aberta de verdade: o vão escuro marca o stencil e "apaga" a profundidade da lataria só ali,
-  // então o motorista DENTRO da cabine aparece pela janela e a porta continua escondendo o resto do corpo
-  const win = new THREE.Shape();
-  [[0.55, 1.5], [1.42, 1.5], [0.95, 2.06], [0.55, 2.06]].forEach(([x, y], i) => (i ? win.lineTo(x, y) : win.moveTo(x, y)));
-  const winGeo = new THREE.ShapeGeometry(win);
-  const portal = (m, order) => { const o = new THREE.Mesh(winGeo, m); o.position.z = -1.27; o.rotation.y = Math.PI; o.scale.x = -1; o.renderOrder = order; van.object.add(o); return o; };
-  portal(new THREE.MeshBasicMaterial({ color: '#2a2622', side: THREE.DoubleSide, depthWrite: false,
-    stencilWrite: true, stencilRef: 1, stencilFunc: THREE.AlwaysStencilFunc, stencilZPass: THREE.ReplaceStencilOp }), 1);
-  portal(new THREE.ShaderMaterial({
-    vertexShader: 'void main(){ vec4 p = projectionMatrix * modelViewMatrix * vec4(position, 1.0); p.z = p.w * 0.99999; gl_Position = p; }',
-    fragmentShader: 'void main(){ gl_FragColor = vec4(0.0); }',
-    colorWrite: false, depthFunc: THREE.AlwaysDepth, side: THREE.DoubleSide,
-    stencilWrite: true, stencilRef: 1, stencilFunc: THREE.EqualStencilFunc,
-  }), 2);
-
-  // motorista sentado: o MESMO esqueleto do personagem (buildBody), menor por igual, girado um pouco para a janela.
-  // Tronco e pescoço atrás da porta; pela janela aparecem cabeça, pescoço e o ombro (atrás e abaixo da cabeça);
-  // o braço sai desse ombro, desce para a frente até o cotovelo no peitoril e o antebraço fica pendurado por fora da porta.
-  const S = 0.4, PSI = 0.5, DOOR_Z = -1.25, SILL_Y = 1.5;
-  const driver = new THREE.Group();
-  driver.position.set(0.86, 1.35 - 0.78 * S, DOOR_Z + 0.125);      // base do tronco em y = 1,35; lado do tronco rente à porta, por dentro
-  driver.rotation.y = PSI;
-  driver.scale.setScalar(S);
-  van.object.add(driver);
-  const rig = buildBody(driver, { flatHands: true });
-  const head = rig.head;
-  head.rotation.order = 'YXZ';
-  const HEAD_YAW = 1.15 - PSI;                                     // rosto virado para a câmera (−Z) e um pouco para a frente
-  head.rotation.y = HEAD_YAW;
-  for (const l of rig.legs) { l.hip.rotation.order = 'YXZ'; l.hip.rotation.set(0, -PSI, Math.PI / 2); l.knee.rotation.z = -Math.PI / 2; }   // sentado, pernas para a frente da van (escondidas pela porta)
-  const [near, far] = rig.arms;                                    // near = lado −Z (janela)
-  far.sh.rotation.z = 0.15; far.elbow.rotation.z = 0.6;            // outra mão no colo (abaixo da janela, escondida pela porta)
-  // braço da janela: orienta ombro e cotovelo pelos pontos reais (sem peças soltas)
-  van.object.updateMatrixWorld(true);
-  const toLocal = (obj, worldQ) => obj.parent.getWorldQuaternion(new THREE.Quaternion()).invert().multiply(worldQ);
-  const aim = down => {                                            // quaternion cujo −Y aponta para `down` e o X fica para a frente (+X)
-    const y = down.clone().normalize().negate(), x = new THREE.Vector3(1, 0, 0).addScaledVector(y, -y.x).normalize();
-    const z = new THREE.Vector3().crossVectors(x, y);
-    return new THREE.Quaternion().setFromRotationMatrix(new THREE.Matrix4().makeBasis(x, y, z));
-  };
-  const vanInv = new THREE.Matrix4().copy(van.object.matrixWorld).invert();
-  const sh = near.sh.getWorldPosition(new THREE.Vector3()).applyMatrix4(vanInv);   // ombro (coordenadas da van)
-  const LU = 0.28 * S, RF = 0.074 * S, RS = 0.118 * S;            // braço, antebraço e ponta da manga (raios do buildBody)
-  const EZ = DOOR_Z - RF - 0.006;                                  // cotovelo logo por fora da porta (antebraço não atravessa a lataria)
-  const EY = SILL_Y + RS + 0.004;                                  // manga e cotovelo deitados sobre a borda de baixo da janela
-  const EX = sh.x + Math.sqrt(Math.max(0, LU * LU - (EZ - sh.z) ** 2 - (EY - sh.y) ** 2));   // o resto do comprimento vai para a frente
-  const elbowAt = new THREE.Vector3(EX, EY, EZ);
-  near.sh.quaternion.copy(toLocal(near.sh, aim(elbowAt.clone().sub(sh))));
-  near.sh.updateMatrixWorld(true);
-  near.elbow.quaternion.copy(toLocal(near.elbow, aim(new THREE.Vector3(0.06, -1, -0.1))));   // antebraço pendurado por fora da porta
-  driver.userData.elbow = elbowAt;
-  driver.traverse(o => { if (o.isMesh) o.renderOrder = 3; });     // desenhado depois do "vão" da janela
-  driver.traverse(o => { if (o.isMesh) { o.castShadow = false; o.receiveShadow = false; } });
+  // janela aberta de verdade + motorista sentado dentro da cabine (models/seatedDriver.js)
+  const seated = buildSeatedDriver(van.body), { head } = seated;
 
   const camera = new THREE.PerspectiveCamera(30, 1, 0.1, 100);
   const look = new THREE.Vector3(0.55, 1.45, 0);
@@ -139,6 +88,8 @@ export function createTitleDriver(container, audio) {
     /** Volta ao estado parado (depois de uma transição), pronto para começar de novo. */
     reset() { mode = 'idle'; mt = 0; onDone = null; heli.reset(); van.teleport(0, 0, 0); },
     /** Testes: avança n quadros de dt segundos. */
+    /** Testes: o motorista sentado (juntas e malhas). */
+    _seated: seated,
     /** Testes: renderiza de outro ponto de vista (a próxima resize/tela volta à câmera do menu). */
     _view(p, l) { camera.position.set(...p); camera.lookAt(...l); renderer.render(scene, camera); },
     _tick(n, dt = 1 / 60) { let t = 0; for (let i = 0; i < n; i++) { t += dt; tick(dt, t); } },

@@ -141,7 +141,7 @@ export function buildBody(parent, opts = {}) {
     sh.add(limb(0.085, 0.074, 0.28, SKIN));                                                          // braço
     const elbow = new THREE.Group(); elbow.position.y = -0.28; sh.add(elbow);
     const wrist = new THREE.Group(); wrist.position.y = -0.2; elbow.add(wrist);
-    elbow.add(limb(0.074, 0.06, 0.2, SKIN)); wrist.add(opts.flatHands ? flatHand(SKIN) : hand(SKIN));   // antebraço + mão
+    elbow.add(limb(0.072, 0.06, 0.2, SKIN)); wrist.add(opts.flatHands ? flatHand(SKIN) : hand(SKIN));   // antebraço + mão
     arms.push({ sh, elbow, wrist });
   }
   const head = new THREE.Group(); head.position.y = 0.7; torso.add(head);

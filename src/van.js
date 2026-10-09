@@ -381,6 +381,8 @@ export function createVan(scene, opts) {
 
   const api = {
     object: root,
+    /** Grupo da carroceria (balança na suspensão / afunda com o bagageiro pesado): porta, janelas e cabine. */
+    body,
     get x() { return x; },
     get z() { return z; },
     get heading() { return heading; },
