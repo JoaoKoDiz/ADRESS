@@ -62,9 +62,10 @@ const POOLS = { grid4: [...Array(16).keys()], plaza6: [...Array(32).keys()], gri
   grid6s: [...Array(32).keys(), ...SHOPS],        // grid6s (Bairro 5): 32 casas + os prédios comerciais
   city6: [...Array(32).keys()].concat([...Array(28).keys()].map(k => 38 + k)),   // city6 (Bairro 6): 32 casas + 28 prédios residenciais
   city7: [...Array(32).keys()].concat([...Array(28).keys()].map(k => 38 + k), SHOPS),   // city7 (Bairro 7): a cidade com postos e prédios comerciais
-  city8: [...Array(32).keys()].concat([...Array(28).keys()].map(k => 38 + k), SHOPS, FUTS) };   // city8 (Bairro 8): o mesmo, em 8×8, com prédios mais altos e os futuristas
+  city8: [...Array(32).keys()].concat([...Array(28).keys()].map(k => 38 + k), SHOPS, USE_FUTS ? FUTS : []) };   // city8 (Bairro 8): o mesmo, em 8×8, com prédios mais altos (e os futuristas, se USE_FUTS)
 // lote de casa ou de prédio comercial
 const buildAnyLot = (h, opts) => h.kind === 'shop' ? buildShopLot(h) : h.kind === 'apt' ? buildAptLot(h) : h.kind === 'fut' ? buildFutLot(h) : buildLot(h, opts);
+const USE_FUTS = false;                        // prédios futuristas (models/fut.js): guardados, desligados — troque para true para voltarem ao Bairro 8
 const TALL_FLOORS = 9;                         // Bairro 8: prédios residenciais mais altos (os outros bairros têm 5 andares)
 let world = createWorld({ renderer, buildLot: buildAnyLot, buildResident, yardBuilders: YARD_BUILDERS, pool: POOLS.grid4 });
 const worlds = { grid4: world };
@@ -93,7 +94,8 @@ function composeRound() {
   if (city8) {                                  // Bairro 8 (8×8): como o 7, mas só há 28 prédios residenciais: entram todos e as casas completam os lotes
     const nShops = 4 + Math.floor(Math.random() * 2);
     const apts = [...Array(28).keys()].map(k => 38 + k);
-    pool = apts.concat(FUTS, shuffled(allHouses).slice(0, HOUSE_SLOTS.length - nShops - apts.length - FUTS.length), shuffled(SHOPS).slice(0, nShops));
+    const futs = USE_FUTS ? FUTS : [];
+    pool = apts.concat(futs, shuffled(allHouses).slice(0, HOUSE_SLOTS.length - nShops - apts.length - futs.length), shuffled(SHOPS).slice(0, nShops));
   } else if (city7) {                           // Bairro 7: 4–5 prédios comerciais, 4 casas e o resto de prédios residenciais
     const nShops = 4 + Math.floor(Math.random() * 2), nHouses = 4;
     const apts = [...Array(28).keys()].map(k => 38 + k);
