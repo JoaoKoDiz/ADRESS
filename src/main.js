@@ -540,11 +540,11 @@ const ROOF_LINES = [
 function startRoofTalk() {
   const lr = loungerSpot(); lr.getWorldPosition(_rp);
   van.object.visible = false;                           // o helicóptero some só durante esta cena (não tampa nada)
-  const px = _rp.x + 1.45, pz = _rp.z + 0.35;           // em pé ao lado da espreguiçadeira (lado leste), olhando para ele
+  const px = _rp.x + 1.45, pz = _rp.z - 0.3;            // em pé ao lado da espreguiçadeira (lado leste), olhando para ele
   walker.pose(px, pz, Math.atan2(_rp.z - pz, _rp.x - px));
   const y = walker.floor;
-  talkCam.pos.set(_rp.x - 1.6, y + 2.6, _rp.z + 4.4);    // por cima da beirada, à frente dos dois: ele à esquerda, o jogador à direita
-  talkCam.look.set((_rp.x + px) / 2, y + 0.7, (_rp.z + pz) / 2 - 0.3);
+  talkCam.pos.set(_rp.x + 1.4, y + 2.7, _rp.z - 4.6);    // por cima da piscina, de frente para os dois
+  talkCam.look.set((_rp.x + px) / 2, y + 0.7, (_rp.z + pz) / 2 + 0.3);
   talkLines = ROOF_LINES; talkPhase = 'talk';
   setState('talk');
   talkBox.show(ROOF_LINES, () => {                      // fim da conversa: some a caixa de fala; aparece o aviso da interface
@@ -627,6 +627,10 @@ function update(dt, t) {
           walker.placeBesideVan(van, roofSolids());
           const R = APT_ROOF, o = roofWalk.o;                 // sem espaço ao lado: fica dentro da laje
           walker.pose(Math.min(Math.max(walker.x, o.x + R.x0 + 0.9), o.x + R.x1 - 0.9), Math.min(Math.max(walker.z, o.z + R.z0 + 0.9), o.z + R.z1 - 0.9), walker.heading);
+          if (roofWalk.h === LOUNGER_APT && loungerSpot() && loungerSpot().visible) {   // C5: desce sempre já ao lado do Seu Galdino
+            loungerSpot().getWorldPosition(_rp);
+            walker.pose(_rp.x + 1.45, _rp.z - 0.3, Math.atan2(0.3, -1.45));
+          }
           walker.show(true);
           setState('walk');
           break;
@@ -844,7 +848,7 @@ function updateHUD() {
     else if (state === 'fuel') hud.setMain('⛽ Abastecendo… glub, glub, glub…', 'ring');
     else if (state === 'talk') hud.setMain('', 'clue');
     else if (state === 'walk' && carrying) hud.setMain(walker.nearVan(van) ? 'Entrar na van devolve a caixa ao lugar dela.' : 'Carregando uma caixa… de quem será?', 'clue');
-    else if (state === 'walk') hud.setMain(walker.nearVan(van) ? 'Perto da van — aperte E para entrar.' : 'Passeando a pé… (não dá para entregar andando)', 'clue');
+    else if (state === 'walk') hud.setMain(walker.nearVan(van) && !nearLounger() ? 'Perto da van — aperte E para entrar.' : 'Passeando a pé… (não dá para entregar andando)', 'clue');
     else if (state === 'drive' && fuelMsgT > 0) hud.setMain(fuelMsg, 'dialog');
     else if (state === 'fadeOut') hud.setMain(restartMsg || 'Entrega concluída! Preparando a próxima…', restartMsg ? 'dialog' : 'success');
     else hud.setMain(game.mainText(), 'clue');

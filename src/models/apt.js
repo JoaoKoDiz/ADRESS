@@ -164,7 +164,7 @@ export function buildAptLot(apt) {
     root.add(at(cyl(0.05, 0.05, 1.8, '#ffffff', 6), CX + 3.5, top + 0.9, Z1 - 0.8));
     if (apt.lounger) {                                          // prédio fixo do Bairro 6: o Seu Galdino na 2ª espreguiçadeira (main.js decide se aparece)
       const lr = buildLoungerReader();
-      lr.position.set(CX - 1.5, top + 0.275, Z1 - 0.6); lr.rotation.y = -Math.PI / 2;   // cabeceira para a piscina, pés para a beirada (sul)
+      lr.position.set(CX - 1.5, top + 0.275, Z1 - 0.6); lr.rotation.y = Math.PI / 2;    // de frente para a piscina (norte); cabeceira na beirada
       lr.visible = false;
       root.add(lr);
     }
