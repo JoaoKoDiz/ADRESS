@@ -316,7 +316,8 @@ addEventListener('contextmenu', e => { if (IN_GAME.includes(state)) e.preventDef
 addEventListener('mousedown', e => { if (e.button === 2 && IN_GAME.includes(state) && !missions.isOpen) rig.orbitHold(true); });
 addEventListener('mousemove', e => { if (e.buttons & 2) rig.orbit(e.movementX, e.movementY); });
 addEventListener('mouseup', e => { if (e.button === 2) rig.orbitHold(false); });
-addEventListener('wheel', e => { if (IN_GAME.includes(state) && rig.mode === 'chase' && !missions.isOpen) { e.preventDefault(); rig.zoom(e.deltaY); } }, { passive: false });   // roda: zoom (só aproxima)
+addEventListener('mousedown', e => { if (e.button === 1 && IN_GAME.includes(state) && !missions.isOpen) { e.preventDefault(); rig.resetView(); } });   // botão do meio: volta a câmera ao padrão
+addEventListener('wheel', e => { if (IN_GAME.includes(state) && rig.mode === 'chase' && !missions.isOpen) { e.preventDefault(); rig.zoom(e.deltaMode === 1 ? e.deltaY * 33 : e.deltaMode === 2 ? e.deltaY * 400 : e.deltaY); } }, { passive: false });   // roda: zoom (só aproxima)
 addEventListener('blur', () => rig.orbitHold(false));
 function resize() {
   const w = Math.max(1, stage.clientWidth), h = Math.max(1, stage.clientHeight);

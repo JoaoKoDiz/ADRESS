@@ -85,6 +85,7 @@ const SLOW_HEIGHT = 13;         //   (dá para ver os quintais da frente mesmo e
 const BOOM_MIN_DIST = 4.5;      // braço encolhido ao máximo (quando algo fica entre a van e a câmera)
 const BOOM_TOP_HEIGHT = 14.5;   //   … e a altura correspondente: encolher = subir e olhar mais para baixo
 const FIXED_DIST = 11.5, FIXED_HEIGHT = 10;   // braço da câmera (fixo; a van parada ou em movimento tem o mesmo enquadramento)
+const R0 = Math.hypot(FIXED_DIST, FIXED_HEIGHT - 2.2), EL0 = Math.atan2(FIXED_HEIGHT - 2.2, FIXED_DIST);   // distância e elevação padrão do braço (PIVOT_Y = 2,2)
 const MIN_RADIUS = 3.2, MIN_ZOOM = 0.28;      // aproximação máxima
 const MIN_ELEV = 0.1, MAX_ELEV = 1.5;         // inclinação mínima/máxima do braço (rad)
 const CHASE_LOOK_AHEAD = 6;     // ponto olhado fica um pouco à frente da van
@@ -164,70 +165,51 @@ export function createCameraRig() {
   let mode = 'chase';                          // 'chase' (padrão, atrás da van) | 'overview' (bairro inteiro)
   let blend = 1;                               // 0 = visão geral, 1 = atrás da van (antes do smoothstep)
   let aspect = 1;
-  let yaw = Math.PI / 2;                       // direção suavizada da câmera de perseguição
-  let slowK = 1;                               // 0 = pose andando, 1 = pose parada (suavizado)
-  let focusK = 0;                              // 0..1: quanto a câmera se volta para a casa visitada
-  let boomU = 0;                               // 0 = braço inteiro, 1 = encolhido ao máximo (suavizado)
-  const tgt = { x: MAP / 2, z: 5 };
-  let tgtY = 0;                                // altura da van (voo de helicóptero)
-  const focus = { x: 0, z: 0 };
+  let yaw = Math.PI / 2;                       // direção (suavizada) em que a van/personagem aponta
+  const tgt = { x: MAP / 2, z: 5 };            // posição real do alvo
+  let tgtY = 0;                                // altura do alvo (voo de helicóptero)
+  const piv = new THREE.Vector3(MAP / 2, PIVOT_Y, 5);   // pivô da câmera: segue o alvo com um leve amortecimento (filtra tremidas da física)
   const overviewPos = new THREE.Vector3();
   const overviewQuat = new THREE.Quaternion().setFromEuler(new THREE.Euler(-PITCH, 0, 0));
-  const chasePos = new THREE.Vector3(), chaseLook = new THREE.Vector3();
+  const chasePos = new THREE.Vector3(), chaseLook = new THREE.Vector3(), dir = new THREE.Vector3(), tmp = new THREE.Vector3();
   const chaseQuat = new THREE.Quaternion(), m4 = new THREE.Matrix4();
 
-  let focusOff = 0;                            // desvio suavizado na direção da casa
-  function focusGoal() {
-    if (focusK <= 0) return 0;
-    const d = angleDiff(Math.atan2(focus.z - tgt.z, focus.x - tgt.x), yaw);
-    return Math.max(-FOCUS_YAW, Math.min(FOCUS_YAW, d)) * focusK;
-  }
-  // olhar em volta (botão direito do mouse): desvio de giro/inclinação em torno da van; volta ao soltar
-  let orbYaw = 0, orbPitch = 0, orbGoalYaw = 0, orbGoalPitch = 0, orbK = 0, orbHeld = false;
-  let zoom = 1, zoomGoal = 1;                  // 1 = distância normal (máximo); só dá para aproximar
-  const tmpPos = new THREE.Vector3();
-  function camYaw() { return yaw + focusOff + orbYaw; }
-  // pose fixa do braço (sem variar com a velocidade): quem controla a câmera é o jogador (botão direito = girar/inclinar, roda = zoom)
-  const baseDist = () => FIXED_DIST;
-  const baseHeight = () => FIXED_HEIGHT;
-  /** Posição da câmera para o encolhimento u do braço, já com a inclinação e o zoom do jogador. */
-  function camPos(u, out) {
-    const cy = camYaw(), fx = Math.cos(cy), fz = Math.sin(cy);
-    const D = baseDist(), H = baseHeight();
-    const d = D + (BOOM_MIN_DIST - D) * u, h = H + (BOOM_TOP_HEIGHT - H) * u;
-    const dy = h - PIVOT_Y;
-    const r = Math.max(MIN_RADIUS, Math.hypot(d, dy) * zoom);
-    const el = THREE.MathUtils.clamp(Math.atan2(dy, d) + orbPitch, MIN_ELEV, MAX_ELEV);
-    return out.set(tgt.x - fx * r * Math.cos(el), PIVOT_Y + r * Math.sin(el), tgt.z - fz * r * Math.cos(el));
-  }
+  // ---- câmera do jogador: botão direito arrastando = girar/inclinar; roda = zoom (só aproxima). Nada muda sozinho.
+  let orbYaw = 0, orbPitch = 0;                // posição atual (suavizada)
+  let goalYaw = 0, goalPitch = 0;              // posição pedida pelo mouse
+  let velYaw = 0, velPitch = 0;                // velocidade do mouse (rad/s), suavizada: dá inércia curta ao soltar
+  let orbHeld = false, zoom = 1, zoomGoal = 1;
+  let arm = R0;                                // comprimento atual do braço (suavizado); encolhe quando algo fica entre a van e a câmera
+  const camYaw = () => yaw + orbYaw;
 
-  /** Menor encolhimento u (0..1) do braço que deixa a linha van→câmera livre de casas e dentro do mapa. */
-  function clearBoom() {
-    const free = u => {
-      camPos(u, tmpPos);
-      const cx = tmpPos.x, cz = tmpPos.z, h = tmpPos.y;
-      // só segura a câmera dentro da sebe enquanto a van está no bairro (fora dele, o mundo é livre)
-      const inside = tgt.x > 0 && tgt.x < MAP && tgt.z > 0 && tgt.z < MAP;
-      if (inside && (cx < CAM_LIM0 || cx > CAM_LIM1 || cz < CAM_LIM0 || cz > CAM_LIM1)) return false;
-      return !segmentBlocked(tgt.x, tgt.z, cx, h, cz);
-    };
-    if (free(0)) return 0;
-    let lo = 0, hi = -1;
-    for (let u = 0.125; u <= 1.0001; u += 0.125) { if (free(u)) { hi = u; break; } lo = u; }
-    if (hi < 0) return 1;
-    for (let i = 0; i < 5; i++) { const m = (lo + hi) / 2; if (free(m)) hi = m; else lo = m; }
-    return hi;
+  /** Direção (unitária) do pivô para a câmera: atrás da van no giro atual, inclinada pela elevação atual. */
+  function rayDir(out) {
+    const cy = camYaw(), el = THREE.MathUtils.clamp(EL0 + orbPitch, MIN_ELEV, MAX_ELEV);
+    return out.set(-Math.cos(cy) * Math.cos(el), Math.sin(el), -Math.sin(cy) * Math.cos(el));
+  }
+  /** O ponto a distância r do pivô, nessa direção, é uma posição livre (dentro da sebe, sem casa entre ele e a van)? */
+  function freeAt(r, d) {
+    const cx = piv.x + d.x * r, cy = piv.y - tgtY + d.y * r, cz = piv.z + d.z * r;
+    const inside = tgt.x > 0 && tgt.x < MAP && tgt.z > 0 && tgt.z < MAP;      // só segura a câmera dentro da sebe enquanto está no bairro
+    if (inside && (cx < CAM_LIM0 || cx > CAM_LIM1 || cz < CAM_LIM0 || cz > CAM_LIM1)) return false;
+    return !segmentBlocked(piv.x, piv.z, cx, cy, cz);
+  }
+  /** Maior distância (≤ a pedida pelo zoom) que fica livre ao longo do raio: a câmera para na frente da primeira parede/casa. */
+  function armGoal(wanted, d) {
+    if (freeAt(wanted, d)) return wanted;
+    let lo = MIN_RADIUS, hi = wanted;
+    for (let r = MIN_RADIUS; r < wanted; r += 0.5) { if (!freeAt(r, d)) { hi = r; break; } lo = r; }
+    for (let i = 0; i < 6; i++) { const m = (lo + hi) / 2; if (freeAt(m, d)) lo = m; else hi = m; }
+    return Math.max(MIN_RADIUS, lo - 0.15);
   }
 
   function apply() {
-    camPos(boomU, chasePos);
+    rayDir(dir);
+    chasePos.set(piv.x + dir.x * arm, piv.y + dir.y * arm, piv.z + dir.z * arm);
+    // onde olhar: um pouco à frente da van; quanto mais o jogador gira/inclina, mais a mira volta para a van (transição contínua, sem saltos)
+    const k = smooth(Math.min(1, Math.abs(orbYaw) / 0.7 + Math.abs(orbPitch) / 0.5));
     const hx = Math.cos(yaw), hz = Math.sin(yaw);
-    chaseLook.set(tgt.x + hx * CHASE_LOOK_AHEAD, CHASE_LOOK_Y, tgt.z + hz * CHASE_LOOK_AHEAD);
-    if (orbK > 0) {                            // olhando em volta: mira na van em vez de à frente dela
-      chaseLook.x += (tgt.x - chaseLook.x) * orbK; chaseLook.z += (tgt.z - chaseLook.z) * orbK;
-      chaseLook.y += (PIVOT_Y - chaseLook.y) * orbK;
-    }
-    chasePos.y += tgtY; chaseLook.y += tgtY;                  // acompanha a altura do helicóptero
+    chaseLook.set(piv.x + hx * CHASE_LOOK_AHEAD * (1 - k), piv.y - PIVOT_Y + CHASE_LOOK_Y + (PIVOT_Y - CHASE_LOOK_Y) * k, piv.z + hz * CHASE_LOOK_AHEAD * (1 - k));
     chaseQuat.setFromRotationMatrix(m4.lookAt(chasePos, chaseLook, UP));
     const b = smooth(blend);
     camera.position.lerpVectors(overviewPos, chasePos, b);
@@ -249,30 +231,34 @@ export function createCameraRig() {
     apply();
   }
 
-  const slowGoal = speed => Math.max(0, Math.min(1, (6 - Math.abs(speed || 0)) / 4));
-  function setFocus(f) { if (f) { focus.x = f.x; focus.z = f.z; } }
-
-  /** target: { x, z, heading, speed?, focus? } da van (focus = ponto da casa sendo visitada, ou null). */
+  /** target: { x, z, heading, y? } do alvo (van ou personagem a pé). */
   function snap(target) {
     tgt.x = target.x; tgt.z = target.z; tgtY = target.y || 0;
+    piv.set(tgt.x, PIVOT_Y + tgtY, tgt.z);
     if (target.heading !== undefined) yaw = target.heading;
-    orbYaw = orbGoalYaw = orbPitch = orbGoalPitch = 0; orbK = 0; zoom = zoomGoal = 1;   // partida/tela nova: câmera padrão
+    orbYaw = goalYaw = orbPitch = goalPitch = 0; velYaw = velPitch = 0; zoom = zoomGoal = 1;      // partida/tela nova: câmera padrão
     blend = mode === 'chase' ? 1 : 0;
-    boomU = clearBoom();
+    rayDir(dir); arm = armGoal(Math.max(MIN_RADIUS, R0 * zoom), dir);
     apply();
   }
 
   function update(dt, target) {
+    dt = Math.min(dt, 0.1);
     tgt.x = target.x; tgt.z = target.z; tgtY = target.y || 0;
     if (target.heading !== undefined) yaw += angleDiff(target.heading, yaw) * (1 - Math.exp(-CHASE_YAW_SMOOTH * dt));
-    // câmera do jogador: segue o mouse de perto e FICA onde foi deixada (não volta sozinha)
-    const follow = 1 - Math.exp(-16 * dt);
-    orbYaw += (orbGoalYaw - orbYaw) * follow; orbPitch += (orbGoalPitch - orbPitch) * follow;
-    zoom += (zoomGoal - zoom) * (1 - Math.exp(-12 * dt));
-    orbK += ((Math.abs(orbYaw) + Math.abs(orbPitch) > 0.02 ? 1 : 0) - orbK) * (1 - Math.exp(-6 * dt));   // girada: mira na van
-    // braço: encolhe rápido (nunca atravessa um telhado), volta devagar (sem trancos)
-    const want = clearBoom();
-    boomU += (want - boomU) * (1 - Math.exp(-(want > boomU ? 18 : 2.5) * dt));
+    // pivô: acompanha o alvo quase colado (a câmera não tem "pose" própria, só segue)
+    const kp = 1 - Math.exp(-26 * dt), kh = 1 - Math.exp(-14 * dt);
+    piv.x += (tgt.x - piv.x) * kp; piv.z += (tgt.z - piv.z) * kp; piv.y += (PIVOT_Y + tgtY - piv.y) * kh;
+    // mouse → giro/inclinação: o ponto pedido anda com o mouse; a câmera o alcança com uma mola crítica (sem trancos e sem oscilar)
+    const gk = 1 - Math.exp(-(orbHeld ? 30 : 14) * dt);
+    const ny = orbYaw + (goalYaw - orbYaw) * gk, np = orbPitch + (goalPitch - orbPitch) * gk;
+    velYaw += ((ny - orbYaw) / dt - velYaw) * (1 - Math.exp(-20 * dt)); velPitch += ((np - orbPitch) / dt - velPitch) * (1 - Math.exp(-20 * dt));
+    orbYaw = ny; orbPitch = np;
+    zoom += (zoomGoal - zoom) * (1 - Math.exp(-11 * dt));
+    // braço (distância): para na frente de paredes/casas; encolhe depressa mas nunca de repente, e só volta devagar (sem "pulsar")
+    rayDir(dir);
+    const want = armGoal(Math.max(MIN_RADIUS, R0 * zoom), dir);
+    arm += (want - arm) * (1 - Math.exp(-(want < arm ? 12 : 2.2) * dt));
     const wantB = mode === 'chase' ? 1 : 0;
     const stepB = dt / TRANSITION;
     blend = wantB > blend ? Math.min(wantB, blend + stepB) : Math.max(wantB, blend - stepB);
@@ -288,22 +274,22 @@ export function createCameraRig() {
     /** 0 = visão geral … 1 = atrás da van (já suavizado). */
     get blend() { return smooth(blend); },
     toggle, resize, update, snap,
-    /** Botão direito pressionado/solto: começa/termina de olhar em volta (só na câmera atrás da van). */
+    /** Botão direito pressionado/solto: começa/termina de girar a câmera (só atrás da van). */
     orbitHold(on) { orbHeld = on && mode === 'chase'; },
-    /** Arrasto do mouse (pixels) enquanto o botão direito está pressionado. */
+    /** Movimento do mouse em pixels (enquanto o botão direito está pressionado). */
     orbit(dx, dy) {
       if (!orbHeld) return;
-      orbGoalYaw += dx * 0.0055;                                               // volta completa permitida (sem limite)
-      if (Math.abs(orbGoalYaw) > Math.PI * 4) orbGoalYaw %= Math.PI * 2;
-      orbGoalPitch = THREE.MathUtils.clamp(orbGoalPitch + dy * 0.0045, -0.7, 1.0);
+      goalYaw += dx * 0.0055;                                                   // sem limite: dá para dar voltas completas
+      if (Math.abs(goalYaw) > Math.PI * 6) { const w = Math.round(goalYaw / (Math.PI * 2)) * Math.PI * 2; goalYaw -= w; orbYaw -= w; }   // (reenrola sem salto visível)
+      goalPitch = THREE.MathUtils.clamp(goalPitch + dy * 0.0045, -0.7, 1.0);
     },
-    /** Roda do mouse: aproxima (deltaY < 0) ou afasta de volta (deltaY > 0), sem passar da distância normal. */
+    /** Roda do mouse (deltaY em pixels): aproxima (negativo) ou afasta de volta (positivo), sem passar da distância normal. */
     zoom(deltaY) {
       if (mode !== 'chase') return;
-      zoomGoal = THREE.MathUtils.clamp(zoomGoal * (deltaY < 0 ? 0.88 : 1 / 0.88), MIN_ZOOM, 1);
+      zoomGoal = THREE.MathUtils.clamp(zoomGoal * Math.exp(THREE.MathUtils.clamp(deltaY, -300, 300) * 0.0011), MIN_ZOOM, 1);
     },
     /** Volta à câmera padrão (sem giro nem zoom). */
-    resetView() { orbGoalYaw = orbGoalPitch = 0; zoomGoal = 1; },
+    resetView() { goalYaw = goalPitch = 0; zoomGoal = 1; },
     /** O bairro mudou de tamanho (ex.: Bairro 2, 6×6): refaz enquadramento e obstáculos da câmera. */
     refit() { rebuildGrid(); resize(lastW, lastH); },
   };

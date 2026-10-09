@@ -320,3 +320,9 @@ document.title = 'OK ' + A.dialog.text + ' errs=' + JSON.stringify(window.__errs
 24. Maquetes novas no mapa.
 25. Bairro 5 com 5–8 prédios comerciais e 1–2 postos.
 26. Deploy no GitHub.
+
+## 10. Atualizações recentes (bagageiros, shop, câmera)
+
+- **Bagageiros** (`models/racks.js`): 16 modelos; todos apoiam no teto (y≈2.30), exceto a Encomenda alienígena (flutua, cordas esticam ao subir, brilho verde). Caixa pesada demais usa cavidade real no teto (`PIT` em `van.js`). Baú e alienígena têm brilho pulsante (`glowSprite`, `tickRack`).
+- **Equipar e salvar** (`models/vanLook.js`, shop): botão "Equipar e salvar" em Rodas/Bagageiro/Estampas; fica em `adress.shop.equip.v1` e vale para a van do jogo (`registerVan`).
+- **Câmera** (`camera.js`, reescrita): braço em raio que para antes de casas/sebe (sem saltos), pivô, giro, inclinação e zoom suavizados. Botão direito arrastando gira/inclina e **fica** onde o jogador deixou; roda só aproxima; **botão do meio** volta ao padrão. Nada muda sozinho.
