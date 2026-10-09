@@ -3,15 +3,11 @@
 import * as THREE from 'three';
 import { createVan } from './van.js';
 import { createHeli } from './heli.js';
-import { box, sphere, cyl, at, mat, mesh } from './models/kit.js';
-
-import { CHAR_MATS } from './models/driver.js';
-import { buildHead, shirtTorso, limb, hand } from './models/driver.js';
-const SKIN = CHAR_MATS.skin, SHIRT = CHAR_MATS.shirt;   // pele e camisa seguem o Shop
+import { buildBody } from './models/driver.js';
 const BEAT = 1.8;   // batidas por segundo (~108 bpm)
 
 export function createTitleDriver(container, audio) {
-  const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+  const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, stencil: true });
   renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.5));
   renderer.setClearColor(0x000000, 0);
   container.appendChild(renderer.domElement);
@@ -28,43 +24,58 @@ export function createTitleDriver(container, audio) {
   van.setGhost(true);                         // a van da tela inicial não colide com o bairro
   const heli = createHeli(van, audio);        // "Livre": vira helicóptero e decola
 
-  // janela aberta: o vão escuro da cabine por cima do vidro lateral esquerdo
+  // janela aberta de verdade: o vão escuro marca o stencil e "apaga" a profundidade da lataria só ali,
+  // então o motorista DENTRO da cabine aparece pela janela e a porta continua escondendo o resto do corpo
   const win = new THREE.Shape();
   [[0.55, 1.5], [1.42, 1.5], [0.95, 2.06], [0.55, 2.06]].forEach(([x, y], i) => (i ? win.lineTo(x, y) : win.moveTo(x, y)));
-  const opening = new THREE.Mesh(new THREE.ShapeGeometry(win), mat('#2a2622', { side: THREE.DoubleSide }));
-  opening.position.z = -1.29;
-  opening.rotation.y = Math.PI;
-  opening.scale.x = -1;                       // espelha de volta (a rotação inverte o x)
-  van.object.add(opening);
+  const winGeo = new THREE.ShapeGeometry(win);
+  const portal = (m, order) => { const o = new THREE.Mesh(winGeo, m); o.position.z = -1.27; o.rotation.y = Math.PI; o.scale.x = -1; o.renderOrder = order; van.object.add(o); return o; };
+  portal(new THREE.MeshBasicMaterial({ color: '#2a2622', side: THREE.DoubleSide, depthWrite: false,
+    stencilWrite: true, stencilRef: 1, stencilFunc: THREE.AlwaysStencilFunc, stencilZPass: THREE.ReplaceStencilOp }), 1);
+  portal(new THREE.ShaderMaterial({
+    vertexShader: 'void main(){ vec4 p = projectionMatrix * modelViewMatrix * vec4(position, 1.0); p.z = p.w * 0.99999; gl_Position = p; }',
+    fragmentShader: 'void main(){ gl_FragColor = vec4(0.0); }',
+    colorWrite: false, depthFunc: THREE.AlwaysDepth, side: THREE.DoubleSide,
+    stencilWrite: true, stencilRef: 1, stencilFunc: THREE.EqualStencilFunc,
+  }), 2);
 
-  // motorista sentado DENTRO da cabine: tronco atrás da porta, cabeça no vão da janela,
-  // cotovelo apoiado na borda da janela e só o antebraço para fora
-  const S = 0.65;
+  // motorista sentado: o MESMO esqueleto do personagem (buildBody), menor por igual, girado um pouco para a janela.
+  // Tronco e pescoço atrás da porta; pela janela aparecem cabeça, pescoço e o ombro (atrás e abaixo da cabeça);
+  // o braço sai desse ombro, desce para a frente até o cotovelo no peitoril e o antebraço fica pendurado por fora da porta.
+  const S = 0.4, PSI = 0.5, DOOR_Z = -1.25, SILL_Y = 1.5;
   const driver = new THREE.Group();
+  driver.position.set(0.86, 1.35 - 0.78 * S, DOOR_Z + 0.125);      // base do tronco em y = 1,35; lado do tronco rente à porta, por dentro
+  driver.rotation.y = PSI;
+  driver.scale.setScalar(S);
   van.object.add(driver);
-  const torso = shirtTorso(SHIRT); torso.scale.multiplyScalar(S); torso.position.set(0.9, 1.08, -0.82); driver.add(torso);   // escondido pela porta
-  const head = new THREE.Group();
-  head.position.set(0.8, 1.5, -1.1);
-  driver.add(head);
-  head.add(at(limb(0.065, 0.07, 0.1, SKIN), 0, 0.08, -0.02));                       // pescoço
-  head.add(at(buildHead(0.26), 0, 0.28, -0.07, 0, 1.15, 0));                        // rosto virado para a câmera (−Z) e um pouco para a frente
-  // braço da janela (refeito): ombro dentro da cabine → manga aparecendo na borda da janela → braço → cotovelo no peitoril
-  // → antebraço curto pendurado por fora da porta → mão de desenho (palma achatada, dedos juntos, polegar)
-  const shoulder = new THREE.Vector3(0.97, 1.5, -1.05), elbowAt = new THREE.Vector3(1.2, 1.55, -1.36);
-  const upper = new THREE.Group(); upper.position.copy(shoulder); driver.add(upper);
-  const dirArm = elbowAt.clone().sub(shoulder), L = dirArm.length();
-  upper.quaternion.setFromUnitVectors(new THREE.Vector3(0, -1, 0), dirArm.normalize());
-  upper.add(limb(0.085, 0.08, L * 0.84, SHIRT), limb(0.055, 0.05, L, SKIN));       // manga (passa um pouco da janela) + braço até o cotovelo
-  const forearm = new THREE.Group();
-  forearm.position.copy(elbowAt);
-  forearm.rotation.set(0.05, 0, 0);                                                 // cai reto, rente à porta, por fora
-  driver.add(forearm);
-  forearm.add(limb(0.05, 0.036, 0.19, SKIN));                                       // antebraço curto, punho mais fino
-  const palm = new THREE.Group(); palm.position.y = -0.2; forearm.add(palm);
-  palm.add(at(sphere(0.05, SKIN, 16, 12), 0, -0.035, 0)); palm.children[0].scale.set(1.15, 1.0, 0.55);          // palma achatada
-  const fingers = at(mesh(new THREE.CapsuleGeometry(0.04, 0.035, 6, 12), SKIN), 0, -0.095, 0.005);
-  fingers.scale.set(1.3, 1, 0.6); palm.add(fingers);                                // dedos juntos
-  palm.add(at(mesh(new THREE.CapsuleGeometry(0.018, 0.04, 6, 10), SKIN), 0.058, -0.04, -0.01, 0, 0, 0.55));       // polegar
+  const rig = buildBody(driver, { flatHands: true });
+  const head = rig.head;
+  head.rotation.order = 'YXZ';
+  const HEAD_YAW = 1.15 - PSI;                                     // rosto virado para a câmera (−Z) e um pouco para a frente
+  head.rotation.y = HEAD_YAW;
+  for (const l of rig.legs) { l.hip.rotation.order = 'YXZ'; l.hip.rotation.set(0, -PSI, Math.PI / 2); l.knee.rotation.z = -Math.PI / 2; }   // sentado, pernas para a frente da van (escondidas pela porta)
+  const [near, far] = rig.arms;                                    // near = lado −Z (janela)
+  far.sh.rotation.z = 0.15; far.elbow.rotation.z = 0.6;            // outra mão no colo (abaixo da janela, escondida pela porta)
+  // braço da janela: orienta ombro e cotovelo pelos pontos reais (sem peças soltas)
+  van.object.updateMatrixWorld(true);
+  const toLocal = (obj, worldQ) => obj.parent.getWorldQuaternion(new THREE.Quaternion()).invert().multiply(worldQ);
+  const aim = down => {                                            // quaternion cujo −Y aponta para `down` e o X fica para a frente (+X)
+    const y = down.clone().normalize().negate(), x = new THREE.Vector3(1, 0, 0).addScaledVector(y, -y.x).normalize();
+    const z = new THREE.Vector3().crossVectors(x, y);
+    return new THREE.Quaternion().setFromRotationMatrix(new THREE.Matrix4().makeBasis(x, y, z));
+  };
+  const vanInv = new THREE.Matrix4().copy(van.object.matrixWorld).invert();
+  const sh = near.sh.getWorldPosition(new THREE.Vector3()).applyMatrix4(vanInv);   // ombro (coordenadas da van)
+  const LU = 0.28 * S, RF = 0.074 * S, RS = 0.118 * S;            // braço, antebraço e ponta da manga (raios do buildBody)
+  const EZ = DOOR_Z - RF - 0.006;                                  // cotovelo logo por fora da porta (antebraço não atravessa a lataria)
+  const EY = SILL_Y + RS + 0.004;                                  // manga e cotovelo deitados sobre a borda de baixo da janela
+  const EX = sh.x + Math.sqrt(Math.max(0, LU * LU - (EZ - sh.z) ** 2 - (EY - sh.y) ** 2));   // o resto do comprimento vai para a frente
+  const elbowAt = new THREE.Vector3(EX, EY, EZ);
+  near.sh.quaternion.copy(toLocal(near.sh, aim(elbowAt.clone().sub(sh))));
+  near.sh.updateMatrixWorld(true);
+  near.elbow.quaternion.copy(toLocal(near.elbow, aim(new THREE.Vector3(0.06, -1, -0.1))));   // antebraço pendurado por fora da porta
+  driver.userData.elbow = elbowAt;
+  driver.traverse(o => { if (o.isMesh) o.renderOrder = 3; });     // desenhado depois do "vão" da janela
   driver.traverse(o => { if (o.isMesh) { o.castShadow = false; o.receiveShadow = false; } });
 
   const camera = new THREE.PerspectiveCamera(30, 1, 0.1, 100);
@@ -96,8 +107,8 @@ export function createTitleDriver(container, audio) {
   }
   function tick(dt, t) {
     const b = t * BEAT * Math.PI * 2;
-    head.rotation.x = Math.sin(b) * 0.14;                     // acena no ritmo
-    head.rotation.z = Math.sin(b / 2) * 0.07;                 // e balança de lado
+    head.rotation.z = -Math.sin(b) * 0.09;                    // acena no ritmo (em volta do pescoço)
+    head.rotation.x = Math.sin(b / 2) * 0.05;                 // e balança de lado
     if (mode === 'idle') van.object.position.y = Math.abs(Math.sin(b / 2)) * 0.03; // a suspensão acompanha
     else if (mode === 'drive') {
       mt += dt;
@@ -128,6 +139,8 @@ export function createTitleDriver(container, audio) {
     /** Volta ao estado parado (depois de uma transição), pronto para começar de novo. */
     reset() { mode = 'idle'; mt = 0; onDone = null; heli.reset(); van.teleport(0, 0, 0); },
     /** Testes: avança n quadros de dt segundos. */
+    /** Testes: renderiza de outro ponto de vista (a próxima resize/tela volta à câmera do menu). */
+    _view(p, l) { camera.position.set(...p); camera.lookAt(...l); renderer.render(scene, camera); },
     _tick(n, dt = 1 / 60) { let t = 0; for (let i = 0; i < n; i++) { t += dt; tick(dt, t); } },
     /** Carreira: a van dá a partida e sai dirigindo; cb ao terminar. */
     drive(cb) { if (mode !== 'idle') return; mode = 'drive'; mt = 0; onDone = cb; audio && audio.ignition && audio.ignition(); },

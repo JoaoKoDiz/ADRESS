@@ -30,6 +30,14 @@ export function shirtTorso(m) {
   t.scale.set(0.86, 1, 1.2); return t;
 }
 /** Mão simples (luva arredondada + polegar), pendurada em y = 0 (punho). */
+/** Mão de desenho para a pose da janela: palma achatada, dedos juntos e polegar separado (um pouco mais larga que o punho). */
+export function flatHand(m) {
+  const g = new THREE.Group();
+  g.add(at(ball(0.07, m, 1.15, 1, 0.55), 0, -0.065, 0));                                          // palma achatada
+  const f = at(mesh(new THREE.CapsuleGeometry(0.052, 0.04, 6, 14), m), 0, -0.145, 0); f.scale.set(1.3, 1, 0.6); g.add(f);   // dedos juntos
+  g.add(at(mesh(new THREE.CapsuleGeometry(0.024, 0.05, 6, 10), m), 0.078, -0.06, 0, 0, 0, 0.5));   // polegar
+  return g;
+}
 export function hand(m, k = 1) {
   const g = new THREE.Group();
   g.add(at(ball(0.085 * k, m, 0.75, 1.1, 1), 0, -0.07 * k, 0), at(ball(0.038 * k, m, 1, 1.4, 1), 0.055 * k, -0.04 * k, 0, 0, 0, -0.4));
@@ -109,7 +117,7 @@ export function buildHead(r) {
 }
 
 /** Corpo articulado (origem nos pés, olhando para +X). Retorna as juntas para animar. */
-export function buildBody(parent) {
+export function buildBody(parent, opts = {}) {
   const SKIN = CHAR_MATS.skin, SHIRT = CHAR_MATS.shirt, PANTS = CHAR_MATS.pants, SHOES = CHAR_MATS.shoes;
   const pelvis = new THREE.Group(); pelvis.position.y = 0.72; parent.add(pelvis);
   const hips = lathe([[0, -0.15], [0.13, -0.14], [0.21, -0.09], [0.25, -0.01], [0.25, 0.08], [0.24, 0.17], [0, 0.18]], PANTS);
@@ -132,8 +140,9 @@ export function buildBody(parent) {
     sh.add(limb(0.135, 0.118, 0.13, SHIRT));                                                         // manga curta arredondada
     sh.add(limb(0.085, 0.074, 0.28, SKIN));                                                          // braço
     const elbow = new THREE.Group(); elbow.position.y = -0.28; sh.add(elbow);
-    elbow.add(limb(0.074, 0.06, 0.2, SKIN), at(hand(SKIN), 0, -0.2, 0));                             // antebraço + mão
-    arms.push({ sh, elbow });
+    const wrist = new THREE.Group(); wrist.position.y = -0.2; elbow.add(wrist);
+    elbow.add(limb(0.074, 0.06, 0.2, SKIN)); wrist.add(opts.flatHands ? flatHand(SKIN) : hand(SKIN));   // antebraço + mão
+    arms.push({ sh, elbow, wrist });
   }
   const head = new THREE.Group(); head.position.y = 0.7; torso.add(head);
   head.add(at(limb(0.095, 0.1, 0.12, SKIN), 0, 0.12, 0));                                            // pescoço
