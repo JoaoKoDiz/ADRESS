@@ -655,6 +655,7 @@ const CINE = {
   van: [-5, 13],                                        // van estacionada na frente da igreja, virada para o bairro
   outCam: [[7, 3.0, 30], [-1.5, 5, 2]],                 // enquadramento de fora: igreja + van, ele vem na direção da câmera
 };
+const _frus = new THREE.Frustum(), _m4 = new THREE.Matrix4(), _bb = new THREE.Box3();
 let cine = null;                                        // { phase, t, talkT, total, count, restore, wp, camPos, camLook }
 let unwhite = null;
 const nearChurchK = () => churchShown && !churchTalkDone() && state === 'walk' && !cine &&
@@ -674,16 +675,16 @@ function startChurchTalk() {
     const rest = CHURCH_LINES.slice(6).reduce((t, l) => t + lineDuration(l), 0);
     let path = 0, prev = CINE.player;
     for (const [x, z] of CINE.walk) { path += Math.hypot(x - prev.x, z - prev.z); prev = { x, z }; }
-    cine.count = Math.ceil(rest + 1.8 + path / 6.5 + 1.5 + 3.0 + 1.6 + 8);   // falas + volta da câmera + caminhada + entrar + van + fade + folga
+    cine.count = Math.ceil(rest + 3.6 + path / 6.5 + 1.5 + 3.0 + 1.6 + 8);   // falas + volta da câmera + caminhada + entrar + van + fade + folga
   } });
 }
 function churchTalkEnd() {                              // última fala lida: grava o progresso; câmera volta ao jogador, já branco
   try { localStorage.setItem(CHURCH_TALK_KEY, '1'); } catch (e) { /* */ }
-  unwhite = whiten(walker.object, van.object);
+  if (!unwhite) unwhite = whiten(walker.object, van.object);   // (normalmente já ficou branco durante a aproximação)
   const v = CL(CINE.van[0], 0, CINE.van[1]);
   van.teleport(v.x, v.z, -Math.PI / 2);                 // virada para o norte (o bairro)
   cine.phase = 'back'; cine.t = 0;
-  cine.from = [cine.camPos.clone(), cine.camLook.clone()];
+  cine.dir0 = cine.camLook.clone().sub(cine.camPos).normalize();   // a câmera fica parada e só gira até o jogador
 }
 function restoreLook() { if (unwhite) { unwhite(); unwhite = null; } }
 function churchCineEnd() {                              // de volta ao bairro: cores, câmera e controles normais
@@ -713,12 +714,17 @@ function updateChurchCine(dt) {
     const k = ease(Math.min(1, c.t / (c.total * 0.92)));   // aproxima devagar durante toda a conversa
     c.camPos.copy(CL(...CINE.camA[0])).lerp(CL(...CINE.camB[0]), k);
     c.camLook.copy(CL(...CINE.camA[1])).lerp(CL(...CINE.camB[1]), k);
-  } else if (c.phase === 'back') {                      // a câmera volta para o jogador (agora branco)
-    const k = ease(Math.min(1, c.t / 1.8));
-    c.camPos.copy(c.from[0]).lerp(CL(...CINE.camA[0]), k);
-    c.camLook.copy(c.from[1]).lerp(CL(CINE.player.x, 1.3, CINE.player.z), k);
+    // assim que o jogador sai totalmente do quadro, ele (e a van, lá fora) já fica branco: nada muda de cor na frente da câmera
+    if (!unwhite && k > 0.3) {
+      _frus.setFromProjectionMatrix(_m4.multiplyMatrices(rig.camera.projectionMatrix, rig.camera.matrixWorldInverse));
+      if (!_frus.intersectsBox(_bb.setFromObject(walker.object))) unwhite = whiten(walker.object, van.object);
+    }
+  } else if (c.phase === 'back') {                      // parada no lugar, a câmera gira até o jogador (já branco) e segura um pouco
+    const k = ease(Math.min(1, c.t / 2.2));
+    const d1 = CL(CINE.player.x, 1.35, CINE.player.z).sub(c.camPos).normalize();
+    c.camLook.copy(c.camPos).add(c.dir0.clone().lerp(d1, k).normalize());
     walker.update(dt, { x: 0, z: 0 }, 'car', [], van);
-    if (k >= 1) { c.phase = 'walk'; c.t = 0; c.wp = 0; }
+    if (c.t > 2.2 + 1.4) { c.phase = 'walk'; c.t = 0; c.wp = 0; }
   } else if (c.phase === 'walk' || c.phase === 'outside') {
     const [tx, tz] = CINE.walk[c.wp], tgt = CL(tx, 0, tz);
     const dx = tgt.x - walker.x, dz = tgt.z - walker.z, d = Math.hypot(dx, dz);
@@ -1150,7 +1156,7 @@ window.ADRESS = {
   get pixelRatio() { return pixelRatio; },
   get titleDriver() { return titleDriver; },
   get church() { return church; },
-  get cine() { return cine; }, startChurchTalk, talkBox,
+  get cine() { return cine; }, get whiteOn() { return !!unwhite; }, startChurchTalk, talkBox,
   get churchState() { return { on: churchOn, t: churchT, a: churchA, shown: churchShown }; },
   get gameMode() { return gameMode; },
   career, missions,
