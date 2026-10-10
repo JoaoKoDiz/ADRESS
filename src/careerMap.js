@@ -225,9 +225,14 @@ export function renderMiniThumbnails(w = 480, h = 360) {
     const sun = new THREE.DirectionalLight('#ffffff', 2.0);
     sun.position.set(-30, 60, 40);
     scene.add(sun);
-    scene.add(miniNeighborhood(kind, PALETTES[i].map(c => ROOF_COL[c])));
-    cam.position.set(-6, 24, 27);
-    cam.lookAt(0, 1.5, 0);
+    const mini = miniNeighborhood(kind, PALETTES[i].map(c => ROOF_COL[c]));
+    scene.add(mini);
+    // enquadra a maquete inteira (prédios altos incluídos), sempre do mesmo ângulo
+    const sph = new THREE.Box3().setFromObject(mini).getBoundingSphere(new THREE.Sphere());
+    const dir = new THREE.Vector3(-6, 24, 27).normalize(), t = Math.tan(THREE.MathUtils.degToRad(cam.fov / 2));
+    const dist = sph.radius / Math.min(t, t * cam.aspect) * 0.92;
+    cam.position.copy(sph.center).addScaledVector(dir, dist);
+    cam.lookAt(sph.center);
     r.render(scene, cam);
     return r.domElement.toDataURL('image/png');
   });

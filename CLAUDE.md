@@ -38,7 +38,7 @@ ADRESS é um jogo 3D de entregas, aconchegante e meio cômico.
 - **Transições:** Carreira = a van sai dirigindo + fade. Livre = helicóptero decola + fade.
 
 **Modo Livre:**
-- Ao clicar em **Livre**, abre a seleção de bairro (`levelSelect.js`): as 6 miniaturas na tela, setas mudam a seleção, **E**/Enter ou clique joga (depois o helicóptero decola).
+- Ao clicar em **Livre**, abre a seleção de bairro (`levelSelect.js`): "Escolha o bairro", 8 cartões creme (4×2) com as miniaturas (enquadradas pela caixa da maquete), "BAIRRO N" + nome só desta tela (`NAMES`: Raízes, Horizontes, Constância, Veredas, Ofício, Mirante, Altitude, Ápice); setas ou clique selecionam (borda laranja, leve ampliação), botão "Jogar no Bairro N" ou **E**/Enter joga (depois o helicóptero decola). O painel Jogar some atrás (`body.lsel-on`).
 - Entregas sem fim no bairro escolhido (`freeLevel`; mesma grade/composição/bloqueios da Carreira, sem parede de entrada).
 - Tem helicóptero (H; no Bairro 6 dá para **pousar no terraço dos prédios**: Shift desce, H desliga o motor e fica parado; H de novo decola), míssil (F), van imparável e explosões.
 - Destruir todas as casas leva a van automaticamente para fora do bairro e aparece um **monstro gigante** (barra de chefe).
