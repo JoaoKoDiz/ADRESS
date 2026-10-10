@@ -33,8 +33,8 @@ ADRESS é um jogo 3D de entregas, aconchegante e meio cômico.
 
 **Telas:**
 - **Tela inicial:** bairro desfocado ao fundo + **Jogar / Configurações / Sair**. Configurações ainda não faz nada.
-- **Painel Jogar:** **Carreira | Livre** (metade de cima) e **Shop** (metade de baixo; abre a tela do Shop — ver `shop.js`).
-- **Motorista animado:** à direita do painel, na van, com braço para fora e cabeça balançando.
+- **Painel Jogar** (`title.js`): bairro desfocado ao fundo; à esquerda logo ADRESS, botão "← Voltar" próprio (`.tp-back`; o Voltar fixo não aparece aqui), "Escolha como jogar", botões largos creme com borda laranja **Carreira** (ícone de mapa, "Avance pelos bairros") e **Livre** (bússola, "Explore no seu ritmo") e um menor **Shop** (caixa, borda roxa). Ícones em SVG embutido. Tela em pé: botões em cima, van embaixo.
+- **Van à direita** (`titleDriver.js`): a van inteira (de frente e de lado, enquadrada pela caixa da van — cabe até a torre de caixas) com a customização salva (cores compartilhadas + `registerVan`), motorista na janela balançando a cabeça; `refit()` reenquadra ao voltar do Shop.
 - **Transições:** Carreira = a van sai dirigindo + fade. Livre = helicóptero decola + fade.
 
 **Modo Livre:**

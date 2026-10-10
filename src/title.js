@@ -1,5 +1,5 @@
 // Tela inicial: o bairro (cena real, câmera do bairro inteiro) desfocado ao fundo + Jogar / Configurações / Sair.
-// "Jogar" abre o painel lateral: Carreira | Livre (metade de cima) e Shop (metade de baixo).
+// "Jogar" abre o painel: logo + Voltar + "Escolha como jogar" + Carreira / Livre / Shop à esquerda; a van (com a customização) à direita.
 // Por enquanto só Jogar, Livre (inicia a partida) e Sair têm ação.
 const CSS = `
 .title { position: fixed; inset: 0; z-index: 20; display: flex; align-items: center; justify-content: center;
@@ -17,29 +17,57 @@ const CSS = `
 .title-btn:hover { transform: translateY(-2px); }
 .title-btn:active { transform: translateY(2px); }
 .title-btn.primary { background: #ff7a1a; color: #fff; box-shadow: 0 5px 0 #a8480b, 0 10px 22px rgba(0,0,0,.25); }
-.title-panel { position: absolute; left: 0; top: 0; bottom: 0; width: clamp(300px, 34vw, 520px); display: none;
-  grid-template-columns: 1fr 1fr; grid-template-rows: 1fr 1fr; gap: 14px; padding: 62px 18px 18px; box-sizing: border-box;
-  background: rgba(30,22,14,.55); border-right: 3px solid rgba(255,243,214,.6); }
-.title.playing .title-panel { display: grid; }
-.title-card { border: 3px solid #fff; border-radius: 18px; display: flex; align-items: center; justify-content: center;
-  font: 900 clamp(20px, 2vw, 32px) "Trebuchet MS","Segoe UI",system-ui,sans-serif; letter-spacing: .05em; color: #fff;
-  text-shadow: 0 3px 0 rgba(0,0,0,.35); box-shadow: 0 6px 18px rgba(0,0,0,.3); user-select: none; }
-.title-card.career { background: #3a78d4; }
-.title-card.free { background: #3c9d55; cursor: pointer; }
-.title-card.free:hover { filter: brightness(1.1); }
-.title-card.shop { grid-column: 1 / span 2; background: #8a55c4; cursor: pointer; }
-.title-card.shop:hover { filter: brightness(1.1); }
-.title-driver { position: absolute; right: 0; top: 8%; bottom: 8%; width: min(38vw, 640px); display: none; pointer-events: none; }
+/* painel "Jogar": coluna à esquerda (logo, Voltar, título, botões) e a van inteira à direita */
+.title-play { position: absolute; left: clamp(16px, 4vw, 72px); top: 0; bottom: 0; width: min(40vw, 640px); min-width: 300px; display: none;
+  flex-direction: column; justify-content: center; gap: clamp(8px, 1.6vh, 18px); padding: 3vh 0; box-sizing: border-box; }
+.title.playing .title-play { display: flex; }
+.title.playing .title-main { display: none; }
+.tp-logo { font-weight: 900; font-size: clamp(54px, 7.6vw, 128px); line-height: .95; letter-spacing: .02em; color: #ff8a1a;
+  -webkit-text-stroke: clamp(3px, .35vw, 6px) #5a2608; paint-order: stroke fill; text-shadow: 0 .07em 0 #5a2608, 0 .12em 18px rgba(0,0,0,.35); }
+.tp-back { align-self: flex-start; padding: .35em 1.1em; border: 3px solid #c98a4a; border-radius: 999px; background: #3a2214; color: #fff3d6;
+  font: 800 clamp(15px, 1.35vw, 22px) "Trebuchet MS","Segoe UI",system-ui,sans-serif; cursor: pointer; box-shadow: 0 4px 0 #1d0f07, 0 8px 16px rgba(0,0,0,.3); }
+.tp-back:hover { filter: brightness(1.2); }
+.tp-title { color: #fff8ea; font: 900 clamp(26px, 3.1vw, 54px) "Trebuchet MS","Segoe UI",system-ui,sans-serif; margin-top: .25em;
+  text-shadow: 0 3px 0 rgba(60,35,15,.75), 0 6px 18px rgba(0,0,0,.35); }
+.title-card { display: flex; align-items: center; gap: clamp(12px, 1.6vw, 26px); box-sizing: border-box; width: 100%;
+  padding: clamp(10px, 1.7vh, 22px) clamp(14px, 1.8vw, 30px); background: #fff3d6; border: clamp(4px, .4vw, 6px) solid #ff7a1a; border-radius: clamp(14px, 1.4vw, 24px);
+  color: #2e1d10; cursor: pointer; user-select: none; box-shadow: 0 6px 0 rgba(150,70,10,.35), 0 12px 26px rgba(0,0,0,.28); transition: transform .1s; }
+.title-card:hover { transform: translateY(-2px); filter: brightness(1.03); }
+.title-card:active { transform: translateY(2px); }
+.title-card svg.ic { width: clamp(52px, 6.2vw, 112px); height: auto; flex: none; }
+.tc-text { flex: 1; display: flex; flex-direction: column; }
+.tc-text b { font: 900 clamp(26px, 3.1vw, 54px)/1.05 "Trebuchet MS","Segoe UI",system-ui,sans-serif; }
+.tc-text small { font: 700 clamp(14px, 1.45vw, 25px) "Trebuchet MS","Segoe UI",system-ui,sans-serif; opacity: .85; margin-top: .2em; }
+.tc-arrow { font: 900 clamp(26px, 2.6vw, 44px) "Trebuchet MS",sans-serif; color: #ff7a1a; flex: none; }
+.title-card.shop { width: 68%; border-color: #8a55c4; padding-top: clamp(6px, 1vh, 12px); padding-bottom: clamp(6px, 1vh, 12px); box-shadow: 0 5px 0 rgba(80,40,130,.35), 0 10px 22px rgba(0,0,0,.25); }
+.title-card.shop svg.ic { width: clamp(38px, 4.2vw, 72px); }
+.title-card.shop .tc-text b { font-size: clamp(20px, 2.2vw, 38px); }
+.title-card.shop .tc-arrow { color: #8a55c4; font-size: clamp(20px, 2vw, 34px); }
+.title-driver { position: absolute; right: 1vw; top: 6vh; bottom: 4vh; left: calc(clamp(16px, 4vw, 72px) + min(40vw, 640px) + 2vw); display: none; pointer-events: none; }
 .title.playing .title-driver { display: block; }
 .title-driver canvas { width: 100%; height: 100%; display: block; }
-.title-card.career { cursor: pointer; }
-.title-card.career:hover { filter: brightness(1.1); }
+@media (max-aspect-ratio: 1/1) {             /* tela em pé: botões em cima, van embaixo */
+  .title-play { width: auto; right: clamp(16px, 4vw, 72px); bottom: 42vh; justify-content: flex-start; }
+  .title-driver { left: 2vw; top: 58vh; }
+}
 .title-fade { position: absolute; inset: 0; background: #1b2418; opacity: 0; transition: opacity .5s; pointer-events: none; z-index: 5; }
 .title-bye { color: #fff3d6; font: 800 clamp(22px, 2.4vw, 36px) "Trebuchet MS","Segoe UI",system-ui,sans-serif;
   text-shadow: 0 3px 0 rgba(0,0,0,.4); text-align: center; }
 `;
 
-export function createTitle({ onFree, onCareer, onPlay, onShop }) {
+// ícones (desenhados em SVG, cores chapadas)
+const ICON_MAP = `<svg class="ic" viewBox="0 0 120 100"><path d="M8 22 L40 10 L80 22 L112 10 L112 82 L80 94 L40 82 L8 94 Z" fill="#2f7fe0"/>
+<path d="M40 10 L40 82 L8 94 L8 22 Z" fill="#1f63bd"/><path d="M80 22 L80 94 L112 82 L112 10 Z" fill="#1f63bd"/>
+<path d="M18 74 C30 56 44 70 56 58 S78 44 86 46" stroke="#ff8a1a" stroke-width="6" stroke-dasharray="8 7" fill="none" stroke-linecap="round"/>
+<path d="M90 50 C78 34 80 14 92 10 C104 14 106 34 90 50 Z" fill="#e3262e" stroke="#7a1010" stroke-width="3"/><circle cx="92" cy="26" r="6" fill="#fff3d6"/></svg>`;
+const ICON_COMPASS = `<svg class="ic" viewBox="0 0 100 100"><circle cx="50" cy="54" r="42" fill="#2f9a4e" stroke="#1e3a24" stroke-width="5"/>
+<circle cx="50" cy="54" r="31" fill="#fff3d6" stroke="#1e3a24" stroke-width="3"/><rect x="44" y="5" width="12" height="9" rx="3" fill="#1e3a24"/>
+<path d="M50 54 L70 30 L56 60 Z" fill="#e3262e"/><path d="M50 54 L30 78 L44 48 Z" fill="#2f7fe0"/><circle cx="50" cy="54" r="4" fill="#1e3a24"/></svg>`;
+const ICON_BOX = `<svg class="ic" viewBox="0 0 100 90"><path d="M10 28 L50 12 L90 28 L90 72 L50 86 L10 72 Z" fill="#c8874a" stroke="#6a3b16" stroke-width="4" stroke-linejoin="round"/>
+<path d="M10 28 L50 44 L90 28" fill="none" stroke="#6a3b16" stroke-width="4"/><path d="M50 44 L50 86" stroke="#6a3b16" stroke-width="4"/>
+<path d="M30 20 L70 36 L70 50 L62 47 L62 38 L22 23 Z" fill="#e8c27a"/></svg>`;
+
+export function createTitle({ onFree, onCareer, onPlay, onShop, onBack }) {
   const style = document.createElement('style');
   style.textContent = CSS;
   document.head.appendChild(style);
@@ -47,10 +75,13 @@ export function createTitle({ onFree, onCareer, onPlay, onShop }) {
   const el = document.createElement('div');
   el.className = 'title';
   el.innerHTML = `
-    <div class="title-panel">
-      <div class="title-card career">Carreira</div>
-      <div class="title-card free">Livre</div>
-      <div class="title-card shop">Shop</div>
+    <div class="title-play">
+      <div class="tp-logo">ADRESS</div>
+      <button type="button" class="tp-back">← Voltar</button>
+      <div class="tp-title">Escolha como jogar</div>
+      <div class="title-card career">${ICON_MAP}<div class="tc-text"><b>Carreira</b><small>Avance pelos bairros</small></div><span class="tc-arrow">›</span></div>
+      <div class="title-card free">${ICON_COMPASS}<div class="tc-text"><b>Livre</b><small>Explore no seu ritmo</small></div><span class="tc-arrow">›</span></div>
+      <div class="title-card shop">${ICON_BOX}<div class="tc-text"><b>Shop</b></div><span class="tc-arrow">›</span></div>
     </div>
     <div class="title-driver"></div>
     <div class="title-main">
@@ -74,6 +105,7 @@ export function createTitle({ onFree, onCareer, onPlay, onShop }) {
   el.querySelector('.title-card.free').addEventListener('click', () => onFree());   // abre a escolha do bairro (não inicia sozinho)
   el.querySelector('.title-card.career').addEventListener('click', go(onCareer));
   el.querySelector('.title-card.shop').addEventListener('click', () => { if (!starting && onShop) onShop(); });   // abre o Shop (não inicia partida)
+  el.querySelector('.tp-back').addEventListener('click', () => { if (!starting && onBack) onBack(); });
   el.querySelector('[data-act="quit"]').addEventListener('click', () => {
     window.close();                                   // só funciona se a aba foi aberta por script
     el.innerHTML = '<div class="title-bye">Até a próxima!<br>Você já pode fechar esta aba.</div>';

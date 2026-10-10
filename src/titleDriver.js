@@ -29,16 +29,19 @@ export function createTitleDriver(container, audio) {
 
   const camera = new THREE.PerspectiveCamera(30, 1, 0.1, 100);
   const look = new THREE.Vector3(0.55, 1.45, 0);
+  const DIR = new THREE.Vector3(0.5, 0.28, -1).normalize();   // de frente e de lado (lado do motorista), um pouco de cima
 
   function resize() {
     const w = Math.max(1, container.clientWidth), h = Math.max(1, container.clientHeight);
     renderer.setSize(w, h, false);
     camera.aspect = w / h;
-    // enquadra a van inteira (≈ 6 de largura) qualquer que seja a proporção
-    const halfW = 2.5, halfH = 1.6;
-    const t = Math.tan(THREE.MathUtils.degToRad(camera.fov / 2));
-    const dist = Math.max(halfH / t, halfW / (t * camera.aspect)) + 2.5;
-    camera.position.set(look.x - 1.0, look.y + 0.8, -dist);
+    // enquadra a van INTEIRA (com o bagageiro escolhido no Shop, que pode ser alto) qualquer que seja a proporção
+    van.object.position.y = 0; van.object.updateMatrixWorld(true);
+    const sph = new THREE.Box3().setFromObject(van.object).getBoundingSphere(new THREE.Sphere());
+    look.copy(sph.center);
+    const t = Math.tan(THREE.MathUtils.degToRad(camera.fov / 2)), r = sph.radius * 0.92;
+    const dist = Math.max(r / t, r / (t * camera.aspect)) * 1.04;
+    camera.position.copy(look).addScaledVector(DIR, dist);
     camera.lookAt(look);
     camera.updateProjectionMatrix();
     camBase.copy(camera.position);
@@ -77,8 +80,10 @@ export function createTitleDriver(container, audio) {
 
   addEventListener('resize', () => running && resize());
   return {
+    /** Reenquadra (a customização da van mudou no Shop). */
+    refit() { if (mode === 'idle') resize(); },
     start() {
-      if (running) return;
+      if (running) { resize(); return; }
       running = true; t0 = last = performance.now();
       resize();
       renderer.render(scene, camera);

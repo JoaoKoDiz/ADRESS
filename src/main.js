@@ -225,6 +225,7 @@ const title = createTitle({
   onCareer: () => titleDriver.drive(() => title.fadeOut(enterMap)),     // dá a partida e vai para o mapa da Carreira
   onShop: () => { if (state === 'title') openShop(); },       // Shop: layout inicial (cores grátis; itens em breve)
   onPlay: el => { titleDriver = titleDriver || createTitleDriver(el, audio); titleDriver.start(); },
+  onBack: () => goBack(),                                      // Voltar do próprio painel (fica embaixo do logo)
 });
 // Shop (painel Jogar): cores da van e do personagem; o resto ainda não está à venda
 const shop = createShop();
@@ -286,6 +287,7 @@ function goBack() {
     title.show('home');
   } else if (state === 'shop') {
     shop.close();
+    if (titleDriver) titleDriver.refit();                // a van pode ter mudado (bagageiro alto): reenquadra
     setState('title');
   } else if (state === 'levelSelect') {
     levelSelect.close();
@@ -983,7 +985,7 @@ function update(dt, t) {
 // ---------- HUD ----------
 const promptPos = new THREE.Vector3();
 function updateHUD() {
-  back.set(state === 'levelSelect' || state === 'shop' || (state === 'title' && title.visible && title.screen === 'play' && !title.starting) || (state === 'map' && !missions.isOpen) || (IN_GAME.includes(state) && !missions.isOpen));
+  back.set(state === 'levelSelect' || state === 'shop' || (state === 'map' && !missions.isOpen) || (IN_GAME.includes(state) && !missions.isOpen));
   missionsBtn.set(gameMode === 'career' && IN_GAME.includes(state) && !missions.isOpen,
     `MISSÕES ${career.completedCount(careerLevel)}/5`);
   hud.setCounter(game.delivered);
