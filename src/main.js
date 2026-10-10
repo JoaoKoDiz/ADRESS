@@ -710,9 +710,10 @@ const CHURCH_LINES = [
 const K_PEW = { x: 2.3, z: -23 };                       // onde ele está sentado (coordenadas locais da igreja)
 const CL = (lx, ly, lz) => new THREE.Vector3(MAP_W() / 2 - lx, ly, MAP_W() + CHURCH_Z - lz);   // local da igreja → mundo (girada 180°)
 const CINE = {
-  player: { x: -0.6, z: -25.6 },                        // no corredor, na frente e à esquerda dele
-  camA: [[-1.5, 2.9, -28.5], [1.6, 1.4, -23.4]],        // jogador de costas em primeiro plano, ele de frente (levemente de lado)
-  camB: [[0.9, 2.2, -25.3], [2.3, 1.75, -23.1]],        // perto dele; o jogador já saiu do quadro
+  // vista LATERAL (olhando para a parede de lado, nunca para a porta: a van lá fora fica sempre fora do quadro)
+  player: { x: -0.6, z: -22.4 },                        // no corredor, ao lado dele
+  camA: [[-3.6, 2.6, -24.2], [0.9, 1.4, -22.9]],        // jogador de costas/lado em primeiro plano, ele de perfil
+  camB: [[0.3, 1.95, -23.55], [2.3, 1.75, -23.05]],     // perto dele, de lado; o jogador já saiu do quadro
   walk: [[0, -24], [0, 3.5], [-1.8, 13]],               // saída: corredor → porta → ao lado da van
   van: [-5, 13],                                        // van estacionada na frente da igreja, virada para o bairro
   outCam: [[7, 3.0, 30], [-1.5, 5, 2]],                 // enquadramento de fora: igreja + van, ele vem na direção da câmera
@@ -780,7 +781,7 @@ function updateChurchCine(dt) {
     // assim que o jogador sai totalmente do quadro, ele (e a van, lá fora) já fica branco: nada muda de cor na frente da câmera
     if (!unwhite && k > 0.3) {
       _frus.setFromProjectionMatrix(_m4.multiplyMatrices(rig.camera.projectionMatrix, rig.camera.matrixWorldInverse));
-      if (!_frus.intersectsBox(_bb.setFromObject(walker.object))) unwhite = whiten(walker.object, van.object);
+      if (!_frus.intersectsBox(_bb.setFromObject(walker.object)) && !_frus.intersectsBox(_bb.setFromObject(van.object))) unwhite = whiten(walker.object, van.object);
     }
   } else if (c.phase === 'back') {                      // parada no lugar, a câmera gira até o jogador (já branco) e segura um pouco
     const k = ease(Math.min(1, c.t / 2.2));
@@ -1225,6 +1226,7 @@ window.ADRESS = {
   get pixelRatio() { return pixelRatio; },
   get titleDriver() { return titleDriver; },
   get church() { return church; },
+  churchReveal() { if (churchOn && !churchShown) { approach.phase = 'revealed'; revealChurch(true); } },
   get churchMusicTime() { return +churchMusic.time.toFixed(2); }, get approach() { return approach; },
   get cine() { return cine; }, get whiteOn() { return !!unwhite; }, startChurchTalk, talkBox,
   get churchState() { return { on: churchOn, t: churchT, a: churchA, shown: churchShown }; },
