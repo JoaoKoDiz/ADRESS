@@ -40,7 +40,7 @@ export function createHeli(van, audio) {
   van.object.add(parts);
 
   let on = false, alt = 0, form = 0, climbTo = 0, t = 0, thump = 0, spin = 0, floor = 0;
-  let ground = null;         // (x, z) → altura do chão naquele ponto (0 ou o topo de um prédio)
+  let ground = null, terrain = null, ter = 0;   // terrain: altura do chão do bairro (Bairro 9: encostas)         // (x, z) → altura do chão naquele ponto (0 ou o topo de um prédio)
 
   return {
     /** Liga (decola) ou desliga (pousa e volta a ser van). */
@@ -52,8 +52,9 @@ export function createHeli(van, audio) {
     /** lift: +1 sobe, −1 desce, 0 mantém. Chame todo quadro (depois de van.update). */
     update(dt, lift) {
       t += dt;
-      floor = ground ? ground(van.x, van.z) : 0;
-      form += ((on || alt > 0.05 ? 1 : 0) - form) * Math.min(1, dt * 4);
+      ter = terrain ? terrain(van.x, van.z) : 0;
+      floor = Math.max(ter, ground ? ground(van.x, van.z) : 0);
+      form += ((on || alt > ter + 0.05 ? 1 : 0) - form) * Math.min(1, dt * 4);
       if (form < 0.02 && !on) form = 0;
       parts.visible = form > 0.02;
       parts.scale.setScalar(Math.max(0.01, form));
@@ -69,7 +70,7 @@ export function createHeli(van, audio) {
       const bob = on && alt > floor + 1 ? Math.sin(t * 2.6) * 0.18 : 0;
       van.object.position.y = alt + bob;
 
-      const landed = !on && floor > 0 && alt <= floor + 0.05;      // pousado em cima de um prédio
+      const landed = !on && floor > ter + 0.01 && alt <= floor + 0.05;      // pousado em cima de um prédio
       spin += ((landed ? 0 : 1) - spin) * Math.min(1, dt * 1.2);   // o rotor desacelera depois do pouso
       rotor.rotation.y += dt * 28 * form * spin;
       tail.rotation.z += dt * 40 * form * spin;
@@ -80,12 +81,13 @@ export function createHeli(van, audio) {
     },
     /** Altura do chão em (x, z); permite pousar no topo dos prédios. */
     setGround(fn) { ground = fn; },
+    setTerrain(fn) { terrain = fn; },
     reset() { on = false; alt = 0; spin = 0; floor = 0; form = 0; climbTo = 0; parts.visible = false; parts.scale.setScalar(0.01); van.object.position.y = 0; },
     get on() { return on; },
     get altitude() { return alt; },
-    get flying() { return on || alt > 0.3; },
+    get flying() { return on || alt > ter + 0.3; },
     /** Pousado no topo de um prédio (motor desligado): a van fica parada até decolar (H). */
-    get landed() { return !on && floor > 0 && alt <= floor + 0.05; },
-    get high() { return alt > HIGH; },
+    get landed() { return !on && floor > ter + 0.01 && alt <= floor + 0.05; },
+    get high() { return alt > ter + HIGH; },
   };
 }

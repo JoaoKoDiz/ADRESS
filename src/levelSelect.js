@@ -1,4 +1,4 @@
-// Modo Livre: escolha do bairro. 8 cartões creme (4×2) com as miniaturas; setas ou clique selecionam; botão "Jogar no Bairro N" ou E/Enter joga.
+// Modo Livre: escolha do bairro. 10 cartões creme (5×2) com as miniaturas; setas ou clique selecionam; botão "Jogar no Bairro N" ou E/Enter joga.
 import { renderMiniThumbnails } from './careerMap.js';
 
 const CSS = `
@@ -9,7 +9,7 @@ const CSS = `
 .lsel.on { display: flex; }
 .lsel h2 { margin: 0; font-weight: 900; font-size: clamp(28px, min(4vw, 7vh), 66px); color: #fff8ea;
   text-shadow: 0 3px 0 rgba(60,35,15,.75), 0 6px 18px rgba(0,0,0,.35); }
-.lsel-grid { display: grid; grid-template-columns: repeat(4, min(20vw, 30vh)); gap: clamp(8px, 1.8vh, 20px) clamp(8px, 1.2vw, 20px); }
+.lsel-grid { display: grid; grid-template-columns: repeat(5, min(17vw, 29vh)); gap: clamp(8px, 1.8vh, 20px) clamp(8px, 1.2vw, 20px); }
 .lsel-card { position: relative; border: 3px solid rgba(201,167,106,.7); border-radius: clamp(10px, 1.2vw, 18px); overflow: hidden; background: #fff3d6;
   cursor: pointer; box-shadow: 0 4px 12px rgba(0,0,0,.22); transition: transform .12s; }
 .lsel-card img { display: block; width: 100%; aspect-ratio: 4 / 3; object-fit: contain; }
@@ -25,8 +25,8 @@ body.lsel-on .title-play, body.lsel-on .title-driver { visibility: hidden; }   /
 .lsel-hint b { display: inline-block; min-width: 1.3em; text-align: center; color: #fff; background: #ff7a1a; border-radius: 5px; padding: .05em .3em; margin: 0 .12em; }
 `;
 // nomes dos bairros (só nesta tela do Modo Livre)
-const NAMES = ['Bairro Raízes', 'Bairro Horizontes', 'Bairro Constância', 'Bairro Veredas', 'Bairro Ofício', 'Bairro Mirante', 'Bairro Altitude', 'Bairro Ápice'];
-const COLS = 4, COUNT = 8;
+const NAMES = ['Bairro Raízes', 'Bairro Horizontes', 'Bairro Constância', 'Bairro Veredas', 'Bairro Ofício', 'Bairro Mirante', 'Bairro Altitude', 'Bairro Ápice', 'Bairro Encostas', 'Bairro Travessia'];
+const COLS = 5, COUNT = 10;
 
 export function createLevelSelect(onPick) {
   const style = document.createElement('style');

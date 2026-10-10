@@ -3,9 +3,10 @@
 // e os moradores (criados sob demanda na primeira visita).
 import * as THREE from 'three';
 import {
-  HEDGE, ROAD, LOT, WALK, MAP, GRID, PLAZA, lotX, lotZ, slotOrigin, roadCenter, ENTRANCE, LOT_ANCHORS, SOLIDS,
+  HEDGE, ROAD, LOT, WALK, MAP, GRID, PLAZA, lotX, lotZ, slotOrigin, roadCenter, ENTRANCE, LOT_ANCHORS, SOLIDS, TERRAIN, CANAL,
 } from './layout.js';
 import { HOUSES } from './data.js';
+import { buildTerrain } from './terrain.js';
 import { buildGasStation } from './models/gas.js';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { mat, mesh, box, cyl, cone, sphere, at, bakeStatic, dynamic, textTexture } from './models/kit.js';
@@ -398,6 +399,7 @@ export function createWorld({ renderer, buildLot, buildResident, yardBuilders, p
   scene.add(baked(buildHedge(), true, true));
   scene.add(baked(outskirts, false, false));
   if (PLAZA) scene.add(baked(buildPlaza(), true, true));
+  if (TERRAIN.kind !== 'flat' || CANAL) scene.add(baked(buildTerrain(), true, true));   // Bairros 9 e 10
 
   // os 16 lotes, construídos uma única vez (cada casa mantém sua identidade; só muda de lugar)
   // (só as casas deste bairro: `pool`; o array é indexado pelo índice da casa)
@@ -472,7 +474,7 @@ export function createWorld({ renderer, buildLot, buildResident, yardBuilders, p
     for (let s = 0; s < layout.length; s++) {
       if (layout[s] < 0) continue;                // lote sem casa (praça, posto)
       const o = slotOrigin(s);
-      lots[layout[s]].position.set(o.x, 0, o.z);
+      lots[layout[s]].position.set(o.x, TERRAIN.h(o.x + LOT / 2, o.z + LOT / 2), o.z);   // Bairro 9: lotes no alto
     }
     mergeLots();
   }
@@ -487,7 +489,7 @@ export function createWorld({ renderer, buildLot, buildResident, yardBuilders, p
     if (current && current !== r) current.visible = false;
     const lot = lots[h];
     // y = 0 do lote: o próprio morador se eleva sobre o caminho de pedras
-    r.position.set(lot.position.x + LOT_ANCHORS.residentSpot.x, 0, lot.position.z + LOT_ANCHORS.residentSpot.z);
+    r.position.set(lot.position.x + LOT_ANCHORS.residentSpot.x, lot.position.y, lot.position.z + LOT_ANCHORS.residentSpot.z);
     if (current !== r || currentH !== h || currentMood !== mood) {
       r.userData.setMood && r.userData.setMood(mood);
       currentMood = mood;

@@ -18,15 +18,25 @@ function subsets(arr, k, start = 0, cur = [], out = []) {
   return out;
 }
 const ALL = [...Array(16).keys()];   // casas do bairro padrão (4×4)
+// Etiquetas de lugar (Bairros 9 e 10: 'loc:*', 'side:*'), que dependem do lote da partida: { casa: [etiquetas] }
+let PLACE = {};
+export const setPlaceTags = m => { PLACE = m || {}; };
+const isPlace = t => t.startsWith('loc:') || t.startsWith('side:');
+const tagsOf = h => PLACE[h] ? HOUSES[h].tags.concat(PLACE[h]) : HOUSES[h].tags;
 /** true se o conjunto de características `s` descreve apenas a casa `h` entre as casas `pool` do bairro. */
-export const isUnique = (h, s, pool = ALL) => pool.every(o => o === h || !s.every(t => HOUSES[o].tags.includes(t)));
+export const isUnique = (h, s, pool = ALL) => pool.every(o => o === h || !s.every(t => tagsOf(o).includes(t)));
 
-/** Menor combinação de características que identifica só a casa h (às vezes cor + objeto, por variedade). */
+/** Menor combinação de características que identifica só a casa h (às vezes cor + objeto, por variedade).
+ *  Sempre tem ao menos uma característica visível; as de lugar às vezes entram mesmo sem precisar. */
 export function makeClue(h, pool = ALL) {
-  const tags = HOUSES[h].tags;
+  const tags = tagsOf(h), visual = s => s.some(t => !isPlace(t));
   for (let k = 1; k <= tags.length; k++) {
-    const opts = subsets(tags, k).filter(s => isUnique(h, s, pool));
+    const opts = subsets(tags, k).filter(s => visual(s) && isUnique(h, s, pool));
     if (!opts.length) continue;
+    if (!opts.some(s => s.some(isPlace)) && Math.random() < 0.35) {
+      const withPlace = subsets(tags, k + 1).filter(s => visual(s) && s.some(isPlace) && isUnique(h, s, pool));
+      if (withPlace.length) return pick(withPlace);
+    }
     if (k === 1 && Math.random() < 0.4) {
       const withColor = subsets(tags, 2).filter(s => s[0].startsWith('roof:') && isUnique(h, s, pool));
       if (withColor.length) return pick(withColor);
@@ -37,11 +47,12 @@ export function makeClue(h, pool = ALL) {
 }
 
 /** Artigos e preposições para falar do destino h (casa ou prédio). */
-export const ref = h => REF[HOUSES[h].kind === 'house' ? 'house' : 'shop'];   // prédios (comercial ou residencial): "o prédio"
+export const ref = h => REF[HOUSES[h].kind === 'house' ? 'house' : HOUSES[h].kind === 'ware' ? 'ware' : 'shop'];   // prédios (comercial ou residencial): "o prédio"
 
 export function phrase(tags) {
-  const p = tags.map(t => PHRASE[t]);
-  return p.length === 1 ? p[0] : p.slice(0, -1).join(', ') + ' e ' + p[p.length - 1];
+  const p = tags.filter(t => !isPlace(t)).map(t => PHRASE[t]);
+  const where = tags.filter(isPlace).map(t => ', ' + PHRASE[t]).join('');   // lugar no fim: "…, no Lado Leste"
+  return (p.length === 1 ? p[0] : p.slice(0, -1).join(', ') + ' e ' + p[p.length - 1]) + where;
 }
 
 export class Game {
@@ -75,6 +86,9 @@ export class Game {
     this.slotOf = [];                               // slotOf[casa] = lote
     for (const s in this.fixed) { this.layout[s] = this.fixed[s]; this.slotOf[this.fixed[s]] = +s; }
     free.forEach((s, i) => { this.layout[s] = perm[i]; this.slotOf[perm[i]] = s; });
+    if (this.arrange) this.arrange(this.layout, free);   // ex.: Bairro 10 põe as casas gêmeas em lados opostos do canal
+    this.layout.forEach((h, s) => { if (h >= 0) this.slotOf[h] = s; });
+    setPlaceTags(this.placeTags ? this.placeTags(this.layout) : null);
     this.pool = this.layout.filter(h => h >= 0);    // casas presentes nesta partida (as fixas também entram nas entregas)
 
     const len = ROUTE_LEN;

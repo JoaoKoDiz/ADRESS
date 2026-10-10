@@ -11,15 +11,17 @@ const G = 0.12, WALK_TOP = 0.17;
 const X0 = 3.4, X1 = 13.8, Z0 = 1.2, Z1 = A.house.z1;
 const FLOOR = 2.8;
 /** Andares dos prédios residenciais do bairro atual (5; no Bairro 8, mais altos). Definido por main.js ao trocar de bairro, ANTES de construir a cena. */
-export const APT_BUILD = { floors: 5 };
-const aptH = () => FLOOR * APT_BUILD.floors;
-export const aptHeight = () => aptH() + 0.6;           // topo da platibanda (para a câmera e a dica)
-export const aptRoofY = () => G + aptH() + 0.65;
+// mixed (Bairro 10): prédios das duas alturas (índice ímpar = 9 andares, par = 5)
+export const APT_BUILD = { floors: 5, mixed: false };
+export const aptFloors = apt => APT_BUILD.mixed && apt ? (apt.index % 2 ? 9 : 5) : APT_BUILD.floors;
+const aptH = apt => FLOOR * aptFloors(apt);
+export const aptHeight = apt => aptH(apt) + 0.6;           // topo da platibanda (para a câmera e a dica)
+export const aptRoofY = apt => G + aptH(apt) + 0.65;
 /** Terraço (coordenadas locais do lote): onde o helicóptero pode pousar. */
 export const APT_ROOF = { x0: X0, x1: X1, z0: Z0, z1: Z1 };
 /** Altura do chão do terraço no ponto local (lx, lz) do lote: o teto, mais o que estiver ali em cima (caixa-d'água, jardim, piscina, painéis). */
 export function aptRoofHeight(apt, lx, lz) {
-  const y = aptRoofY(), cx = (X0 + X1) / 2, cz = (Z0 + Z1) / 2;
+  const y = aptRoofY(apt), cx = (X0 + X1) / 2, cz = (Z0 + Z1) / 2;
   if (apt.atop === 'tank') return Math.hypot(lx - cx, lz - cz) < 2.1 ? y + 4.25 : y;     // pousa na tampa da caixa
   if (apt.atop === 'garden') return y + 0.3;
   if (apt.atop === 'pool') return Math.abs(lx - cx) < (X1 - X0 - 2) / 2 && Math.abs(lz - cz) < (Z1 - Z0 - 2.4) / 2 ? y + 0.37 : y;
@@ -31,7 +33,7 @@ const GLASS = '#4a6a8a', FRAME = '#dcdcdc', DARK = '#3a3d44', CONCRETE = '#c4c0b
 const COLS = [X0 + 1.9, CX, X1 - 1.9];                   // três colunas de janelas na frente
 
 export function buildAptLot(apt) {
-  const FLOORS = APT_BUILD.floors, H = FLOOR * FLOORS;
+  const FLOORS = aptFloors(apt), H = FLOOR * FLOORS;
   const root = new THREE.Group();
   root.name = 'apt:' + apt.name;
   const gray = apt.gray, rail = BALCONY_COL[apt.balcony];

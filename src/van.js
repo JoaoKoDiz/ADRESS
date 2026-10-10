@@ -1,7 +1,7 @@
 // A van de entregas: modelo 3D (laranja, bem visível) + física de direção portada da versão 2D (escala 1/10).
 // Espaço local do modelo: frente = +X, lado direito = +Z, cima = +Y. No mundo: object.rotation.y = −heading.
 import * as THREE from 'three';
-import { SOLIDS, BOUNDS, VAN_START } from './layout.js';
+import { SOLIDS, BOUNDS, VAN_START, TERRAIN } from './layout.js';
 import { mat, mesh, box, cyl, at, group, dynamic, bakeStatic } from './models/kit.js';
 import { buildWheel, WHEEL_R, WHEEL_W } from './models/wheels.js';
 import { buildRack, tickRack } from './models/racks.js';
@@ -245,8 +245,11 @@ export function createVan(scene, opts) {
   };
 
   function sync() {
-    root.position.set(x, 0, z);
-    root.rotation.set(0, -heading, 0);
+    // Bairro 9: acompanha o chão (altura e inclinação das ladeiras)
+    const cx = Math.cos(heading) * 1.8, cz = Math.sin(heading) * 1.8;
+    const slope = TERRAIN.kind === 'flat' ? 0 : Math.atan2(TERRAIN.h(x + cx, z + cz) - TERRAIN.h(x - cx, z - cz), 3.6);
+    root.position.set(x, TERRAIN.h(x, z), z);
+    root.rotation.set(0, -heading, slope);
     body.position.y = -squat;
     body.rotation.set(roll, 0, pitch);
     for (let i = 0; i < wheels.length; i++) wheels[i].rotation.z = spin;

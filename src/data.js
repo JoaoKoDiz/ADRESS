@@ -112,6 +112,23 @@ export const L6_FIXED = { 16: 87 };
 /** Bairro 1: { lote: casa } sempre iguais em todas as partidas. */
 export const L1_FIXED = { 15: 86 };
 
+// ---- Galpões (Bairro 10, índices 88–103): 4 cores de telhado × 4 de portão (cada par é único) + itens na área de carga ----
+{
+  const names = ['Seu Tavares', 'Dona Rute', 'Seu Gervásio', 'Dona Cleusa', 'Seu Amaro', 'Dona Filó', 'Seu Ozório', 'Dona Lena',
+    'Seu Bráulio', 'Dona Marta', 'Seu Quirino', 'Dona Socorro', 'Seu Valter', 'Dona Isaura', 'Seu Nonato', 'Dona Jandira'];
+  const R = ['red', 'blue', 'green', 'gray'], GT = ['blue', 'red', 'yellow', 'green'];
+  const IT = [['pallets'], ['forklift'], ['truck'], ['barrels'], ['pallets', 'forklift'], ['truck', 'barrels'], ['forklift', 'barrels'], ['pallets', 'truck']];
+  for (let i = 0; i < 16; i++) HOUSES.push({ name: names[i], kind: 'ware', wroof: R[i % 4], gate: GT[(i + Math.floor(i / 4)) % 4], items: IT[(i * 3) % 8] });
+}
+/** Índices dos galpões em HOUSES. */
+export const WARES = [...Array(16).keys()].map(k => 88 + k);
+// ---- Casas gêmeas (Bairro 10, índices 104–109): cópias das casas abaixo, sempre do outro lado do canal ----
+const TWIN_OF = [0, 1, 2, 6, 13, 9];
+const TWIN_NAMES = ['Seu Juvenal', 'Dona Cidinha', 'Seu Benedito', 'Dona Arlete', 'Seu Romeu', 'Dona Fátima'];
+TWIN_OF.forEach((o, i) => { const c = HOUSES[o]; HOUSES.push({ name: TWIN_NAMES[i], roof: c.roof, door: c.door, f: c.f.slice(), twin: o }); });
+/** Pares [original, gêmea]. */
+export const TWINS = TWIN_OF.map((o, i) => [o, 104 + i]);
+
 export const ROOF_ITEMS = ['chimney', 'dish', 'solar', 'tank', 'rooster', 'kite', 'patch'];
 export const YARD_ITEMS = ['fruit', 'bare', 'cactus', 'sunflowers', 'ballbush', 'doghouse', 'pool', 'trampoline',
   'swing', 'bike', 'flamingo', 'gnome', 'clothesline', 'tires', 'fountain'];
@@ -127,6 +144,12 @@ HOUSES.forEach((h, i) => {
   if (h.kind === 'fut') {
     h.f = [];
     h.tags = ['glow:' + h.glow, 'crown:' + h.crown];
+    h.roofItems = []; h.yardItems = [];
+    return;
+  }
+  if (h.kind === 'ware') {
+    h.f = [];
+    h.tags = ['wroof:' + h.wroof, 'gate:' + h.gate].concat(h.items.map(k => 'w:' + k));
     h.roofItems = []; h.yardItems = [];
     return;
   }
@@ -166,6 +189,14 @@ export const PHRASE = {
   'atop:tank': 'uma caixa-d’água grande no terraço', 'atop:antenna': 'antenas no terraço', 'atop:garden': 'um jardim no terraço',
   'atop:solar': 'painéis solares no terraço', 'atop:pool': 'uma piscina no terraço',
   'fac:clothes': 'roupas penduradas nas janelas', 'fac:plants': 'plantas nas sacadas', 'fac:ac': 'ar-condicionados na fachada', 'fac:mural': 'um grafite colorido na parede',
+  // galpões
+  'wroof:red': 'telhado vermelho', 'wroof:blue': 'telhado azul', 'wroof:green': 'telhado verde', 'wroof:gray': 'telhado cinza',
+  'gate:blue': 'portão azul', 'gate:red': 'portão vermelho', 'gate:yellow': 'portão amarelo', 'gate:green': 'portão verde',
+  'w:pallets': 'caixas e pallets na entrada', 'w:forklift': 'uma empilhadeira na entrada', 'w:truck': 'um caminhão na área de carga',
+  'w:barrels': 'barris e tubos empilhados',
+  // lugar (Bairros 9 e 10): vão no fim da pista
+  'loc:top': 'na parte mais alta do bairro', 'loc:ramp': 'logo depois da subida', 'loc:stairs': 'ao lado da escadaria',
+  'side:east': 'no Lado Leste', 'side:west': 'no Lado Oeste',
   'gnd:dumpster': 'uma caçamba na frente', 'gnd:moto': 'uma moto estacionada na frente', 'gnd:guard': 'uma guarita na entrada', 'gnd:bikes': 'um bicicletário na frente',
 };
 
@@ -173,6 +204,7 @@ export const PHRASE = {
 export const REF = {
   house: { a: 'a casa', da: 'da casa', na: 'na casa', n: 'casa' },
   shop: { a: 'o prédio', da: 'do prédio', na: 'no prédio', n: 'prédio' },
+  ware: { a: 'o galpão', da: 'do galpão', na: 'no galpão', n: 'galpão' },
 };
 
 export const COMPLAINTS = [

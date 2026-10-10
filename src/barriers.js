@@ -12,7 +12,7 @@
 //   uma das pontas ('L' ou 'R'), cortando só aquela metade: o portão continua acessível pela outra ponta.
 //   Trecho vertical (coluna j, entre as linhas i e i+1): I(j,i) — I(j,i+1). A barreira fica no meio e corta o trecho.
 import * as THREE from 'three';
-import { ROAD, GRID, ENTRANCE, GAS_LIST, roadCenter, SOLIDS } from './layout.js';
+import { ROAD, GRID, ENTRANCE, GAS_LIST, HOUSE_SLOTS, roadCenter, SOLIDS } from './layout.js';
 import { mat, box, cyl, cone, at } from './models/kit.js';
 
 const START = () => [ENTRANCE.road, 0];   // cruzamento da entrada (rua central, borda norte)
@@ -158,7 +158,9 @@ function buildJam() {
 const key = (...a) => a.join(',');
 
 /** O conjunto de barreiras deixa tudo alcançável a partir da entrada? (`skipM`: portões dos trechos engarrafados, que ficam de fora de propósito) */
-function allReachable(blocked, skipM = new Set()) {
+let TOPO = { blocked: new Set(), skip: new Set(), exclude: new Set(), heightAt: () => 0 };   // ver layout.roadTopology()
+function allReachable(blocked0, skipM = new Set()) {
+  const blocked = new Set([...TOPO.blocked, ...blocked0]);
   const N = GRID;
   const adj = new Map();
   const link = (a, b) => { (adj.get(a) || adj.set(a, []).get(a)).push(b); (adj.get(b) || adj.set(b, []).get(b)).push(a); };
@@ -169,7 +171,7 @@ function allReachable(blocked, skipM = new Set()) {
   for (let j = 0; j <= N; j++) for (let i = 0; i < N; i++) {        // trechos verticais
     if (!blocked.has(key('V', j, i))) link(key('I', j, i), key('I', j, i + 1));
   }
-  const total = (N + 1) * (N + 1) + N * (N + 1) - skipM.size;
+  const total = (N + 1) * (N + 1) + N * (N + 1) - skipM.size - TOPO.skip.size;
   const seen = new Set([key('I', ...START())]);
   const queue = [key('I', ...START())];
   while (queue.length) for (const n of adj.get(queue.shift()) || []) if (!seen.has(n)) { seen.add(n); queue.push(n); }
@@ -195,20 +197,21 @@ export function createBarriers() {
   }
 
   /** Sorteia de `min` a `max` bloqueios válidos (dos tipos `types`) e os coloca na cena `scene`. */
-  function randomize(scene, { min = 3, max = 5, types = ['barrier'], jams = null } = {}) {
+  function randomize(scene, { min = 3, max = 5, types = ['barrier'], jams = null, topo = null } = {}) {
     clear();
+    if (topo) TOPO = topo;
     scene.add(group);
     const N = GRID;
     const cands = [];
-    for (let i = 0; i <= N; i++) for (let j = 0; j < N; j++) cands.push(['H', j, i, 'L'], ['H', j, i, 'R']);
+    for (let i = 0; i <= N; i++) for (let j = 0; j < N; j++) if (!TOPO.exclude.has(key('H', j, i))) cands.push(['H', j, i, 'L'], ['H', j, i, 'R']);
     const gasSegs = new Set(GAS_LIST.map(g => key('V', g.slots[0] % N + 1, Math.floor(g.slots[0] / N))));   // ruas por dentro dos postos
-    for (let j = 0; j <= N; j++) for (let i = 0; i < N; i++) if (!gasSegs.has(key('V', j, i))) cands.push(['V', j, i]);
+    for (let j = 0; j <= N; j++) for (let i = 0; i < N; i++) if (!gasSegs.has(key('V', j, i)) && !TOPO.exclude.has(key('V', j, i)) && !TOPO.blocked.has(key('V', j, i))) cands.push(['V', j, i]);
     const want = min + Math.floor(Math.random() * (max - min + 1));
     const wantJams = jams ? jams.min + Math.floor(Math.random() * (jams.max - jams.min + 1)) : 0;
     // engarrafamentos: trechos horizontais de rua com lotes ao norte (i ≥ 1); tampam o trecho inteiro
     const jamCands = [];
     const gasSlots = new Set(GAS_LIST.flatMap(g => g.slots));          // lote de posto não é destino de entrega: engarrafar ali não adiantaria
-    for (let i = 1; i <= N; i++) for (let j = 0; j < N; j++) if (!gasSlots.has((i - 1) * N + j)) jamCands.push([j, i]);
+    for (let i = 1; i <= N; i++) for (let j = 0; j < N; j++) if (!gasSlots.has((i - 1) * N + j) && HOUSE_SLOTS.includes((i - 1) * N + j) && !TOPO.exclude.has(key('H', j, i))) jamCands.push([j, i]);
     const shuf = a => { for (let k = a.length - 1; k > 0; k--) { const r = Math.floor(Math.random() * (k + 1)); [a[k], a[r]] = [a[r], a[k]]; } };
     let chosen, jamSegs;
     for (let tries = 0; tries < 60; tries++) {
@@ -237,7 +240,7 @@ export function createBarriers() {
       b.visible = true;
       b.userData.cars.forEach(c => { c.userData.body.material = mat(CAR_COLORS[Math.floor(Math.random() * CAR_COLORS.length)]); });
       const x0 = roadCenter(j) + ROAD / 2 + 0.2, x1 = roadCenter(j + 1) - ROAD / 2 - 0.2, z = roadCenter(i);
-      b.position.set((x0 + x1) / 2, 0, z);
+      b.position.set((x0 + x1) / 2, TOPO.heightAt((x0 + x1) / 2, z), z);
       const s = { x0, x1, z0: z - ROAD / 2 - 0.1, z1: z + ROAD / 2 + 0.1 };
       SOLIDS.push(s); solids.push(s); jamRects.push(s);
       jammed.push((i - 1) * N + j);                // o lote ao norte do trecho (sua porta dá para este trecho)
@@ -260,7 +263,7 @@ export function createBarriers() {
         const [, j, i] = c;
         x = roadCenter(j); z = (roadCenter(i) + roadCenter(i + 1)) / 2; alongX = false;
       }
-      b.position.set(x, 0, z);
+      b.position.set(x, TOPO.heightAt(x, z), z);
       b.rotation.y = type === 'truck'
         ? (Math.random() < 0.5 ? Math.PI / 4 : -Math.PI / 4) + (Math.random() < 0.5 ? Math.PI : 0)   // caminhão parado na diagonal
         : alongX ? Math.PI / 2 : 0;
