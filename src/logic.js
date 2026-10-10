@@ -137,7 +137,7 @@ export class Game {
     return c;
   }
 
-  /** Casa cujo morador não atende (Seu Galdino): mesma lógica da rota, mas o texto é um pensamento do narrador. */
+  /** Casa cujo morador não atende (K): mesma lógica da rota, mas o texto é um pensamento do narrador. */
   narratorVisit(h) {
     let text, success = false;
     if (h === this.recipient) { success = true; text = pick(NARRATOR.success); this.delivered++; }

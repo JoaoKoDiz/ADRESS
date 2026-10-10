@@ -640,7 +640,7 @@ export function buildLot(house, { yardBuilders } = {}) {
     if (obj.userData && typeof obj.userData.update === 'function') updaters.push(t => obj.userData.update(t));
   });
 
-  // Seu Galdino: cadeira de balanço com ele lendo jornal (sempre ali; animado)
+  // K: cadeira de balanço com ele lendo jornal (sempre ali; animado)
   if (house.reader) {
     const spot = buildReaderSpot(), rd = house.reader;
     spot.position.set(rd.x, G, rd.z); spot.rotation.y = rd.rot; spot.scale.setScalar(0.9);

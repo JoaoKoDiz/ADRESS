@@ -1,4 +1,4 @@
-// Seu Galdino (casa fixa do Bairro 1): sentado numa cadeira de balanço de madeira no quintal, lendo jornal
+// K (casa fixa do Bairro 1): sentado numa cadeira de balanço de madeira no quintal, lendo jornal
 // e balançando bem de leve. Não liga para entregas (main.js não mostra morador na porta; as falas são do narrador).
 // Estilo low-poly (sombreamento chapado), como a referência. Frente do personagem/cadeira = +X local.
 import * as THREE from 'three';
@@ -225,7 +225,7 @@ export function buildReaderSpot() {
 }
 
 /**
- * Seu Galdino reclinado numa espreguiçadeira (terraço do prédio fixo do Bairro 6), de óculos de sol, sem jornal.
+ * K reclinado numa espreguiçadeira (terraço do prédio fixo do Bairro 6), de óculos de sol, sem jornal.
  * Origem no tampo da espreguiçadeira (comprimento ao longo de X, cabeceira em −X), frente = +X. Inclui o encosto levantado.
  */
 export function buildLoungerReader() {
@@ -276,7 +276,7 @@ export function buildLoungerReader() {
 }
 
 /**
- * Seu Galdino sentado num banco da igreja, de óculos normais, sem jornal, mãos nas pernas. Só fica sentado (sem animação).
+ * K sentado num banco da igreja, de óculos normais, sem jornal, mãos nas pernas. Só fica sentado (sem animação).
  * Origem no chão, no meio do assento; frente = +X. `seatY` = altura do assento.
  */
 export function buildPewReader(seatY = 0.62) {

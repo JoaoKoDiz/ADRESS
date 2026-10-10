@@ -162,7 +162,7 @@ export function buildAptLot(apt) {
     for (const dx of [-3.5, -1.5]) root.add(at(box(1.0, 0.25, 2.0, '#ffffff'), CX + dx, top + 0.15, Z1 - 0.6));
     root.add(at(cone(1.2, 0.5, '#ff6fa5', 10), CX + 3.5, top + 2.0, Z1 - 0.8));                  // guarda-sol
     root.add(at(cyl(0.05, 0.05, 1.8, '#ffffff', 6), CX + 3.5, top + 0.9, Z1 - 0.8));
-    if (apt.lounger) {                                          // prédio fixo do Bairro 6: o Seu Galdino na 2ª espreguiçadeira (main.js decide se aparece)
+    if (apt.lounger) {                                          // prédio fixo do Bairro 6: o K na 2ª espreguiçadeira (main.js decide se aparece)
       const lr = buildLoungerReader();
       lr.position.set(CX - 1.5, top + 0.275, Z1 - 0.6); lr.rotation.y = Math.PI / 2;    // de frente para a piscina (norte); cabeceira na beirada
       lr.visible = false;

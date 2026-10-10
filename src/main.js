@@ -423,11 +423,12 @@ function nextDelivery() {
   setState('drive');
 }
 
-// ---------- Bairro 1: a caixa do Seu Galdino (casa fixa do canto) ----------
+// ---------- Bairro 1: a caixa do K (casa fixa do canto) ----------
 // Uma caixa por partida no lote 0 (canto oposto), à direita da casa, no canto do quintal perto do encontro das cercas.
-// Só dá para pegar a pé; entrar na van com ela a devolve ao lugar. Entregue ao Seu Galdino, ele deixa o jornal de lado
+// Só dá para pegar a pé; entrar na van com ela a devolve ao lugar. Entregue ao K, ele deixa o jornal de lado
 // e conversa (caixa de diálogo, câmera fixa). Depois de entregue (salvo para sempre), a caixa some e ele só repete a última fala.
-const PARCEL_KEY = 'adress.l1.galdinoParcel', GALDINO = L1_FIXED[15];
+const PARCEL_KEY = 'adress.l1.kParcel', K_HOUSE = L1_FIXED[15];
+try { const old = localStorage.getItem('adress.l1.' + 'galdino' + 'Parcel'); if (old) { localStorage.setItem(PARCEL_KEY, old); localStorage.removeItem('adress.l1.' + 'galdino' + 'Parcel'); } } catch (e) { /* progresso salvo com a chave antiga */ }
 let parcelDone = false;
 try { parcelDone = localStorage.getItem(PARCEL_KEY) === '1'; } catch (e) { /* sem armazenamento */ }
 const PARCEL_AT = { x: 15.7, z: 2.3 };                  // coordenadas do lote 0
@@ -438,7 +439,7 @@ const parcel = (() => {
   add(0.72, 0.525, 0.14, '#e8d3a0', 0, 0.26, 0);          // fita
   add(0.14, 0.53, 0.72, '#e8d3a0', 0, 0.26, 0);
   add(0.26, 0.01, 0.18, '#ffffff', 0.18, 0.531, 0.2);     // etiqueta
-  g.name = 'galdino-parcel';
+  g.name = 'k-parcel';
   return g;
 })();
 let carrying = false, parcelGiven = false;   // parcelGiven: já entregue nesta partida (fica ao lado dele, sem poder pegar de volta)
@@ -452,10 +453,10 @@ function resetParcel() {
   world.scene.add(parcel);
 }
 const nearParcel = () => !carrying && !parcelGiven && parcel.parent && Math.hypot(walker.x - parcel.position.x, walker.z - parcel.position.z) < 1.9;
-const readerSpot = () => { const lot = world.scene.getObjectByName('lot:' + GALDINO); return lot && lot.visible ? lot.getObjectByName('reader-spot') : null; };
+const readerSpot = () => { const lot = world.scene.getObjectByName('lot:' + K_HOUSE); return lot && lot.visible ? lot.getObjectByName('reader-spot') : null; };
 const _rp = new THREE.Vector3();
-/** Perto do Seu Galdino, na frente dele (a pé). */
-function nearGaldino() {
+/** Perto do K, na frente dele (a pé). */
+function nearK() {
   if (!isL1() || !(carrying || parcelDone)) return false;
   const sp = readerSpot(); if (!sp) return false;
   sp.getWorldPosition(_rp);
@@ -463,12 +464,12 @@ function nearGaldino() {
   return Math.hypot(dx, dz) < 2.9 && dx * fx + dz * fz > -0.2;
 }
 const talkBox = createTalkBox(stage);
-const GALDINO_LAST = ['Pelo visto, vou ter que me mudar para ', { b: 'o topo de um prédio alto' }, '. Quem sabe assim vocês finalmente me enxergam.'];
-const GALDINO_LINES = [
+const K_LAST = ['Pelo visto, vou ter que me mudar para ', { b: 'o topo de um prédio alto' }, '. Quem sabe assim vocês finalmente me enxergam.'];
+const K_LINES = [
   ['Ah! Finalmente uma encomenda que é minha mesmo!'],
   ['Já recebi tanta coisa que não pedi que comecei a conferir se o nome na porta ainda era o meu.'],
   ['Mas me diga: foi tão difícil assim encontrar esta casa?'],
-  GALDINO_LAST,
+  K_LAST,
 ];
 const talkCam = { pos: new THREE.Vector3(), look: new THREE.Vector3() };
 let talkPhase = '', talkLines = null;
@@ -478,27 +479,27 @@ function startTalk() {
   const px = _rp.x + rt.x * 1.9 - f.x * 0.1, pz = _rp.z + rt.z * 1.9 - f.z * 0.1;          // o jogador fica ao lado dele (vista lateral)
   walker.pose(px, pz, Math.atan2(_rp.z - pz, _rp.x - px));
   const d = new THREE.Vector3(_rp.x - px, 0, _rp.z - pz).normalize();
-  // câmera fixa: atrás e à direita do jogador (ele aparece em parte, em primeiro plano) e o Seu Galdino de lado, à frente
+  // câmera fixa: atrás e à direita do jogador (ele aparece em parte, em primeiro plano) e o K de lado, à frente
   talkCam.pos.set(px - d.x * 1.7 - d.z * 1.75, 1.85, pz - d.z * 1.7 + d.x * 1.75);
   talkCam.look.set(_rp.x * 0.85 + px * 0.15, 0.95, _rp.z * 0.85 + pz * 0.15);
   if (carrying) {                                         // a caixa fica no chão, ao lado da cadeira
     carrying = false; parcelGiven = true;
     parcel.position.set(_rp.x + f.x * 0.55 - rt.x * 0.95, 0, _rp.z + f.z * 0.55 - rt.z * 0.95); parcel.rotation.set(0, -r + 0.3, 0);
-    talkLines = GALDINO_LINES;
-  } else talkLines = [GALDINO_LAST];
+    talkLines = K_LINES;
+  } else talkLines = [K_LAST];
   sp.userData.setAside(true);
   talkPhase = 'aside';
   setState('talk');
 }
 function endTalk() {
-  if (!parcelDone && talkLines === GALDINO_LINES) { parcelDone = true; try { localStorage.setItem(PARCEL_KEY, '1'); } catch (e) { /* */ } }
+  if (!parcelDone && talkLines === K_LINES) { parcelDone = true; try { localStorage.setItem(PARCEL_KEY, '1'); } catch (e) { /* */ } }
   const sp = readerSpot(); sp && sp.userData.setAside(false);   // volta a ler
   talkPhase = ''; actionLock = 0.4;
   rig.snap({ x: walker.x, z: walker.z, heading: walker.heading, speed: 0 });   // câmera de sempre, atrás do personagem
   setState('walk');
 }
 
-// ---------- Bairro 6: o Seu Galdino no terraço do prédio fixo (C5) ----------
+// ---------- Bairro 6: o K no terraço do prédio fixo (C5) ----------
 // Só aparece depois da conversa da caixa no Bairro 1. Chega-se de helicóptero (Livre): pousado no terraço, L desce a pé.
 let roofWalk = null;                                    // { s, h, o, y }: terraço onde o personagem está andando
 function roofUnderVan() {
@@ -675,7 +676,7 @@ function update(dt, t) {
           walker.placeBesideVan(van, roofSolids());
           const R = APT_ROOF, o = roofWalk.o;                 // sem espaço ao lado: fica dentro da laje
           walker.pose(Math.min(Math.max(walker.x, o.x + R.x0 + 0.9), o.x + R.x1 - 0.9), Math.min(Math.max(walker.z, o.z + R.z0 + 0.9), o.z + R.z1 - 0.9), walker.heading);
-          if (roofWalk.h === LOUNGER_APT && loungerSpot() && loungerSpot().visible) {   // C5: desce sempre já ao lado do Seu Galdino
+          if (roofWalk.h === LOUNGER_APT && loungerSpot() && loungerSpot().visible) {   // C5: desce sempre já ao lado do K
             loungerSpot().getWorldPosition(_rp);
             walker.pose(_rp.x + 1.45, _rp.z - 0.3, Math.atan2(0.3, -1.45));
           }
@@ -727,7 +728,7 @@ function update(dt, t) {
       if (stateT > FUEL_TIME) { fuelMsgT = 3; fuelMsg = FUEL_LINES[Math.floor(Math.random() * FUEL_LINES.length)]; actionLock = 0.3; setState('drive'); }
       break;
     case 'ring':
-      if (stateT > RESIDENT_APPEAR && !HOUSES[pending].narrator) world.showResident(pending, 'angry');   // Seu Galdino não atende: continua lendo
+      if (stateT > RESIDENT_APPEAR && !HOUSES[pending].narrator) world.showResident(pending, 'angry');   // K não atende: continua lendo
       if (stateT > RING_TIME) {
         const stepBefore = game.step, indicated = game.route[game.step] === pending;
         dialog = game.visit(pending);
@@ -779,10 +780,10 @@ function update(dt, t) {
       if (nearLounger()) startRoofTalk();             // no terraço a van fica perto: falar com ele tem prioridade
       else if (walker.nearVan(van)) { if (carrying) resetParcel(); walker.show(false); walker.setFloor(0); roofWalk = null; actionLock = 0.5; setState('drive'); }   // a caixa volta ao lugar
       else if (nearParcel()) carrying = true;
-      else if (nearGaldino()) startTalk();
+      else if (nearK()) startTalk();
       break;
     }
-    case 'talk': {                                  // conversa com o Seu Galdino: jogador parado, câmera fixa
+    case 'talk': {                                  // conversa com o K: jogador parado, câmera fixa
       walker.update(dt, { x: 0, z: 0 }, 'car', [], van);
       const sp = readerSpot();
       if (talkPhase === 'aside' && (!sp || sp.userData.asideDone())) { talkPhase = 'talk'; talkBox.show(talkLines, endTalk); }
@@ -906,8 +907,8 @@ function updateHUD() {
   }
 
   const walkNear = state === 'walk' && walker.nearVan(van) && !nearLounger() && !missions.isOpen;
-  // a pé no Bairro 1: pegar a caixa / entregar ao Seu Galdino / conversar (balão em cima do personagem)
-  const walkAct = state === 'walk' && !walkNear && !missions.isOpen ? (nearParcel() ? 'Pegar a caixa' : nearGaldino() ? (carrying ? 'Entregar a caixa' : 'Conversar') : nearLounger() ? 'Conversar' : '') : '';
+  // a pé no Bairro 1: pegar a caixa / entregar ao K / conversar (balão em cima do personagem)
+  const walkAct = state === 'walk' && !walkNear && !missions.isOpen ? (nearParcel() ? 'Pegar a caixa' : nearK() ? (carrying ? 'Entregar a caixa' : 'Conversar') : nearLounger() ? 'Conversar' : '') : '';
   if (walkAct) {
     rig.camera.updateMatrixWorld();
     promptPos.set(walker.x, walker.floor + 2.7, walker.z).project(rig.camera);

@@ -102,10 +102,10 @@ export const SHOPS = [32, 33, 34, 35, 36, 37, 66, 67, 68, 69];
 // yardZ: posição própria de um item do quintal (a árvore sem folhas fica mais perto da casa, deixando a frente livre)
 // reader: cadeira de balanço com ele lendo jornal no espaço livre do quintal (lado direito, na frente da árvore).
 // narrator: ele não atende a porta; as falas das entregas nessa casa são pensamentos do narrador, entre parênteses.
-HOUSES.push({ name: 'Seu Galdino', roof: 'red', f: ['rooster', 'sunflowers', 'bare'], yardZ: { bare: 11.0 },
+HOUSES.push({ name: 'K', roof: 'red', f: ['rooster', 'sunflowers', 'bare'], yardZ: { bare: 11.0 },
   reader: { x: 15.0, z: 14.2, rot: -2.2 }, narrator: true });
 // ---- Prédio fixo do Bairro 6 (índice 87): sempre na quadra C5 (lote 16). No terraço, a 2ª espreguiçadeira recebe o
-// Seu Galdino (só depois da conversa do Bairro 1): `lounger`.
+// K (só depois da conversa do Bairro 1): `lounger`.
 HOUSES.push({ name: 'Dona Ivone', kind: 'apt', balcony: 'red', atop: 'pool', extra: ['fac:plants', 'gnd:moto'], gray: '#9ea2a9', lounger: true });
 /** Bairro 6: { lote: prédio } sempre iguais em todas as partidas (C5 = linha C, coluna 5, contando do canto à direita da entrada). */
 export const L6_FIXED = { 16: 87 };
@@ -221,7 +221,7 @@ export const NOHINT_AGAIN = [
   'Ainda não é meu! Segue a pista que você tem.',
   'Voltou? Continua não sendo meu.',
 ];
-// Narrador (casa do Seu Galdino, que nunca larga o jornal): sempre entre parênteses
+// Narrador (casa do K, que nunca larga o jornal): sempre entre parênteses
 export const NARRATOR = {
   success: [
     '(Ele nem tirou os olhos do jornal. Mas o endereço confere: a encomenda era dele mesmo!)',
