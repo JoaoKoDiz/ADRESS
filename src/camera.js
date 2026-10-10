@@ -181,6 +181,7 @@ export function createCameraRig() {
   let goalYaw = 0, goalPitch = 0;              // posição pedida pelo mouse
   let velYaw = 0, velPitch = 0;                // velocidade do mouse (rad/s), suavizada: dá inércia curta ao soltar
   let orbHeld = false, zoom = 1, zoomGoal = 1;
+  let lookLift = 0, liftGoal = 0;              // cena: a mira sobe suavemente (ex.: aproximação da igreja, para enquadrar o horizonte)
   let arm = R0;                                // comprimento atual do braço (suavizado); encolhe quando algo fica entre a van e a câmera
   const camYaw = () => yaw + orbYaw;
 
@@ -212,6 +213,7 @@ export function createCameraRig() {
     const k = smooth(Math.min(1, Math.abs(orbYaw) / 0.7 + Math.abs(orbPitch) / 0.5));
     const hx = Math.cos(yaw), hz = Math.sin(yaw);
     chaseLook.set(piv.x + hx * CHASE_LOOK_AHEAD * (1 - k), piv.y - PIVOT_Y + CHASE_LOOK_Y + (PIVOT_Y - CHASE_LOOK_Y) * k, piv.z + hz * CHASE_LOOK_AHEAD * (1 - k));
+    chaseLook.y += lookLift;
     chaseQuat.setFromRotationMatrix(m4.lookAt(chasePos, chaseLook, UP));
     const b = smooth(blend);
     camera.position.lerpVectors(overviewPos, chasePos, b);
@@ -238,7 +240,7 @@ export function createCameraRig() {
     tgt.x = target.x; tgt.z = target.z; tgtY = target.y || 0;
     piv.set(tgt.x, PIVOT_Y + tgtY, tgt.z);
     if (target.heading !== undefined) yaw = target.heading;
-    orbYaw = goalYaw = orbPitch = goalPitch = 0; velYaw = velPitch = 0; zoom = zoomGoal = 1;      // partida/tela nova: câmera padrão
+    orbYaw = goalYaw = orbPitch = goalPitch = 0; velYaw = velPitch = 0; zoom = zoomGoal = 1; lookLift = liftGoal = 0;      // partida/tela nova: câmera padrão
     blend = mode === 'chase' ? 1 : 0;
     rayDir(dir); arm = armGoal(Math.max(MIN_RADIUS, R0 * zoom), dir);
     apply();
@@ -257,6 +259,7 @@ export function createCameraRig() {
     velYaw += ((ny - orbYaw) / dt - velYaw) * (1 - Math.exp(-20 * dt)); velPitch += ((np - orbPitch) / dt - velPitch) * (1 - Math.exp(-20 * dt));
     orbYaw = ny; orbPitch = np;
     zoom += (zoomGoal - zoom) * (1 - Math.exp(-11 * dt));
+    lookLift += (liftGoal - lookLift) * (1 - Math.exp(-0.9 * dt));
     // braço (distância): para na frente de paredes/casas; encolhe depressa mas nunca de repente, e só volta devagar (sem "pulsar")
     rayDir(dir);
     const want = armGoal(Math.max(MIN_RADIUS, R0 * zoom), dir);
@@ -294,6 +297,8 @@ export function createCameraRig() {
     resetView() { goalYaw = goalPitch = 0; zoomGoal = 1; },
     /** O bairro mudou de tamanho (ex.: Bairro 2, 6×6): refaz enquadramento e obstáculos da câmera. */
     refit() { rebuildGrid(); resize(lastW, lastH); },
+    /** Cena: levanta a mira da câmera atrás da van em `v` (suave; 0 volta ao normal). */
+    setLookLift(v) { liftGoal = v; },
     /** Caixas extras que seguram o braço da câmera ([x0, z0, x1, z1, yTopo]); [] tira. */
     setExtraBoxes(list) { EXTRA_BOXES.length = 0; EXTRA_BOXES.push(...list); buildCamBoxes(); },
   };

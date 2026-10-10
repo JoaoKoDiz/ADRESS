@@ -34,6 +34,7 @@ import { createLevelSelect } from './levelSelect.js';
 import { createWalker } from './walker.js';
 import { createTalkBox, lineDuration } from './talkBox.js';
 import { whiten } from './whiteout.js';
+import { createChurchMusic } from './churchMusic.js';
 import { buildChurch, setChurchOpacity, CHURCH_SOLIDS, CHURCH_CAM } from './models/church.js';
 import { createBackButton } from './backButton.js';
 import { createMissions, createMissionsButton, MISSIONS } from './missions.js';
@@ -597,8 +598,10 @@ function setupChurch() {
   let pd = parcelDone; try { pd = pd || localStorage.getItem(PARCEL_KEY) === '1'; } catch (e) { /* */ }
   churchOn = isL1() && gameMode === 'free' && pd && roofDone();   // as duas conversas, lidas do progresso salvo
   churchT = 0; churchA = 0; churchShown = false;
+  endApproachMusic(0.3); approach = { phase: 'idle' };
   if (church && church.parent) church.parent.remove(church);
   if (!churchOn) return;
+  churchMusic.load().catch(() => {});                   // decodifica já: na hora da aproximação a faixa está pronta
   if (!church) church = buildChurch();
   church.position.set(MAP_W() / 2, 0, MAP_W() + CHURCH_Z); church.rotation.y = Math.PI;   // fachada virada para o bairro (norte)
   church.visible = false;
@@ -607,22 +610,66 @@ function setupChurch() {
 let sunSprite = null; const SUN_OFS = new THREE.Vector3();
 function grabSun() { sunSprite = world.scene.getObjectByName('sun'); if (sunSprite) SUN_OFS.set(0, sunSprite.position.y, sunSprite.position.z - MAP / 2); }
 const MAP_W = () => MAP;                                // largura do bairro (lado do quadrado, com a sebe)
+// Aproximação (sincronizada com assets/dark-sanctuary.mp3): ~1 s dirigindo para o sul fora do bairro → a van segue sozinha
+// para a igreja (mesma velocidade e câmera; W solto não para; L/H/F bloqueados) e a faixa começa do início (fade-in 2 s),
+// pausando a música de fundo. A igreja só aparece quando a POSIÇÃO REAL do áudio chega a 14 s: aí surge rápido e os controles voltam.
+// A faixa continua até o jogador entrar na igreja a pé (fade-out ~1 s). Uma vez por partida.
+const churchMusic = createChurchMusic(audio);
+const REVEAL_AT = 14, REVEAL_D = 360;                   // segundo da música; distância da fachada nesse instante
+let approach = { phase: 'idle' };
+const approachLock = () => approach.phase === 'auto';
+function endApproachMusic(fade = 1) {
+  if (churchMusic.playing) churchMusic.fadeOut(fade);
+  music.suspend(false);                                 // a música de fundo volta como o jogador deixou
+}
+function startApproach() {
+  approach = { phase: 'auto', z0: van.z, v0: Math.max(8, van.speed) };
+  const zf = MAP_W() + CHURCH_Z, D = Math.max(50, zf - REVEAL_D - van.z), T = REVEAL_AT, a = approach;
+  a.vTop = a.v0 + (D - a.v0 * T) / (T - 2);              // velocidade de cruzeiro para chegar no ponto certo aos 14 s
+  music.suspend(true);
+  churchMusic.play(2);
+}
+const ramp = t => { const s = Math.min(1, Math.max(0, t / 4)); return s * s * (3 - 2 * s); };
+const rampInt = t => t < 4 ? 4 * ((t / 4) ** 3 - (t / 4) ** 4 / 2) : 2 + (t - 4);
+/** Condução automática: eixo (volante) e velocidade imposta para o quadro. */
+function approachAxis() {
+  const a = approach, tau = Math.max(0, churchMusic.time);
+  const zDes = a.z0 + a.v0 * tau + (a.vTop - a.v0) * rampInt(tau);
+  const v = a.v0 + (a.vTop - a.v0) * ramp(tau) + 0.8 * (zDes - van.z);
+  van.setForceSpeed(Math.max(4, v));
+  const tx = MAP_W() / 2, tz = MAP_W() + CHURCH_Z;
+  let d = Math.atan2(tz - van.z, tx - van.x) - van.heading;
+  while (d > Math.PI) d -= 2 * Math.PI; while (d < -Math.PI) d += 2 * Math.PI;
+  return { x: Math.max(-1, Math.min(1, d * 3)), z: -1 };
+}
+function revealChurch(fast) {
+  const M = MAP_W();
+  churchShown = true; church.visible = true; setChurchOpacity(church, 0); churchFade = fast ? 1.2 : 3.5;
+  const z0 = M + CHURCH_Z, cx = M / 2;
+  for (const b of CHURCH_SOLIDS) churchSolids.push({ x0: cx - b.x1, x1: cx - b.x0, z0: z0 - b.z1, z1: z0 - b.z0 });   // igreja girada 180°: (x, z) → (cx − x, z0 − z)
+  rig.setExtraBoxes(CHURCH_CAM.map(([x0, x1, a, b, top]) => [cx - x1, z0 - b, cx - x0, z0 - a, top]));          // a câmera não atravessa as paredes
+  SOLIDS.push(...churchSolids);
+}
+let churchFade = 3.5;
 function updateChurch(dt) {
   if (!churchOn) return;
   const M = MAP_W();
+  // aproximação: a mira sobe aos poucos (horizonte no meio da tela) até a van chegar perto da igreja
+  rig.setLookLift((approach.phase === 'auto' || approach.phase === 'revealed') && state === 'drive' && van.z < M + CHURCH_Z - 140 ? 4.8 : 0);
   if (!churchShown) {
     const outside = van.x < 0 || van.x > M || van.z < 0 || van.z > M;
     const southSpeed = Math.sin(van.heading) * van.speed;          // velocidade na direção do sol (+Z)
-    if (state === 'drive' && outside && southSpeed > 4 && Math.sin(van.heading) * Math.sign(van.speed) > 0.6) churchT += dt;
-    if (churchT >= 5) {
-      churchShown = true; church.visible = true; setChurchOpacity(church, 0);
-      const z0 = M + CHURCH_Z, cx = M / 2;
-      for (const b of CHURCH_SOLIDS) churchSolids.push({ x0: cx - b.x1, x1: cx - b.x0, z0: z0 - b.z1, z1: z0 - b.z0 });   // igreja girada 180°: (x, z) → (cx − x, z0 − z)
-      rig.setExtraBoxes(CHURCH_CAM.map(([x0, x1, a, b, top]) => [cx - x1, z0 - b, cx - x0, z0 - a, top]));          // a câmera não atravessa as paredes
-      SOLIDS.push(...churchSolids);
+    if (approach.phase === 'idle' && state === 'drive' && outside && southSpeed > 4 && Math.sin(van.heading) * Math.sign(van.speed) > 0.6) churchT += dt;
+    if (approach.phase === 'idle' && churchT >= 1 && !heli.on) {      // ~1 s indo para o sol: espera a faixa estar pronta e começa
+      approach.phase = 'loading';
+      churchMusic.load().then(() => { if (approach.phase === 'loading' && churchOn) startApproach(); }, () => { approach.phase = 'idle'; churchT = 0; });
+    }
+    if (approach.phase === 'auto' && churchMusic.time >= REVEAL_AT) {   // segundo 14 da música: a igreja surge e o jogador volta a dirigir
+      van.setForceSpeed(null); approach.phase = 'revealed';
+      revealChurch(true);
     }
   } else if (churchA < 1) {
-    churchA = Math.min(1, churchA + dt / 3.5);                       // surge devagar, como através de uma névoa distante
+    churchA = Math.min(1, churchA + dt / churchFade);                       // surge devagar, como através de uma névoa distante
     setChurchOpacity(church, churchA * churchA * (3 - 2 * churchA));
   }
 }
@@ -794,6 +841,7 @@ function update(dt, t) {
         break;
       }
       const free = gameMode === 'free';
+      if (approachLock()) { input.walk(); input.heli(); input.fire(); }   // aproximação da igreja: L, H e F não valem
       if (input.walk() && actionLock <= 0) {          // L: o motorista desce da van (só parada e no chão)
         if (heli.landed && roofUnderVan()) {                   // pousado no terraço de um prédio: desce e anda pela laje
           van.stop(); nearHouse = -1; nearPump = false;
@@ -821,7 +869,7 @@ function update(dt, t) {
       if (free && input.heli()) heli.toggle();
       van.setGhost(free && (menu.unstoppable || heli.high));
       if (heli.landed) van.stop();                // pousado no teto: parado até decolar (H)
-      van.update(dt, heli.landed ? { x: 0, z: 0 } : input.axis(), rig.mode === 'chase' ? 'car' : 'screen');
+      van.update(dt, heli.landed ? { x: 0, z: 0 } : approachLock() ? approachAxis() : input.axis(), approachLock() ? 'car' : rig.mode === 'chase' ? 'car' : 'screen');
       if (heli.on && rig.mode === 'chase') {      // no ar, A/D giram mesmo parado
         const ax = input.axis().x;
         if (ax) van.turn(ax * 2.2 * dt * (1 - Math.min(1, Math.abs(van.speed) / 5)));
@@ -892,6 +940,9 @@ function update(dt, t) {
       if (fade >= 1) { startNewRound(); setState('fadeIn'); }
       break;
     case 'walk': {                                  // a pé: sem entregas, sem abastecer; E perto da van volta a dirigir
+      if (approach.phase === 'revealed' && churchShown && walker.z > MAP_W() + CHURCH_Z + 3.5 && Math.abs(walker.x - MAP_W() / 2) < 11.8) {
+        approach.phase = 'done'; endApproachMusic(1);    // entrou na igreja: a faixa some em ~1 s
+      }
       if (missions.isOpen) { if (input.missions()) missions.close(); break; }
       if (gameMode === 'career' && input.missions()) { missions.open(careerLevel); break; }
       van.stop();
@@ -970,7 +1021,9 @@ function update(dt, t) {
   if (state === 'cine' && cine) { rig.camera.position.copy(cine.camPos); rig.camera.lookAt(cine.camLook); }
   // névoa só na câmera atrás da van (suaviza o horizonte); a visão geral fica nítida
   const fb = rig.blend, fog = world.scene.fog;
-  if (fog) { fog.near = 3000 + (130 - 3000) * fb; fog.far = 3200 + (430 - 3200) * fb; }
+  // ao sul do Bairro 1, a caminho da igreja, a névoa se afasta aos poucos (a igreja aparece de longe)
+  const fs = churchOn ? THREE.MathUtils.smoothstep(van.z - MAP_W(), 40, 220) : 0, fn = 130 + 200 * fs, ff = 430 + 700 * fs;
+  if (fog) { fog.near = 3000 + (fn - 3000) * fb; fog.far = 3200 + (ff - 3200) * fb; }
   if (!sunSprite || sunSprite.parent !== world.scene) grabSun();
   if (sunSprite) sunSprite.position.set(rig.camera.position.x, 0, rig.camera.position.z).add(SUN_OFS);   // sol acompanha a câmera (fica sempre no mesmo lugar do céu, por mais longe que se dirija)
   const shake = Math.max(hint.shake, boom.shake);
@@ -984,7 +1037,7 @@ function update(dt, t) {
     if (fog) { fog.near = 3000; fog.far = 3200; }
   }
   if (state === 'map') audio.engine(careerMap.moving, 0.55);
-  else audio.engine(state === 'drive', Math.abs(van.speed) / van.maxSpeed);
+  else audio.engine(state === 'drive', Math.min(1.15, Math.abs(van.speed) / van.maxSpeed));
   input.endFrame();
 }
 
@@ -1156,6 +1209,7 @@ window.ADRESS = {
   get pixelRatio() { return pixelRatio; },
   get titleDriver() { return titleDriver; },
   get church() { return church; },
+  get churchMusicTime() { return +churchMusic.time.toFixed(2); }, get approach() { return approach; },
   get cine() { return cine; }, get whiteOn() { return !!unwhite; }, startChurchTalk, talkBox,
   get churchState() { return { on: churchOn, t: churchT, a: churchA, shown: churchShown }; },
   get gameMode() { return gameMode; },

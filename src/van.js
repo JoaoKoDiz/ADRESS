@@ -291,10 +291,12 @@ export function createVan(scene, opts) {
    * Controle estilo carro (usado com a câmera atrás da van): W acelera, S freia e depois dá ré,
    * A/D viram o volante (só vira andando; em ré a direção se inverte, como num carro de verdade).
    */
+  let forceSpeed = null;
   function driveCar(dt, axis) {
     const throttle = axis ? -axis.z : 0, steer = axis ? axis.x : 0;
     if (throttle > 0) {
       if (speed < 0) speed = Math.min(0, speed + CAR_BRAKE * dt);
+      else if (speed > MAX) speed = Math.max(MAX, speed - (speed - MAX) * Math.min(1, 0.9 * dt));   // acima do máximo (saiu da condução automática): volta aos poucos
       else speed = Math.min(MAX, speed + CAR_ACC * dt);
     } else if (throttle < 0) {
       if (speed > 0.5) speed = Math.max(0, speed - CAR_BRAKE * dt);
@@ -306,6 +308,7 @@ export function createVan(scene, opts) {
     }
     if (steer && speed > CORNER_SPEED) speed -= (speed - CORNER_SPEED) * Math.min(1, 2.5 * dt);
     // quanto mais rápido, mais a direção responde (até um limite); parado não gira
+    if (forceSpeed !== null) speed = forceSpeed;                     // condução automática (cena): velocidade imposta
     const grip = Math.min(1, Math.abs(speed) / 5) * Math.sign(speed);
     heading = angleDiff(heading + steer * STEER * grip * dt, 0);
   }
@@ -390,6 +393,8 @@ export function createVan(scene, opts) {
     get maxSpeed() { return MAX; },
     reset() { teleport(VAN_START.x, VAN_START.z, VAN_START.heading); },
     stop() { speed = 0; prevSpeed = 0; roll = 0; pitch = 0; sync(); },
+    /** Condução automática: impõe a velocidade (null devolve ao jogador; acima do máximo ela cai aos poucos). */
+    setForceSpeed(v) { forceSpeed = v; },
     setGhost(v) { ghost = !!v; },
     /** Troca o modelo das rodas (Shop): 0 = padrão. */
     /** Troca a carga do teto (Shop): 0 = caixas. */

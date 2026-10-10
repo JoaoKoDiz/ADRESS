@@ -24,7 +24,7 @@ export function createMusic(stageEl, src = 'assets/musica-fundo.mp3') {
 
   let wanted = true;                     // o jogador quer música tocando?
   try { const v = localStorage.getItem('adress.music'); if (v !== null) wanted = v === '1'; } catch (e) { /* ignora */ }
-  let started = false;
+  let started = false, suspended = false;
 
   const btn = document.createElement('button');
   btn.type = 'button'; btn.className = 'music-btn'; btn.tabIndex = -1;
@@ -42,7 +42,7 @@ export function createMusic(stageEl, src = 'assets/musica-fundo.mp3') {
     wanted = !wanted;
     try { localStorage.setItem('adress.music', wanted ? '1' : '0'); } catch (e) { /* ignora */ }
     started = true;
-    wanted ? play() : audio.pause();
+    wanted && !suspended ? play() : audio.pause();
     paint();
   }
   btn.addEventListener('mousedown', e => e.preventDefault());
@@ -52,8 +52,10 @@ export function createMusic(stageEl, src = 'assets/musica-fundo.mp3') {
 
   return {
     /** Chamado no primeiro gesto do jogador: começa a tocar (se não estiver pausada). */
-    start() { if (started) return; started = true; if (wanted) play(); },
+    start() { if (started) return; started = true; if (wanted && !suspended) play(); },
     toggle,
+    /** Cena com música própria: pausa a de fundo SEM mudar a preferência salva; false volta como estava. */
+    suspend(on) { suspended = on; if (on) audio.pause(); else if (wanted && started) play(); },
     get playing() { return !audio.paused; },
     audio,
   };
