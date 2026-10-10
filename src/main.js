@@ -37,6 +37,7 @@ import { createTalkBox, lineDuration } from './talkBox.js';
 import { whiten } from './whiteout.js';
 import { createChurchMusic } from './churchMusic.js';
 import { buildChurch, setChurchOpacity, CHURCH_SOLIDS, CHURCH_CAM } from './models/church.js';
+import { buildBell, BELL_SPOT } from './models/bell.js';
 import { createBackButton } from './backButton.js';
 import { createMissions, createMissionsButton, MISSIONS } from './missions.js';
 import { createCareer } from './career.js';
@@ -626,7 +627,7 @@ function endRoofScene() {
 const ROOF_KEY = 'adress.l6.roofTalk';
 const roofDone = () => { try { return localStorage.getItem(ROOF_KEY) === '1'; } catch (e) { return false; } };
 const CHURCH_Z = 1150;                                  // distância ao sul da sebe (bem longe: ~1 min dirigindo)
-let church = null, churchOn = false, churchT = 0, churchA = 0, churchShown = false;
+let church = null, churchBell = null, churchOn = false, churchT = 0, churchA = 0, churchShown = false;
 const churchSolids = [];
 function setupChurch() {
   for (const b of churchSolids) { const i = SOLIDS.indexOf(b); if (i >= 0) SOLIDS.splice(i, 1); }
@@ -639,7 +640,12 @@ function setupChurch() {
   if (church && church.parent) church.parent.remove(church);
   if (!churchOn) return;
   churchMusic.load().catch(() => {});                   // decodifica já: na hora da aproximação a faixa está pronta
-  if (!church) church = buildChurch();
+  if (!church) {
+    church = buildChurch();
+    churchBell = buildBell(); church.add(churchBell);                // sino azul (1ª conversa): cai no fim da cena de saída
+    church.userData.materials.push(...churchBell.userData.materials);
+  }
+  churchBell.userData.bell.position.set(0, 0, 0); churchBell.userData.bell.rotation.set(0, 0, 0);   // pendurado desde o início da visita
   church.position.set(MAP_W() / 2, 0, MAP_W() + CHURCH_Z); church.rotation.y = Math.PI;   // fachada virada para o bairro (norte)
   church.visible = false;
   world.scene.add(church);
@@ -776,7 +782,7 @@ function startChurchTalk() {
     const rest = CHURCH_LINES.slice(6).reduce((t, l) => t + lineDuration(l), 0);
     let path = 0, prev = CINE.player;
     for (const [x, z] of CINE.walk) { path += Math.hypot(x - prev.x, z - prev.z); prev = { x, z }; }
-    cine.count = Math.ceil(rest + 3.6 + path / 6.5 + 1.5 + 3.0 + 1.6 + 8);   // falas + volta da câmera + caminhada + entrar + van + fade + folga
+    cine.count = Math.ceil(rest + 3.6 + path / 6.5 + 1.5 + BELL_END + 1.6 + 8);   // falas + volta da câmera + caminhada + entrar + van/sino + fade + folga
   } });
 }
 function churchTalkEnd() {                              // última fala lida: grava o progresso; câmera volta ao jogador, já branco
@@ -843,10 +849,29 @@ function updateChurchCine(dt) {
     }
   } else if (c.phase === 'drive') {                     // a van branca sai em direção ao bairro…
     van.update(dt, { x: 0, z: -1 }, 'car');
-    if (c.t > 3.0 && !c.fading) { c.fading = true; talkBox.fadeBlack(1, 800); }
-    if (c.t > 3.9) { churchCineEnd(); talkBox.fadeBlack(0, 900); }   // (no tempo do jogo) já no bairro
+    // …a câmera fica no lugar e só gira para cima até o sino azul; ele aparece um instante, solta-se e cai (sem som)
+    if (c.t > BELL_TILT0) {
+      if (!c.dirB) { c.dirB = c.camLook.clone().sub(c.camPos).normalize(); c.dirS = CL(BELL_SPOT.x, BELL_SPOT.y - churchBell.userData.h * 0.6, BELL_SPOT.z).sub(c.camPos).normalize(); }
+      const k = ease(Math.min(1, (c.t - BELL_TILT0) / BELL_TILT));
+      c.camLook.copy(c.camPos).add(c.dirB.clone().lerp(c.dirS, k).normalize());
+    }
+    const ft = c.t - BELL_FALL0, b = churchBell.userData.bell;
+    if (ft > 0) {
+      const drop = BELL_SPOT.y - churchBell.userData.h - BELL_SPOT.floor, fallT = Math.sqrt(2 * drop / 22);
+      if (ft < fallT) { b.position.y = -11 * ft * ft; b.rotation.z = 0.08 * ft; }   // queda livre, girando de leve
+      else {                                            // bateu no piso do corredor: um quique curto e tomba para o lado
+        const u = Math.min(1, (ft - fallT) / 0.7);
+        b.position.y = -drop + Math.sin(Math.min(1, u * 2) * Math.PI) * 0.6 * (1 - u);
+        b.rotation.z = 0.08 * fallT + ease(u) * 0.55;
+      }
+    }
+    if (c.t > BELL_END && !c.fading) { c.fading = true; talkBox.fadeBlack(1, 800); }
+    if (c.t > BELL_END + 0.9) { churchCineEnd(); talkBox.fadeBlack(0, 900); }   // (no tempo do jogo) já no bairro
   }
 }
+// fim da cena de saída: a van parte (0–1,6 s), a câmera gira para cima até o sino (2,4 s), ele fica parado um instante,
+// solta-se e cai em direção ao chão (sai do quadro por baixo) e só então vem o fade-out
+const BELL_TILT0 = 1.6, BELL_TILT = 2.4, BELL_FALL0 = BELL_TILT0 + BELL_TILT + 1.2, BELL_END = BELL_FALL0 + 1.8;
 function fadeBlackOff() { talkBox.fadeBlack(0, 300); }
 
 function startNewRound() {
