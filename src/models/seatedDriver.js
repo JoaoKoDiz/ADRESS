@@ -1,7 +1,7 @@
 // Motorista sentado na van do menu ("Jogar"): janela aberta de verdade + o MESMO esqueleto do personagem (buildBody)
 // sentado dentro da cabine, com o braço apoiado na janela. Tudo preso à carroceria da van (acompanha a suspensão).
 import * as THREE from 'three';
-import { buildBody } from './driver.js';
+import { buildBody, BODY } from './driver.js';
 
 /** Monta a janela "aberta" e o motorista na carroceria `body` (coordenadas da van). Retorna as juntas para animar/testar. */
 export function buildSeatedDriver(body) {
@@ -26,7 +26,7 @@ export function buildSeatedDriver(body) {
   // apoiado no peitoril e o antebraço fica pendurado por fora, rente à porta. Tudo em coordenadas da carroceria.
   const S = 0.4, PSI = 0.5, DOOR_Z = -1.25, SILL_Y = 1.5;
   const driver = new THREE.Group();
-  driver.position.set(0.84, 1.35 - 0.78 * S, DOOR_Z + 0.135);      // base do tronco em y = 1,35; lado do tronco um pouco para dentro da porta
+  driver.position.set(0.84, 1.35 - BODY.torsoY * S, DOOR_Z + 0.135);      // base do tronco em y = 1,35; lado do tronco um pouco para dentro da porta
   driver.rotation.y = PSI;
   driver.scale.setScalar(S);
   body.add(driver);
@@ -48,7 +48,7 @@ export function buildSeatedDriver(body) {
     return new THREE.Quaternion().setFromRotationMatrix(new THREE.Matrix4().makeBasis(x, y, z));
   };
   const sh = body.worldToLocal(near.sh.getWorldPosition(new THREE.Vector3()));   // ombro
-  const LU = 0.28 * S, RF = 0.074 * S, LF = 0.2 * S, RW = 0.06 * S;   // braço, raio do cotovelo, antebraço, raio do punho (medidas do buildBody)
+  const LU = BODY.upperArm * S, RF = 0.074 * S, LF = BODY.foreArm * S, RW = 0.062 * S;   // braço, raio do cotovelo, antebraço, raio do punho (medidas do buildBody)
   const EZ = DOOR_Z - RF - 0.002;                                  // cotovelo logo por fora da porta (antebraço não atravessa a lataria)
   const elbowAt = new THREE.Vector3();
   const place = ey => {                                            // cotovelo na altura ey; o resto do comprimento do braço vai para a frente

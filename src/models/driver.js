@@ -1,5 +1,5 @@
-// O motorista de entregas: estilo desenho animado, cabeça grande, corpo compacto, membros arredondados, mãos simples,
-// tênis grandes. Sombreamento liso, cores sólidas. Camisa, calça e tênis têm UM material cada (recolorível no Shop);
+// O motorista de entregas: mesma fisionomia e estilo do personagem da história paralela (cabeça grande facetada, corpo compacto,
+// pernas curtas, mãos simples, tênis um pouco maiores), sombreamento chapado e fosco, cores sólidas. Camisa, calça e tênis têm UM material cada (recolorível no Shop);
 // dobras e detalhes são só geometria (mesmo material), nada de cores/estampas fixas nessas peças.
 // Rosto olha para +X local. Compartilhado por walker.js (a pé) e titleDriver.js (na janela da van).
 import * as THREE from 'three';
@@ -7,12 +7,11 @@ import { sphere, mesh, mat, at } from './kit.js';
 
 /** Cores do personagem (Shop): materiais únicos e compartilhados (jogo, tela inicial e Shop). */
 export const CHAR_DEFAULT = { skin: '#e8b48a', shirt: '#2a9df4', pants: '#2f3a55', shoes: '#1b1b1f' };
-export const CHAR_MATS = Object.fromEntries(Object.entries(CHAR_DEFAULT).map(([k, c]) => [k, new THREE.MeshStandardMaterial({ color: c, roughness: 0.6 })]));
+export const CHAR_MATS = Object.fromEntries(Object.entries(CHAR_DEFAULT).map(([k, c]) => [k, new THREE.MeshStandardMaterial({ color: c, roughness: 0.9, flatShading: true })]));
 export const setCharColors = c => { for (const k of Object.keys(CHAR_MATS)) if (c && c[k]) CHAR_MATS[k].color.set(c[k]); };
 
-const smooth = { flatShading: false, roughness: 0.6 };
-const HAIR = mat('#3a2418', smooth), CAP = mat('#e3262e', smooth), BROW = mat('#2b1a12', smooth), LIP = mat('#8a3b2a', smooth);
-const LENS = mat('#101218', { flatShading: false, roughness: 0.18, metalness: 0.35 });
+const smooth = { roughness: 0.9 };                        // fosco e facetado (como a referência)
+const CAP = mat('#e3262e', smooth), LIP = mat('#5a2e22', smooth);
 
 /** Esfera esticada (material pronto). */
 export const ball = (r, m, sx = 1, sy = 1, sz = 1) => { const o = sphere(r, m, 22, 16); o.scale.set(sx, sy, sz); return o; };
@@ -46,82 +45,60 @@ export function hand(m, k = 1) {
   return g;
 }
 
-// ---- cabeça: esfera com mandíbula arredondada (a parte de baixo da frente afina e alonga um pouco)
-const JAW = { x: 0.08, z: 0.2, y: 1.07 };
-const front = xn => THREE.MathUtils.smoothstep(xn, -0.2, 0.6);
-function jaw(xn, yn) { const k = Math.pow(Math.max(0, -yn), 1.5) * front(xn); return { fx: 1 - JAW.x * k, fz: 1 - JAW.z * k, fy: yn < 0 ? 1 + (JAW.y - 1) * front(xn) : 1 }; }
-function headGeo(r) {
-  const g = new THREE.SphereGeometry(r, 40, 30), p = g.attributes.position, n = g.attributes.normal;
-  for (let i = 0; i < p.count; i++) {
-    const x = p.getX(i), y = p.getY(i), z = p.getZ(i), f = jaw(x / r, y / r);
-    p.setXYZ(i, x * f.fx, y * f.fy, z * f.fz);
-    const v = new THREE.Vector3(n.getX(i) / f.fx, n.getY(i) / f.fy, n.getZ(i) / f.fz).normalize(); n.setXYZ(i, v.x, v.y, v.z);
-  }
-  return g;
-}
-/** Ponto da superfície do rosto (frente, +X) na altura y e lateral z; k > 1 afasta um pouco para fora. */
-function onFace(r, y, z, k = 1) {
-  const fy = y < 0 ? JAW.y : 1, yn = y / fy / r;
-  let x0 = Math.sqrt(Math.max(0, 1 - yn * yn - (z / r) ** 2)) * r;
-  for (let i = 0; i < 3; i++) { const f = jaw(x0 / r, yn); x0 = Math.sqrt(Math.max(0, 1 - yn * yn - (z / f.fz / r) ** 2)) * r; }
-  const f = jaw(x0 / r, yn);
-  return new THREE.Vector3(x0 * f.fx * k, y * k, z * k);
-}
-const tube = (pts, rad, m) => {
-  const g = new THREE.Group(), c = new THREE.CatmullRomCurve3(pts);
-  g.add(mesh(new THREE.TubeGeometry(c, 24, rad, 8, false), m));
-  for (const e of [pts[0], pts[pts.length - 1]]) g.add(at(sphere(rad, m, 10, 8), e.x, e.y, e.z));   // pontas arredondadas
-  return g;
-};
-/** Pedaço de esfera (raio R) entre os ângulos dados — encaixa certinho na cabeça (óculos, cabelo). */
-const patch = (R, m, p0, pl, t0, tl) => mesh(new THREE.SphereGeometry(R, 24, 10, p0, pl, t0, tl), m);
+// ---- cabeça (mesmo desenho do personagem da história paralela): esfera de poucas faces, nariz e orelhas
+// arredondados, olhos simples, sobrancelhas retas, boca pequena e reta (sério e tranquilo). Boné e óculos escuros do jogador.
+const lowBall = (r, m, sx = 1, sy = 1, sz = 1) => { const o = mesh(new THREE.SphereGeometry(r, 10, 8), m); o.scale.set(sx, sy, sz); return o; };
 const SIDE = { side: THREE.DoubleSide };
-const HAIR2 = mat('#3a2418', { ...smooth, ...SIDE }), LENS2 = mat('#101218', { flatShading: false, roughness: 0.18, metalness: 0.35, ...SIDE });
+const HAIR2 = mat('#3a2418', { roughness: 0.9, ...SIDE }), HAIRD = mat('#2e1c12', { roughness: 0.9 }), EYE = mat('#1d1210'), FRAME = mat('#1c1c22');
+const LENS2 = mat('#101218', { roughness: 0.25, metalness: 0.3, ...SIDE });
 
-/** Cabeça grande de raio r: pele, cabelo curto, boné, óculos escuros, sobrancelhas, nariz redondo e sorriso de canto. Centro na origem. */
+/** Cabeça grande de raio r (rosto para +X, centro na origem). */
 export function buildHead(r) {
   const SKIN = CHAR_MATS.skin, h = new THREE.Group();
-  h.add(mesh(headGeo(r), SKIN));                                                           // crânio + mandíbula
-  for (const s of [-1, 1]) h.add(at(ball(r * 0.16, SKIN, 0.55, 1, 0.7), -r * 0.04, r * 0.0, s * r * 0.97));   // orelhas
-  h.add(at(ball(r * 0.14, SKIN, 1, 0.95, 1), ...onFace(r, -r * 0.06, 0, 0.99).toArray()));  // nariz redondo
-  // cabelo: nuca + costeletas acima das orelhas (formas lisas embaixo do boné)
-  h.add(patch(r * 1.025, HAIR2, -1.15, 2.3, 0.95, 0.95));
-  for (const s of [-1, 1]) h.add(patch(r * 1.025, HAIR2, s > 0 ? 1.1 : -1.88, 0.78, 0.95, 0.4));
+  h.add(lowBall(r, SKIN, 1, 0.98, 1.02));                                                   // crânio facetado
+  const face = (y, z) => Math.sqrt(Math.max(0, r * r - y * y - z * z));                    // x da superfície do rosto
+  h.add(at(lowBall(r * 0.15, SKIN, 1, 0.9, 1), face(-0.06 * r, 0) + 0.01, -0.06 * r, 0));   // nariz
+  for (const s of [-1, 1]) {
+    h.add(at(lowBall(r * 0.17, SKIN, 0.55, 1, 0.7), -0.03 * r, -0.02 * r, s * r * 0.97));   // orelhas
+    const ez = s * r * 0.38, ey = r * 0.12;
+    h.add(at(lowBall(r * 0.1, EYE, 0.35, 1.15, 0.85), face(ey, ez) - 0.005, ey, ez));      // olhos simples
+    // óculos escuros: aro octogonal fino com lente escura, hastes até a orelha
+    const ring = mesh(new THREE.TorusGeometry(r * 0.27, r * 0.035, 4, 8), FRAME);
+    ring.position.set(face(ey, ez) + r * 0.08, ey, ez); ring.rotation.set(0, Math.PI / 2 + s * 0.35, Math.PI / 8); h.add(ring);
+    const lens = mesh(new THREE.CircleGeometry(r * 0.27, 8), LENS2); lens.position.copy(ring.position); lens.rotation.copy(ring.rotation); h.add(lens);
+    h.add(at(box3(r * 0.75, r * 0.05, r * 0.05, FRAME), r * 0.45, ey + 0.02 * r, s * r * 0.72, 0, s * 0.55, 0));
+    // sobrancelhas bem definidas, quase retas (sério, sem franzir)
+    const by = r * 0.44, bz = s * r * 0.36;
+    h.add(at(box3(r * 0.08, r * 0.09, r * 0.34, HAIRD), face(by, bz) + 0.01, by, bz, s * 0.08, -s * 0.3, 0));
+  }
+  h.add(at(box3(r * 0.08, r * 0.05, r * 0.3, FRAME), face(r * 0.14, 0) + r * 0.08, r * 0.14, 0));   // ponte dos óculos
+  h.add(at(box3(r * 0.05, r * 0.04, r * 0.24, LIP), face(-r * 0.42, 0) - 0.005, -r * 0.42, 0));     // boca pequena e reta
+  // cabelo: nuca + mechas nos lados (o topo fica embaixo do boné)
+  h.add(mesh(new THREE.SphereGeometry(r * 1.05, 10, 7, -1.5, 3.0, 1.0, 0.95), HAIR2));
+  for (const s of [-1, 1]) for (const [x, y] of [[0.25, 0.25], [-0.15, 0.2]]) {
+    const t = mesh(new THREE.ConeGeometry(r * 0.2, r * 0.55, 5), HAIR2);
+    t.position.set(x * r, y * r, s * r * 0.92); t.rotation.set(s * (Math.PI - 0.4), 0, 0); h.add(t);
+  }
   // boné justo: calota com espessura + aba ligada na borda da frente + botão
-  const R0 = r * 0.99, R1 = r * 1.05, TC = 1.08, pts = [[R0 * Math.sin(TC), R0 * Math.cos(TC)]];
-  for (let i = 0; i <= 14; i++) { const t = TC * (1 - i / 14); pts.push([R1 * Math.sin(t), R1 * Math.cos(t)]); }
-  h.add(lathe(pts, CAP, 36));
-  h.add(at(ball(r * 0.08, CAP, 1, 0.6, 1), 0, R1 * 0.99, 0));
+  const R0 = r * 0.99, R1 = r * 1.07, TC = 1.08, pts = [[R0 * Math.sin(TC), R0 * Math.cos(TC)]];
+  for (let i = 0; i <= 8; i++) { const t = TC * (1 - i / 8); pts.push([R1 * Math.sin(t), R1 * Math.cos(t)]); }
+  h.add(lathe(pts, CAP, 12));
+  h.add(at(lowBall(r * 0.08, CAP, 1, 0.6, 1), 0, R1 * 0.99, 0));
   const rc = R0 * Math.sin(TC), E = r * 0.62, A = 1.0, sh = new THREE.Shape();
-  for (let i = 0; i <= 20; i++) { const t = -A + 2 * A * i / 20; (i ? sh.lineTo.bind(sh) : sh.moveTo.bind(sh))(rc * Math.cos(t), rc * Math.sin(t)); }
-  for (let i = 20; i >= 0; i--) { const t = -A + 2 * A * i / 20, e = rc + E * Math.cos(t / A * Math.PI / 2) ** 1.2; sh.lineTo(e * Math.cos(t), e * Math.sin(t)); }
-  const brim = mesh(new THREE.ExtrudeGeometry(sh, { depth: r * 0.05, bevelEnabled: true, bevelSize: r * 0.02, bevelThickness: r * 0.02, bevelSegments: 2, curveSegments: 8 }), CAP);
-  const bg = at(new THREE.Group(), 0, R0 * Math.cos(TC) + r * 0.02, 0, 0, 0, 0.16); brim.rotation.x = Math.PI / 2; bg.add(brim); h.add(bg);
-  // óculos escuros: lentes curvas coladas no rosto, ponte e hastes até as orelhas
-  const RG = r * 1.03, T0 = 1.27, TL = 0.36;
-  for (const s of [-1, 1]) {
-    const pc = Math.PI - s * 0.4;
-    h.add(patch(RG, LENS2, pc - 0.27, 0.54, T0, TL));
-    h.add(patch(RG, LENS2, s > 0 ? Math.PI / 2 + 0.05 : Math.PI + 0.67, 0.86, T0 + 0.02, 0.06));
-  }
-  h.add(patch(RG, LENS2, Math.PI - 0.14, 0.28, T0 + 0.02, 0.07));
-  // sobrancelhas: uma mais alta e arqueada (ar travesso)
-  for (const s of [-1, 1]) {
-    const base = s > 0 ? 0.37 : 0.34, pts = [];
-    for (let i = 0; i <= 6; i++) { const u = i / 6, z = s * r * (0.16 + 0.4 * u); pts.push(onFace(r, r * (base + 0.035 * Math.sin(u * Math.PI) - (s > 0 ? 0 : 0.02 * u)), z, 1.01)); }
-    h.add(tube(pts, r * 0.045, BROW));
-  }
-  // boca: uma curva limpa, mais alta de um lado
-  const mp = [];
-  for (let i = 0; i <= 8; i++) { const u = i / 8 * 2 - 1; mp.push(onFace(r, r * (-0.42 + 0.1 * u * u + 0.05 * u + 0.03 * Math.max(0, u) ** 2), u * r * 0.26, 1.005)); }
-  h.add(tube(mp, r * 0.028, LIP));
+  for (let i = 0; i <= 10; i++) { const t = -A + 2 * A * i / 10; (i ? sh.lineTo.bind(sh) : sh.moveTo.bind(sh))(rc * Math.cos(t), rc * Math.sin(t)); }
+  for (let i = 10; i >= 0; i--) { const t = -A + 2 * A * i / 10, e = rc + E * Math.cos(t / A * Math.PI / 2) ** 1.2; sh.lineTo(e * Math.cos(t), e * Math.sin(t)); }
+  const brim = mesh(new THREE.ExtrudeGeometry(sh, { depth: r * 0.06, bevelEnabled: false, curveSegments: 4 }), CAP);
+  const bg = at(new THREE.Group(), 0, R0 * Math.cos(TC) + r * 0.02, 0, 0, 0, 0.12); brim.rotation.x = Math.PI / 2; bg.add(brim); h.add(bg);
   return h;
 }
+const box3 = (w, hh, d, m) => mesh(new THREE.BoxGeometry(w, hh, d), m);
 
+/** Medidas do corpo usadas por quem monta poses (seatedDriver.js). */
+export const BODY = { pelvisY: 0.64, torsoY: 0.64 + 0.06, upperArm: 0.28, foreArm: 0.2 };
 /** Corpo articulado (origem nos pés, olhando para +X). Retorna as juntas para animar. */
 export function buildBody(parent, opts = {}) {
   const SKIN = CHAR_MATS.skin, SHIRT = CHAR_MATS.shirt, PANTS = CHAR_MATS.pants, SHOES = CHAR_MATS.shoes;
-  const pelvis = new THREE.Group(); pelvis.position.y = 0.72; parent.add(pelvis);
+  const pelvis = new THREE.Group(); pelvis.position.y = BODY.pelvisY; parent.add(pelvis);
   const hips = lathe([[0, -0.15], [0.13, -0.14], [0.21, -0.09], [0.25, -0.01], [0.25, 0.08], [0.24, 0.17], [0, 0.18]], PANTS);
   hips.scale.set(0.85, 1, 1.15); pelvis.add(hips);                                                  // quadril (embaixo da camisa)
   const torso = new THREE.Group(); torso.position.y = 0.06; pelvis.add(torso);
@@ -129,25 +106,25 @@ export function buildBody(parent, opts = {}) {
   const legs = [], arms = [];
   for (const s of [-1, 1]) {
     const hip = new THREE.Group(); hip.position.set(0, -0.03, s * 0.14); pelvis.add(hip);
-    hip.add(limb(0.16, 0.135, 0.29, PANTS));                                                         // coxa (contínua com a canela)
-    const knee = new THREE.Group(); knee.position.y = -0.29; hip.add(knee);
-    knee.add(limb(0.135, 0.13, 0.26, PANTS));                                                        // canela até o tênis
-    const foot = new THREE.Group(); foot.position.y = -0.26; knee.add(foot);
+    hip.add(limb(0.16, 0.135, 0.25, PANTS));                                                         // coxa (contínua com a canela; pernas curtas)
+    const knee = new THREE.Group(); knee.position.y = -0.25; hip.add(knee);
+    knee.add(limb(0.135, 0.13, 0.22, PANTS));                                                        // canela até o tênis
+    const foot = new THREE.Group(); foot.position.y = -0.22; knee.add(foot);
     const shoe = at(mesh(new THREE.CapsuleGeometry(0.115, 0.17, 8, 18), SHOES), 0.07, -0.035, 0, 0, 0, Math.PI / 2);
-    shoe.scale.set(0.95, 1, 1.05); foot.add(shoe);                                                   // tênis: bico redondo e volume
+    shoe.scale.set(1.05, 1.12, 1.15); foot.add(shoe);                                                   // tênis: bico redondo e volume
     const sole = at(mesh(new THREE.CapsuleGeometry(0.128, 0.19, 8, 18), SHOES), 0.07, -0.105, 0, 0, 0, Math.PI / 2);
-    sole.scale.set(0.34, 1, 1.12); foot.add(sole);                                                   // sola mais larga (borda visível)
+    sole.scale.set(0.34, 1.12, 1.22); foot.add(sole);                                                   // sola mais larga (borda visível)
     legs.push({ hip, knee, foot });
-    const sh = new THREE.Group(); sh.position.set(0, 0.56, s * 0.31); torso.add(sh);
-    sh.add(limb(0.135, 0.118, 0.13, SHIRT));                                                         // manga curta arredondada
+    const sh = new THREE.Group(); sh.position.set(0, 0.53, s * 0.26); torso.add(sh);                 // ombro embutido no tronco (sem bola aparente)
+    sh.add(limb(0.125, 0.11, 0.15, SHIRT));                                                          // manga curta
     sh.add(limb(0.085, 0.074, 0.28, SKIN));                                                          // braço
     const elbow = new THREE.Group(); elbow.position.y = -0.28; sh.add(elbow);
     const wrist = new THREE.Group(); wrist.position.y = -0.2; elbow.add(wrist);
-    elbow.add(limb(0.072, 0.06, 0.2, SKIN)); wrist.add(opts.flatHands ? flatHand(SKIN) : hand(SKIN));   // antebraço + mão
+    elbow.add(limb(0.074, 0.062, 0.2, SKIN)); wrist.add(flatHand(SKIN));                       // antebraço contínuo + mão simples
     arms.push({ sh, elbow, wrist });
   }
   const head = new THREE.Group(); head.position.y = 0.7; torso.add(head);
   head.add(at(limb(0.095, 0.1, 0.12, SKIN), 0, 0.12, 0));                                            // pescoço
-  head.add(at(buildHead(0.42), 0, 0.44, 0));
+  head.add(at(buildHead(0.45), 0, 0.46, 0));
   return { pelvis, torso, legs, arms, head };
 }
