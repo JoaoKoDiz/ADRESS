@@ -657,9 +657,12 @@ function updateChurch(dt) {
   // aproximação: a mira sobe aos poucos (horizonte no meio da tela) até a van chegar perto da igreja
   rig.setLookLift((approach.phase === 'auto' || approach.phase === 'revealed') && state === 'drive' && van.z < M + CHURCH_Z - 140 ? 4.8 : 0);
   if (!churchShown) {
-    const outside = van.x < 0 || van.x > M || van.z < 0 || van.z > M;
+    // gatilho: linha imaginária na borda de FORA da sebe do fim do bairro (lado da igreja, z = M). Só conta além dela e
+    // indo para a igreja; parou ou voltou → a contagem zera (a próxima tentativa começa do zero). Dentro do bairro nada acontece.
+    const beyond = van.z > M;
     const southSpeed = Math.sin(van.heading) * van.speed;          // velocidade na direção do sol (+Z)
-    if (approach.phase === 'idle' && state === 'drive' && outside && southSpeed > 4 && Math.sin(van.heading) * Math.sign(van.speed) > 0.6) churchT += dt;
+    const going = southSpeed > 4 && Math.sin(van.heading) * Math.sign(van.speed) > 0.6;
+    if (approach.phase === 'idle') churchT = state === 'drive' && beyond && going && !heli.on ? churchT + dt : 0;
     if (approach.phase === 'idle' && churchT >= 1 && !heli.on) {      // ~1 s indo para o sol: espera a faixa estar pronta e começa
       approach.phase = 'loading';
       churchMusic.load().then(() => { if (approach.phase === 'loading' && churchOn) startApproach(); }, () => { approach.phase = 'idle'; churchT = 0; });
