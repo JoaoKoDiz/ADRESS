@@ -618,16 +618,26 @@ const churchMusic = createChurchMusic(audio);
 const REVEAL_AT = 14, REVEAL_D = 360;                   // segundo da música; distância da fachada nesse instante
 let approach = { phase: 'idle' };
 const approachLock = () => approach.phase === 'auto';
+// botão ♪ durante a faixa: pausa sempre; retoma do mesmo ponto só antes da revelação (depois, nesta visita, não volta)
+const MUSIC_OVERRIDE = {
+  get on() { return churchMusic.playing; },
+  toggle() {
+    if (churchMusic.playing) churchMusic.pause();
+    else if (approach.phase === 'auto' && churchMusic.paused) churchMusic.resume();
+  },
+};
 function endApproachMusic(fade = 1) {
-  if (churchMusic.playing) churchMusic.fadeOut(fade);
+  if (churchMusic.active) churchMusic.fadeOut(fade);
+  music.setOverride(null);
   music.suspend(false);                                 // a música de fundo volta como o jogador deixou
 }
 function startApproach() {
-  approach = { phase: 'auto', z0: van.z, v0: Math.max(8, van.speed) };
+  approach = { phase: 'auto', z0: van.z, v0: Math.max(8, van.speed), cmd: Math.max(8, van.speed) };
   const zf = MAP_W() + CHURCH_Z, D = Math.max(50, zf - REVEAL_D - van.z), T = REVEAL_AT, a = approach;
   a.vTop = a.v0 + (D - a.v0 * T) / (T - 2);              // velocidade de cruzeiro para chegar no ponto certo aos 14 s
   music.suspend(true);
-  churchMusic.play(2);
+  churchMusic.play(4);
+  music.setOverride(MUSIC_OVERRIDE);                   // o botão ♪ passa a controlar esta faixa (sem mudar a preferência salva)
 }
 const ramp = t => { const s = Math.min(1, Math.max(0, t / 4)); return s * s * (3 - 2 * s); };
 const rampInt = t => t < 4 ? 4 * ((t / 4) ** 3 - (t / 4) ** 4 / 2) : 2 + (t - 4);
@@ -635,8 +645,10 @@ const rampInt = t => t < 4 ? 4 * ((t / 4) ** 3 - (t / 4) ** 4 / 2) : 2 + (t - 4)
 function approachAxis() {
   const a = approach, tau = Math.max(0, churchMusic.time);
   const zDes = a.z0 + a.v0 * tau + (a.vTop - a.v0) * rampInt(tau);
-  const v = a.v0 + (a.vTop - a.v0) * ramp(tau) + 0.8 * (zDes - van.z);
-  van.setForceSpeed(Math.max(4, v));
+  // música pausada: a sequência também para (a van freia suave e espera); ao continuar, volta a acelerar suave
+  const v = churchMusic.paused ? 0 : Math.max(4, a.v0 + (a.vTop - a.v0) * ramp(tau) + 0.8 * (zDes - van.z));
+  a.cmd += (v - a.cmd) * (1 - Math.exp(-(churchMusic.paused ? 1.6 : 1.2) * (1 / 60)));
+  van.setForceSpeed(a.cmd);
   const tx = MAP_W() / 2, tz = MAP_W() + CHURCH_Z;
   let d = Math.atan2(tz - van.z, tx - van.x) - van.heading;
   while (d > Math.PI) d -= 2 * Math.PI; while (d < -Math.PI) d += 2 * Math.PI;
@@ -708,7 +720,8 @@ const CINE = {
 const _frus = new THREE.Frustum(), _m4 = new THREE.Matrix4(), _bb = new THREE.Box3();
 let cine = null;                                        // { phase, t, talkT, total, count, restore, wp, camPos, camLook }
 let unwhite = null;
-const nearChurchK = () => churchShown && !churchTalkDone() && state === 'walk' && !cine &&
+const nearChurchK = () => churchShown && state === 'walk' && !cine && !approachLock() &&   // pode repetir (o progresso continua salvo)
+ 
   Math.hypot(walker.x - CL(K_PEW.x, 0, K_PEW.z).x, walker.z - CL(K_PEW.x, 0, K_PEW.z).z) < 3.4;
 const ease = x => x * x * (3 - 2 * x);
 function setCam(posL, lookL) { cine.camPos.copy(CL(...posL)); cine.camLook.copy(CL(...lookL)); }
@@ -957,10 +970,10 @@ function update(dt, t) {
       actionLock = Math.max(0, actionLock - dt);
       if (actionLock > 0 || !input.action()) break;
       if (nearLounger()) startRoofTalk();             // no terraço a van fica perto: falar com ele tem prioridade
+      else if (nearChurchK()) startChurchTalk();       // na igreja também (a van pode ter entrado pela porta)
       else if (walker.nearVan(van)) { if (carrying) resetParcel(); walker.show(false); walker.setFloor(0); roofWalk = null; actionLock = 0.5; setState('drive'); }   // a caixa volta ao lugar
       else if (nearParcel()) carrying = true;
       else if (nearK()) startTalk();
-      else if (nearChurchK()) startChurchTalk();
       break;
     }
     case 'cine':                                     // sequência automática (igreja): sem controles
@@ -1092,7 +1105,7 @@ function updateHUD() {
     else hud.setMain(game.mainText(), 'clue');
   }
 
-  const walkNear = state === 'walk' && walker.nearVan(van) && !nearLounger() && !missions.isOpen;
+  const walkNear = state === 'walk' && walker.nearVan(van) && !nearLounger() && !nearChurchK() && !missions.isOpen;
   // a pé no Bairro 1: pegar a caixa / entregar ao K / conversar (balão em cima do personagem)
   const walkAct = state === 'walk' && !walkNear && !missions.isOpen ? (nearParcel() ? 'Pegar a caixa' : nearK() ? (carrying ? 'Entregar a caixa' : 'Conversar') : nearLounger() || nearChurchK() ? 'Conversar' : '') : '';
   if (walkAct) {

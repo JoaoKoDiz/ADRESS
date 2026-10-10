@@ -24,7 +24,7 @@ export function createMusic(stageEl, src = 'assets/musica-fundo.mp3') {
 
   let wanted = true;                     // o jogador quer música tocando?
   try { const v = localStorage.getItem('adress.music'); if (v !== null) wanted = v === '1'; } catch (e) { /* ignora */ }
-  let started = false, suspended = false;
+  let started = false, suspended = false, override = null;   // override: cena com faixa própria controla o botão
 
   const btn = document.createElement('button');
   btn.type = 'button'; btn.className = 'music-btn'; btn.tabIndex = -1;
@@ -32,9 +32,10 @@ export function createMusic(stageEl, src = 'assets/musica-fundo.mp3') {
   const PAUSE = '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="4" width="5" height="16" rx="1.2" fill="#fff"/><rect x="14" y="4" width="5" height="16" rx="1.2" fill="#fff"/></svg>';
   const NOTE = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 3v11.3A3.5 3.5 0 1 0 12 17.5V8h6V3z" fill="#fff"/></svg>';
   const paint = () => {
-    btn.dataset.on = wanted ? '1' : '0';
-    btn.innerHTML = wanted ? PAUSE : NOTE;
-    btn.title = wanted ? 'Pausar a música' : 'Continuar a música';
+    const on = override ? override.on : wanted;
+    btn.dataset.on = on ? '1' : '0';
+    btn.innerHTML = on ? PAUSE : NOTE;
+    btn.title = on ? 'Pausar a música' : 'Continuar a música';
     btn.setAttribute('aria-label', btn.title);
   };
   const play = () => { const p = audio.play(); if (p && p.catch) p.catch(() => {}); };
@@ -46,7 +47,7 @@ export function createMusic(stageEl, src = 'assets/musica-fundo.mp3') {
     paint();
   }
   btn.addEventListener('mousedown', e => e.preventDefault());
-  btn.addEventListener('click', () => { btn.blur(); toggle(); });
+  btn.addEventListener('click', () => { btn.blur(); if (override) { override.toggle(); paint(); } else toggle(); });
   paint();
   stageEl.appendChild(btn);
 
@@ -57,6 +58,10 @@ export function createMusic(stageEl, src = 'assets/musica-fundo.mp3') {
     /** Cena com música própria: pausa a de fundo SEM mudar a preferência salva; false volta como estava. */
     suspend(on) { suspended = on; if (on) audio.pause(); else if (wanted && started) play(); },
     get playing() { return !audio.paused; },
+    /** Cena: o botão passa a controlar outra faixa ({ on, toggle() }); null devolve. A preferência salva não muda. */
+    setOverride(o) { override = o; paint(); },
+    /** Redesenha o ícone (o estado da faixa da cena mudou). */
+    refresh: () => paint(),
     audio,
   };
 }
