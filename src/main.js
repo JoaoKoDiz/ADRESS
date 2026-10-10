@@ -2,7 +2,7 @@
 // Este arquivo define como cada módulo é usado (o "contrato" entre eles).
 import * as THREE from 'three';
 import { Game, ROUTE_LEN } from './logic.js';
-import { MAP, doorPoint, slotOrigin, DELIVERY_RADIUS, DELIVERY_MAX_SPEED, VAN, LOT_ANCHORS, SOLIDS, ENTRANCE, HEDGE, GRID, PLAZA, HOUSE_SLOTS, configureGrid, setGasStations, GAS_LIST, GAS_CANOPY, GAS_ISLANDS, GAS_PARTS } from './layout.js';
+import { MAP, doorPoint, slotOrigin, DELIVERY_RADIUS, DELIVERY_MAX_SPEED, VAN, LOT_ANCHORS, SOLIDS, ENTRANCE, HEDGE, GRID, PLAZA, HOUSE_SLOTS, configureGrid, roadCenter, setGasStations, GAS_LIST, GAS_CANOPY, GAS_ISLANDS, GAS_PARTS } from './layout.js';
 import { createInput } from './input.js';
 import { createWorld } from './world.js';
 import { createVan } from './van.js';
@@ -32,7 +32,8 @@ import { createJamSound } from './jamSound.js';
 import { createShop } from './shop.js';
 import { createLevelSelect } from './levelSelect.js';
 import { createWalker } from './walker.js';
-import { createTalkBox } from './talkBox.js';
+import { createTalkBox, lineDuration } from './talkBox.js';
+import { whiten } from './whiteout.js';
 import { buildChurch, setChurchOpacity, CHURCH_SOLIDS, CHURCH_CAM } from './models/church.js';
 import { createBackButton } from './backButton.js';
 import { createMissions, createMissionsButton, MISSIONS } from './missions.js';
@@ -624,7 +625,123 @@ function updateChurch(dt) {
   }
 }
 
+// ---------- Igreja: 1ª conversa com o K (sequência automática) ----------
+// A pé, perto dele (6º banco): controles suspensos, falas que passam sozinhas (com pausas), câmera que se aproxima devagar.
+// Depois da 6ª fala aparece o aviso com a contagem para voltar ao bairro. No fim: o jogador e a van ficam brancos
+// (whiteout.js), ele sai da igreja, entra na van e ela volta ao bairro; lá tudo volta ao normal. Salvo em CHURCH_TALK_KEY.
+const CHURCH_TALK_KEY = 'adress.church.talk1';
+const churchTalkDone = () => { try { return localStorage.getItem(CHURCH_TALK_KEY) === '1'; } catch (e) { return false; } };
+const P = { p: 0.65 };                                  // pausa dentro da fala ([...] do roteiro)
+const CHURCH_LINES = [
+  ['Você encontrou o caminho.'],
+  ['Dessa vez, ', P, 'não tenho nenhuma encomenda esperando. ', P, 'Pode descansar um pouco.'],
+  ['É curioso… ', P, 'Trabalhando com entregas, ', P, 'você passa o dia tentando chegar ao lugar certo.'],
+  ['Mas chegar ao lugar certo ', P, 'não significa muito se, ', P, 'pelo caminho, ', P, 'você deixa para trás aquilo em que acredita.'],
+  ['É fácil ser honesto quando a verdade não custa nada. ', P, 'O difícil é continuar sendo quando ela pode levar embora algo que você queria manter.'],
+  ['É nessas horas que suas escolhas mostram quem você é. ', P, 'Mesmo quando ninguém está olhando.'],
+  ['Você não precisa ficar aqui para provar nada. ', P, 'Há coisas esperando por você lá fora.'],
+  ['Vá. ', P, 'Só não deixe que a pressa escolha por você.'],
+  ['E, ', P, 'quando voltar, ', P, 'não precisa trazer nenhuma encomenda. ', P, 'Sua presença já basta.'],
+];
+const K_PEW = { x: 2.3, z: -23 };                       // onde ele está sentado (coordenadas locais da igreja)
+const CL = (lx, ly, lz) => new THREE.Vector3(MAP_W() / 2 - lx, ly, MAP_W() + CHURCH_Z - lz);   // local da igreja → mundo (girada 180°)
+const CINE = {
+  player: { x: -0.6, z: -25.6 },                        // no corredor, na frente e à esquerda dele
+  camA: [[-1.5, 2.9, -28.5], [1.6, 1.4, -23.4]],        // jogador de costas em primeiro plano, ele de frente (levemente de lado)
+  camB: [[0.9, 2.2, -25.3], [2.3, 1.75, -23.1]],        // perto dele; o jogador já saiu do quadro
+  walk: [[0, -24], [0, 3.5], [-1.8, 13]],               // saída: corredor → porta → ao lado da van
+  van: [-5, 13],                                        // van estacionada na frente da igreja, virada para o bairro
+  outCam: [[7, 3.0, 30], [-1.5, 5, 2]],                 // enquadramento de fora: igreja + van, ele vem na direção da câmera
+};
+let cine = null;                                        // { phase, t, talkT, total, count, restore, wp, camPos, camLook }
+let unwhite = null;
+const nearChurchK = () => churchShown && !churchTalkDone() && state === 'walk' && !cine &&
+  Math.hypot(walker.x - CL(K_PEW.x, 0, K_PEW.z).x, walker.z - CL(K_PEW.x, 0, K_PEW.z).z) < 3.4;
+const ease = x => x * x * (3 - 2 * x);
+function setCam(posL, lookL) { cine.camPos.copy(CL(...posL)); cine.camLook.copy(CL(...lookL)); }
+function startChurchTalk() {
+  const p = CL(CINE.player.x, 0, CINE.player.z), k = CL(K_PEW.x, 0, K_PEW.z);
+  walker.pose(p.x, p.z, Math.atan2(k.z - p.z, k.x - p.x));
+  van.stop();
+  const total = CHURCH_LINES.reduce((t, l) => t + lineDuration(l), 0);
+  cine = { phase: 'talk', t: 0, total, count: -1, wp: 0, camPos: new THREE.Vector3(), camLook: new THREE.Vector3() };
+  setCam(...CINE.camA);
+  setState('cine');
+  talkBox.show(CHURCH_LINES, churchTalkEnd, { auto: true, onAdvance: i => {
+    if (i !== 6) return;                                // terminou a 6ª fala: começa a contagem para voltar ao bairro
+    const rest = CHURCH_LINES.slice(6).reduce((t, l) => t + lineDuration(l), 0);
+    let path = 0, prev = CINE.player;
+    for (const [x, z] of CINE.walk) { path += Math.hypot(x - prev.x, z - prev.z); prev = { x, z }; }
+    cine.count = Math.ceil(rest + 1.8 + path / 6.5 + 1.5 + 3.0 + 1.6 + 8);   // falas + volta da câmera + caminhada + entrar + van + fade + folga
+  } });
+}
+function churchTalkEnd() {                              // última fala lida: grava o progresso; câmera volta ao jogador, já branco
+  try { localStorage.setItem(CHURCH_TALK_KEY, '1'); } catch (e) { /* */ }
+  unwhite = whiten(walker.object, van.object);
+  const v = CL(CINE.van[0], 0, CINE.van[1]);
+  van.teleport(v.x, v.z, -Math.PI / 2);                 // virada para o norte (o bairro)
+  cine.phase = 'back'; cine.t = 0;
+  cine.from = [cine.camPos.clone(), cine.camLook.clone()];
+}
+function restoreLook() { if (unwhite) { unwhite(); unwhite = null; } }
+function churchCineEnd() {                              // de volta ao bairro: cores, câmera e controles normais
+  restoreLook(); talkBox.warn(null); talkBox.hide();
+  cine = null; walker.show(false);
+  const z = MAP_W() - HEDGE - 3.9, x = roadCenter(Math.floor(GRID / 2));
+  van.teleport(x, z, -Math.PI / 2);
+  rig.snap({ x: van.x, z: van.z, heading: van.heading, speed: 0 });
+  actionLock = 0.5;
+  setState('drive');
+}
+function updateChurchCine(dt) {
+  const c = cine; c.t += dt;
+  if (c.count >= 0) {                                   // contagem regressiva real
+    c.count = Math.max(0, c.count - dt);
+    talkBox.warn(['Você está fora do bairro há muito tempo. Volte em ', { b: String(Math.ceil(c.count)) }, ' segundos, ou a partida reiniciará.']);
+    const M = MAP_W(), outside = van.x < 0 || van.x > M || van.z < 0 || van.z > M;
+    if (c.count <= 0 && outside) {                      // não deu tempo: reinicia a partida pelo caminho de sempre
+      restoreLook(); talkBox.warn(null); talkBox.hide(); cine = null; walker.show(false); fadeBlackOff();
+      restartMsg = 'Você ficou fora do bairro por tempo demais. A partida vai reiniciar…'; setState('fadeOut');
+      return;
+    }
+  }
+  if (c.phase === 'talk') {
+    talkBox.update(dt);
+    walker.update(dt, { x: 0, z: 0 }, 'car', [], van);
+    const k = ease(Math.min(1, c.t / (c.total * 0.92)));   // aproxima devagar durante toda a conversa
+    c.camPos.copy(CL(...CINE.camA[0])).lerp(CL(...CINE.camB[0]), k);
+    c.camLook.copy(CL(...CINE.camA[1])).lerp(CL(...CINE.camB[1]), k);
+  } else if (c.phase === 'back') {                      // a câmera volta para o jogador (agora branco)
+    const k = ease(Math.min(1, c.t / 1.8));
+    c.camPos.copy(c.from[0]).lerp(CL(...CINE.camA[0]), k);
+    c.camLook.copy(c.from[1]).lerp(CL(CINE.player.x, 1.3, CINE.player.z), k);
+    walker.update(dt, { x: 0, z: 0 }, 'car', [], van);
+    if (k >= 1) { c.phase = 'walk'; c.t = 0; c.wp = 0; }
+  } else if (c.phase === 'walk' || c.phase === 'outside') {
+    const [tx, tz] = CINE.walk[c.wp], tgt = CL(tx, 0, tz);
+    const dx = tgt.x - walker.x, dz = tgt.z - walker.z, d = Math.hypot(dx, dz);
+    if (d < 0.5) {
+      if (++c.wp >= CINE.walk.length) { walker.show(false); c.phase = 'drive'; c.t = 0; return; }   // entra na van
+    } else {
+      walker.pose(walker.x, walker.z, Math.atan2(dz, dx));
+      walker.update(dt, { x: 0, z: -1 }, 'car', walkSolids(), { x: 1e6, z: 1e6 });
+    }
+    const lz = MAP_W() + CHURCH_Z - walker.z;           // z local do jogador
+    if (c.phase === 'walk' && lz > -3.5) { c.phase = 'outside'; setCam(...CINE.outCam); }   // corte para fora
+    if (c.phase === 'walk') {                           // dentro: a câmera acompanha por trás, olhando para a porta
+      const cp = CL(0.9, 3.4, lz - 6.5), cl = CL(0, 1.6, lz + 4), a = 1 - Math.exp(-3 * dt);
+      c.camPos.lerp(cp, a); c.camLook.lerp(cl, a);
+    }
+  } else if (c.phase === 'drive') {                     // a van branca sai em direção ao bairro…
+    van.update(dt, { x: 0, z: -1 }, 'car');
+    if (c.t > 3.0 && !c.fading) { c.fading = true; talkBox.fadeBlack(1, 800); }
+    if (c.t > 3.9) { churchCineEnd(); talkBox.fadeBlack(0, 900); }   // (no tempo do jogo) já no bairro
+  }
+}
+function fadeBlackOff() { talkBox.fadeBlack(0, 300); }
+
 function startNewRound() {
+  if (cine || unwhite) { restoreLook(); cine = null; }
   walker.show(false); talkBox.hide(); walker.setFloor(0); roofWalk = null; van.object.visible = true;
   if (COMPOSED.includes(neighborhood)) composeRound(); else game.newRound();
   refreshBarriers();                             // Bairro 3: barreiras em lugares novos
@@ -781,8 +898,12 @@ function update(dt, t) {
       else if (walker.nearVan(van)) { if (carrying) resetParcel(); walker.show(false); walker.setFloor(0); roofWalk = null; actionLock = 0.5; setState('drive'); }   // a caixa volta ao lugar
       else if (nearParcel()) carrying = true;
       else if (nearK()) startTalk();
+      else if (nearChurchK()) startChurchTalk();
       break;
     }
+    case 'cine':                                     // sequência automática (igreja): sem controles
+      if (cine) updateChurchCine(dt);
+      break;
     case 'talk': {                                  // conversa com o K: jogador parado, câmera fixa
       walker.update(dt, { x: 0, z: 0 }, 'car', [], van);
       const sp = readerSpot();
@@ -838,6 +959,7 @@ function update(dt, t) {
   const onFoot = state === 'walk';              // a câmera segue o personagem a pé
   rig.update(dt, onFoot ? { x: walker.x, z: walker.z, y: walker.floor, heading: walker.heading, speed: walker.speed, focus: null } : { x: van.x, z: van.z, y: heli.altitude, heading: van.heading, speed: van.speed, focus: null });   // sem câmera automática: quem controla é o jogador
   if (state === 'talk') { rig.camera.position.copy(talkCam.pos); rig.camera.lookAt(talkCam.look); }   // enquadramento fixo da conversa
+  if (state === 'cine' && cine) { rig.camera.position.copy(cine.camPos); rig.camera.lookAt(cine.camLook); }
   // névoa só na câmera atrás da van (suaviza o horizonte); a visão geral fica nítida
   const fb = rig.blend, fog = world.scene.fog;
   if (fog) { fog.near = 3000 + (130 - 3000) * fb; fog.far = 3200 + (430 - 3200) * fb; }
@@ -884,7 +1006,7 @@ function updateHUD() {
   } else {
     const extraKeys0 = '  ·  L: descer da van';
     const extraKeys = extraKeys0 + (gameMode === 'free' ? '  ·  H: helicóptero  ·  F: míssil' : '  ·  M: missões');
-    hud.setSub(state === 'talk' ? '' : state === 'walk'
+    hud.setSub(state === 'talk' || state === 'cine' ? '' : state === 'walk'
       ? (rig.mode === 'chase' ? 'A PÉ  ·  W/S: andar  ·  A/D: virar  ·  E (perto da van): entrar  ·  C: bairro  ·  botão direito: olhar em volta' : 'A PÉ  ·  WASD: andar  ·  E (perto da van): entrar  ·  C: câmera')
       : heli.landed
       ? 'POUSADO NO PRÉDIO  ·  H: decolar  ·  F: míssil'
@@ -898,7 +1020,7 @@ function updateHUD() {
     else if (state === 'boss') hud.setMain(monster.phase === 'driveOut' ? 'Todas as casas foram destruídas… algo despertou!' : 'O DEVORADOR DE BAIRROS acordou!', 'dialog');
     else if (state === 'missile') hud.setMain('Míssil disparado!', 'ring');
     else if (state === 'fuel') hud.setMain('⛽ Abastecendo… glub, glub, glub…', 'ring');
-    else if (state === 'talk') hud.setMain('', 'clue');
+    else if (state === 'talk' || state === 'cine') hud.setMain('', 'clue');
     else if (state === 'walk' && carrying) hud.setMain(walker.nearVan(van) ? 'Entrar na van devolve a caixa ao lugar dela.' : 'Carregando uma caixa… de quem será?', 'clue');
     else if (state === 'walk') hud.setMain(walker.nearVan(van) && !nearLounger() ? 'Perto da van — aperte E para entrar.' : 'Passeando a pé… (não dá para entregar andando)', 'clue');
     else if (state === 'drive' && fuelMsgT > 0) hud.setMain(fuelMsg, 'dialog');
@@ -908,7 +1030,7 @@ function updateHUD() {
 
   const walkNear = state === 'walk' && walker.nearVan(van) && !nearLounger() && !missions.isOpen;
   // a pé no Bairro 1: pegar a caixa / entregar ao K / conversar (balão em cima do personagem)
-  const walkAct = state === 'walk' && !walkNear && !missions.isOpen ? (nearParcel() ? 'Pegar a caixa' : nearK() ? (carrying ? 'Entregar a caixa' : 'Conversar') : nearLounger() ? 'Conversar' : '') : '';
+  const walkAct = state === 'walk' && !walkNear && !missions.isOpen ? (nearParcel() ? 'Pegar a caixa' : nearK() ? (carrying ? 'Entregar a caixa' : 'Conversar') : nearLounger() || nearChurchK() ? 'Conversar' : '') : '';
   if (walkAct) {
     rig.camera.updateMatrixWorld();
     promptPos.set(walker.x, walker.floor + 2.7, walker.z).project(rig.camera);
@@ -1026,6 +1148,7 @@ window.ADRESS = {
   get pixelRatio() { return pixelRatio; },
   get titleDriver() { return titleDriver; },
   get church() { return church; },
+  get cine() { return cine; }, startChurchTalk, talkBox,
   get churchState() { return { on: churchOn, t: churchT, a: churchA, shown: churchShown }; },
   get gameMode() { return gameMode; },
   career, missions,
