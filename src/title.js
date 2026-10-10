@@ -6,17 +6,23 @@ const CSS = `
   backdrop-filter: blur(9px) saturate(1.1); -webkit-backdrop-filter: blur(9px) saturate(1.1); background: rgba(38,51,31,.28);
   font-family: "Trebuchet MS","Segoe UI",system-ui,sans-serif; }
 .title.hidden { display: none; }
-.title-main { display: flex; flex-direction: column; align-items: center; gap: 16px; }
-.title-buttons { display: flex; flex-direction: column; align-items: center; gap: 16px; }
+.title-main { display: flex; flex-direction: column; align-items: center; gap: clamp(10px, 2.2vh, 26px); }
+.title-buttons { display: flex; flex-direction: column; align-items: center; gap: clamp(12px, 2.2vh, 24px); }
 .title.playing .title-buttons { display: none; }   /* no painel Jogar, só o logo fica no centro */
-.title-logo { font-weight: 900; font-size: clamp(56px, 9vw, 130px); letter-spacing: .06em; color: #ff7a1a;
-  text-shadow: 0 6px 0 #8a3a08, 0 12px 30px rgba(0,0,0,.35); margin-bottom: 18px; }
-.title-btn { width: clamp(220px, 22vw, 320px); padding: .7em 1em; border: 3px solid #fff; border-radius: 16px;
-  background: #fff3d6; color: #3a2a1a; font: 800 clamp(18px, 1.7vw, 26px) "Trebuchet MS","Segoe UI",system-ui,sans-serif;
-  letter-spacing: .04em; cursor: pointer; box-shadow: 0 5px 0 #c9a76a, 0 10px 22px rgba(0,0,0,.25); transition: transform .1s; }
+.title-logo { font-weight: 900; font-size: clamp(60px, min(9.5vw, 15vh), 150px); line-height: 1; letter-spacing: .02em; color: #ff8a1a;
+  -webkit-text-stroke: clamp(3px, .35vw, 6px) #5a2608; paint-order: stroke fill; text-shadow: 0 .06em 0 #5a2608, 0 .1em 16px rgba(0,0,0,.3);
+  margin-bottom: clamp(6px, 2vh, 22px); }
+/* os 3 botões: mesma largura e altura, texto centralizado */
+.title-btn { width: clamp(240px, max(26vw, 34vh), 440px); height: clamp(54px, 9vh, 96px); padding: 0 1em; box-sizing: border-box;
+  border: clamp(4px, .38vw, 6px) solid #ff7a1a; border-radius: clamp(14px, 1.4vw, 22px); background: #fff3d6; color: #2e1d10;
+  font: 800 clamp(20px, min(2.3vw, 4vh), 40px) "Trebuchet MS","Segoe UI",system-ui,sans-serif; cursor: pointer;
+  box-shadow: 0 4px 0 rgba(150,70,10,.3), 0 8px 18px rgba(0,0,0,.22); transition: transform .1s; }
 .title-btn:hover { transform: translateY(-2px); }
 .title-btn:active { transform: translateY(2px); }
-.title-btn.primary { background: #ff7a1a; color: #fff; box-shadow: 0 5px 0 #a8480b, 0 10px 22px rgba(0,0,0,.25); }
+.title-btn[data-act="quit"] { background: #302014; color: #fff3d6; border-color: #fff3d6; box-shadow: 0 4px 0 rgba(0,0,0,.3), 0 8px 18px rgba(0,0,0,.25); }
+/* na tela inicial só o bairro aparece atrás (a barra e os botões da partida ficam escondidos) */
+body.title-on .ahud { display: none; }
+body.title-on .menu-btn, body.title-on .hint-btn, body.title-on .music-btn { visibility: hidden; }
 /* painel "Jogar": coluna à esquerda (logo, Voltar, título, botões) e a van inteira à direita */
 .title-play { position: absolute; left: clamp(16px, 4vw, 72px); top: 0; bottom: 0; width: min(40vw, 640px); min-width: 300px; display: none;
   flex-direction: column; justify-content: center; gap: clamp(8px, 1.6vh, 18px); padding: 3vh 0; box-sizing: border-box; }
@@ -87,7 +93,7 @@ export function createTitle({ onFree, onCareer, onPlay, onShop, onBack }) {
     <div class="title-main">
       <div class="title-logo">ADRESS</div>
       <div class="title-buttons">
-        <button type="button" class="title-btn primary" data-act="play">Jogar</button>
+        <button type="button" class="title-btn" data-act="play">Jogar</button>
         <button type="button" class="title-btn" data-act="settings">Configurações</button>
         <button type="button" class="title-btn" data-act="quit">Sair</button>
       </div>
@@ -111,7 +117,8 @@ export function createTitle({ onFree, onCareer, onPlay, onShop, onBack }) {
     el.innerHTML = '<div class="title-bye">Até a próxima!<br>Você já pode fechar esta aba.</div>';
   });
 
-  function hide() { el.classList.add('hidden'); }
+  document.body.classList.add('title-on');
+  function hide() { el.classList.add('hidden'); document.body.classList.remove('title-on'); }
   return {
     hide,
     /** Escurece a tela inicial (0,5 s) e chama cb. */
@@ -119,7 +126,7 @@ export function createTitle({ onFree, onCareer, onPlay, onShop, onBack }) {
     get visible() { return !el.classList.contains('hidden'); },
     /** Mostra a tela inicial: 'home' (Jogar/Configurações/Sair) ou 'play' (Carreira/Livre/Shop). */
     show(screen) {
-      el.classList.remove('hidden');
+      el.classList.remove('hidden'); document.body.classList.add('title-on');
       el.classList.toggle('playing', screen === 'play');
       el.querySelector('.title-fade').style.opacity = '0';
       starting = false;
