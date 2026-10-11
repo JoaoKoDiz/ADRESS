@@ -172,6 +172,45 @@ export function createAudio() {
       for (let j = 0; j < 8; j++) uT(100 + Math.random() * 120, 0.1 + j * 0.09, 0.15, 'square', 0.04, 0.5);
       [1600, 1300, 1000, 700, 450, 250].forEach((f, j) => uT(f, 0.9 + j * 0.1, 0.22, 'triangle', 0.035));
     }),
+    // ---- Devolução da Realidade (mesmo barramento) ----
+    rHop: safe(() => { uT(520, 0, 0.12, 'triangle', 0.05, 1.8); uT(780, 0.06, 0.1, 'sine', 0.03, 1.5); }),
+    rStampFall: safe(() => { uN(0.5, 0.12, 0, 0, 1800, true); uT(300, 0, 0.5, 'sawtooth', 0.04, 0.3); }),
+    rStamp: safe((big = 1) => {
+      uN(1.4 * big, 0.4, 0, 500); uT(42, 0, 1.6 * big, 'sine', 0.36, 0.45); uT(64, 0, 1.2, 'square', 0.08, 0.5); uN(0.12, 0.2, 0, 0, 3000);
+      uT(180, 0.05, 0.9, 'triangle', 0.08, 2.6); uT(140, 0.3, 0.6, 'sine', 0.06, 0.6);              // a mola da quadra: boing
+      uN(1.8 * big, 0.12, 0.2, 260);
+    }),
+    rTear: safe(() => { for (let j = 0; j < 14; j++) uN(0.09, 0.07 + j * 0.004, j * 0.055, 0, 2200 + j * 180); uT(90, 0, 1.0, 'sawtooth', 0.05, 0.5); }),
+    rHands: safe(() => { for (let j = 0; j < 10; j++) uN(0.18, 0.08, j * 0.18, 700); uT(60, 0, 2, 'square', 0.06, 1.4); uN(1.2, 0.14, 0.7, 0, 1600); [0.4, 1.1, 1.7].forEach(at => uT(55, at, 0.6, 'sine', 0.24, 0.6)); }),
+    rSuck: safe(() => { uN(2.4, 0.22, 0, 600, 0, true); uT(400, 0, 2.4, 'sawtooth', 0.05, 0.15); uT(800, 0.3, 2, 'sine', 0.04, 0.1); for (let j = 0; j < 8; j++) uT(1600 - j * 120, j * 0.25, 0.4, 'triangle', 0.025, 0.3); uT(30, 0, 2.4, 'sine', 0.2, 1.6); }),
+    rBurst: safe(() => { uN(1.6, 0.4, 0, 1200); uT(48, 0, 1.6, 'sine', 0.34, 0.4); for (let j = 0; j < 16; j++) uT(300 + Math.random() * 900, 0.05 + j * 0.05, 0.12, 'square', 0.03, 0.6); uN(1.2, 0.1, 0.2, 0, 3000); }),
+    rMachine: safe(() => {
+      for (let j = 0; j < 12; j++) { uT(80, j * 0.16, 0.12, 'square', 0.07, 0.7); uN(0.06, 0.06, j * 0.16 + 0.08, 0, 3500); }     // clanc-clanc
+      uT(55, 0.9, 0.7, 'sawtooth', 0.12, 0.6); uN(0.6, 0.3, 1.1, 400); uT(38, 1.1, 1, 'sine', 0.3, 0.5);                       // prensa
+      for (let j = 0; j < 22; j++) uN(0.05, 0.06, 1.5 + j * 0.022, 0, 4000 + j * 60);                                           // fita desenrolando
+      uT(900, 1.5, 0.5, 'sawtooth', 0.03, 2.2);
+    }),
+    rLabel: safe(() => { uN(0.1, 0.2, 0, 0, 2000); uT(260, 0, 0.15, 'square', 0.06, 0.6); uT(1200, 0.05, 0.25, 'sine', 0.04, 1.3); }),
+    rCharge: safe(() => {
+      for (let j = 0; j < 8; j++) { uT(70, j * 0.12, 0.1, 'square', 0.06, 0.8); uN(0.05, 0.05, j * 0.12, 0, 3000); }             // esteira
+      uT(60, 0.6, 1.4, 'sawtooth', 0.14, 4); uT(120, 0.7, 1.3, 'square', 0.05, 4); uN(1.4, 0.18, 0.6, 0, 1200, true); uT(30, 0.6, 1.4, 'sine', 0.2, 1.5);
+    }),
+    rFire: safe(() => {
+      uN(2.4, 0.5, 0, 800); uT(32, 0, 2.6, 'sine', 0.42, 0.3); uT(46, 0, 2.2, 'sawtooth', 0.2, 0.35); uT(70, 0.02, 1.8, 'square', 0.1, 0.4);
+      uN(0.3, 0.25, 0, 0, 4000); uN(2.0, 0.16, 0.3, 0, 1500, true);
+      for (let j = 0; j < 10; j++) { uN(0.18, 0.08 + j * 0.008, 0.6 + j * 0.13, 1500 + j * 200); uT(1800 - j * 100, 0.6 + j * 0.13, 0.15, 'sine', 0.03, 0.3); }   // camadas rompendo
+    }),
+    rHole: safe(() => { uT(90, 0, 1.6, 'sawtooth', 0.06, 0.5); uN(1.5, 0.08, 0, 300, 0, true); uT(40, 0, 1.6, 'sine', 0.16, 0.8); }),
+    rThud: safe(() => { uN(0.08, 0.05, 0, 600); uT(160, 0, 0.1, 'triangle', 0.03, 0.7); }),
+    rOpen: safe(() => {
+      uN(3.4, 0.5, 0, 1000); uT(30, 0, 3.6, 'sine', 0.44, 0.3); uT(44, 0, 3, 'sawtooth', 0.2, 0.4); uT(66, 0.05, 2.6, 'triangle', 0.18, 0.5);
+      uN(0.4, 0.25, 0, 0, 5000); uN(3, 0.18, 0.3, 280);
+      for (let j = 0; j < 24; j++) uT(200 + Math.random() * 1600, 0.2 + j * 0.1, 0.15, ['square', 'triangle', 'sawtooth'][j % 3], 0.03, Math.random() < 0.5 ? 0.4 : 2);
+      for (let j = 0; j < 8; j++) { uN(0.4, 0.14, 0.4 + j * 0.3, 500); uT(50 + j * 6, 0.4 + j * 0.3, 0.6, 'sine', 0.16, 0.6); }   // ondas cósmicas
+    }),
+    rConfetti: safe(() => { for (let j = 0; j < 18; j++) uT(900 + Math.random() * 1400, j * 0.04, 0.08, 'triangle', 0.03, 1.4); uN(0.5, 0.08, 0, 0, 5000); }),
+    rFold: safe(() => { for (let j = 0; j < 6; j++) { uN(0.12, 0.1, j * 0.1, 1800); uT(220 - j * 20, j * 0.1, 0.12, 'square', 0.05, 0.7); } }),
+    rOps: safe(() => { uT(1800, 0, 0.09, 'sine', 0.03, 1.3); uT(2400, 0.1, 0.07, 'sine', 0.02, 0.8); }),
     /** corta tudo (devolução dos controles) */
     end: safe(() => {
       if (!ub) return; const b = ub; ub = null; const now = ac.currentTime;

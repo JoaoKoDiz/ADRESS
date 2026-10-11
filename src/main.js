@@ -6,6 +6,7 @@ import { MAP, doorPoint, slotOrigin, DELIVERY_RADIUS, DELIVERY_MAX_SPEED, VAN, V
 import { createLaser } from './laser.js';
 import { createUrsa } from './ursa.js';
 import { createSolar } from './solar.js';
+import { createReality } from './reality.js';
 import { createInput } from './input.js';
 import { createWorld } from './world.js';
 import { createVan } from './van.js';
@@ -642,10 +643,11 @@ function moonUpdate(dt, snap = false) {
 const laser = createLaser(audio);
 const ursa = createUrsa(audio, stage);
 const solar = createSolar(audio);
+const reality = createReality(audio, stage, renderer);
 let fxCine = laser;                                    // efeito cinematográfico em andamento (laser ou Ursa Menor)
 const laserVoids = [];
 let laserRet = 'drive';
-function clearLaserVoids() { laser.cancel(); ursa.cancel(); solar.cancel(); for (const m of laserVoids) if (m.parent) m.parent.remove(m); laserVoids.length = 0; }
+function clearLaserVoids() { laser.cancel(); ursa.cancel(); solar.cancel(); reality.cancel(); for (const m of laserVoids) if (m.parent) m.parent.remove(m); laserVoids.length = 0; }
 /** Área ocupada pela construção (quadra inteira; galpão = 2 lotes + a rua entre eles). */
 function laserArea(slot) {
   const sp = SPOTS ? SPOTS.spots[slot] : null;
@@ -679,6 +681,13 @@ function startLaser(h, slot, kind = 'laser') {
   }
   world.hideResident(); van.stop(); nearHouse = -1;
   setState('laser');
+  if (kind === 'reality') {                             // Devolução da Realidade (reality.js): carimbo, caixa do universo, canhão e a quadra vira cratera em forma de caixa
+    fxCine = reality;
+    reality.start({ parent, local, rect, moon: !!MOONV, cam: rig.camera, world, lot: world.lotGroup(h),
+      onHide: () => world.setHidden(h, true), onDestroy: () => boom.markDestroyed(h),
+      onCrater: g => laserVoids.push(g), onEnd: () => { setState(laserRet); actionLock = 0.6; } });
+    return;
+  }
   if (kind === 'ursa' || kind === 'solar') {            // Ursa Menor / Sistema Solar: 7 impactos; o 4º derruba a construção (escombros), os outros queimam o chão
     fxCine = ursa;
     const scorch = (i) => {
@@ -2009,7 +2018,7 @@ window.ADRESS = {
   get moonVan() { return { p: vanSph.p.toArray().map(v => +v.toFixed(3)), f: vanSph.f.toArray().map(v => +v.toFixed(3)), y: +van.simY.toFixed(2) }; },
   FRAME, MOONV: () => MOONV,
   lockCP: n => STORY_CP.apply(n), get parcelVisible() { return !!parcel.parent; },
-  laser, ursa, solar, startLaser,
+  laser, ursa, solar, reality, startLaser,
   get church() { return church; }, get venK() { return venK; }, startVeniceTalk, churchStage, get greenBell() { return greenBell; }, get churchBell() { return churchBell; },
   churchReveal() { if (churchOn && !churchShown) { approach.phase = 'revealed'; revealChurch(true); } },
   get churchMusicTime() { return +churchMusic.time.toFixed(2); }, get bellMusic() { return bellMusic; }, get vanFade() { return vanFade; }, nowPlaying, get approach() { return approach; },
