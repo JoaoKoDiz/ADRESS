@@ -408,8 +408,12 @@ function updateTrolleySeq(dt) {
     setState('trolley'); talkBox.fadeBlack(0, 350); q.phase = 'scene'; q.t = 0;
   } else if (q.phase === 'scene') {
     trolley.update(dt, input.action());
-    if (trolley.done) { talkBox.fadeBlack(1, 300); q.phase = trolley.side > 0 && storyReady() ? 'talkIn' : 'out'; q.t = 0; }   // K salvo (história completa): conversa
-  } else if (q.phase === 'talkIn' && q.t > 0.5) {
+    if (trolley.done) {
+      const story = trolley.side > 0 && storyReady();                 // K salvo (história completa): fade mais longo e a música some antes da conversa
+      talkBox.fadeBlack(1, story ? 3000 : 300); if (story) sTrainProblem.fadeOut(3);
+      q.phase = story ? 'talkIn' : 'out'; q.t = 0;
+    }   // K salvo (história completa): conversa
+  } else if (q.phase === 'talkIn' && q.t > 3.1) {
     trolley.talkScene(); talkBox.fadeBlack(0, 400); q.phase = 'talk'; q.t = 0;
     talkBox.show(TROLLEY_LINES, () => {
       try { localStorage.setItem(TROLLEY_TALK_KEY, '1'); } catch (e) { /* */ }   // conversa concluída (para a continuação em Veneza)

@@ -5,7 +5,7 @@ import * as THREE from 'three';
 import { box, cyl, at, mat } from './models/kit.js';
 import { buildTram } from './train.js';
 import { buildResident } from './models/resident.js';
-import { buildPewReader } from './models/reader.js';
+import { buildPewReader, buildStandingReader } from './models/reader.js';
 import { buildBody } from './models/driver.js';
 
 const FORK = 0, START = -38, END = 70, SPLIT = 16, SPREAD = 6, HIT_X = 25, SPEED = 3.3;   // ~10 s até a bifurcação
@@ -67,12 +67,9 @@ export function createTrolley(stageEl) {
   [3, 8, 13, 21, 27].forEach((h, i) => lie(buildResident(h), HIT_X - 4 + i * 2, 1));
 
   const tram = buildTram(); scene.add(tram);
-  // conversa depois do dilema (K salvo, história secundária): K sentado num banco ao lado dos trilhos, longe do bonde
+  // conversa depois do dilema (K salvo, história secundária): K em pé ao lado dos trilhos, longe do bonde
   const talk = new THREE.Group(); talk.visible = false; scene.add(talk);
-  talk.add(at(box(2.0, 0.12, 0.7, '#8a5a36'), -14, 0.56, -4.2));
-  for (const s of [-1, 1]) talk.add(at(box(0.12, 0.5, 0.6, '#555555'), -14 + s * 0.85, 0.25, -4.2));
-  talk.add(at(box(2.0, 0.6, 0.1, '#8a5a36'), -14, 1.0, -3.85));
-  const kTalk = buildPewReader(0.62); kTalk.position.set(-14, 0, -4.2); kTalk.rotation.y = Math.PI / 2; talk.add(kTalk);   // de frente para o jogador (-z), trilhos atrás
+  const kTalk = buildStandingReader(); kTalk.position.set(-14, 0, -4.6); kTalk.rotation.y = Math.PI / 2; talk.add(kTalk);   // em pé, de frente para o jogador (-z), longe dos trilhos
   const camSave = { p: camera.position.clone(), q: camera.quaternion.clone() };
   let x = START, side = -1, locked = false, t = 0, active = false, doneT = -1;
   const place = () => {
