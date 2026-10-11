@@ -1111,7 +1111,7 @@ const MAP_W = () => MAP;                                // largura do bairro (la
 const churchMusic1 = createChurchMusic(audio), churchMusic2 = createChurchMusic(audio, secondSanctuaryUrl);
 let churchMusic = churchMusic1;
 // 2ª visita: música da cena do sino verde (assets/innocent-time.mp3), do início ao fim; depois a música de fundo volta
-const bellMusic = createChurchMusic(audio, innocentTimeUrl, 0.6, () => music.suspend(false));
+const bellMusic = createChurchMusic(audio, innocentTimeUrl, 0.3, () => music.suspend(false));
 // Música da conversa com o K na igreja (assets/church-talk.mp3): começa 10 s depois da 1ª fala aparecer, fade-in de 8 s até
 // 50%, toca mesmo com o botão ♪ desligado (sem mudar a preferência) e vai até o fim sem fade-out nem loop, inclusive de
 // volta à vila. Enquanto toca, a música de fundo fica suspensa; ao terminar, volta como o jogador deixou.
@@ -1266,7 +1266,6 @@ function startChurchTalk() {
   cine = { phase: 'talk', t: 0, total, count: -1, wp: 0, stage, bell: stage === 2 ? greenBell : churchBell, camPos: new THREE.Vector3(), camLook: new THREE.Vector3() };
   setCam(...CINE.camA);
   setState('cine');
-  if (stage === 2) startBellMusic();                    // 2ª conversa: "Once Upon An Innocent Time" desde o começo da conversa
   talkBox.show(lines, churchTalkEnd, { auto: true, onAdvance: i => {
     if (i !== 6 || cine.stage === 2) return;           // terminou a 6ª fala: começa a contagem para voltar ao bairro (na 2ª visita, não há contagem)
     const rest = lines.slice(6).reduce((t, l) => t + lineDuration(l), 0);
@@ -1286,7 +1285,7 @@ function churchTalkEnd() {                              // última fala lida: gr
 /** 2ª conversa: encerra as outras músicas e toca "Once Upon An Innocent Time" do início (vai até o fim, inclusive na volta ao bairro). */
 function startBellMusic() {
   talkMusic.stop(); if (churchMusic.active) churchMusic.stop(); music.setOverride(null); music.suspend(true);
-  const go = () => bellMusic.play(1);
+  const go = () => bellMusic.play(10);                  // fade-in de 10 s
   bellMusic.ready ? go() : bellMusic.load().then(go, () => music.suspend(false));
 }
 function restoreLook() { if (unwhite) { unwhite(); unwhite = null; } vanFade = null; }
@@ -1327,6 +1326,7 @@ function updateChurchCine(dt) {
     }
   }
   if (c.phase === 'talk') {
+    if (!c.music && c.stage === 2 && c.t >= 5) { c.music = true; startBellMusic(); }   // 2ª conversa: "Once Upon An Innocent Time" 5 s depois do começo
     if (!c.music && c.stage !== 2 && c.t >= TALK_MUSIC_AT) { c.music = true; startTalkMusic(); }   // 10 s depois da 1ª fala (pausas incluídas); só na 1ª conversa
     talkBox.update(dt);
     walker.update(dt, { x: 0, z: 0 }, 'car', [], van);
