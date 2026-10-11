@@ -49,6 +49,7 @@ ADRESS é um jogo 3D de entregas, aconchegante e meio cômico.
   - Só **A/D** movem a van; **E** joga; **M** abre as missões da maquete.
   - A van começa ao lado do último bairro desbloqueado.
 - **Cadeado** no canto inferior direito do mapa (no lugar do botão DICA): senha **`1225`** desbloqueia todos os bairros (salvo no navegador).
+  - Depois da senha abre o menu **CHECKPOINT DA HISTÓRIA** (testes; `STORY_CP` em `main.js`, lista em `lockButton.js`): 1 Nada … 7 Segunda conversa na igreja. Escolher grava no progresso salvo as chaves até a etapa (`kParcel`, `roofTalk`, `church.talk1`, `trolley.talk1`, `venice.talk1`, `church.talk2`) e apaga as posteriores; caixa, K do terraço, igreja/sinos (azul caído sempre que `church.talk1` existe; numa conversa repetida ele volta a pender fora do quadro e cai de novo), bonde e Veneza são recalculados ao começar cada partida. Independe do desbloqueio dos bairros. Teste: `ADRESS.lockCP(n)`.
 - **Na partida:**
   - Entrada do bairro fechada (parede invisível).
   - Sem destruição, míssil, helicóptero ou explosões.

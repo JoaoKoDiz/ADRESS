@@ -691,7 +691,20 @@ const back = createBackButton(goBack);
 const career = createCareer();          // progresso das missões e desbloqueio das fases (salvo no navegador)
 const missions = createMissions(career); // Carreira: M perto da maquete abre as missões do bairro
 // cadeado no mapa da Carreira (no lugar do botão DICA): a senha certa desbloqueia todos os bairros
-const lock = createLockButton(stage, () => { career.unlockAll(); careerMap.setLocked(l => !career.isUnlocked(l)); }, () => career.allUnlocked);
+// Checkpoints de teste da história secundária (no cadeado, depois da senha): grava no progresso salvo as etapas até a
+// escolhida e apaga as posteriores. Cada cena lê esse progresso ao começar (caixa, K no terraço, igreja e sinos, bonde, Veneza).
+const STORY_STEPS = ['Nada', 'Conversa na casa do personagem — completa', 'Conversa no terraço — completa', 'Primeira conversa na igreja — completa',
+  'Trolley Problem — completo', 'Conversa em Veneza — completa', 'Segunda conversa na igreja — completa'];
+const storyKeys = () => [PARCEL_KEY, ROOF_KEY, CHURCH_TALK_KEY, TROLLEY_TALK_KEY, VENICE_TALK_KEY, CHURCH2_KEY];
+const STORY_CP = {
+  names: STORY_STEPS,
+  current() { const k = storyKeys(); let n = 0; while (n < k.length && flagOn(k[n])) n++; return n; },
+  apply(n) {
+    storyKeys().forEach((k, i) => { try { if (i < n) localStorage.setItem(k, '1'); else localStorage.removeItem(k); } catch (e) { /* */ } });
+    parcelDone = n >= 1;                                   // (lido na hora pela caixa e pelo K do terraço)
+  },
+};
+const lock = createLockButton(stage, () => { career.unlockAll(); careerMap.setLocked(l => !career.isUnlocked(l)); }, () => career.allUnlocked, STORY_CP);
 // botão MISSÕES no canto superior direito durante a partida da Carreira (missões do bairro jogado)
 const missionsBtn = createMissionsButton(stage, () => {
   if (gameMode === 'career' && IN_GAME.includes(state) && !missions.isOpen) missions.open(careerLevel);
@@ -1080,7 +1093,7 @@ function setupChurch() {
   const st = churchStage();
   for (const b of [churchBell, greenBell]) { b.userData.bell.position.set(0, 0, 0); b.userData.bell.rotation.set(0, 0, 0); b.visible = false; }
   // só aparecem na cena de saída (fora do quadro, antes de a câmera subir); depois da 1ª conversa (já na 2ª etapa), o azul fica caído
-  if (st >= 2 && churchTalkDone()) { churchBell.visible = true; churchBell.userData.bell.position.y = -bellDrop(churchBell); }
+  if (churchTalkDone()) { churchBell.visible = true; churchBell.userData.bell.position.y = -bellDrop(churchBell); }   // 1ª conversa feita: o azul já está caído
   if (st >= 3) { greenBell.visible = true; greenBell.userData.bell.position.y = -bellDrop(greenBell); }
   church.userData.pewK.visible = st < 3;                // depois da despedida ele já foi embora
   church.position.set(MAP_W() / 2, 0, MAP_W() + CHURCH_Z); church.rotation.y = Math.PI;   // fachada virada para o bairro (norte)
@@ -1342,6 +1355,7 @@ function updateChurchCine(dt) {
   } else if (c.phase === 'drive') {                     // a van branca sai em direção ao bairro…
     van.update(dt, { x: 0, z: -1 }, 'car');
     const bell = c.bell;
+    if (!c.rehung) { c.rehung = true; bell.userData.bell.position.set(0, 0, 0); bell.userData.bell.rotation.set(0, 0, 0); }   // (conversa repetida: o sino volta a pender, fora do quadro, e cai de novo)
     bell.visible = true;                                // a câmera ainda olha para baixo: ele já está pendurado quando ela subir
     // …a câmera fica no lugar e só gira para cima até o sino (azul na 1ª, verde na 2ª); ele aparece um instante, solta-se e cai (sem som)
     if (c.t > BELL_TILT0 && c.stage === 2 && !c.bellMusic) {   // 2ª visita: a câmera começa a virar → música do sino verde (sem sobrepor)
@@ -1907,6 +1921,7 @@ window.ADRESS = {
   moonPlace(p, f) { van.teleport(0, 0, 0); FRAME.reset(new THREE.Vector3(...p).normalize(), new THREE.Vector3(...f), 0, 0); moonAnchor.x = moonAnchor.z = 0; FRAME.toSphere(0, 0, vanSph.p); moonUpdate(0, true); },
   get moonVan() { return { p: vanSph.p.toArray().map(v => +v.toFixed(3)), f: vanSph.f.toArray().map(v => +v.toFixed(3)), y: +van.simY.toFixed(2) }; },
   FRAME, MOONV: () => MOONV,
+  lockCP: n => STORY_CP.apply(n), get parcelVisible() { return !!parcel.parent; },
   get church() { return church; }, get venK() { return venK; }, startVeniceTalk, churchStage, get greenBell() { return greenBell; }, get churchBell() { return churchBell; },
   churchReveal() { if (churchOn && !churchShown) { approach.phase = 'revealed'; revealChurch(true); } },
   get churchMusicTime() { return +churchMusic.time.toFixed(2); }, get bellMusic() { return bellMusic; }, get vanFade() { return vanFade; }, nowPlaying, get approach() { return approach; },

@@ -24,6 +24,10 @@ const CSS = `
 .lock-card button { padding: .45em 1.1em; border: 3px solid #3a2a1a; border-radius: 999px; cursor: pointer;
   font: 800 15px "Trebuchet MS",system-ui,sans-serif; background: #e0a526; color: #3a2a1a; box-shadow: 0 3px 0 #1d140c; }
 .lock-card button.ghost { background: #fff; }
+.lock-card .cps { display: grid; gap: 7px; margin: 4px 0 10px; text-align: left; }
+.lock-card .cps button { width: 100%; text-align: left; padding: .5em .9em; background: #fff; box-shadow: 0 2px 0 #1d140c; font-size: 14px; }
+.lock-card .cps button.cur { background: #ffd98a; border-color: #FF7A1A; }
+.lock-card .cps button:hover { filter: brightness(.96); }
 .lock-card.shake { animation: lockShake .35s; }
 @keyframes lockShake { 20%, 60% { transform: translateX(-8px); } 40%, 80% { transform: translateX(8px); } }
 `;
@@ -33,8 +37,9 @@ const LOCK_SVG = open => `<svg viewBox="0 0 24 24" aria-hidden="true">
   <path d="${open ? 'M7 11V7a5 5 0 0 1 9.6-2' : 'M7 11V7a5 5 0 0 1 10 0v4'}" fill="none" stroke="#fff" stroke-width="2.6" stroke-linecap="round"/>
   <rect x="4" y="11" width="16" height="11" rx="2.5" fill="#fff"/><circle cx="12" cy="16" r="1.8" fill="#3a2a1a"/></svg>`;
 
-/** onUnlock(): chamado quando a senha certa é digitada. isUnlockedAll(): o cadeado já foi aberto antes? */
-export function createLockButton(stageEl, onUnlock, isUnlockedAll) {
+/** onUnlock(): chamado quando a senha certa é digitada. isUnlockedAll(): o cadeado já foi aberto antes?
+ *  cp (checkpoints de teste da história): { names: [...], current(): índice, apply(i) } — depois da senha abre a lista. */
+export function createLockButton(stageEl, onUnlock, isUnlockedAll, cp = null) {
   const style = document.createElement('style');
   style.textContent = CSS;
   document.head.appendChild(style);
@@ -49,18 +54,22 @@ export function createLockButton(stageEl, onUnlock, isUnlockedAll) {
 
   const panel = document.createElement('div');
   panel.className = 'lock-panel';
-  panel.innerHTML = `<div class="lock-card"><h3>🔒 SENHA</h3>
+  const PASS_HTML = `<h3>🔒 SENHA</h3>
     <input type="password" inputmode="numeric" maxlength="8" autocomplete="off">
     <div class="msg"></div>
-    <div class="row"><button type="button" class="ghost" data-k="cancel">Cancelar</button><button type="button" data-k="ok">Desbloquear</button></div></div>`;
+    <div class="row"><button type="button" class="ghost" data-k="cancel">Cancelar</button><button type="button" data-k="ok">Desbloquear</button></div>`;
+  panel.innerHTML = `<div class="lock-card">${PASS_HTML}</div>`;
   stageEl.appendChild(panel);
-  const card = panel.querySelector('.lock-card'), field = panel.querySelector('input'), msg = panel.querySelector('.msg');
+  const card = panel.querySelector('.lock-card');
+  let field = panel.querySelector('input'), msg = panel.querySelector('.msg');
 
   let open = false, shown = false;
   const paint = () => { const o = isUnlockedAll(); btn.dataset.open = o ? '1' : ''; btn.innerHTML = LOCK_SVG(o); };
   paint();
 
   function show() {
+    card.innerHTML = PASS_HTML; field = card.querySelector('input'); msg = card.querySelector('.msg');
+    field.addEventListener('input', () => { field.value = field.value.replace(/\D/g, ''); });
     open = true; field.value = ''; msg.textContent = ''; msg.className = 'msg';
     panel.classList.add('on');
     setTimeout(() => field.focus(), 0);
@@ -69,6 +78,7 @@ export function createLockButton(stageEl, onUnlock, isUnlockedAll) {
   function submit() {
     if (field.value === PASSWORD) {
       onUnlock(); paint();
+      if (cp) { showCheckpoints(); return; }
       msg.textContent = 'Todos os bairros desbloqueados!'; msg.className = 'msg ok';
       setTimeout(close, 900);
     } else {
@@ -78,20 +88,32 @@ export function createLockButton(stageEl, onUnlock, isUnlockedAll) {
     }
   }
 
+  // checkpoints da história secundária (testes): escolher um configura o progresso salvo até aquela etapa
+  function showCheckpoints() {
+    const cur = cp.current();
+    card.innerHTML = `<h3>CHECKPOINT DA HISTÓRIA</h3><div class="msg ok">Todos os bairros desbloqueados!</div>
+      <div class="cps">${cp.names.map((n, i) => `<button type="button" data-cp="${i}" class="${i === cur ? 'cur' : ''}">${i + 1}. ${n}</button>`).join('')}</div>
+      <div class="row"><button type="button" class="ghost" data-k="cancel">Fechar</button></div>`;
+    msg = card.querySelector('.msg'); field = { blur() {}, focus() {}, value: '' };
+  }
   btn.addEventListener('click', () => { btn.blur(); if (!open) show(); });
   panel.addEventListener('click', e => {
-    const k = e.target.dataset && e.target.dataset.k;
+    const k = e.target.dataset && e.target.dataset.k, c = e.target.dataset && e.target.dataset.cp;
+    if (c !== undefined && cp) {
+      cp.apply(+c);
+      card.querySelectorAll('.cps button').forEach(b => b.classList.toggle('cur', b.dataset.cp === c));
+      msg.textContent = 'Checkpoint aplicado: ' + cp.names[+c]; msg.className = 'msg ok';
+      setTimeout(close, 1400); return;
+    }
     if (k === 'ok') submit();
     else if (k === 'cancel' || e.target === panel) close();
   });
   // as teclas digitadas no painel não vão para o jogo (E/Enter não entram no bairro, A/D não andam)
   panel.addEventListener('keydown', e => {
     e.stopPropagation();
-    if (e.key === 'Enter') submit();
+    if (e.key === 'Enter' && field.addEventListener) submit();
     else if (e.key === 'Escape') close();
   });
-  field.addEventListener('input', () => { field.value = field.value.replace(/\D/g, ''); });
-
   return {
     get isOpen() { return open; },
     /** Mostra/esconde o cadeado (só no mapa da Carreira). */
