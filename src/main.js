@@ -647,7 +647,8 @@ function setupChurch() {
     churchBell = buildBell(); church.add(churchBell);                // sino azul (1ª conversa): cai no fim da cena de saída
     church.userData.materials.push(...churchBell.userData.materials);
   }
-  churchBell.userData.bell.position.set(0, 0, 0); churchBell.userData.bell.rotation.set(0, 0, 0);   // pendurado desde o início da visita
+  churchBell.userData.bell.position.set(0, 0, 0); churchBell.userData.bell.rotation.set(0, 0, 0);
+  churchBell.visible = false;                           // só aparece na cena de saída (fora do quadro, antes de a câmera subir)
   church.position.set(MAP_W() / 2, 0, MAP_W() + CHURCH_Z); church.rotation.y = Math.PI;   // fachada virada para o bairro (norte)
   church.visible = false;
   world.scene.add(church);
@@ -864,6 +865,7 @@ function updateChurchCine(dt) {
     }
   } else if (c.phase === 'drive') {                     // a van branca sai em direção ao bairro…
     van.update(dt, { x: 0, z: -1 }, 'car');
+    churchBell.visible = true;                          // a câmera ainda olha para baixo: ele já está pendurado quando ela subir
     // …a câmera fica no lugar e só gira para cima até o sino azul; ele aparece um instante, solta-se e cai (sem som)
     if (c.t > BELL_TILT0) {
       if (!c.dirB) { c.dirB = c.camLook.clone().sub(c.camPos).normalize(); c.dirS = CL(BELL_SPOT.x, BELL_SPOT.y - churchBell.userData.h * 0.6, BELL_SPOT.z).sub(c.camPos).normalize(); }
@@ -873,11 +875,11 @@ function updateChurchCine(dt) {
     const ft = c.t - BELL_FALL0, b = churchBell.userData.bell;
     if (ft > 0) {
       const drop = BELL_SPOT.y - churchBell.userData.h - BELL_SPOT.floor, fallT = Math.sqrt(2 * drop / 22);
-      if (ft < fallT) { b.position.y = -11 * ft * ft; b.rotation.z = 0.08 * ft; }   // queda livre, girando de leve
-      else {                                            // bateu no piso do corredor: um quique curto e tomba para o lado
-        const u = Math.min(1, (ft - fallT) / 0.7);
-        b.position.y = -drop + Math.sin(Math.min(1, u * 2) * Math.PI) * 0.6 * (1 - u);
-        b.rotation.z = 0.08 * fallT + ease(u) * 0.55;
+      if (ft < fallT) { b.position.y = -11 * ft * ft; b.rotation.z = 0.05 * ft; }   // queda livre, quase reta
+      else {                                            // bateu no piso do corredor: quique curto, balança e fica parado ali
+        const u = Math.min(1, (ft - fallT) / 0.9);
+        b.position.y = -drop + Math.max(0, Math.sin(Math.min(1, u * 2.5) * Math.PI)) * 0.25 * (1 - u);
+        b.rotation.z = 0.05 * fallT * (1 - u) + Math.sin(u * Math.PI * 3) * 0.06 * (1 - u);
       }
     }
     if (c.t > BELL_END && !c.fading) { c.fading = true; talkBox.fadeBlack(1, 800); }
@@ -885,8 +887,8 @@ function updateChurchCine(dt) {
   }
 }
 // fim da cena de saída: a van parte (0–1,6 s), a câmera gira para cima até o sino (2,4 s), ele fica parado um instante,
-// solta-se e cai em direção ao chão (sai do quadro por baixo) e só então vem o fade-out
-const BELL_TILT0 = 1.6, BELL_TILT = 2.4, BELL_FALL0 = BELL_TILT0 + BELL_TILT + 1.2, BELL_END = BELL_FALL0 + 1.8;
+// solta-se e cai no piso do corredor, fica ali um instante e só então vem o fade-out
+const BELL_TILT0 = 1.6, BELL_TILT = 2.4, BELL_FALL0 = BELL_TILT0 + BELL_TILT + 1.2, BELL_END = BELL_FALL0 + 2.6;
 function fadeBlackOff() { talkBox.fadeBlack(0, 300); }
 
 function startNewRound() {
