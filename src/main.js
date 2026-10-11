@@ -1262,6 +1262,7 @@ function startChurchTalk() {
   walker.pose(p.x, p.z, Math.atan2(k.z - p.z, k.x - p.x));
   van.stop();
   const stage = churchStage(), lines = stage === 2 ? CHURCH2_LINES : CHURCH_LINES;
+  if (stage === 2 && talkMusic.active) { talkMusic.stop(); music.suspend(false); }   // a música da 1ª conversa não entra na 2ª
   const total = lines.reduce((t, l) => t + lineDuration(l), 0);
   cine = { phase: 'talk', t: 0, total, count: -1, wp: 0, stage, bell: stage === 2 ? greenBell : churchBell, camPos: new THREE.Vector3(), camLook: new THREE.Vector3() };
   setCam(...CINE.camA);
@@ -1320,7 +1321,7 @@ function updateChurchCine(dt) {
     }
   }
   if (c.phase === 'talk') {
-    if (!c.music && c.t >= TALK_MUSIC_AT) { c.music = true; startTalkMusic(); }   // 10 s depois da 1ª fala (pausas incluídas)
+    if (!c.music && c.stage !== 2 && c.t >= TALK_MUSIC_AT) { c.music = true; startTalkMusic(); }   // 10 s depois da 1ª fala (pausas incluídas); só na 1ª conversa
     talkBox.update(dt);
     walker.update(dt, { x: 0, z: 0 }, 'car', [], van);
     const k = ease(Math.min(1, c.t / (c.total * 0.92)));   // aproxima devagar durante toda a conversa
