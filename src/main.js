@@ -2,7 +2,7 @@
 // Este arquivo define como cada módulo é usado (o "contrato" entre eles).
 import * as THREE from 'three';
 import { Game, ROUTE_LEN } from './logic.js';
-import { MAP, doorPoint, slotOrigin, DELIVERY_RADIUS, DELIVERY_MAX_SPEED, VAN, LOT_ANCHORS, SOLIDS, ENTRANCE, HEDGE, GRID, PLAZA, HOUSE_SLOTS, configureGrid, roadCenter, setGasStations, GAS_LIST, GAS_CANOPY, GAS_ISLANDS, GAS_PARTS, TERRAIN, CANAL, VENICE, RAIL, slotPlaceTags, roadTopology } from './layout.js';
+import { MAP, doorPoint, slotOrigin, DELIVERY_RADIUS, DELIVERY_MAX_SPEED, VAN, VAN_START, LOT_ANCHORS, SOLIDS, ENTRANCE, HEDGE, GRID, PLAZA, HOUSE_SLOTS, configureGrid, roadCenter, setGasStations, GAS_LIST, GAS_CANOPY, GAS_ISLANDS, GAS_PARTS, TERRAIN, CANAL, VENICE, RAIL, slotPlaceTags, roadTopology } from './layout.js';
 import { createInput } from './input.js';
 import { createWorld } from './world.js';
 import { createVan } from './van.js';
@@ -16,6 +16,10 @@ import { buildShopLot } from './models/shop.js';
 import { SHOPS, HOUSES, FUTS, L1_FIXED, L6_FIXED, WARES, TWINS, VENS } from './data.js';
 import { buildWareLot } from './models/ware.js';
 import { createTrain } from './train.js';
+import { createTrolley } from './trolley.js';
+import honkUrl from '../assets/snd-carhonk.mp3';
+import driveUrl from '../assets/snd-drive.mp3';
+import trainProblemUrl from '../assets/train-problem.mp3';
 import { buildVeniceLot, buildBoat, buildBoatNpc, VEN_X0, VEN_X1, VEN_Z0, VEN_Z1 } from './models/venice.js';
 import { buildAptLot, APT_ROOF, aptRoofHeight, aptRoofY, APT_BUILD } from './models/apt.js';
 import { buildFutLot, futRoofHeight } from './models/fut.js';
@@ -330,7 +334,60 @@ function walkSolids() {
   }
   return out;
 }
-const train = createTrain();                // Bairro 11: trem entre as estações e cancelas das passagens de nível
+const train = createTrain();
+// ---------- Nível 12 (Trilhos): o dilema do bonde ----------
+// A van parada na frente de um bonde por 10 s seguidos → buzina, o bonde avança, corte para preto (~2 s, som de dirigir) e a
+// cena separada (trolley.js). Depois, preto de novo e volta à partida com a van num lugar seguro, perto, fora dos trilhos.
+const trolley = createTrolley(stage);
+const sHonk = createChurchMusic(audio, honkUrl, 0.9), sDrive = createChurchMusic(audio, driveUrl, 0.9);
+const sTrainProblem = createChurchMusic(audio, trainProblemUrl, 0.7);
+let tseq = null, trolleyCool = 0;
+function startTrolleySeq(tr) {
+  tseq = { phase: 'honk', t: 0, tram: tr, x: van.x, z: van.z };
+  sHonk.load().then(() => sHonk.play(0.01), () => {});
+  train.charge(tr);                                                  // o bonde começa a avançar em direção à van
+}
+function safeSpotNear(x0, z0) {                                       // perto, sem sólidos e longe de todos os trilhos
+  const rail = []; for (const l of RAIL.lines) for (let s = 0; s <= l.S; s += 1) rail.push(l.at(s));
+  for (let r = 0; r <= 30; r += 2.5) for (let k = 0; k < 16; k++) {
+    const a = k / 16 * Math.PI * 2, x = x0 + Math.cos(a) * r, z = z0 + Math.sin(a) * r;
+    if (x < 6 || z < 6 || x > MAP - 6 || z > MAP - 6) continue;
+    if (SOLIDS.some(b => x > b.x0 - 2.6 && x < b.x1 + 2.6 && z > b.z0 - 2.6 && z < b.z1 + 2.6)) continue;
+    if (rail.some(p => Math.hypot(p.x - x, p.z - z) < 4.5)) continue;
+    return { x, z };
+  }
+  return { x: VAN_START.x, z: VAN_START.z };
+}
+function updateTrolleySeq(dt) {
+  trolleyCool = Math.max(0, trolleyCool - dt);
+  if (!tseq) {
+    if (neighborhood !== 'rail8' || state !== 'drive' || trolleyCool > 0) return;
+    const b = train.blocked();
+    if (b && b.vanBlock >= 10) startTrolleySeq(b);
+    return;
+  }
+  const q = tseq; q.t += dt;
+  if (q.phase === 'honk' && q.t > 0.7) {                              // o bonde já avança: corta direto (sem mostrar batida)
+    talkBox.fadeBlack(1, 120); sDrive.load().then(() => sDrive.play(0.01), () => {});
+    van.stop(); setState('trolleyBlack'); q.phase = 'black'; q.t = 0;
+  } else if (q.phase === 'black' && q.t > 2.0) {
+    sDrive.stop(); music.suspend(true);
+    trolley.resize(stage.clientWidth, stage.clientHeight); trolley.start();
+    sTrainProblem.load().then(() => { if (tseq) sTrainProblem.play(0.3); }, () => {});
+    setState('trolley'); talkBox.fadeBlack(0, 350); q.phase = 'scene'; q.t = 0;
+  } else if (q.phase === 'scene') {
+    trolley.update(dt, input.action());
+    if (trolley.done) { talkBox.fadeBlack(1, 300); q.phase = 'out'; q.t = 0; }
+  } else if (q.phase === 'out' && q.t > 0.5) {                        // volta à partida normal
+    trolley.stop(); sTrainProblem.stop(); train.clearCharge();
+    if (!talkMusic.playing) music.suspend(false);
+    const p = safeSpotNear(q.x, q.z);
+    van.teleport(p.x, p.z, van.heading); van.stop();
+    rig.snap({ x: van.x, z: van.z, heading: van.heading, speed: 0 });
+    setState('drive'); actionLock = 0.5; talkBox.fadeBlack(0, 600);
+    tseq = null; trolleyCool = 15;                                    // não dispara de novo logo em seguida
+  }
+}                // Bairro 11: trem entre as estações e cancelas das passagens de nível
 const jamSound = createJamSound(audio);     // Bairro 7: música perto dos engarrafamentos (fade-in/out, loop perfeito)
 const monster = createMonster(world.scene, stage, audio);   // final secreto: 16 casas destruídas
 const allDestroyed = () => game.pool.every(h => boom.isDestroyed(h));
@@ -1244,7 +1301,8 @@ function update(dt, t) {
 
   if (state !== 'drive') van.relax(dt);          // torre de caixas do bagageiro: para de balançar quando a van não está sendo dirigida
   world.update(t, dt);
-  if (neighborhood === 'rail8') train.update(dt, van);   // Bairro 11: o bonde espera se a van estiver nos trilhos
+  if (neighborhood === 'rail8') train.update(dt, van);
+  updateTrolleySeq(dt);   // Bairro 11: o bonde espera se a van estiver nos trilhos
   if (neighborhood === 'venice8') { npcBoats.update(dt); updateBoat(dt); }
   updateChurch(dt);
   world.updateGas(van.x, van.z, dt);
@@ -1310,7 +1368,7 @@ function updateHUD() {
   } else {
     const extraKeys0 = '  ·  L: descer da van';
     const extraKeys = extraKeys0 + (gameMode === 'free' ? '  ·  H: helicóptero  ·  F: míssil' : '  ·  M: missões');
-    hud.setSub(state === 'talk' || state === 'cine' ? '' : state === 'walk'
+    hud.setSub(state === 'talk' || state === 'cine' || state === 'trolley' || state === 'trolleyBlack' ? '' : state === 'walk'
       ? (rig.mode === 'chase' ? 'A PÉ  ·  W/S: andar  ·  A/D: virar  ·  E (perto da van): entrar  ·  C: bairro  ·  botão direito: olhar em volta' : 'A PÉ  ·  WASD: andar  ·  E (perto da van): entrar  ·  C: câmera')
       : heli.landed
       ? 'POUSADO NO PRÉDIO  ·  H: decolar  ·  F: míssil'
@@ -1324,7 +1382,7 @@ function updateHUD() {
     else if (state === 'boss') hud.setMain(monster.phase === 'driveOut' ? 'Todas as casas foram destruídas… algo despertou!' : 'O DEVORADOR DE BAIRROS acordou!', 'dialog');
     else if (state === 'missile') hud.setMain('Míssil disparado!', 'ring');
     else if (state === 'fuel') hud.setMain('⛽ Abastecendo… glub, glub, glub…', 'ring');
-    else if (state === 'talk' || state === 'cine') hud.setMain('', 'clue');
+    else if (state === 'talk' || state === 'cine' || state === 'trolley' || state === 'trolleyBlack') hud.setMain('', 'clue');
     else if (state === 'walk' && carrying) hud.setMain(walker.nearVan(van) ? 'Entrar na van devolve a caixa ao lugar dela.' : 'Carregando uma caixa… de quem será?', 'clue');
     else if (state === 'walk') hud.setMain(walker.nearVan(van) && !nearLounger() ? 'Perto da van — aperte E para entrar.' : 'Passeando a pé… (não dá para entregar andando)', 'clue');
     else if (state === 'drive' && fuelMsgT > 0) hud.setMain(fuelMsg, 'dialog');
@@ -1433,7 +1491,7 @@ renderer.setAnimationLoop(now => {
   elapsed += dt;
   update(dt, elapsed);
   updateHUD();
-  if (inMap()) renderer.render(careerMap.scene, careerMap.camera); else renderer.render(world.scene, rig.camera);
+  if (inMap()) renderer.render(careerMap.scene, careerMap.camera); else if (state === 'trolley') renderer.render(trolley.scene, trolley.camera); else renderer.render(world.scene, rig.camera);
 });
 
 // ---------- Ganchos para testes automatizados ----------
@@ -1462,7 +1520,7 @@ window.ADRESS = {
   get careerLevel() { return careerLevel; },
   setCareerLevel(l) { careerLevel = l; },
   setFreeLevel(l) { freeLevel = l; },
-  walker, jamSound, train, walkSolids,
+  walker, jamSound, train, walkSolids, trolley, get tseq() { return tseq; },
   get levelSelect() { return levelSelect; },
   shop,
   startGame: m => startFree(m), newRound: () => startNewRound(),
@@ -1476,5 +1534,5 @@ window.ADRESS = {
   /** Coloca a van parada no ponto de entrega da casa h, virada para leste. */
   placeVanAtDoor(h) { const p = doorPoint(game.slotOf[h]); van.teleport(p.x, p.z, 0); },
   /** Executa n quadros de simulação com passo fixo (útil quando o requestAnimationFrame está parado). */
-  step(n = 1, dt = 1 / 60) { for (let i = 0; i < n; i++) { elapsed += dt; update(dt, elapsed); updateHUD(); } if (inMap()) renderer.render(careerMap.scene, careerMap.camera); else renderer.render(world.scene, rig.camera); },
+  step(n = 1, dt = 1 / 60) { for (let i = 0; i < n; i++) { elapsed += dt; update(dt, elapsed); updateHUD(); } if (inMap()) renderer.render(careerMap.scene, careerMap.camera); else if (state === 'trolley') renderer.render(trolley.scene, trolley.camera); else renderer.render(world.scene, rig.camera); },
 };

@@ -52,7 +52,7 @@ export function buildRail(g) {
 }
 
 /** Bonde de duas cabines (frente e trás iguais): local +x = sentido de s crescente. */
-function buildTram() {
+export function buildTram() {
   const t = new THREE.Group(), add = (m, x, y, z, rx = 0, ry = 0, rz = 0) => t.add(at(m, x, y, z, rx, ry, rz));
   add(box(LEN - 0.4, 0.9, 2.3, RED), 0, 0.85, 0);                                      // saia vermelho queimado
   add(box(LEN - 0.4, 1.5, 2.3, CREAM), 0, 2.05, 0);                                   // corpo creme
@@ -131,6 +131,11 @@ export function createTrain() {
     get s() { return trams[0] ? trams[0].s0 : 0; },
     get moving() { return trams[0] ? trams[0].moving() && trams[0].v > 0.05 : false; },
     get waiting() { return trams.some(t => t.waiting); },
+    /** Bonde parado pela van há mais tempo (e quantos segundos). */
+    blocked() { let best = null; for (const t of trams) if ((t.vanBlock || 0) > (best ? best.vanBlock : 0)) best = t; return best; },
+    /** O bonde avança mesmo com a van na frente (início do dilema); clearCharge volta ao normal e zera as contagens. */
+    charge(t) { t.charge = true; },
+    clearCharge() { for (const t of trams) { t.charge = false; t.vanBlock = 0; } },
     reset() {
       if (!RAIL) return;
       if (!trams.length) trams = RAIL.lines.map((l, i) => { const t = createTram(l, i); root.add(t.tram); return t; });
@@ -145,10 +150,11 @@ export function createTrain() {
         if (T.wait > 0) { T.wait -= dt; T.v = 0; }
         else {
           const left = T.dir > 0 ? end - T.s0 : T.s0;
-          const lim = crossingLimit(T), byVan = blockedByVan(T, van);
+          const lim = crossingLimit(T), byVan = !T.charge && blockedByVan(T, van);
+          T.vanBlock = byVan && T.v < 0.3 ? (T.vanBlock || 0) + dt : 0;          // tempo seguido parado pela van (Nível 12: o dilema)
           T.waiting = byVan || lim < Infinity;
           const room = Math.min(left, Math.max(0, lim));
-          const want = byVan ? 0 : Math.min(6.5, Math.sqrt(2 * 1.4 * Math.max(0, room)) + (room === left ? 0.3 : 0));
+          const want = T.charge ? 5 : byVan ? 0 : Math.min(6.5, Math.sqrt(2 * 1.4 * Math.max(0, room)) + (room === left ? 0.3 : 0));
           T.v = T.v < want ? Math.min(want, T.v + 1.4 * dt) : Math.max(want, T.v - 3.5 * dt);
           T.s0 += T.dir * T.v * dt;
           if (T.dir > 0 && T.s0 >= end) { T.s0 = end; T.dir = -1; T.wait = T.line.wait; T.v = 0; }
