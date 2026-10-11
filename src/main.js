@@ -50,9 +50,11 @@ import { createShop } from './shop.js';
 import { createLevelSelect } from './levelSelect.js';
 import { createWalker } from './walker.js';
 import { createTalkBox, lineDuration } from './talkBox.js';
-import { whiten } from './whiteout.js';
+import { whiten, whitenFade } from './whiteout.js';
 import { createChurchMusic } from './churchMusic.js';
 import talkTrackUrl from '../assets/church-talk.mp3';
+import secondSanctuaryUrl from '../assets/second-sanctuary.mp3';
+import innocentTimeUrl from '../assets/innocent-time.mp3';
 import tarantellaUrl from '../assets/tarantella.mp3';
 import sunnyUrl from '../assets/sunnyside-farm.mp3';
 import snowyUrl from '../assets/snowy.mp3';
@@ -786,6 +788,8 @@ const TRACK_INFO = {
   [sunnyUrl]: { title: 'Sunnyside Farm', author: 'MasterSwordRemix' },
   [snowyUrl]: { title: 'Snowy', author: 'Toby Fox' },
   church: { title: 'Dark Sanctuary', author: 'Toby Fox' },
+  church2: { title: 'The Second Sanctuary', author: 'Woop' },
+  bell2: { title: 'Once Upon An Innocent Time', author: 'Undertale Green' },
   churchTalk: { title: 'Once Upon A Terrible Time', author: 'UTB Team' },
   train: { title: 'The Train Problem', author: 'MasterSwordRemix' },
 };
@@ -793,8 +797,10 @@ const TRACK_INFO = {
 function nowPlaying() {
   if (state === 'title' || state === 'levelSelect' || state === 'shop') return null;   // telas de menu: sem créditos
   if (sTrainProblem.audible) return TRACK_INFO.train;          // (audible: inclui o fade-out final)
+  if (bellMusic.audible) return TRACK_INFO.bell2;
   if (talkMusic.audible) return TRACK_INFO.churchTalk;
-  if (churchMusic.audible) return TRACK_INFO.church;
+  if (churchMusic2.audible) return TRACK_INFO.church2;
+  if (churchMusic1.audible) return TRACK_INFO.church;
   if (music.playing) return TRACK_INFO[music.track] || TRACK_INFO.default;   // (a música dos engarrafamentos não entra)
   return null;
 }   // (embutidas no html: funcionam em qualquer lugar)
@@ -1058,10 +1064,13 @@ function setupChurch() {
   churchOn = isL1() && gameMode === 'free' && pd && roofDone();   // as duas conversas, lidas do progresso salvo
   churchT = 0; churchA = 0; churchShown = false;
   endApproachMusic(0.3); approach = { phase: 'idle' };
+  if (unwhite && !cine) restoreLook();                 // (aparência branca de uma visita anterior)
+  churchMusic = churchOn && churchStage() === 2 ? churchMusic2 : churchMusic1;
   if (church && church.parent) church.parent.remove(church);
   if (!churchOn) return;
   churchMusic.load().catch(() => {});                   // decodifica já: na hora da aproximação a faixa está pronta
   talkMusic.load().catch(() => {});                     // (e a da conversa)
+  if (churchStage() === 2) bellMusic.load().catch(() => {});
   if (!church) {
     church = buildChurch();
     churchBell = buildBell(); church.add(churchBell);                // sino azul (1ª conversa): cai no fim da cena de saída
@@ -1085,7 +1094,11 @@ const MAP_W = () => MAP;                                // largura do bairro (la
 // para a igreja (mesma velocidade e câmera; W solto não para; L/H/F bloqueados) e a faixa começa do início (fade-in 2 s),
 // pausando a música de fundo. A igreja só aparece quando a POSIÇÃO REAL do áudio chega a 14 s: aí surge rápido e os controles voltam.
 // A faixa continua até o jogador entrar na igreja a pé (fade-out ~1 s). Uma vez por partida.
-const churchMusic = createChurchMusic(audio);
+// 2ª visita (depois de Veneza): a aproximação usa assets/second-sanctuary.mp3 e a igreja surge aos 28 s
+const churchMusic1 = createChurchMusic(audio), churchMusic2 = createChurchMusic(audio, secondSanctuaryUrl);
+let churchMusic = churchMusic1;
+// 2ª visita: música da cena do sino verde (assets/innocent-time.mp3), do início ao fim; depois a música de fundo volta
+const bellMusic = createChurchMusic(audio, innocentTimeUrl, 0.6, () => music.suspend(false));
 // Música da conversa com o K na igreja (assets/church-talk.mp3): começa 10 s depois da 1ª fala aparecer, fade-in de 8 s até
 // 50%, toca mesmo com o botão ♪ desligado (sem mudar a preferência) e vai até o fim sem fade-out nem loop, inclusive de
 // volta à vila. Enquanto toca, a música de fundo fica suspensa; ao terminar, volta como o jogador deixou.
@@ -1098,7 +1111,7 @@ function startTalkMusic() {
   const go = () => { if (talkMusic.play(TALK_MUSIC_FADE)) music.suspend(true); };
   talkMusic.ready ? go() : talkMusic.load().then(go, () => {});
 }
-const REVEAL_AT = 14, REVEAL_D = 360;                   // segundo da música; distância da fachada nesse instante
+const REVEAL_D = 360, revealAt = () => (churchMusic === churchMusic2 ? 28 : 14);                   // segundo da música; distância da fachada nesse instante
 let approach = { phase: 'idle' };
 const approachLock = () => approach.phase === 'auto';
 // botão ♪ durante a faixa: pausa sempre; retoma do mesmo ponto só antes da revelação (depois, nesta visita, não volta)
@@ -1116,7 +1129,7 @@ function endApproachMusic(fade = 1) {
 }
 function startApproach() {
   approach = { phase: 'auto', z0: van.z, v0: Math.max(8, van.speed), cmd: Math.max(8, van.speed) };
-  const zf = MAP_W() + CHURCH_Z, D = Math.max(50, zf - REVEAL_D - van.z), T = REVEAL_AT, a = approach;
+  const zf = MAP_W() + CHURCH_Z, D = Math.max(50, zf - REVEAL_D - van.z), T = revealAt(), a = approach;
   a.vTop = a.v0 + (D - a.v0 * T) / (T - 2);              // velocidade de cruzeiro para chegar no ponto certo aos 14 s
   music.suspend(true);
   churchMusic.play(4);
@@ -1148,6 +1161,7 @@ function revealChurch(fast) {
 let churchFade = 3.5;
 function updateChurch(dt) {
   if (!churchOn) return;
+  if (churchMusic === churchMusic2 && unwhite && !cine && state === 'drive' && approach.phase !== 'auto' && van.z < MAP_W()) restoreLook();   // voltou ao bairro sem conversar: cores de volta
   const M = MAP_W();
   // aproximação: a mira sobe aos poucos (horizonte no meio da tela) até a van chegar perto da igreja
   rig.setLookLift((approach.phase === 'auto' || approach.phase === 'revealed') && state === 'drive' && van.z < M + CHURCH_Z - 140 ? 4.8 : 0);
@@ -1158,11 +1172,13 @@ function updateChurch(dt) {
     const southSpeed = Math.sin(van.heading) * van.speed;          // velocidade na direção do sol (+Z)
     const going = southSpeed > 4 && Math.sin(van.heading) * Math.sign(van.speed) > 0.6;
     if (approach.phase === 'idle') churchT = state === 'drive' && beyond && going && !heli.on ? churchT + dt : 0;
-    if (approach.phase === 'idle' && churchT >= 1 && !heli.on && !talkMusic.playing) {   // (a música da conversa ainda tocando: espera)      // ~1 s indo para o sol: espera a faixa estar pronta e começa
+    if (approach.phase === 'idle' && churchT >= 1 && !heli.on && !talkMusic.playing && !bellMusic.playing) {   // (a música da conversa ainda tocando: espera)      // ~1 s indo para o sol: espera a faixa estar pronta e começa
       approach.phase = 'loading';
       churchMusic.load().then(() => { if (approach.phase === 'loading' && churchOn) startApproach(); }, () => { approach.phase = 'idle'; churchT = 0; });
     }
-    if (approach.phase === 'auto' && churchMusic.time >= REVEAL_AT) {   // segundo 14 da música: a igreja surge e o jogador volta a dirigir
+    if (approach.phase === 'auto' && churchMusic === churchMusic2) updateWhiteVan();
+       // 2ª visita: a van fica branca aos poucos
+    if (approach.phase === 'auto' && churchMusic.time >= revealAt()) {   // segundo 14 da música: a igreja surge e o jogador volta a dirigir
       van.setForceSpeed(null); approach.phase = 'revealed';
       revealChurch(true);
     }
@@ -1238,7 +1254,7 @@ function startChurchTalk() {
   setCam(...CINE.camA);
   setState('cine');
   talkBox.show(lines, churchTalkEnd, { auto: true, onAdvance: i => {
-    if (i !== 6) return;                                // terminou a 6ª fala: começa a contagem para voltar ao bairro
+    if (i !== 6 || cine.stage === 2) return;           // terminou a 6ª fala: começa a contagem para voltar ao bairro (na 2ª visita, não há contagem)
     const rest = lines.slice(6).reduce((t, l) => t + lineDuration(l), 0);
     let path = 0, prev = CINE.player;
     for (const [x, z] of CINE.walk) { path += Math.hypot(x - prev.x, z - prev.z); prev = { x, z }; }
@@ -1253,7 +1269,21 @@ function churchTalkEnd() {                              // última fala lida: gr
   cine.phase = 'back'; cine.t = 0;
   cine.dir0 = cine.camLook.clone().sub(cine.camPos).normalize();   // a câmera fica parada e só gira até o jogador
 }
-function restoreLook() { if (unwhite) { unwhite(); unwhite = null; } }
+function restoreLook() { if (unwhite) { unwhite(); unwhite = null; } vanFade = null; }
+// 2ª visita: aos WHITE_AT s da música (depois de ela começar e bem antes de a igreja surgir), a van inteira vai ficando
+// branca em ~2 s; o jogador (escondido dentro da van) fica branco de uma vez. Dura a visita toda; restoreLook desfaz.
+const WHITE_AT = 9, WHITE_FADE = 2;
+let vanFade = null;
+function updateWhiteVan() {
+  const t = churchMusic.time;
+  if (t < WHITE_AT) return;
+  if (!vanFade && !unwhite) {
+    vanFade = whitenFade(van.object);
+    const undoWalker = whiten(walker.object), f = vanFade;
+    unwhite = () => { f.restore(); undoWalker(); };
+  }
+  if (vanFade) vanFade.step((t - WHITE_AT) / WHITE_FADE);
+}
 function churchCineEnd() {                              // de volta ao bairro: cores, câmera e controles normais
   if (cine && cine.stage === 2 && church) church.userData.pewK.visible = false;   // despedida: ele já foi embora
   restoreLook(); talkBox.warn(null); talkBox.hide();
@@ -1314,6 +1344,12 @@ function updateChurchCine(dt) {
     const bell = c.bell;
     bell.visible = true;                                // a câmera ainda olha para baixo: ele já está pendurado quando ela subir
     // …a câmera fica no lugar e só gira para cima até o sino (azul na 1ª, verde na 2ª); ele aparece um instante, solta-se e cai (sem som)
+    if (c.t > BELL_TILT0 && c.stage === 2 && !c.bellMusic) {   // 2ª visita: a câmera começa a virar → música do sino verde (sem sobrepor)
+      c.bellMusic = true;
+      talkMusic.stop(); if (churchMusic.active) churchMusic.stop(); music.setOverride(null); music.suspend(true);
+      const go = () => bellMusic.play(0.6);
+      bellMusic.ready ? go() : bellMusic.load().then(go, () => music.suspend(false));
+    }
     if (c.t > BELL_TILT0) {
       if (!c.dirB) { c.dirB = c.camLook.clone().sub(c.camPos).normalize(); c.dirS = CL(bell.position.x, BELL_SPOT.y - bell.userData.h * 0.6, BELL_SPOT.z).sub(c.camPos).normalize(); }
       const k = ease(Math.min(1, (c.t - BELL_TILT0) / BELL_TILT));
@@ -1873,7 +1909,7 @@ window.ADRESS = {
   FRAME, MOONV: () => MOONV,
   get church() { return church; }, get venK() { return venK; }, startVeniceTalk, churchStage, get greenBell() { return greenBell; }, get churchBell() { return churchBell; },
   churchReveal() { if (churchOn && !churchShown) { approach.phase = 'revealed'; revealChurch(true); } },
-  get churchMusicTime() { return +churchMusic.time.toFixed(2); }, get approach() { return approach; },
+  get churchMusicTime() { return +churchMusic.time.toFixed(2); }, get bellMusic() { return bellMusic; }, get vanFade() { return vanFade; }, nowPlaying, get approach() { return approach; },
   get cine() { return cine; }, get whiteOn() { return !!unwhite; }, get talkMusicTime() { return talkMusic.time; }, startChurchTalk, talkBox,
   get churchState() { return { on: churchOn, t: churchT, a: churchA, shown: churchShown }; },
   get gameMode() { return gameMode; },
