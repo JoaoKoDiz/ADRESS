@@ -2,7 +2,7 @@
 // Este arquivo define como cada módulo é usado (o "contrato" entre eles).
 import * as THREE from 'three';
 import { Game, ROUTE_LEN } from './logic.js';
-import { MAP, doorPoint, slotOrigin, DELIVERY_RADIUS, DELIVERY_MAX_SPEED, VAN, LOT_ANCHORS, SOLIDS, ENTRANCE, HEDGE, GRID, PLAZA, HOUSE_SLOTS, configureGrid, roadCenter, setGasStations, GAS_LIST, GAS_CANOPY, GAS_ISLANDS, GAS_PARTS, TERRAIN, CANAL, VENICE, slotPlaceTags, roadTopology } from './layout.js';
+import { MAP, doorPoint, slotOrigin, DELIVERY_RADIUS, DELIVERY_MAX_SPEED, VAN, LOT_ANCHORS, SOLIDS, ENTRANCE, HEDGE, GRID, PLAZA, HOUSE_SLOTS, configureGrid, roadCenter, setGasStations, GAS_LIST, GAS_CANOPY, GAS_ISLANDS, GAS_PARTS, TERRAIN, CANAL, VENICE, RAIL, slotPlaceTags, roadTopology } from './layout.js';
 import { createInput } from './input.js';
 import { createWorld } from './world.js';
 import { createVan } from './van.js';
@@ -89,6 +89,17 @@ let neighborhood = 'grid4';
 //   Bairro 4 (5×5): 1 posto (2 lotes vizinhos), 2 prédios comerciais e as 25 casas menos algumas (nunca as com galo/fonte);
 //   Bairro 5 (6×6): 1 ou 2 postos (em linhas diferentes), 5 a 8 prédios comerciais e casas sorteadas entre as 32;
 //   Bairro 6 (cidade): 28 prédios residenciais + 8 casas sorteadas entre as 32.
+/** Bairro 11: true se o par de quadras [s, s+1] (as duas quadras + a rua entre elas, com a calçada) fica longe de todos os trilhos. */
+function pairFree() {
+  const M = 1.8;                                                       // meia largura do bonde + folga
+  const pts = [];
+  for (const l of RAIL.lines) for (let s = 0; s <= l.S; s += 0.5) pts.push(l.at(s));
+  return ([a, b]) => {
+    const A = slotOrigin(a), B = slotOrigin(b);
+    const x0 = A.x - 0.4 - M, x1 = B.x + 17.2 + 0.4 + M, z0 = A.z - 0.4 - M, z1 = A.z + 17.2 + 0.4 + M;
+    return !pts.some(p => p.x > x0 && p.x < x1 && p.z > z0 && p.z < z1);
+  };
+}
 function composeRound() {
   const city = neighborhood === 'city6', city7 = neighborhood === 'city7', city8 = neighborhood === 'city8';
   const shuffled = a => { a = a.slice(); for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; };
@@ -100,11 +111,16 @@ function composeRound() {
   const pairCol = () => canal ? [0, 1, 5, 6][Math.floor(Math.random() * 4)] : Math.floor(Math.random() * (GRID - 1));
   const gasList = rows.slice(0, nGas).map(r => { const c = pairCol(); return [r * GRID + c, r * GRID + c + 1]; });
   // Bairro 11: postos nas linhas 1–4 (fora da coluna dos trilhos); 2 galpões perto da estação dos galpões (fundo do bairro)
+  // Bairro 11: os trilhos já estão definidos; postos e galpões (2 quadras + a rua entre elas) só onde não encostam em nenhum
+  // trecho dos 3 percursos (inclusive curvas). Sem lugar válido: entram menos estruturas.
   if (rail) {
     gasList.length = 0;
-    shuffled([1, 2, 3, 4]).slice(0, nGas).forEach(r => { const c = 1 + Math.floor(Math.random() * 5); gasList.push([r * GRID + c, r * GRID + c + 1]); });
+    const free = pairFree();
+    const cand = shuffled([1, 2, 3, 4].flatMap(r => [1, 2, 3, 4, 5].map(c => [r * GRID + c, r * GRID + c + 1]))).filter(free);
+    const rowsUsed = new Set();
+    for (const p of cand) { if (gasList.length >= nGas) break; const r = Math.floor(p[0] / GRID); if (!rowsUsed.has(r)) { rowsUsed.add(r); gasList.push(p); } }
   }
-  const wareList = rail ? shuffled([[59, 60], [61, 62], [44, 45], [52, 53]]).slice(0, 2) : canal ? rows.slice(nGas, nGas + 2 + Math.floor(Math.random() * 2)).map(r => { const c = pairCol(); return [r * GRID + c, r * GRID + c + 1]; }) : [];
+  const wareList = rail ? shuffled([[59, 60], [61, 62], [44, 45], [52, 53], [57, 58], [41, 42]]).filter(pairFree()).filter(p => !gasList.some(g => g.some(x => p.includes(x)))).slice(0, 2) : canal ? rows.slice(nGas, nGas + 2 + Math.floor(Math.random() * 2)).map(r => { const c = pairCol(); return [r * GRID + c, r * GRID + c + 1]; }) : [];
   setGasStations(gasList, wareList);
   SOLIDS.push(...world.extraSolids);                                  // troncos das árvores de fora
   if (gameMode === 'career') {
@@ -121,9 +137,10 @@ function composeRound() {
   } else if (rail) {                            // Bairro 11: 2 galpões (fixos nos pares sorteados), 4–5 comerciais, 20 prédios, casas
     const wares = shuffled(WARES).slice(0, wareList.length);
     fixed = {}; wareList.forEach((p, i) => { fixed[p[0]] = wares[i]; });
-    const nShops = 4 + Math.floor(Math.random() * 2), nApts = 24;
+    const nShops = 4 + Math.floor(Math.random() * 2), rest = HOUSE_SLOTS.length - wares.length - nShops;
+    const nApts = Math.min(28, Math.max(24, rest - 32));                 // (com menos postos/galpões sobram mais lotes)
     pool = wares.concat(shuffled(SHOPS).slice(0, nShops), shuffled([...Array(28).keys()].map(k => 38 + k)).slice(0, nApts),
-      shuffled(allHouses).slice(0, HOUSE_SLOTS.length - wares.length - nShops - nApts));
+      shuffled(allHouses).slice(0, rest - nApts));
   } else if (canal) {                           // Bairro 10: galpões (fixos nos pares sorteados), 2–3 pares de gêmeas, comércio, prédios e casas
     const wares = shuffled(WARES).slice(0, wareList.length);
     fixed = {}; wareList.forEach((p, i) => { fixed[p[0]] = wares[i]; });
@@ -1447,7 +1464,7 @@ window.ADRESS = {
   walker, jamSound, train, walkSolids,
   get levelSelect() { return levelSelect; },
   shop,
-  startGame: m => startFree(m),
+  startGame: m => startFree(m), newRound: () => startNewRound(),
   get shadowTier() { return shadowTier; },
   get pacing() { return { every, refresh }; },
   /** Pula o fade inicial e deixa o jogo no modo de direção. */
