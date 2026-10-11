@@ -25,6 +25,10 @@ export function createMusic(stageEl, src = 'assets/musica-fundo.mp3') {
   let wanted = true;                     // o jogador quer música tocando?
   try { const v = localStorage.getItem('adress.music'); if (v !== null) wanted = v === '1'; } catch (e) { /* ignora */ }
   let started = false, suspended = false, override = null;   // override: cena com faixa própria controla o botão
+  // Faixa do bairro (Níveis 10, 15 e 16): começa sozinha ao entrar, mesmo com o botão desligado; o botão pausa/continua
+  // do mesmo ponto (sem mudar a preferência salva da música padrão). Trocar de faixa encerra a anterior.
+  let track = src, special = false, specialOn = false;
+  const isOn = () => (special ? specialOn : wanted);
 
   const btn = document.createElement('button');
   btn.type = 'button'; btn.className = 'music-btn'; btn.tabIndex = -1;
@@ -32,7 +36,7 @@ export function createMusic(stageEl, src = 'assets/musica-fundo.mp3') {
   const PAUSE = '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="4" width="5" height="16" rx="1.2" fill="#fff"/><rect x="14" y="4" width="5" height="16" rx="1.2" fill="#fff"/></svg>';
   const NOTE = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 3v11.3A3.5 3.5 0 1 0 12 17.5V8h6V3z" fill="#fff"/></svg>';
   const paint = () => {
-    const on = override ? override.on : wanted;
+    const on = override ? override.on : isOn();
     btn.dataset.on = on ? '1' : '0';
     btn.innerHTML = on ? PAUSE : NOTE;
     btn.title = on ? 'Pausar a música' : 'Continuar a música';
@@ -40,6 +44,7 @@ export function createMusic(stageEl, src = 'assets/musica-fundo.mp3') {
   };
   const play = () => { const p = audio.play(); if (p && p.catch) p.catch(() => {}); };
   function toggle() {
+    if (special) { specialOn = !specialOn; started = true; specialOn && !suspended ? play() : audio.pause(); paint(); return; }
     wanted = !wanted;
     try { localStorage.setItem('adress.music', wanted ? '1' : '0'); } catch (e) { /* ignora */ }
     started = true;
@@ -53,10 +58,20 @@ export function createMusic(stageEl, src = 'assets/musica-fundo.mp3') {
 
   return {
     /** Chamado no primeiro gesto do jogador: começa a tocar (se não estiver pausada). */
-    start() { if (started) return; started = true; if (wanted && !suspended) play(); },
+    start() { if (started) return; started = true; if (isOn() && !suspended) play(); },
+    /** Troca a faixa de fundo (null = a padrão). autoplay: começa tocando já, mesmo com o botão desligado. */
+    setTrack(next, autoplay = false) {
+      next = next || src;
+      if (next === track) return;
+      audio.pause(); audio.src = next; track = next; try { audio.currentTime = 0; } catch (e) { /* ainda carregando */ }
+      special = next !== src; specialOn = special && autoplay;
+      if (special && autoplay) started = true;
+      if (isOn() && started && !suspended) play();
+      paint();
+    },
     toggle,
     /** Cena com música própria: pausa a de fundo SEM mudar a preferência salva; false volta como estava. */
-    suspend(on) { suspended = on; if (on) audio.pause(); else if (wanted && started) play(); },
+    suspend(on) { suspended = on; if (on) audio.pause(); else if (isOn() && started) play(); },
     get playing() { return !audio.paused; },
     /** Cena: o botão passa a controlar outra faixa ({ on, toggle() }); null devolve. A preferência salva não muda. */
     setOverride(o) { override = o; paint(); },

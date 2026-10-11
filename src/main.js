@@ -652,6 +652,7 @@ function startFree(mode = 'free') {
   resetGates();
   setupChurch();
   if (mode === 'career') career.startMatch(careerLevel); else career.stop();
+  music.setTrack(LEVEL_TRACKS[neighborhood] || null, true);   // Veneza, Colheita e Nevasca: a faixa do bairro já tocando
   ENTRANCE_WALL.x0 = ENTRANCE.x0; ENTRANCE_WALL.x1 = ENTRANCE.x1;   // a entrada depende do bairro
   const w = SOLIDS.indexOf(ENTRANCE_WALL);
   if (mode === 'career' && w < 0) SOLIDS.push(ENTRANCE_WALL);
@@ -689,7 +690,9 @@ const FADE_TIME = 0.8, RING_TIME = 0.8, RESIDENT_APPEAR = 0.45, SUCCESS_AUTO = 4
 let state = 'title', stateT = 0, fade = 0;
 let dialog = null, pending = -1, nearHouse = -1;
 let actionLock = 0;                 // depois de fechar uma reclamação, E não toca a mesma campainha de novo na hora
-const setState = s => { state = s; stateT = 0; };
+const setState = s => { state = s; stateT = 0; if (s === 'title' || s === 'mapIn' || s === 'map') music.setTrack(null); };   // fora da partida: a música padrão
+// Músicas próprias de alguns bairros (assets/): começam sozinhas ao entrar no bairro (Livre e Carreira)
+const LEVEL_TRACKS = { venice8: 'assets/tarantella.mp3', farm10: 'assets/sunnyside-farm.mp3', snow8: 'assets/snowy.mp3' };
 
 // Posto de gasolina: parado embaixo da cobertura, ao lado das bombas, E abastece (não conta como entrega).
 // Para abastecer de novo, a van precisa sair de perto das bombas e voltar.
