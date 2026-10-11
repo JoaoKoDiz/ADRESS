@@ -121,13 +121,10 @@ function setupTerrain(kind) {
     return 0;
   };
 }
-// ---- Bairro 11 (Trilhos): bondinho urbano com trilhos embutidos no asfalto, no eixo das ruas. Percurso fixo: rua norte
-// (parada da entrada) → desce a rua vertical 3 → rua 3 para leste → desce a rua vertical 6 → rua 6 para oeste (parada dos
-// galpões). Nos cruzamentos, arcos de raio 7 (cabem no cruzamento sem tocar as calçadas). `at(s)`: ponto e direção a `s`.
-function setupRail(kind) {
-  if (kind !== 'rail8') { RAIL = null; return; }
-  const rc = roadCenter, R = 7;
-  const P = [[rc(1) + STEP / 2, rc(0)], [rc(3), rc(0)], [rc(3), rc(3)], [rc(6), rc(3)], [rc(6), rc(6)], [rc(4) + 5, rc(6)]];
+// ---- Bairro 11 (Trilhos): 3 bondinhos, cada um num percurso fixo no eixo das ruas (trilhos embutidos no asfalto).
+// Os percursos se cruzam em pares, em pontos diferentes: 1×2 (rua vertical 6 × rua 5) e 2×3 (rua vertical 2 × rua 5); o 1 e o 3
+// nunca se encontram. Nos cruzamentos de ruas, arcos de raio 7 (cabem sem tocar as calçadas). `at(s)`: ponto e direção a `s`.
+function makeLine(P, R = 7) {
   const segs = []; let prev = { x: P[0][0], z: P[0][1] };
   const line = (b) => { const L = Math.hypot(b.x - prev.x, b.z - prev.z); if (L > 0.01) segs.push({ type: 'L', a: prev, b, L }); prev = b; };
   for (let i = 1; i < P.length; i++) {
@@ -152,9 +149,46 @@ function setupRail(kind) {
       return { x: g.c.x + R * Math.cos(a), z: g.c.z + R * Math.sin(a), dx: -Math.sin(a) * sg, dz: Math.cos(a) * sg };
     }
   };
-  RAIL = { S, at, R, reserved: [],
-    stops: [{ x: P[0][0] + 1, z: rc(0) - 3.0, ry: 0, name: 'PARADA ENTRADA' }, { x: P[P.length - 1][0] - 1, z: rc(6) + 3.0, ry: Math.PI, name: 'PARADA DOS GALPÕES' }],
-    route: ['H,1,0', 'H,2,0', 'V,3,0', 'V,3,1', 'V,3,2', 'H,3,3', 'H,4,3', 'H,5,3', 'V,6,3', 'V,6,4', 'V,6,5', 'H,5,6', 'H,4,6'] };
+  return { S, at };
+}
+function setupRail(kind) {
+  if (kind !== 'rail8') { RAIL = null; return; }
+  const rc = roadCenter, hr = ROAD / 2, W = -Math.PI / 2;          // W: parada na beira leste de uma rua vertical, virada para ela
+  const defs = [
+    { P: [[rc(1) + STEP / 2, rc(0)], [rc(3), rc(0)], [rc(3), rc(3)], [rc(6), rc(3)], [rc(6), rc(6)], [rc(4) + 5, rc(6)]],
+      stops: [{ x: rc(1) + STEP / 2 + 1, z: rc(0) - 3.0, ry: 0, name: 'PARADA ENTRADA' }, { x: rc(4) + 4, z: rc(6) + 3.0, ry: Math.PI, name: 'PARADA DOS GALPÕES' }],
+      wait: 5, start: 0 },
+    { P: [[rc(1), rc(2) + STEP / 2], [rc(1), rc(5)], [rc(7), rc(5)], [rc(7), rc(6) - 5]],
+      stops: [{ x: rc(1) + 3.0, z: rc(2) + STEP / 2 - 1, ry: W, name: 'PARADA OESTE' }, { x: rc(7) + 3.0, z: rc(6) - 6, ry: W, name: 'PARADA LESTE' }],
+      wait: 6.5, start: 0.45 },
+    { P: [[rc(4), rc(7) + STEP / 2], [rc(4), rc(8)], [rc(2), rc(8)], [rc(2), rc(4)], [rc(3), rc(4)], [rc(3), rc(4) + STEP / 2]],
+      stops: [{ x: rc(4) + 3.0, z: rc(7) + STEP / 2 + 1, ry: W, name: 'PARADA SUL' }, { x: rc(3) + 3.0, z: rc(4) + STEP / 2 - 1, ry: W, name: 'PARADA CENTRO' }],
+      wait: 4, start: 0.8 },
+  ];
+  const lines = defs.map(d => Object.assign(makeLine(d.P), { stops: d.stops, wait: d.wait, start: d.start }));
+  // cruzamentos entre percursos (pontos onde os trilhos de dois bondes se encontram)
+  const crossings = [];
+  for (let a = 0; a < lines.length; a++) for (let b = a + 1; b < lines.length; b++) {
+    for (let sa = 0; sa < lines[a].S; sa += 0.5) {
+      const p = lines[a].at(sa);
+      for (let sb = 0; sb < lines[b].S; sb += 0.5) {
+        const q = lines[b].at(sb);
+        if (Math.hypot(p.x - q.x, p.z - q.z) < 0.4 && !crossings.some(c => c.a === a && c.b === b && Math.abs(c.sa - sa) < 6)) crossings.push({ a, b, sa, sb, x: p.x, z: p.z });
+      }
+    }
+  }
+  // trechos de rua ocupados pelos trilhos (sem bloqueios sorteados neles)
+  const route = new Set();
+  for (const l of lines) for (let s = 0; s < l.S; s += 1) {
+    const p = l.at(s);
+    for (let i = 0; i <= GRID; i++) {
+      const j = Math.floor((p.x - rc(0)) / STEP);
+      if (Math.abs(p.z - rc(i)) < hr && j >= 0 && j < GRID) route.add('H,' + j + ',' + i);
+      const k = Math.floor((p.z - rc(0)) / STEP);
+      if (Math.abs(p.x - rc(i)) < hr && k >= 0 && k < GRID) route.add('V,' + i + ',' + k);
+    }
+  }
+  RAIL = { lines, crossings, reserved: [], stops: lines.flatMap(l => l.stops), route: [...route] };
 }
 
 // ---- Nível 12 (Veneza), estrutura fixa (desenho do dono): casas nas bordas e em alguns pontos; uma faixa larga de água
@@ -204,7 +238,7 @@ function setupVenice(kind) {
 }
 
 /** Etiquetas de lugar de um lote (Bairro 9): parte mais alta, depois da subida, ao lado da escadaria. */
-const RAIL_TAGS = { 1: 'loc:stopN', 2: 'loc:stopN', 36: 'loc:stopS', 52: 'loc:stopS' };
+const RAIL_TAGS = { 1: 'loc:stopN', 2: 'loc:stopN', 36: 'loc:stopS', 52: 'loc:stopS', 16: 'loc:stopW', 17: 'loc:stopW', 46: 'loc:stopE', 47: 'loc:stopE', 59: 'loc:stopSul', 60: 'loc:stopSul', 34: 'loc:stopC', 35: 'loc:stopC' };
 export function slotPlaceTags(s) {
   if (VENICE) return VENICE.tags[s] ? [VENICE.tags[s]] : [];
   if (RAIL) return RAIL_TAGS[s] ? [RAIL_TAGS[s]] : [];

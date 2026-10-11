@@ -38,9 +38,9 @@ function stop(g, s) {                                    // parada: cobertura, b
 
 /** Parte fixa: trilhos rentes ao asfalto (a van passa por cima) e as duas paradas. */
 export function buildRail(g) {
-  const b = batcher(), S = RAIL.S;
-  for (let s = 0; s < S; s += 0.8) {
-    const p = RAIL.at(s + 0.4), ry = -Math.atan2(p.dz, p.dx), nx = -p.dz, nz = p.dx;
+  const b = batcher();
+  for (const line of RAIL.lines) for (let s = 0; s < line.S; s += 0.8) {
+    const p = line.at(s + 0.4), ry = -Math.atan2(p.dz, p.dx), nx = -p.dz, nz = p.dx;
     for (const o of [-GAUGE, GAUGE]) {
       b.add(0.84, 0.03, 0.22, GROOVE, p.x + nx * o, 0.012, p.z + nz * o, ry);
       b.add(0.84, 0.035, 0.1, STEEL, p.x + nx * o, 0.02, p.z + nz * o, ry);
@@ -75,57 +75,88 @@ function buildTram() {
   return bakeStatic(t);
 }
 
-export function createTrain() {
-  const root = new THREE.Group(); root.name = 'tram';
-  const tram = buildTram(); root.add(tram);
+/** Um bondinho num percurso (`line`). `idx` é a prioridade nos cruzamentos (menor passa primeiro). */
+function createTram(line, idx) {
+  const tram = buildTram();
   const solid = { x0: 0, x1: 0, z0: 0, z1: 0 };
-  const VMAX = 6.5, ACC = 1.4, STOP = 5;
-  let s0 = 0, dir = 1, wait = STOP, v = 0, waiting = false;
-  const place = () => {
-    const a = RAIL.at(s0), b = RAIL.at(s0 + LEN), m = RAIL.at(s0 + LEN / 2);
+  const VMAX = 6.5, ACC = 1.4, DEC = 3.5;
+  const T = { idx, line, tram, solid, s0: 0, dir: 1, wait: 0, v: 0, waiting: false };
+  T.place = () => {
+    const a = line.at(T.s0), b = line.at(T.s0 + LEN), m = line.at(T.s0 + LEN / 2);
     tram.position.set(m.x, 0, m.z);
     tram.rotation.y = -Math.atan2(b.z - a.z, b.x - a.x);
-    // sólido: caixa que envolve o bonde girado (nas curvas fica um pouco maior)
     const c = Math.abs(Math.cos(tram.rotation.y)), sn = Math.abs(Math.sin(tram.rotation.y));
     const ex = c * LEN / 2 + sn * HALF_W, ez = sn * LEN / 2 + c * HALF_W;
     Object.assign(solid, { x0: m.x - ex, x1: m.x + ex, z0: m.z - ez, z1: m.z + ez });
   };
-  /** A van está nos trilhos logo à frente (no sentido do movimento)? */
-  const blockedBy = van => {
+  T.reset = () => { T.dir = 1; T.v = 0; T.s0 = (line.S - LEN) * line.start; T.wait = line.start ? 0 : line.wait; T.place(); };
+  /** distância (ao longo do percurso, no sentido do movimento) da frente até s; negativa se já passou */
+  T.ahead = s => T.dir > 0 ? s - (T.s0 + LEN) : T.s0 - s;
+  T.over = (s, m) => s > T.s0 - m && s < T.s0 + LEN + m;
+  T.moving = () => T.wait <= 0;
+  return T;
+}
+
+export function createTrain() {
+  const root = new THREE.Group(); root.name = 'trams';
+  let trams = [];
+  const M = 2.2, NEAR = 16;                               // M: folga do cruzamento (meia largura do outro bonde + sobra)
+  const blockedByVan = (T, van) => {
     if (!van) return false;
-    const front = dir > 0 ? s0 + LEN : s0;
-    for (let k = 0.5; k <= 9; k += 0.75) {
-      const p = RAIL.at(front + dir * k);
-      if (Math.hypot(p.x - van.x, p.z - van.z) < 3.0) return true;
-    }
+    const front = T.dir > 0 ? T.s0 + LEN : T.s0;
+    for (let k = 0.5; k <= 9; k += 0.75) { const p = T.line.at(front + T.dir * k); if (Math.hypot(p.x - van.x, p.z - van.z) < 3.0) return true; }
     return false;
   };
-  const removeSolid = () => { const i = SOLIDS.indexOf(solid); if (i >= 0) SOLIDS.splice(i, 1); };
+  /** Distância livre até o ponto em que o bonde precisa parar por causa de um cruzamento (Infinity = livre). */
+  const crossingLimit = T => {
+    let lim = Infinity;
+    for (const c of RAIL.crossings) {
+      const mine = c.a === T.idx ? c.sa : c.b === T.idx ? c.sb : null;
+      if (mine === null) continue;
+      const O = trams[c.a === T.idx ? c.b : c.a], other = c.a === T.idx ? c.sb : c.sa;
+      if (T.over(mine, M)) continue;                                   // já está no cruzamento: segue
+      const d = T.ahead(mine);
+      if (d < 0 || d > NEAR) continue;                                 // longe ou já passou
+      const oInside = O.over(other, M);
+      const oComing = O.moving() && O.ahead(other) >= 0 && O.ahead(other) < NEAR;
+      if (oInside || (oComing && O.idx < T.idx)) lim = Math.min(lim, d - M - 0.6);   // espera antes do cruzamento
+    }
+    return lim;
+  };
   return {
     object: root,
     gates: [],
+    get trams() { return trams; },
     get length() { return LEN; },
-    get s() { return s0; },
-    get moving() { return wait <= 0 && v > 0.05; },
-    get waiting() { return waiting; },
-    reset() { s0 = 0; dir = 1; wait = STOP; v = 0; removeSolid(); if (RAIL) place(); },
-    detach() { removeSolid(); if (root.parent) root.parent.remove(root); },
+    get s() { return trams[0] ? trams[0].s0 : 0; },
+    get moving() { return trams[0] ? trams[0].moving() && trams[0].v > 0.05 : false; },
+    get waiting() { return trams.some(t => t.waiting); },
+    reset() {
+      if (!RAIL) return;
+      if (!trams.length) trams = RAIL.lines.map((l, i) => { const t = createTram(l, i); root.add(t.tram); return t; });
+      for (const t of trams) { t.reset(); const i = SOLIDS.indexOf(t.solid); if (i >= 0) SOLIDS.splice(i, 1); }
+    },
+    detach() { for (const t of trams) { const i = SOLIDS.indexOf(t.solid); if (i >= 0) SOLIDS.splice(i, 1); } if (root.parent) root.parent.remove(root); },
     update(dt, van) {
       if (!RAIL) return;
-      const end = RAIL.S - LEN;
-      waiting = false;
-      if (wait > 0) { wait -= dt; v = 0; }
-      else {
-        const left = dir > 0 ? end - s0 : s0;
-        waiting = blockedBy(van);                                      // a van no caminho: freia e espera
-        const want = waiting ? 0 : Math.min(VMAX, Math.sqrt(2 * ACC * Math.max(0, left)) + 0.3);
-        v = v < want ? Math.min(want, v + ACC * dt) : Math.max(want, v - ACC * 2.5 * dt);
-        s0 += dir * v * dt;
-        if (dir > 0 && s0 >= end) { s0 = end; dir = -1; wait = STOP; v = 0; }
-        else if (dir < 0 && s0 <= 0) { s0 = 0; dir = 1; wait = STOP; v = 0; }
+      for (const T of trams) {
+        const end = T.line.S - LEN;
+        T.waiting = false;
+        if (T.wait > 0) { T.wait -= dt; T.v = 0; }
+        else {
+          const left = T.dir > 0 ? end - T.s0 : T.s0;
+          const lim = crossingLimit(T), byVan = blockedByVan(T, van);
+          T.waiting = byVan || lim < Infinity;
+          const room = Math.min(left, Math.max(0, lim));
+          const want = byVan ? 0 : Math.min(6.5, Math.sqrt(2 * 1.4 * Math.max(0, room)) + (room === left ? 0.3 : 0));
+          T.v = T.v < want ? Math.min(want, T.v + 1.4 * dt) : Math.max(want, T.v - 3.5 * dt);
+          T.s0 += T.dir * T.v * dt;
+          if (T.dir > 0 && T.s0 >= end) { T.s0 = end; T.dir = -1; T.wait = T.line.wait; T.v = 0; }
+          else if (T.dir < 0 && T.s0 <= 0) { T.s0 = 0; T.dir = 1; T.wait = T.line.wait; T.v = 0; }
+        }
+        T.place();
+        if (SOLIDS.indexOf(T.solid) < 0) SOLIDS.push(T.solid);
       }
-      place();
-      if (SOLIDS.indexOf(solid) < 0) SOLIDS.push(solid);
     },
   };
 }
