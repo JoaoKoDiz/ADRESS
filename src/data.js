@@ -323,6 +323,39 @@ export const COMPLAINTS = [
   'Terceira caixa errada da semana, e ainda é quarta-feira!',
   'Eu estava cochilando, e isso nem é meu.',
 ];
+/** Veneza (moradores comuns): falas principalmente em português, com uma expressão italiana de vez em quando. */
+export const VEN_LINES = {
+  complaints: [
+    'Mamma mia! Outra entrega errada? Isso não é meu.',
+    'O endereço está certo. Você só está no canal errado.',
+    'Buongiorno! Bonita caixa, mas não é minha.',
+    'Eu estava regando as flores da janela, e isso nem é meu.',
+    'Moço, aqui só chega pão e peixe fresco. Isso não é meu.',
+    'Não é meu, mas obrigado pela visita. Prego!',
+    'Atravessou a ponte toda para isso? Não é meu.',
+    'Mamma mia, o gato até se animou, mas não é meu.',
+    'Isso não é meu. Aqui em Veneza todo mundo erra de ponte um dia.',
+    'Vamos ver esse endereço de novo… Não, não é aqui.',
+  ],
+  hints: [
+    (p, r) => `Acho que é ${r.da} com ${p}.`,
+    (p, r) => `Prego! Tenta ${r.na} com ${p}.`,
+    (p, r) => `Se não me engano, é ${r.da} com ${p}.`,
+    (p, r) => `Deve ser ${r.da} com ${p}, eu acho.`,
+    (p, r) => `Pergunta ${r.na} com ${p}. Boa sorte nos canais!`,
+  ],
+  repeats: [
+    (p, r) => `De novo você? Já falei: acho que é ${r.da} com ${p}.`,
+    (p, r) => `Mamma mia… Continua não sendo meu. É ${r.da} com ${p}, como eu disse.`,
+  ],
+  nohint: ['Sei lá de quem é; segue a pista que você tem aí.', 'Não faço ideia de quem seja, sinceramente.', 'Pergunta para outro vizinho, porque eu não sei.'],
+  nohintAgain: ['Ainda não é meu! Segue a pista que você tem.', 'Voltou? Continua não sendo meu. Ciao!'],
+  success: [
+    'Grazie! Finalmente chegou. Meu café já estava esfriando!',
+    'Era essa mesmo! Grazie mille pela paciência!',
+    'Ah, minha encomenda! Achei que tinha caído no canal. Obrigado!',
+  ],
+};
 export const FEATURE_COMPLAINTS = {
   flamingo: 'Só porque eu tenho um flamingo não quer dizer que eu compro tudo pela internet.',
   gnome: 'Nem o meu gnomo sabe de quem é isso, e ele sabe de tudo.',

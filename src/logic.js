@@ -1,9 +1,12 @@
 // Lógica das rodadas, independente de renderização.
 import {
-  HOUSES, PHRASE, REF, COMPLAINTS, NARRATOR, FEATURE_COMPLAINTS, HINTS, REPEATS, NOHINT, NOHINT_AGAIN, SUCCESS,
+  HOUSES, PHRASE, REF, COMPLAINTS, NARRATOR, FEATURE_COMPLAINTS, HINTS, REPEATS, NOHINT, NOHINT_AGAIN, SUCCESS, VEN_LINES,
 } from './data.js';
 
 const rand = n => Math.floor(Math.random() * n);
+const BASE_LINES = { complaints: COMPLAINTS, hints: HINTS, repeats: REPEATS, nohint: NOHINT, nohintAgain: NOHINT_AGAIN, success: SUCCESS };
+/** Falas do morador da casa h (Veneza tem as suas, com um toque italiano). */
+const lines = h => (HOUSES[h].kind === 'ven' ? VEN_LINES : BASE_LINES);
 
 /** Casas por rodada: 4 entregas erradas + a certa. */
 export const ROUTE_LEN = 5;
@@ -142,10 +145,11 @@ export class Game {
   complaintFor(h) {
     const special = HOUSES[h].f.filter(k => FEATURE_COMPLAINTS[k] && !this.usedComplaints.has(FEATURE_COMPLAINTS[k]));
     let c;
+    const base = lines(h).complaints;
     if (special.length && Math.random() < 0.5) c = FEATURE_COMPLAINTS[pick(special)];
     else {
-      const pool = COMPLAINTS.filter(x => !this.usedComplaints.has(x));
-      c = pick(pool.length ? pool : COMPLAINTS);
+      const pool = base.filter(x => !this.usedComplaints.has(x));
+      c = pick(pool.length ? pool : base);
     }
     this.usedComplaints.add(c);
     return c;
@@ -170,19 +174,19 @@ export class Game {
     let text, success = false;
     if (HOUSES[h].narrator) return this.narratorVisit(h);
     if (h === this.recipient) {
-      success = true; text = pick(SUCCESS); this.delivered++;
+      success = true; text = pick(lines(h).success); this.delivered++;
     } else {
       const idx = this.route.indexOf(h);
       if (idx === this.step) {                          // casa indicada: reclama e dá o próximo palpite
         this.step++; this.hintByNarrator = false;
-        text = this.complaintFor(h) + ' ' + pick(HINTS)(phrase(this.clues[this.step]), ref(this.route[this.step]));
+        text = this.complaintFor(h) + ' ' + pick(lines(h).hints)(phrase(this.clues[this.step]), ref(this.route[this.step]));
       } else if (idx >= 0 && idx < this.step) {         // já deu palpite: só repete, sem pista nova
-        text = pick(REPEATS)(phrase(this.clues[idx + 1]), ref(this.route[idx + 1]));
+        text = pick(lines(h).repeats)(phrase(this.clues[idx + 1]), ref(this.route[idx + 1]));
       } else if (this.noHintVisited.has(h)) {           // fora da indicação, de novo
-        text = pick(NOHINT_AGAIN);
+        text = pick(lines(h).nohintAgain);
       } else {                                          // fora da indicação: não altera a rota
         this.noHintVisited.add(h);
-        text = this.complaintFor(h) + ' ' + pick(NOHINT);
+        text = this.complaintFor(h) + ' ' + pick(lines(h).nohint);
       }
     }
     return { h, name: HOUSES[h].name, text, success };

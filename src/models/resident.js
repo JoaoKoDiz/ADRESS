@@ -1,8 +1,8 @@
 // Morador que aparece no portão durante o diálogo: bonequinho low-poly, cabeçudo, virado para +Z (câmera).
 // userData.setMood('angry' | 'happy') troca pose e balão; userData.update(t) anima.
 import * as THREE from 'three';
-import { box, cyl, sphere, at, dynamic, bakeStatic } from './kit.js';
-import { SHIRTS, HAIRS } from '../data.js';
+import { box, cyl, sphere, torus, at, dynamic, bakeStatic } from './kit.js';
+import { SHIRTS, HAIRS, HOUSES } from '../data.js';
 
 const SKIN = '#f0c49a', PANTS = '#3d4a66', SHOES = '#2b2522', EYES = '#2a1d14', CHEEK = '#f29a8a';
 const CARDBOARD = '#c98a4a', TAPE = '#f3d9a6';
@@ -51,8 +51,18 @@ function makeArm(shirt, side) {
 }
 
 /** Morador da casa `houseIndex` (camisa e cabelo derivados do índice). */
+// Veneza: estilos de roupa (camisa de linho, blusa listrada, avental, lenço, chapéu de palha, gondoleiro) e cores trocáveis
+export const VEN_STYLE = {
+  linen: ['#efe6d2', '#dfe8ef', '#e9dcc6', '#f3efe6'], stripe: ['#1f3a68', '#b5302a', '#2b2b2b'], apron: ['#f4f1ea', '#e7d3a8', '#cfd8c4'],
+  scarf: ['#c8402f', '#2f6fb0', '#d9a441', '#3f7a4a', '#a8432e'], straw: '#f3d98f', ribbon: ['#c8402f', '#1f3a68', '#2b2b2b'],
+};
+const VEN_LOOKS = ['linen', 'stripe', 'apron', 'scarf', 'straw', 'gondolier', 'linen-scarf', 'apron-straw'];
+
 export function buildResident(houseIndex) {
-  const shirt = SHIRTS[houseIndex % SHIRTS.length];
+  const ven = HOUSES[houseIndex] && HOUSES[houseIndex].kind === 'ven';
+  const look = ven ? VEN_LOOKS[(houseIndex * 5) % VEN_LOOKS.length] : null, V = VEN_STYLE, pk = (a, k = 1) => a[(houseIndex * k) % a.length];
+  const striped = look === 'stripe' || look === 'gondolier';
+  const shirt = !ven ? SHIRTS[houseIndex % SHIRTS.length] : striped ? '#f6f4ee' : look.startsWith('linen') ? pk(V.linen) : SHIRTS[houseIndex % SHIRTS.length];
   const hair = HAIRS[(houseIndex * 3) % HAIRS.length];
 
   const root = new THREE.Group();
@@ -69,6 +79,12 @@ export function buildResident(houseIndex) {
   // tronco (camisa) + cinto
   body.add(at(cyl(0.34, 0.37, 0.62, shirt, 10), 0, 0.88, 0));
   body.add(at(cyl(0.375, 0.375, 0.08, PANTS, 10), 0, 0.6, 0));
+  if (ven) {                                                           // Veneza: listras, avental, gola de linho
+    if (striped) for (let k = 0; k < 4; k++) body.add(at(cyl(0.375 - k * 0.008, 0.38 - k * 0.008, 0.07, look === 'gondolier' ? '#1f3a68' : pk(V.stripe, 3), 10), 0, 0.7 + k * 0.12, 0));
+    if (look.startsWith('apron')) { const c = pk(V.apron, 7); body.add(at(box(0.5, 0.62, 0.05, c), 0, 0.72, 0.37)); body.add(at(box(0.36, 0.22, 0.05, c), 0, 1.06, 0.35)); }
+    if (look.startsWith('linen')) for (const sd of [-1, 1]) body.add(at(box(0.16, 0.05, 0.12, '#ffffff'), sd * 0.1, 1.17, 0.27, 0.3, 0, sd * 0.4));
+    if (look.includes('scarf')) { const c = pk(V.scarf, 11); body.add(at(torus(0.27, 0.07, c, 6, 14), 0, 1.16, 0, Math.PI / 2, 0, 0)); body.add(at(box(0.12, 0.26, 0.05, c), 0.09, 1.0, 0.34, 0, 0, 0.2)); }
+  }
   // cabeça grande, levemente inclinada para trás: o rosto aparece para a câmera, que olha de cima
   const head = new THREE.Group();
   head.position.set(0, 1.18, 0);
@@ -81,6 +97,11 @@ export function buildResident(houseIndex) {
   cap.scale.set(1, 0.72, 1);
   head.add(cap);
   head.add(at(box(0.72, 0.4, 0.22, hair), 0, hy - 0.02, -0.26));
+  if (ven && (look === 'gondolier' || look.endsWith('straw') || look === 'straw')) {   // chapéu de palha (gondoleiro: com fita)
+    head.add(at(cyl(0.62, 0.62, 0.04, V.straw, 14), 0, hy + 0.38, -0.03));
+    head.add(at(cyl(0.36, 0.38, 0.24, V.straw, 12), 0, hy + 0.5, -0.03));
+    head.add(at(cyl(0.385, 0.385, 0.07, look === 'gondolier' ? '#c8402f' : pk(V.ribbon, 2), 12), 0, hy + 0.43, -0.03));
+  }
   // rosto: olhos, bochechas, nariz
   for (const s of [-1, 1]) {
     head.add(at(sphere(0.065, EYES, 6, 4), s * 0.15, hy + 0.05, 0.36));
