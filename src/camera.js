@@ -4,7 +4,7 @@
 //     Parada, a câmera sobe para olhar por cima dos telhados; entregando, vira um pouco para a casa visitada.
 //   'overview' (tecla C): visão fixa do SUL, com o bairro inteiro enquadrado na tela.
 import * as THREE from 'three';
-import { MAP, HEDGE, HOUSE_SLOTS, GAS_LIST, GAS_PARTS, BUILD_H, slotOrigin, LOT_ANCHORS, ENTRANCE, FAVELA, FARMLAND } from './layout.js';
+import { MAP, HEDGE, HOUSE_SLOTS, GAS_LIST, GAS_PARTS, BUILD_H, slotOrigin, LOT_ANCHORS, ENTRANCE, FAVELA, FARMLAND, SNOWV } from './layout.js';
 import { FAV } from './favelaPlan.js';
 
 const PITCH = THREE.MathUtils.degToRad(57);   // inclinação para baixo
@@ -115,7 +115,12 @@ function buildCamBoxes() {
     for (const sp of FARMLAND.spots) CAM_BOXES.push([sp.box.x0 - 0.6, sp.box.z0 - 0.6, sp.box.x1 + 0.6, sp.box.z1 + 0.6, 10]);
     for (const d of FARMLAND.decor) if (d.type === 'trees' || d.type === 'orchard') CAM_BOXES.push([d.x0, d.z0, d.x1, d.z1, d.type === 'trees' ? 8 : 5]);
   }
-  for (const s of FAVELA || FARMLAND ? [] : HOUSE_SLOTS) {
+  if (SNOWV) {                                                 // Nevasca: patamares (o braço não entra no barranco), casas e pinheiros
+    CAM_BOXES.push([SNOWV.MID.x0, SNOWV.MID.z0, MAP, MAP, 3.6], [SNOWV.HIGH.x0, SNOWV.HIGH.z0, MAP, MAP, 6.6]);
+    for (const sp of SNOWV.spots) CAM_BOXES.push([sp.walkBox.x0 - 0.8, sp.walkBox.z0 - 0.8, sp.walkBox.x1 + 0.8, sp.walkBox.z1 + 0.8, sp.y + 7.8]);
+    for (const p of SNOWV.pines) CAM_BOXES.push([p.x - 1.4, p.z - 1.4, p.x + 1.4, p.z + 1.4, p.y + 5.5]);
+  }
+  for (const s of FAVELA || FARMLAND || SNOWV ? [] : HOUSE_SLOTS) {
     const o = slotOrigin(s), H = LOT_ANCHORS.house;
     CAM_BOXES.push([o.x + H.x0 - 0.7 - CAM_PAD, o.z + H.z0 - 0.7 - CAM_PAD, o.x + H.x1 + 0.7 + CAM_PAD, o.z + H.z1 + 1.1 + CAM_PAD, BUILD_H + CAM_PAD]);
   }

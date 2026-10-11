@@ -2,10 +2,11 @@
 // (sobra espaço para a van ultrapassar). Como os carros do Nível 14: mantêm distância de outro trator à frente, param
 // diante da van ou do motorista a pé e retomam quando há passagem. São sólidos para a van.
 import * as THREE from 'three';
-import { SOLIDS, FARMLAND } from './layout.js';
+import { SOLIDS, FARMLAND, TERRAIN } from './layout.js';
 import { buildTractor } from './models/farm.js';
 
-const SIDE = 2.3, SPEED = 3.4, LEN = 3.6;
+const SIDE = 2.3, LEN = 3.6;
+let SPEED = 3.4;
 const COLORS = ['#c8402f', '#3f8a4a', '#2f6fb0'];
 
 export function createTractors(audio) {
@@ -25,10 +26,12 @@ export function createTractors(audio) {
   return {
     object: root,
     get list() { return list; },
-    reset() {
+    /** opts (Nevasca): { loops, build, speed } — o limpa-neve usa a mesma lógica. */
+    reset(opts = {}) {
       for (const t of list) { root.remove(t.mesh); const k = SOLIDS.indexOf(t.solid); if (k >= 0) SOLIDS.splice(k, 1); }
-      list = (FARMLAND ? FARMLAND.tractorLoops : []).map((loop, i) => {
-        const path = makePath(loop), mesh = buildTractor(COLORS[i % COLORS.length]); root.add(mesh);
+      SPEED = opts.speed || 3.4;
+      list = (opts.loops || (FARMLAND ? FARMLAND.tractorLoops : [])).map((loop, i) => {
+        const path = makePath(loop), mesh = (opts.build || buildTractor)(COLORS[i % COLORS.length]); root.add(mesh);
         return { i, path, s: path.S * (0.15 + 0.3 * i), v: 0, mesh, solid: { x0: 0, x1: 0, z0: 0, z1: 0 }, x: 0, z: 0, ux: 1, uz: 0 };
       });
       for (const t of list) this.place(t);
@@ -38,7 +41,7 @@ export function createTractors(audio) {
       const dx = q.x - p.x, dz = q.z - p.z, l = Math.hypot(dx, dz) || 1;
       t.ux += (dx / l - t.ux) * 0.25; t.uz += (dz / l - t.uz) * 0.25;     // curvas suaves
       t.x = p.x; t.z = p.z;
-      t.mesh.position.set(p.x, 0, p.z); t.mesh.rotation.y = -Math.atan2(t.uz, t.ux);
+      t.mesh.position.set(p.x, TERRAIN.h(p.x, p.z), p.z); t.mesh.rotation.y = -Math.atan2(t.uz, t.ux);
       const cx = Math.abs(t.ux), cz = Math.abs(t.uz), ex = cx * 2.0 + cz * 1.3, ez = cz * 2.0 + cx * 1.3;
       Object.assign(t.solid, { x0: p.x - ex, x1: p.x + ex, z0: p.z - ez, z1: p.z + ez });
     },

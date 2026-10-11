@@ -26,13 +26,15 @@ export let CANAL = null;        // Bairro 10: { x0, x1, bridges: [linhas de rua]
 export let VENICE = null;        // Nível 12 (Veneza): canais no lugar das ruas, canal principal sinuoso, vielas, pracinha e pontes
 export let RAIL = null;          // Bairro 11: percurso do bondinho pelas ruas (trilhos no asfalto) e as 2 paradas
 export let FLUX = null;          // Nível 14 (Fluxo): avenida central (ruas 5 e 6, mão única) com canteiro na fileira 5, cruzamentos e retornos
-export let FAVELA = null;
+export let FAVELA = null;        // Nível 13 (Morro): plano fixo sem grade (favelaPlan.js); os "lotes" são as casas de entrega
 export let FARMLAND = null;      // Nível 15 (Colheita): plano fixo rural (farmPlan.js); os "lotes" são as propriedades
-/** Plano de pontos (Morro ou Colheita): os lotes são pontos com posição, frente e porta próprias. */
-export let SPOTS = null;        // Nível 13 (Morro): plano fixo sem grade (favelaPlan.js); os "lotes" são as casas de entrega
+export let SNOWV = null;         // Nível 16 (Nevasca): plano fixo da vila nevada (snowPlan.js)
+/** Plano de pontos (Morro, Colheita ou Nevasca): os lotes são pontos com posição, frente e porta próprias. */
+export let SPOTS = null;
 export const TERRAIN = { kind: 'flat', H1: 3, H2: 6, ramps: [], stairs: [], h: () => 0 };
 import { planFavela, FAV } from './favelaPlan.js';
 import { planFarm } from './farmPlan.js';
+import { planSnow, SNOW } from './snowPlan.js';
 // Posto de gasolina, em coordenadas locais do modelo (origem no canto noroeste do lote da esquerda, frente +Z).
 // A van entra nele: só a loja, as ilhas das bombas, os pilares da cobertura, o totem, o calibrador e a lixeira barram.
 export const GAS_W = LOT * 2 + ROAD;
@@ -71,7 +73,7 @@ export const SOLIDS = [];
 
 /** Troca a grade do bairro e refaz os obstáculos-base (lotes, praça e sebe). */
 export function configureGrid(kind) {
-  GRID = kind === 'plaza6' || kind === 'grid6s' || kind === 'city6' || kind === 'city7' ? 6 : kind === 'city8' || kind === 'hill8' || kind === 'canal8' || kind === 'rail8' || kind === 'venice8' || kind === 'favela8' ? 8 : kind === 'flux10' || kind === 'farm10' ? 10 : kind === 'grid5' ? 5 : 4;
+  GRID = kind === 'plaza6' || kind === 'grid6s' || kind === 'city6' || kind === 'city7' ? 6 : kind === 'city8' || kind === 'hill8' || kind === 'canal8' || kind === 'rail8' || kind === 'venice8' || kind === 'favela8' || kind === 'snow8' ? 8 : kind === 'flux10' || kind === 'farm10' ? 10 : kind === 'snow8' ? 14 : kind === 'grid5' ? 5 : 4;
   BUILD_H = kind === 'city8' || kind === 'canal8' || kind === 'rail8' ? 31 : kind === 'hill8' ? 23 : kind === 'favela8' ? 20 : kind === 'flux10' ? 16.5 : kind === 'farm10' ? 10 : kind === 'city6' || kind === 'city7' ? 16.5 : 9.2;
   // praça: bloco 2×2 central (linhas e colunas 2–3 do 6×6)
   const plazaSlots = kind === 'plaza6' ? [2 * GRID + 2, 2 * GRID + 3, 3 * GRID + 2, 3 * GRID + 3] : [];
@@ -88,7 +90,8 @@ export function configureGrid(kind) {
     : null;
   FAVELA = kind === 'favela8' ? planFavela(HEDGE * 2 + ROAD * 9 + LOT * 8, HEDGE) : null;
   FARMLAND = kind === 'farm10' ? planFarm(HEDGE * 2 + ROAD * 11 + LOT * 10, HEDGE) : null;
-  SPOTS = FAVELA || FARMLAND;
+  SNOWV = kind === 'snow8' ? planSnow(HEDGE * 2 + ROAD * 9 + LOT * 8, HEDGE) : null;
+  SPOTS = FAVELA || FARMLAND || SNOWV;
   setupFlux(kind);
   setupTerrain(kind);
   setupRail(kind);
@@ -124,6 +127,7 @@ export function setGasStations(list, wares = []) {
 function setupTerrain(kind) {
   const T = TERRAIN;
   if (FAVELA) { T.kind = 'favela'; T.ramps = []; T.stairs = []; T.H1 = FAV.H1; T.H2 = FAV.H2; T.h = FAVELA.h; return; }
+  if (SNOWV) { T.kind = 'snow'; T.ramps = []; T.stairs = []; T.H1 = SNOW.MIDH; T.H2 = SNOW.HIGHH; T.h = SNOWV.h; return; }
   T.H1 = 3; T.H2 = 6;
   if (kind !== 'hill8') { T.kind = 'flat'; T.ramps = []; T.stairs = []; T.h = () => 0; return; }
   T.kind = 'hill';
@@ -336,6 +340,7 @@ function rebuildBaseSolids() {
   if (FAVELA) favelaSolids();
   if (FLUX) fluxSolids();
   if (FARMLAND) farmSolids();
+  if (SNOWV) snowSolids();
   if (TERRAIN.kind === 'hill') {                   // muros das encostas (nas ladeiras não há muro; nas escadarias, só para a van)
     const isRamp = (j, i) => TERRAIN.ramps.some(r => r.j === j && r.i === i), isStair = (j, i) => TERRAIN.stairs.some(r => r.j === j && r.i === i);
     const wall = (j, i, top) => { const z = top ? rc(i + 1) - hr : rc(i) + hr; SOLIDS.push({ x0: rc(j) - hr, x1: rc(j) + hr, z0: z - 0.3, z1: z + 0.3, vanOnly: isStair(j, i) }); };
@@ -353,6 +358,28 @@ function setupFlux(kind) {
   FLUX = { north: 5, south: 6, row: 5, widen: W, gaps: [0, 2, 5, 8, 10], lights: [2, 5, 8],
     parks: [3, 8, 11, 16, 24, 29, 32, 37, 61, 67, 73, 78, 84, 86, 92, 97],     // pracinhas e estacionamentos (fixos)
     median: { z0: roadCenter(5) + hr + W, z1: roadCenter(6) - hr - W } };
+}
+/** Nevasca: muros nas bordas dos patamares (abertos nas ladeiras), laterais das ladeiras, montes de neve dos atalhos
+ *  (sólidos próprios: o limpa-neve os abre e fecha — main.js) e os pinheiros. */
+function snowSolids() {
+  const V = SNOWV, edge = (P, along, fixed, from, to, gaps) => {      // along 'x' (borda norte) ou 'z' (borda oeste)
+    let a = from;
+    for (const g of gaps.sort((p, q) => p[0] - q[0])) { if (g[0] > a) push(a, g[0]); a = Math.max(a, g[1]); }
+    if (to > a) push(a, to);
+    function push(u0, u1) { SOLIDS.push(along === 'x' ? { x0: u0, x1: u1, z0: fixed - 0.35, z1: fixed + 0.35 } : { x0: fixed - 0.35, x1: fixed + 0.35, z0: u0, z1: u1 }); }
+  };
+  for (const P of [V.MID, V.HIGH]) {
+    const rz = V.ramps.filter(r => r.axis === 'z' && r.z0 < P.z0 && r.z1 > P.z0).map(r => [r.x0 - 0.6, r.x1 + 0.6]);
+    const rx = V.ramps.filter(r => r.axis === 'x' && r.x0 < P.x0 && r.x1 > P.x0).map(r => [r.z0 - 0.6, r.z1 + 0.6]);
+    edge(P, 'x', P.z0, P.x0, P.x1, rz);
+    edge(P, 'z', P.x0, P.z0, P.z1, rx);
+  }
+  for (const r of V.ramps) {
+    if (r.axis === 'z') SOLIDS.push({ x0: r.x0 - 0.6, x1: r.x0, z0: r.z0, z1: r.z1 }, { x0: r.x1, x1: r.x1 + 0.6, z0: r.z0, z1: r.z1 });
+    else SOLIDS.push({ x0: r.x0, x1: r.x1, z0: r.z0 - 0.6, z1: r.z0 }, { x0: r.x0, x1: r.x1, z0: r.z1, z1: r.z1 + 0.6 });
+  }
+  for (const c of V.cuts) { c.solid = { ...c.box }; SOLIDS.push(c.solid); }
+  for (const p of V.pines) SOLIDS.push({ x0: p.x - 0.5, x1: p.x + 0.5, z0: p.z - 0.5, z1: p.z + 0.5 });
 }
 /** Colheita: cercas (a porteira fechada é um sólido à parte, que some ao abrir), plantações, extras e a decoração. */
 function farmSolids() {

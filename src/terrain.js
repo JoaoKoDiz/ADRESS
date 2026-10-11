@@ -7,7 +7,8 @@ import { buildRail } from './train.js';
 import { buildFavelaScene } from './models/favela.js';
 import { buildFluxScene } from './models/flux.js';
 import { buildFarmScene } from './models/farm.js';
-import { FARMLAND, FLUX, WALK, FAVELA, RAIL as RAIL_PATH, VENICE, TERRAIN, CANAL, slotOrigin, doorPoint, lotX, lotZ, GRID, MAP, HEDGE, ROAD, LOT, roadCenter } from './layout.js';
+import { buildSnowScene } from './models/snow.js';
+import { SNOWV, FARMLAND, FLUX, WALK, FAVELA, RAIL as RAIL_PATH, VENICE, TERRAIN, CANAL, slotOrigin, doorPoint, lotX, lotZ, GRID, MAP, HEDGE, ROAD, LOT, roadCenter } from './layout.js';
 
 const ASPHALT = '#5d6470', WALLC = '#b9ad98', CAP = '#d8cfbe', RAIL = '#e8e2d4', STEPC = '#cfc6b4';
 const WATER = '#3d8fc4', WATER_DEEP = '#2f78ad', STONE = '#a99f8f', WOOD = '#8a6a44';
@@ -21,6 +22,7 @@ export function buildTerrain() {
   if (VENICE) buildVenice(g);
   if (FAVELA) buildFavelaScene(g, FAVELA, MAP, HEDGE);
   if (FARMLAND) buildFarmScene(g, FARMLAND);
+  if (SNOWV) buildSnowScene(g, SNOWV, MAP, HEDGE);
   if (FLUX) buildFluxScene(g, { FLUX, GRID, ROAD, LOT, WALK, roadCenter, slotOrigin });
   return g;
 }

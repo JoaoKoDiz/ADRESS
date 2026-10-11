@@ -49,7 +49,7 @@ function roadGeometry(curve, samples) {
 //   canal    — canal no meio, pontes e um galpão (Bairro 10, Travessia)
 //   rail     — trilhos em L com curva, trem e estação (Bairro 11, Trilhos)
 //   venice   — canais, fachadas venezianas coloridas e a Ponte de Rialto (Nível 12, Veneza)
-const MINI_KINDS = ['houses', 'plaza', 'barriers', 'trucks', 'gas', 'city', 'jam', 'jam8', 'hill', 'venice', 'canal', 'rail', 'favela', 'flux', 'farm'];   // 13 = Morro, 14 = Fluxo, 15 = Colheita   // 10 = Veneza, 11 = Travessia, 12 = Trilhos
+const MINI_KINDS = ['houses', 'plaza', 'barriers', 'trucks', 'gas', 'city', 'jam', 'jam8', 'hill', 'venice', 'canal', 'rail', 'favela', 'flux', 'farm', 'snow'];   // 13 = Morro, 14 = Fluxo, 15 = Colheita, 16 = Nevasca   // 10 = Veneza, 11 = Travessia, 12 = Trilhos
 
 /** Bairro em miniatura do tipo `kind`: base de grama, sebe, ruas e o que caracteriza o bairro. gray = fase bloqueada. */
 function miniNeighborhood(kind, colors, gray = false) {
@@ -132,6 +132,17 @@ function miniNeighborhood(kind, colors, gray = false) {
     return bakeStatic(g);
   }
 
+  if (kind === 'snow') {                         // Nível 16 (Nevasca): neve, patamar com muro de pedra, ladeira, gelo, pinheiros e casinhas
+    const SN = G('#eef3f7', '#c4c4c4'), ST = G('#8f8b85', '#9a9a9a');
+    add(box(13.6, 0.1, 13.6, SN), 0, 0.42, 0);
+    add(box(13.6, 1.6, 6.4, ST), 0, 0.4 + 0.8, -3.6); add(box(13.6, 0.1, 6.4, SN), 0, 2.05, -3.6);
+    add(box(1.8, 0.2, Math.hypot(3.4, 1.6), ROADC), 2.6, 1.25, 1.2, Math.atan2(1.6, 3.4), 0, 0);
+    add(box(9, 0.12, 1.8, ROADC), -1.6, 0.48, 4.2, 0, 0.15, 0);
+    add(box(3.4, 0.14, 1.5, G('#a9d8f2', '#b8b8b8')), -3.6, 0.5, 4.4, 0, 0.15, 0);
+    house(-4.2, -3.8, roof(0), 0.75); house(0.8, -4.2, roof(1), 0.75); house(-4.4, 1.6, roof(2), 0.8); house(4.6, 4.6, roof(3), 0.8);
+    for (const [x, z, y] of [[5.6, -5.2, 2.1], [-6, -1.4, 2.1], [1.2, 5.8, 0.45], [-1.6, 1.8, 0.45]]) { add(cone(0.75, 1.6, G('#2f6b45', '#8a8a8a'), 7), x, y + 0.9, z); add(cone(0.4, 0.5, SN, 7), x, y + 1.5, z); }
+    return bakeStatic(g);
+  }
   if (kind === 'farm') {                         // Nível 15 (Colheita): estrada de terra, celeiro, casinha, milharal, pasto e cerca
     add(box(13.6, 0.1, 13.6, G('#86b85c', '#a3a3a3')), 0, 0.42, 0);
     add(box(2.0, 0.12, 14, G('#b8956a', '#9a9a9a')), -1.2, 0.47, 0, 0, 0.18, 0); add(box(7, 0.12, 2.0, G('#b8956a', '#9a9a9a')), 3, 0.47, 1.5, 0, -0.2, 0);
@@ -320,7 +331,7 @@ function boardTexture(gray = false) {
 }
 
 const PALETTES = [['red', 'blue', 'yellow', 'green'], ['purple', 'red', 'gray', 'yellow', 'blue', 'green', 'red', 'yellow'], ['blue', 'green', 'red', 'purple'],
-  ['yellow', 'gray', 'blue', 'red'], ['green', 'purple', 'yellow', 'blue'], ['red'], ['blue'], ['green'], ['red', 'blue', 'yellow', 'purple'], ['red'], ['blue', 'green', 'red'], ['green', 'yellow', 'purple'], ['red'], ['blue', 'red', 'yellow', 'green'], ['red', 'blue']];
+  ['yellow', 'gray', 'blue', 'red'], ['green', 'purple', 'yellow', 'blue'], ['red'], ['blue'], ['green'], ['red', 'blue', 'yellow', 'purple'], ['red'], ['blue', 'green', 'red'], ['green', 'yellow', 'purple'], ['red'], ['blue', 'red', 'yellow', 'green'], ['red', 'blue'], ['red', 'blue', 'green', 'yellow']];
 
 /** Miniaturas (data URL) dos 8 bairros, desenhadas uma vez num renderizador próprio. Usadas na seleção do modo Livre. */
 export function renderMiniThumbnails(w = 480, h = 360) {
@@ -372,7 +383,7 @@ export function createCareerMap(stageEl, audio) {
   scene.add(ground);
 
   // estrada com curvas suaves
-  const pts = [[0, 0], [30, -14], [62, 6], [94, -10], [126, 10], [158, -6], [190, 8], [222, -4], [254, 10], [286, -6], [318, 8], [350, -6], [382, 8], [414, -6], [446, 8]]
+  const pts = [[0, 0], [30, -14], [62, 6], [94, -10], [126, 10], [158, -6], [190, 8], [222, -4], [254, 10], [286, -6], [318, 8], [350, -6], [382, 8], [414, -6], [446, 8], [478, -6]]
     .map(([x, z]) => new THREE.Vector3(x, 0, z));
   const curve = new THREE.CatmullRomCurve3(pts, false, 'centripetal');
   const length = curve.getLength();

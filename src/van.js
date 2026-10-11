@@ -295,21 +295,29 @@ export function createVan(scene, opts) {
    * A/D viram o volante (só vira andando; em ré a direção se inverte, como num carro de verdade).
    */
   let forceSpeed = null;
+  // Gelo (Nível 16): iceFn(x, z) → 0..1. Sobre o gelo a aderência cai aos poucos (iceK): freia e acelera menos, a direção
+  // de movimento demora a seguir a frente (desliza nas curvas) e nas descidas ela embala. Fora do gelo volta ao normal.
+  let iceFn = null, iceK = 0, moveAngle = VAN_START.heading;
   function driveCar(dt, axis) {
     const throttle = axis ? -axis.z : 0, steer = axis ? axis.x : 0;
+    const BRK = CAR_BRAKE * (1 - 0.65 * iceK), ACCL = CAR_ACC * (1 - 0.45 * iceK);
     if (throttle > 0) {
-      if (speed < 0) speed = Math.min(0, speed + CAR_BRAKE * dt);
+      if (speed < 0) speed = Math.min(0, speed + BRK * dt);
       else if (speed > MAX) speed = Math.max(MAX, speed - (speed - MAX) * Math.min(1, 0.9 * dt));   // acima do máximo (saiu da condução automática): volta aos poucos
-      else speed = Math.min(MAX, speed + CAR_ACC * dt);
+      else speed = Math.min(MAX, speed + ACCL * dt);
     } else if (throttle < 0) {
-      if (speed > 0.5) speed = Math.max(0, speed - CAR_BRAKE * dt);
+      if (speed > 0.5) speed = Math.max(0, speed - BRK * dt);
       else speed = Math.max(-MAX_REVERSE, speed - REV_ACC * dt);
     } else {
       // solto: desacelera devagar (resistência proporcional + atrito de rolagem)
-      const v = Math.max(0, Math.abs(speed) - (Math.abs(speed) * CAR_COAST + CAR_ROLL) * dt);
+      const v = Math.max(0, Math.abs(speed) - (Math.abs(speed) * CAR_COAST + CAR_ROLL) * (1 - 0.7 * iceK) * dt);
       speed = v < 0.3 ? 0 : Math.sign(speed) * v;
     }
-    if (steer && speed > CORNER_SPEED) speed -= (speed - CORNER_SPEED) * Math.min(1, 2.5 * dt);
+    if (steer && speed > CORNER_SPEED) speed -= (speed - CORNER_SPEED) * Math.min(1, 2.5 * (1 - 0.6 * iceK) * dt);
+    if (iceK > 0.01 && TERRAIN.kind !== 'flat') {                    // descida congelada: embala
+      const c0 = Math.cos(heading), s0 = Math.sin(heading), g = (TERRAIN.h(x + c0 * 1.8, z + s0 * 1.8) - TERRAIN.h(x - c0 * 1.8, z - s0 * 1.8)) / 3.6;
+      speed = Math.max(-MAX_REVERSE, Math.min(MAX * 1.15, speed - 9 * g * iceK * dt));
+    }
     // quanto mais rápido, mais a direção responde (até um limite); parado não gira
     if (forceSpeed !== null) speed = forceSpeed;                     // condução automática (cena): velocidade imposta
     const grip = Math.min(1, Math.abs(speed) / 5) * Math.sign(speed);
@@ -339,7 +347,11 @@ export function createVan(scene, opts) {
     let hit = false;
     const dist = speed * dt;
     const n = Math.max(1, Math.ceil(Math.abs(dist) / MAX_STEP));
-    const c = Math.cos(heading), s = Math.sin(heading);
+    const iceNow = iceFn ? iceFn(x, z) : 0;
+    iceK += (iceNow - iceK) * Math.min(1, (iceNow > iceK ? 3 : 2) * dt);   // entra e sai do gelo aos poucos
+    if (iceK < 0.01) { iceK = 0; moveAngle = heading; }
+    else moveAngle = angleDiff(moveAngle + angleDiff(heading, moveAngle) * Math.min(1, (14 - 12.2 * iceK) * dt), 0);   // desliza
+    const c = Math.cos(moveAngle), s = Math.sin(moveAngle);
     for (let i = 0; i < n; i++) {
       x += c * dist / n;
       z += s * dist / n;
@@ -378,7 +390,7 @@ export function createVan(scene, opts) {
   }
 
   function teleport(nx, nz, nh) {
-    x = nx; z = nz; heading = angleDiff(nh, 0);
+    x = nx; z = nz; heading = angleDiff(nh, 0); moveAngle = heading; iceK = 0;
     speed = 0; prevSpeed = 0; roll = 0; pitch = 0; swR = swVR = swP = swVP = 0; if (sway) sway.rotation.set(0, 0, 0);
     sync();
   }
@@ -398,6 +410,9 @@ export function createVan(scene, opts) {
     stop() { speed = 0; prevSpeed = 0; roll = 0; pitch = 0; sync(); },
     /** Condução automática: impõe a velocidade (null devolve ao jogador; acima do máximo ela cai aos poucos). */
     setForceSpeed(v) { forceSpeed = v; },
+    /** Gelo: fn(x, z) → 0..1 (null = sem gelo). */
+    setIce(fn) { iceFn = fn; iceK = 0; moveAngle = heading; },
+    get iceLevel() { return iceK; },
     setGhost(v) { ghost = !!v; },
     /** Troca o modelo das rodas (Shop): 0 = padrão. */
     /** Troca a carga do teto (Shop): 0 = caixas. */
