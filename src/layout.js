@@ -203,8 +203,8 @@ function setupVenice(kind) {
   HOUSE.forEach((row, r) => [...row].forEach((ch, c) => { if (ch === '#') houses.push(r * 8 + c); }));
   // praças: só as 6 quadras de cada lado se ligam (3 de pedregulho, 2 de mesas, 1 café), com as ruas entre elas
   const rect = (x0, z0, x1, z1) => ({ x0, z0, x1, z1 });
-  const plazaNE = [rect(X(5), Z(1), X(6) + L, Z(2) + L), rect(X(4), Z(2), X(5) + L, Z(2) + L), rect(X(5), Z(2), X(5) + L, Z(3) + L)];
-  const plazaSW = [rect(X(1), Z(5), X(2) + L, Z(6) + L), rect(X(2), Z(5), X(3) + L, Z(5) + L), rect(X(2), Z(4), X(2) + L, Z(5) + L)];
+  const plazaNE = [rect(X(5), Z(1), X(6) + L, Z(2) + L), rect(X(4), Z(2), X(5), Z(2) + L), rect(X(5), Z(2) + L, X(5) + L, Z(3) + L)];   // sem sobreposição
+  const plazaSW = [rect(X(1), Z(5), X(2) + L, Z(6) + L), rect(X(2) + L, Z(5), X(3) + L, Z(5) + L), rect(X(2), Z(4), X(2) + L, Z(5))];
   const zones = {                                           // laranja / roxo / verde (quadras)
     orange: [[2, 4], [2, 5], [3, 5], [4, 2], [5, 2], [5, 3]], purple: [[1, 5], [2, 6], [5, 1], [6, 2]], green: [[1, 6], [6, 1]] };
   // cafés: maiores e girados na diagonal, alinhados com a ponte (comprimento ao longo da direção da Rialto)

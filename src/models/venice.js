@@ -6,7 +6,7 @@ import { box, cyl, cone, sphere, at, mat, bakeStatic, dynamic, textTexture } fro
 import { LOT } from '../layout.js';
 import { VEN_FACADE, VEN_SHUTTER, VEN_AWNING } from '../data.js';
 
-const QUAY = '#bfb5a2', TILE = '#b5532f', WOOD = '#7a5434', WIN = '#2e3a46', FLOOR_H = 3.0;
+const QUAY = '#8d877c', TILE = '#b5532f', WOOD = '#7a5434', WIN = '#2e3a46', FLOOR_H = 3.0;
 // chão de pedregulho (textura desenhada uma vez, repetida a cada 4 unidades)
 let COBBLE = null;
 function cobbleMat() {
@@ -35,9 +35,10 @@ function narrow(root, x0, w, n, color, sh, opts = {}) {
   const add = (m, x, y, z, rx = 0, ry = 0, rz = 0) => root.add(at(m, x, y, z, rx, ry, rz));
   const H = n * FLOOR_H, cx = x0 + w / 2, D = VEN_Z1 - VEN_Z0, cz = (VEN_Z0 + VEN_Z1) / 2;
   add(box(w, H, D, color), cx, 0.15 + H / 2, cz);
-  add(box(w + 0.3, 0.25, D + 0.3, '#e8dfcc'), cx, 0.15 + H + 0.1, cz);                  // cornija
-  for (const s of [-1, 1]) add(box(w + 0.5, 0.22, D / 2 + 0.6, TILE), cx, 0.15 + H + 0.6, cz + s * D / 4, s * 0.32, 0, 0);   // telhado de telhas
-  add(box(w + 0.5, 0.3, 0.4, '#9a4127'), cx, 0.15 + H + 1.1, cz);
+  const ww = w - 0.04;                                                                // (não encosta na vizinha: nada de faces sobrepostas)
+  add(box(ww, 0.25, D + 0.3, '#e8dfcc'), cx, 0.15 + H + 0.1, cz);                    // cornija
+  for (const s of [-1, 1]) add(box(ww, 0.22, D / 2 + 0.6, TILE), cx, 0.15 + H + 0.6, cz + s * D / 4, s * 0.32, 0, 0);   // telhado de telhas
+  add(box(ww, 0.3, 0.4, '#9a4127'), cx, 0.15 + H + 1.1, cz);
   if (opts.chimney) add(box(0.6, 1.4, 0.6, '#b8a58a'), cx + w * 0.25, 0.15 + H + 1.2, cz - 1.5);
   const cols = w > 4.6 ? [cx - w * 0.26, cx + w * 0.26] : [cx];
   for (let f = 0; f < n; f++) {
@@ -57,8 +58,7 @@ export function buildVeniceLot(h) {
   root.name = 'ven:' + h.name;
   const add = (m, x, y, z, rx = 0, ry = 0, rz = 0) => root.add(at(m, x, y, z, rx, ry, rz));
   // ilha: base de pedra com borda de cais
-  add(box(LOT + 0.6, 0.9, LOT + 0.6, QUAY), LOT / 2, -0.3, LOT / 2);
-  root.add(cobble(LOT, LOT, LOT / 2, 0.16, LOT / 2));
+  add(box(LOT + 0.6, 0.9, LOT + 0.6, QUAY), LOT / 2, -0.3, LOT / 2);              // (os pedregulhos ficam por cima: terrain.js)
   // vizinhas (neutras, mais baixas) e o destino no meio, colado nelas
   const W = 5.4, xD = (LOT - W) / 2;
   narrow(root, VEN_X0, xD - VEN_X0, 2, '#d8cfc0', '#8a7f72', { chimney: true });
@@ -94,10 +94,14 @@ export function buildVeniceLot(h) {
     add(cyl(0.28, 0.2, 0.45, '#b5532f', 8), cx + s * 1.3, yB + 0.3, fz + 0.5);
     add(sphere(0.38, '#3f8f3a', 7, 5), cx + s * 1.3, yB + 0.75, fz + 0.5);
   }
-  if (h.items.includes('flowers')) for (let f = 1; f < h.floors; f++) for (const s of [-1, 1]) {
-    const y = 0.15 + f * FLOOR_H + 0.7;
-    add(box(1.1, 0.25, 0.35, '#7a5434'), cx + s * W * 0.26, y, fz + 0.25);
-    for (const dx of [-0.35, 0, 0.35]) add(sphere(0.17, ['#e8467a', '#ffd84a', '#ffffff'][(f + dx * 3 + 3) % 3 | 0], 6, 4), cx + s * W * 0.26 + dx, y + 0.2, fz + 0.3);
+  if (h.items.includes('flowers')) {                                                          // floreiras: nas janelas acima da sacada
+    const spots = [];
+    for (let f = 2; f < h.floors; f++) for (const sx of [-1, 1]) spots.push([cx + sx * W * 0.26, 0.15 + f * FLOOR_H + 0.7, fz + 0.25, 1.1]);
+    if (h.floors === 2) for (const sx of [-1, 1]) spots.push([cx + sx * 0.5, yB + 0.95, fz + 0.86, 0.7]);   // casa baixa: sobre o parapeito da sacada
+    spots.forEach(([x, y, z, w], k) => {
+      add(box(w, 0.25, 0.35, '#7a5434'), x, y, z);
+      for (const dx of w > 1 ? [-0.35, 0, 0.35] : [-0.18, 0.18]) add(sphere(0.17, ['#e8467a', '#ffd84a', '#ffffff'][(k + (dx > 0 ? 1 : 0) + (dx === 0 ? 2 : 0)) % 3], 6, 4), x + dx, y + 0.2, z + 0.05);
+    });
   }
   if (h.items.includes('laundry')) {                                                           // varal com roupas entre as janelas do alto
     const y = 0.15 + (h.floors - 1) * FLOOR_H + 2.6;

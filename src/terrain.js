@@ -179,10 +179,39 @@ function buildVenice(g) {
   }
   // praças: base de pedra; laranja = pedregulhos, roxo = mesas com sombrinhas, verde = café/restaurante
   for (const r of V.plazaNE.concat(V.plazaSW)) {
-    g.add(at(box(r.x1 - r.x0 + 0.6, 0.9, r.z1 - r.z0 + 0.6, '#bfb5a2'), (r.x0 + r.x1) / 2, -0.3, (r.z0 + r.z1) / 2));
-    g.add(cobble(r.x1 - r.x0, r.z1 - r.z0, (r.x0 + r.x1) / 2, 0.16, (r.z0 + r.z1) / 2));   // chão de pedregulho
+    g.add(at(box(r.x1 - r.x0 + 0.6, 0.9, r.z1 - r.z0 + 0.6, '#8d877c'), (r.x0 + r.x1) / 2, -0.3, (r.z0 + r.z1) / 2));   // base (rejunte escuro)
   }
   const cell = (r, c) => ({ x: lotX(c), z: lotZ(r) });
+  // pedregulhos de verdade: pedrinhas baixas (quadradas e retangulares), tamanhos e cinzas variados, em fileiras — instanciadas
+  {
+    const lands = V.houses.map(s => { const o = slotOrigin(s); return { x0: o.x - 0.3, z0: o.z - 0.3, x1: o.x + LOT + 0.3, z1: o.z + LOT + 0.3, house: o }; })
+      .concat(V.plazaNE.concat(V.plazaSW).map(r => ({ x0: r.x0 - 0.3, z0: r.z0 - 0.3, x1: r.x1 + 0.3, z1: r.z1 + 0.3 })));
+    const T = [];
+    for (const r of lands) for (let z = r.z0 + 0.3; z < r.z1 - 0.2; ) {
+      const dz = 0.42 + rand() * 0.38;
+      for (let x = r.x0 + 0.1 + rand() * 0.4; x < r.x1 - 0.3; ) {
+        const dx = rand() < 0.45 ? dz * (0.9 + rand() * 0.2) : dz * (1.3 + rand() * 0.9), cx = x + dx / 2, cz = z + dz / 2;
+        x += dx + 0.07;
+        if (cx > r.x1 - 0.2 || cz > r.z1 - 0.2) continue;
+        const o = r.house;
+        if (o && cx > o.x + 1.4 && cx < o.x + 15.8 && cz > o.z + 2.0 && cz < o.z + 12.0) continue;   // embaixo das casas
+        if (!o && !V.walkable(cx, cz)) continue;                                                // dentro do café
+        T.push([cx, cz, dx, dz]);
+      }
+      z += dz + 0.07;
+    }
+    const geo = new THREE.BoxGeometry(1, 1, 1), im = new THREE.InstancedMesh(geo, new THREE.MeshLambertMaterial({ color: '#ffffff' }), T.length);
+    const m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), c = new THREE.Color(), up = new THREE.Vector3(0, 1, 0);
+    T.forEach(([x, z, dx, dz], i) => {
+      const h = 0.05 + rand() * 0.05;
+      q.setFromAxisAngle(up, (rand() - 0.5) * 0.12);
+      m4.compose(new THREE.Vector3(x, 0.15 + h / 2, z), q, new THREE.Vector3(dx, h, dz));
+      im.setMatrixAt(i, m4);
+      const t = 0.5 + rand() * 0.32; c.setRGB(t, t * 0.985, t * 0.95); im.setColorAt(i, c);
+    });
+    im.receiveShadow = true; im.castShadow = false; im.userData.dynamic = true;                 // (fora da fusão de malhas)
+    g.add(im);
+  }
   // laranja: espaço aberto, só o pedregulho
   const UMB = ['#c8402f', '#3c8f52', '#2f6fb0', '#efbf2a', '#fff3d6'];
   for (const [r, c] of V.zones.purple) {                                                       // mesas, cadeiras e sombrinhas (maiores)
@@ -208,29 +237,21 @@ function buildVenice(g) {
     for (const fz of [-1, 1]) {                                                               // as duas frentes (dos dois lados)
       k.add(at(box(w - 1.2, 0.18, 2.2, '#3c8f52'), 0, 3.3, fz * (d / 2 + 0.95), fz * -0.3, 0, 0));
       for (let x = -w / 2 + 1.5; x < w / 2 - 1; x += 2.4) {
-        k.add(at(box(1.4, 2.3, 0.08, '#2e3a46'), x, 1.45, fz * (d / 2 + 0.04)));
-        k.add(at(box(1.2, 1.3, 0.08, '#2e3a46'), x, 5.0, fz * (d / 2 + 0.04)));
+        if (Math.abs(x) > 1.8) k.add(at(box(1.4, 2.3, 0.08, '#2e3a46'), x, 1.45, fz * (d / 2 + 0.04)));   // vitrines (o meio é a porta)
+        k.add(at(box(1.2, 1.3, 0.08, '#2e3a46'), x, 5.6, fz * (d / 2 + 0.04)));                         // janelas de cima (acima da placa)
       }
+      k.add(at(box(2.3, 2.9, 0.1, '#e8dfcc'), 0, 1.6, fz * (d / 2 + 0.05)));                        // porta de entrada: moldura,
+      k.add(at(box(1.8, 2.6, 0.14, '#6b3f22'), 0, 1.45, fz * (d / 2 + 0.08)));                       // folhas de madeira com vidro
+      for (const sx of [-0.45, 0.45]) k.add(at(box(0.6, 1.3, 0.16, '#9fc3d8'), sx, 1.85, fz * (d / 2 + 0.09)));
+      k.add(at(box(2.4, 0.18, 1.0, '#cfc6b4'), 0, 0.24, fz * (d / 2 + 0.5)));                        // degrau
       const tex = textTexture('CAFFÈ · RISTORANTE', { width: 768, height: 128, bg: '#2a5a3a', fg: '#fff3d6', font: 'bold 60px "Trebuchet MS", sans-serif' });
-      const sign = new THREE.Mesh(new THREE.PlaneGeometry(w - 3, 1.2), new THREE.MeshLambertMaterial({ map: tex, side: THREE.DoubleSide }));
-      sign.position.set(0, 4.2, fz * (d / 2 + 0.07)); if (fz < 0) sign.rotation.y = Math.PI; k.add(sign);
+      const sign = new THREE.Mesh(new THREE.PlaneGeometry(w - 3, 0.85), new THREE.MeshLambertMaterial({ map: tex, side: THREE.DoubleSide }));
+      sign.position.set(0, 4.25, fz * (d / 2 + 0.07));                                             // entre o toldo e as janelas de cima
+      if (fz < 0) sign.rotation.y = Math.PI; k.add(sign);
       for (const dx of [-4.5, 0, 4.5]) { k.add(at(cylLike(0.75, 0.1, '#f2efe6'), dx, 1.2, fz * (d / 2 + 3.6))); k.add(at(box(0.14, 1.1, 0.14, '#444'), dx, 0.7, fz * (d / 2 + 3.6))); }
     }
   }
-  for (const rc2 of V.cafes) {                                                                  // café / restaurante (prédio de 2 andares com toldo e mesas)
-    const cx = (rc2.x0 + rc2.x1) / 2, cz = (rc2.z0 + rc2.z1) / 2, w = rc2.x1 - rc2.x0, d = rc2.z1 - rc2.z0;
-    g.add(at(box(w, 6.2, d, '#e9c98f'), cx, 3.25, cz));
-    for (const s of [-1, 1]) g.add(at(box(w + 0.5, 0.22, d / 2 + 0.6, '#b5532f'), cx, 6.6, cz + s * d / 4, s * 0.32, 0, 0));
-    g.add(at(box(w - 1, 0.15, 1.8, '#3c8f52'), cx, 3.1, rc2.z1 + 0.8, 0.3, 0, 0));
-    for (let x = rc2.x0 + 1.4; x < rc2.x1 - 1; x += 2.4) {
-      g.add(at(box(1.4, 2.2, 0.08, '#2e3a46'), x, 1.4, rc2.z1 + 0.04));
-      g.add(at(box(1.2, 1.2, 0.08, '#2e3a46'), x, 4.6, rc2.z1 + 0.04));
-    }
-    const tex = textTexture('CAFFÈ · RISTORANTE', { width: 768, height: 128, bg: '#2a5a3a', fg: '#fff3d6', font: 'bold 60px "Trebuchet MS", sans-serif' });
-    const sign = new THREE.Mesh(new THREE.PlaneGeometry(w - 2, 1.0), new THREE.MeshLambertMaterial({ map: tex }));
-    sign.position.set(cx, 3.9, rc2.z1 + 0.06); g.add(sign);
-    for (const dx of [-3, 0, 3]) { g.add(at(cylLike(0.5, 0.08, '#f2efe6'), cx + dx, 0.9, rc2.z1 + 3.2)); g.add(at(box(0.1, 0.75, 0.1, '#444'), cx + dx, 0.5, rc2.z1 + 3.2)); }
-  }
+
   // Ponte de Rialto em diagonal (de uma praça à outra): pedra clara, grande arco, degraus e lojinhas cobertas
   const R = V.rialto, rg = new THREE.Group();
   rg.position.set(R.cx, 0, R.cz); rg.rotation.y = Math.atan2(R.ux, R.uz); g.add(rg);

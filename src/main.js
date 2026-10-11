@@ -231,9 +231,10 @@ function mooringStep(dt) {                     // true: a lancha está presa (o 
     van.teleport(van.x + (d.x - van.x) * a, van.z + (d.z - van.z) * a, van.heading + dh * a); van.stop();
     return true;
   }
-  if (leftPier && Math.hypot(van.x - leftPier.dock.x, van.z - leftPier.dock.z) > 9) leftPier = null;
+  if (leftPier && Math.hypot(van.x - leftPier.dock.x, van.z - leftPier.dock.z) > 14) leftPier = null;
   if (Math.abs(van.speed) < 1.2) for (const p of VENICE.piers) {
-    if (p !== leftPier && Math.hypot(van.x - p.dock.x, van.z - p.dock.z) < 5.5) { moored = p; moorK = 0; rope.visible = true; van.stop(); return true; }
+    const pcx = (p.x0 + p.x1) / 2, sameSide = Math.sign(van.x - pcx) === Math.sign(p.dock.x - pcx);   // (do lado do píer onde atraca: não o atravessa)
+    if (p !== leftPier && sameSide && Math.hypot(van.x - p.dock.x, van.z - p.dock.z) < 11) { moored = p; moorK = 0; rope.visible = true; van.stop(); return true; }
   }
   return false;
 }
