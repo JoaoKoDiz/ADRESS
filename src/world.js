@@ -3,7 +3,7 @@
 // e os moradores (criados sob demanda na primeira visita).
 import * as THREE from 'three';
 import {
-  HEDGE, ROAD, LOT, WALK, MAP, GRID, PLAZA, lotX, lotZ, slotOrigin, slotY, roadCenter, ENTRANCE, LOT_ANCHORS, SOLIDS, TERRAIN, CANAL, RAIL, VENICE, FAVELA,
+  HEDGE, ROAD, LOT, WALK, MAP, GRID, PLAZA, lotX, lotZ, slotOrigin, slotY, roadCenter, ENTRANCE, LOT_ANCHORS, SOLIDS, TERRAIN, CANAL, RAIL, VENICE, FAVELA, FLUX,
 } from './layout.js';
 import { HOUSES } from './data.js';
 import { buildTerrain } from './terrain.js';
@@ -89,7 +89,7 @@ function buildGround(venice = false) {
     const c = roadCenter(i);
     for (let j = 0; j < GRID; j++) {
       const a = lotX(j) - WALK + 1, b = lotX(j) + LOT + WALK - 1;
-      dashes(a, b, m => g.add(at(box(DASH, 0.02, LW, CENTER_LINE), m, 0.01, c)));   // ruas leste–oeste
+      if (!(FLUX && (i === FLUX.north || i === FLUX.south))) dashes(a, b, m => g.add(at(box(DASH, 0.02, LW, CENTER_LINE), m, 0.01, c)));   // ruas leste–oeste (a avenida tem faixas próprias)
       dashes(a, b, m => g.add(at(box(LW, 0.02, DASH, CENTER_LINE), c, 0.01, m)));   // ruas norte–sul
     }
   }
@@ -401,7 +401,7 @@ export function createWorld({ renderer, buildLot, buildResident, yardBuilders, p
   ground.traverse(o => { if (o.isMesh && outside.has(o.material)) o.receiveShadow = false; });
   if (!venice) { scene.add(baked(buildHedge(), true, true)); scene.add(baked(outskirts, false, false)); }   // Veneza: só laguna em volta
   if (PLAZA) scene.add(baked(buildPlaza(), true, true));
-  if (TERRAIN.kind !== 'flat' || CANAL || RAIL || VENICE) scene.add(baked(buildTerrain(), true, true));   // Bairros 9, 10 e 11
+  if (TERRAIN.kind !== 'flat' || CANAL || RAIL || VENICE || FLUX) scene.add(baked(buildTerrain(), true, true));   // Bairros 9, 10 e 11
 
   // os 16 lotes, construídos uma única vez (cada casa mantém sua identidade; só muda de lugar)
   // (só as casas deste bairro: `pool`; o array é indexado pelo índice da casa)

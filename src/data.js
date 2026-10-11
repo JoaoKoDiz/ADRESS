@@ -179,6 +179,20 @@ export const FAV_AWNING = { red: '#d23a2e', blue: '#2a64c2', green: '#2f9a4a' };
 /** Índices das casas do Morro em HOUSES. */
 export const FAVS = [...Array(64).keys()].map(k => 170 + k);
 
+// ---- Prédios contemporâneos (Nível 14, índices 234–245): vidro azulado, volumes brancos ou cinza desencontrados,
+// cobertura plana, marquise na entrada e vasos. Cada um tem 4 características (combinações diferentes → pista única).
+{
+  const names = ['Ed. Horizonte', 'Ed. Aurora', 'Ed. Prisma', 'Ed. Vértice', 'Ed. Atlântico', 'Ed. Mirante Azul', 'Ed. Lumen',
+    'Ed. Paralelo', 'Ed. Ônix', 'Ed. Brisa', 'Ed. Quadra', 'Ed. Zênite'];
+  const combos = [['white', 'blue', 'wood', 'trees'], ['gray', 'aqua', 'white', 'pergola'], ['white', 'aqua', 'wood', 'flag'],
+    ['gray', 'blue', 'white', 'trees'], ['white', 'blue', 'white', 'pergola'], ['gray', 'aqua', 'wood', 'trees'],
+    ['white', 'aqua', 'white', 'trees'], ['gray', 'blue', 'wood', 'flag'], ['white', 'blue', 'wood', 'pergola'],
+    ['gray', 'aqua', 'white', 'flag'], ['white', 'aqua', 'wood', 'pergola'], ['gray', 'blue', 'wood', 'trees']];
+  combos.forEach(([fac, glass, canopy, top], i) => HOUSES.push({ name: names[i], kind: 'mod', fac, glass, canopy, top }));
+}
+/** Índices dos prédios contemporâneos em HOUSES. */
+export const MODS = [...Array(12).keys()].map(k => 234 + k);
+
 export const ROOF_ITEMS = ['chimney', 'dish', 'solar', 'tank', 'rooster', 'kite', 'patch'];
 export const YARD_ITEMS = ['fruit', 'bare', 'cactus', 'sunflowers', 'ballbush', 'doghouse', 'pool', 'trampoline',
   'swing', 'bike', 'flamingo', 'gnome', 'clothesline', 'tires', 'fountain'];
@@ -200,6 +214,11 @@ HOUSES.forEach((h, i) => {
   if (h.kind === 'ven') {
     h.f = [];
     h.tags = ['vfac:' + h.fac, 'vsh:' + h.sh, 'vfl:' + h.floors].concat(h.arch ? ['varch'] : [], h.awning ? ['vaw:' + h.awning] : [], h.items.map(k => 'v:' + k));
+    h.roofItems = []; h.yardItems = [];
+    return;
+  }
+  if (h.kind === 'mod') {
+    h.f = []; h.tags = ['mfac:' + h.fac, 'mglass:' + h.glass, 'mcan:' + h.canopy, 'mtop:' + h.top];
     h.roofItems = []; h.yardItems = [];
     return;
   }
@@ -268,6 +287,10 @@ export const PHRASE = {
   'loc:rialto': 'perto da Ponte de Rialto', 'loc:cafe': 'perto do café',
   'loc:stopN': 'perto da parada do bonde da entrada', 'loc:stopS': 'perto da parada do bonde dos galpões', 'loc:stopW': 'perto da parada oeste do bonde', 'loc:stopE': 'perto da parada leste do bonde',
   'loc:stopSul': 'perto da parada sul do bonde', 'loc:stopC': 'perto da parada central do bonde',
+  // prédios contemporâneos (Nível 14)
+  'mfac:white': 'volumes brancos', 'mfac:gray': 'volumes cinza-escuros', 'mglass:blue': 'vidros azuis', 'mglass:aqua': 'vidros verde-água',
+  'mcan:wood': 'marquise de madeira', 'mcan:white': 'marquise branca', 'mtop:trees': 'árvores na cobertura',
+  'mtop:pergola': 'um pergolado na cobertura', 'mtop:flag': 'um mastro com bandeira no topo',
   // Morro
   'ffac:blue': 'fachada azul', 'ffac:yellow': 'fachada amarela', 'ffac:coral': 'fachada coral', 'ffac:green': 'fachada verde',
   'ffac:beige': 'fachada bege', 'ffac:brick': 'tijolo aparente', 'ffl:1': 'um andar só', 'ffl:2': 'dois andares', 'ffl:3': 'três andares',

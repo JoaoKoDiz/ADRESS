@@ -25,6 +25,7 @@ export let CANAL = null;        // Bairro 10: { x0, x1, bridges: [linhas de rua]
 // Terreno (Bairro 9): altura do chão em (x, z). Fora do Bairro 9 é sempre 0.
 export let VENICE = null;        // Nível 12 (Veneza): canais no lugar das ruas, canal principal sinuoso, vielas, pracinha e pontes
 export let RAIL = null;          // Bairro 11: percurso do bondinho pelas ruas (trilhos no asfalto) e as 2 paradas
+export let FLUX = null;          // Nível 14 (Fluxo): avenida central (ruas 5 e 6, mão única) com canteiro na fileira 5, cruzamentos e retornos
 export let FAVELA = null;        // Nível 13 (Morro): plano fixo sem grade (favelaPlan.js); os "lotes" são as casas de entrega
 export const TERRAIN = { kind: 'flat', H1: 3, H2: 6, ramps: [], stairs: [], h: () => 0 };
 import { planFavela, FAV } from './favelaPlan.js';
@@ -66,8 +67,8 @@ export const SOLIDS = [];
 
 /** Troca a grade do bairro e refaz os obstáculos-base (lotes, praça e sebe). */
 export function configureGrid(kind) {
-  GRID = kind === 'plaza6' || kind === 'grid6s' || kind === 'city6' || kind === 'city7' ? 6 : kind === 'city8' || kind === 'hill8' || kind === 'canal8' || kind === 'rail8' || kind === 'venice8' || kind === 'favela8' ? 8 : kind === 'grid5' ? 5 : 4;
-  BUILD_H = kind === 'city8' || kind === 'canal8' || kind === 'rail8' ? 31 : kind === 'hill8' ? 23 : kind === 'favela8' ? 20 : kind === 'city6' || kind === 'city7' ? 16.5 : 9.2;
+  GRID = kind === 'plaza6' || kind === 'grid6s' || kind === 'city6' || kind === 'city7' ? 6 : kind === 'city8' || kind === 'hill8' || kind === 'canal8' || kind === 'rail8' || kind === 'venice8' || kind === 'favela8' ? 8 : kind === 'flux10' ? 10 : kind === 'grid5' ? 5 : 4;
+  BUILD_H = kind === 'city8' || kind === 'canal8' || kind === 'rail8' ? 31 : kind === 'hill8' ? 23 : kind === 'favela8' ? 20 : kind === 'flux10' ? 16.5 : kind === 'city6' || kind === 'city7' ? 16.5 : 9.2;
   // praça: bloco 2×2 central (linhas e colunas 2–3 do 6×6)
   const plazaSlots = kind === 'plaza6' ? [2 * GRID + 2, 2 * GRID + 3, 3 * GRID + 2, 3 * GRID + 3] : [];
   ENTRANCE.road = kind === 'canal8' ? 2 : Math.floor(GRID / 2);   // rua do meio (no 5×5, a 3ª rua); no Bairro 10 o meio é o canal
@@ -82,6 +83,7 @@ export function configureGrid(kind) {
     ? { x0: roadCenter(3) + ROAD / 2, x1: roadCenter(5) - ROAD / 2, cols: [3, 4], bridges: [1, 4, 7], foot: [lotZ(2) + LOT / 2, lotZ(5) + LOT / 2] }
     : null;
   FAVELA = kind === 'favela8' ? planFavela(HEDGE * 2 + ROAD * 9 + LOT * 8, HEDGE) : null;
+  setupFlux(kind);
   setupTerrain(kind);
   setupRail(kind);
   setupVenice(kind);
@@ -95,6 +97,7 @@ export function configureGrid(kind) {
 /** Lotes que podem ter construção (sem praça e sem o canal). */
 function baseSlots() {
   if (FAVELA) return [...FAVELA.spots.keys()];
+  if (FLUX) return [...Array(GRID * GRID).keys()].filter(s => Math.floor(s / GRID) !== FLUX.row && !FLUX.parks.includes(s));
   return [...Array(GRID * GRID).keys()].filter(s => !(PLAZA && PLAZA.slots.includes(s)) && !(CANAL && CANAL.cols.includes(s % GRID)) && !(RAIL && RAIL.reserved.includes(s)) && !(VENICE && VENICE.nonHouse.includes(s)));
 }
 /** Postos (e galpões, Bairro 10) em pares de lotes vizinhos ([s, s+1], mesma linha). O galpão fica no lote da esquerda
@@ -325,6 +328,7 @@ function rebuildBaseSolids() {
     for (const r of VENICE.plazaNE.concat(VENICE.plazaSW)) SOLIDS.push({ x0: r.x0 - WALK, z0: r.z0 - WALK, x1: r.x1 + WALK, z1: r.z1 + WALK, vanOnly: true });
   }
   if (FAVELA) favelaSolids();
+  if (FLUX) fluxSolids();
   if (TERRAIN.kind === 'hill') {                   // muros das encostas (nas ladeiras não há muro; nas escadarias, só para a van)
     const isRamp = (j, i) => TERRAIN.ramps.some(r => r.j === j && r.i === i), isStair = (j, i) => TERRAIN.stairs.some(r => r.j === j && r.i === i);
     const wall = (j, i, top) => { const z = top ? rc(i + 1) - hr : rc(i) + hr; SOLIDS.push({ x0: rc(j) - hr, x1: rc(j) + hr, z0: z - 0.3, z1: z + 0.3, vanOnly: isStair(j, i) }); };
@@ -333,6 +337,20 @@ function rebuildBaseSolids() {
     const xb = rc(4) + hr;
     for (const i of [7, 8]) SOLIDS.push({ x0: xb - 0.3, x1: xb + 0.3, z0: rc(i) - hr, z1: rc(i) + hr });
   }
+}
+// ---- Nível 14 (Fluxo): 10×10; a avenida são as ruas 5 (mão única para oeste) e 6 (para leste), alargadas para dentro da
+// fileira de quadras 5, que vira o canteiro central. O canteiro só abre nos 3 cruzamentos com semáforo e nos 2 retornos (pontas).
+function setupFlux(kind) {
+  if (kind !== 'flux10') { FLUX = null; return; }
+  const hr = ROAD / 2, W = 4;
+  FLUX = { north: 5, south: 6, row: 5, widen: W, gaps: [0, 2, 5, 8, 10], lights: [2, 5, 8],
+    parks: [3, 8, 11, 16, 24, 29, 32, 37, 61, 67, 73, 78, 84, 86, 92, 97],     // pracinhas e estacionamentos (fixos)
+    median: { z0: roadCenter(5) + hr + W, z1: roadCenter(6) - hr - W } };
+}
+function fluxSolids() {
+  const hr = ROAD / 2, m = FLUX.median, g = FLUX.gaps;
+  for (let k = 0; k < g.length - 1; k++) SOLIDS.push({ x0: roadCenter(g[k]) + hr, x1: roadCenter(g[k + 1]) - hr, z0: m.z0, z1: m.z1 });
+  for (const s of FLUX.parks) { const o = slotOrigin(s); SOLIDS.push({ x0: o.x - WALK, z0: o.z - WALK, x1: o.x + LOT + WALK, z1: o.z + LOT + WALK }); }
 }
 /** Morro: muros de contenção nas bordas das faixas (abertos nas ladeiras e escadarias), laterais das ladeiras e escadarias,
  *  escadarias barradas para a van, mercadinho, quadra e pracinha (só a pé) e as casas de enchimento. */

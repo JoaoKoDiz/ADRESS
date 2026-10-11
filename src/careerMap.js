@@ -49,7 +49,7 @@ function roadGeometry(curve, samples) {
 //   canal    — canal no meio, pontes e um galpão (Bairro 10, Travessia)
 //   rail     — trilhos em L com curva, trem e estação (Bairro 11, Trilhos)
 //   venice   — canais, fachadas venezianas coloridas e a Ponte de Rialto (Nível 12, Veneza)
-const MINI_KINDS = ['houses', 'plaza', 'barriers', 'trucks', 'gas', 'city', 'jam', 'jam8', 'hill', 'venice', 'canal', 'rail', 'favela'];   // 13 = Morro   // 10 = Veneza, 11 = Travessia, 12 = Trilhos
+const MINI_KINDS = ['houses', 'plaza', 'barriers', 'trucks', 'gas', 'city', 'jam', 'jam8', 'hill', 'venice', 'canal', 'rail', 'favela', 'flux'];   // 13 = Morro, 14 = Fluxo   // 10 = Veneza, 11 = Travessia, 12 = Trilhos
 
 /** Bairro em miniatura do tipo `kind`: base de grama, sebe, ruas e o que caracteriza o bairro. gray = fase bloqueada. */
 function miniNeighborhood(kind, colors, gray = false) {
@@ -132,6 +132,18 @@ function miniNeighborhood(kind, colors, gray = false) {
     return bakeStatic(g);
   }
 
+  if (kind === 'flux') {                         // Nível 14 (Fluxo): avenida larga com canteiro, semáforo, carros e um prédio de vidro
+    add(box(14, 0.42, 4.4, ROADC), 0, 0.22, 0.4);
+    add(box(2.2, 0.42, 14, ROADC), -3.5, 0.22, 0); add(box(2.2, 0.42, 14, ROADC), 3.5, 0.22, 0);
+    add(box(4.6, 0.5, 0.8, G('#6fae4f', '#9c9c9c')), -0.1, 0.45, 0.4); add(box(4.6, 0.5, 0.8, G('#6fae4f', '#9c9c9c')), 5.6, 0.45, 0.4); add(box(1.6, 0.5, 0.8, G('#6fae4f', '#9c9c9c')), -6.2, 0.45, 0.4);
+    for (const [x, z, c] of [[-5.5, -0.5, '#d8473a'], [1.4, -0.5, '#3a78d4'], [-1.6, 1.3, '#efbf2a'], [5.4, 1.3, '#3c9d55']]) { add(box(1.3, 0.5, 0.7, G(c, '#8a8a8a')), x, 0.65, z); add(box(0.7, 0.35, 0.6, G('#dfe6ee', '#b0b0b0')), x - 0.1, 1.05, z); }
+    add(box(0.12, 1.8, 0.12, G('#3a3d44', '#6a6a6a')), -2.2, 1.3, -1.6); add(box(0.35, 0.8, 0.35, G('#2a2d33', '#5a5a5a')), -2.2, 2.4, -1.6);
+    add(sphere(0.12, G('#22e05a', '#8a8a8a'), 6, 4), -2.2, 2.2, -1.42);
+    add(box(2.6, 4.2, 2.4, G('#f1f1ec', '#c8c8c8')), 0, 2.5, -4.6); add(box(2.2, 3.0, 2.0, G('#f1f1ec', '#c8c8c8')), 0.4, 6.1, -4.9);
+    add(box(2.0, 2.8, 0.08, G('#4f86c6', '#8f8f8f')), 0.4, 6.1, -3.86); add(box(2.2, 1.4, 0.08, G('#4f86c6', '#8f8f8f')), 0, 1.4, -3.36);
+    house(5.4, -4.6, roof(0), 0.8); house(-5.4, -4.6, roof(1), 0.8); house(-5.4, 4.8, roof(2), 0.8); house(0, 4.8, roof(3), 0.8); house(5.4, 4.8, roof(0), 0.8);
+    return bakeStatic(g);
+  }
   if (kind === 'favela') {                       // Nível 13 (Morro): 3 patamares, rua em zigue-zague e casinhas coloridas de laje
     const WALLC = G('#9a9285', '#a0a0a0'), TOP = G('#b3a993', '#b0b0b0');
     add(box(13.4, 1.4, 8.6, WALLC), 0, 0.4 + 0.7, -2.3); add(box(13.4, 0.1, 8.6, TOP), 0, 1.85, -2.3);
@@ -297,7 +309,7 @@ function boardTexture(gray = false) {
 }
 
 const PALETTES = [['red', 'blue', 'yellow', 'green'], ['purple', 'red', 'gray', 'yellow', 'blue', 'green', 'red', 'yellow'], ['blue', 'green', 'red', 'purple'],
-  ['yellow', 'gray', 'blue', 'red'], ['green', 'purple', 'yellow', 'blue'], ['red'], ['blue'], ['green'], ['red', 'blue', 'yellow', 'purple'], ['red'], ['blue', 'green', 'red'], ['green', 'yellow', 'purple'], ['red']];
+  ['yellow', 'gray', 'blue', 'red'], ['green', 'purple', 'yellow', 'blue'], ['red'], ['blue'], ['green'], ['red', 'blue', 'yellow', 'purple'], ['red'], ['blue', 'green', 'red'], ['green', 'yellow', 'purple'], ['red'], ['blue', 'red', 'yellow', 'green']];
 
 /** Miniaturas (data URL) dos 8 bairros, desenhadas uma vez num renderizador próprio. Usadas na seleção do modo Livre. */
 export function renderMiniThumbnails(w = 480, h = 360) {
@@ -349,7 +361,7 @@ export function createCareerMap(stageEl, audio) {
   scene.add(ground);
 
   // estrada com curvas suaves
-  const pts = [[0, 0], [30, -14], [62, 6], [94, -10], [126, 10], [158, -6], [190, 8], [222, -4], [254, 10], [286, -6], [318, 8], [350, -6], [382, 8]]
+  const pts = [[0, 0], [30, -14], [62, 6], [94, -10], [126, 10], [158, -6], [190, 8], [222, -4], [254, 10], [286, -6], [318, 8], [350, -6], [382, 8], [414, -6]]
     .map(([x, z]) => new THREE.Vector3(x, 0, z));
   const curve = new THREE.CatmullRomCurve3(pts, false, 'centripetal');
   const length = curve.getLength();

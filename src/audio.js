@@ -8,7 +8,7 @@ const ENGINE_LP = 250, ENGINE_LP_RANGE = 120;     // filtro passa-baixa abre um 
 
 export function createAudio() {
   const Ctor = typeof window !== 'undefined' && (window.AudioContext || window.webkitAudioContext);
-  let ac = null, master = null, eng = null, broken = !Ctor;
+  let ac = null, master = null, eng = null, traf = null, trafGain = -1, broken = !Ctor;
   // últimos alvos agendados no motor (evita empilhar automações a cada quadro)
   let engGain = -1, engHz = -1;
 
@@ -34,6 +34,12 @@ export function createAudio() {
     o.connect(f); o2.connect(f); f.connect(g); g.connect(master);
     o.start(); o2.start();
     eng = { o, o2, f, g };
+    // trânsito (Nível 14): um ronco mais grave, mais baixo, que cresce com o carro mais perto
+    const t1 = ac.createOscillator(), t2 = ac.createOscillator(), tf = ac.createBiquadFilter(), tg = ac.createGain();
+    t1.type = 'sawtooth'; t2.type = 'triangle'; t1.frequency.value = 58; t2.frequency.value = 87;
+    tf.type = 'lowpass'; tf.frequency.value = 220; tg.gain.value = 0;
+    t1.connect(tf); t2.connect(tf); tf.connect(tg); tg.connect(master); t1.start(); t2.start();
+    traf = { t1, t2, tg };
   }
 
   /** Nota curta com ataque rápido e decaimento exponencial. `glide` multiplica a frequência ao longo da nota. */
@@ -142,6 +148,13 @@ export function createAudio() {
       tone(1568, 0.36, 0.5, 'sine', 0.03);
     }),
 
+    /** Trânsito: k = 0 (nenhum carro perto) … 1 (carro colado); hz varia um pouco com a velocidade dele. */
+    traffic: safe((k, speed01 = 0.5) => {
+      if (!traf) return;
+      const gain = 0.03 * Math.max(0, Math.min(1, k)), t = ac.currentTime;
+      if (Math.abs(gain - trafGain) > 0.0008) { trafGain = gain; traf.tg.gain.setTargetAtTime(gain, t, 0.25); }
+      traf.t1.frequency.setTargetAtTime(52 + 30 * speed01, t, 0.3); traf.t2.frequency.setTargetAtTime(80 + 40 * speed01, t, 0.3);
+    }),
     /** Ronco do motor: segue a velocidade (0..1) enquanto `running`; senão desaparece suavemente. */
     engine: safe((running, speed01) => {
       if (!eng) return;

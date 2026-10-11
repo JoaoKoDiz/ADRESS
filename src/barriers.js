@@ -125,8 +125,8 @@ function buildHole() {
 }
 
 /** Engarrafamento: fila de carros nas duas faixas ao longo de um trecho de rua (ao longo do X local). */
-const CAR_COLORS = ['#d8473a', '#3a78d4', '#efbf2a', '#3c9d55', '#f2f2f2', '#8a55c4', '#ff8a1e', '#2b2d33', '#e86aa0'];
-function buildCar() {
+export const CAR_COLORS = ['#d8473a', '#3a78d4', '#efbf2a', '#3c9d55', '#f2f2f2', '#8a55c4', '#ff8a1e', '#2b2d33', '#e86aa0'];
+export function buildCar() {
   const g = new THREE.Group();
   const body = at(box(4.4, 0.9, 1.9, CAR_COLORS[0]), 0, 0.85, 0);
   g.add(body);
