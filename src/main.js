@@ -50,6 +50,9 @@ import { createTalkBox, lineDuration } from './talkBox.js';
 import { whiten } from './whiteout.js';
 import { createChurchMusic } from './churchMusic.js';
 import talkTrackUrl from '../assets/church-talk.mp3';
+import tarantellaUrl from '../assets/tarantella.mp3';
+import sunnyUrl from '../assets/sunnyside-farm.mp3';
+import snowyUrl from '../assets/snowy.mp3';
 import { buildChurch, setChurchOpacity, CHURCH_SOLIDS, CHURCH_CAM } from './models/church.js';
 import { buildBell, BELL_SPOT } from './models/bell.js';
 import { createBackButton } from './backButton.js';
@@ -692,7 +695,7 @@ let dialog = null, pending = -1, nearHouse = -1;
 let actionLock = 0;                 // depois de fechar uma reclamação, E não toca a mesma campainha de novo na hora
 const setState = s => { state = s; stateT = 0; if (s === 'title' || s === 'mapIn' || s === 'map') music.setTrack(null); };   // fora da partida: a música padrão
 // Músicas próprias de alguns bairros (assets/): começam sozinhas ao entrar no bairro (Livre e Carreira)
-const LEVEL_TRACKS = { venice8: 'assets/tarantella.mp3', farm10: 'assets/sunnyside-farm.mp3', snow8: 'assets/snowy.mp3' };
+const LEVEL_TRACKS = { venice8: tarantellaUrl, farm10: sunnyUrl, snow8: snowyUrl };   // (embutidas no html: funcionam em qualquer lugar)
 
 // Posto de gasolina: parado embaixo da cobertura, ao lado das bombas, E abastece (não conta como entrega).
 // Para abastecer de novo, a van precisa sair de perto das bombas e voltar.
