@@ -55,7 +55,8 @@ import tarantellaUrl from '../assets/tarantella.mp3';
 import sunnyUrl from '../assets/sunnyside-farm.mp3';
 import snowyUrl from '../assets/snowy.mp3';
 import { buildChurch, setChurchOpacity, CHURCH_SOLIDS, CHURCH_CAM } from './models/church.js';
-import { buildBell, BELL_SPOT } from './models/bell.js';
+import { buildBell, BELL_SPOT, BELL2_X } from './models/bell.js';
+import { buildPewReader } from './models/reader.js';
 import { createBackButton } from './backButton.js';
 import { createMissions, createMissionsButton, MISSIONS } from './missions.js';
 import { createCareer } from './career.js';
@@ -657,7 +658,7 @@ function startFree(mode = 'free') {
   gameMode = mode;
   if (!COMPOSED.includes(neighborhood)) setupGrid4();   // Bairro 1 tem a casa fixa; o 3 (mesma grade) não
   resetGates();
-  setupChurch();
+  setupChurch(); setupVeniceK();
   if (mode === 'career') career.startMatch(careerLevel); else career.stop();
   music.setTrack(LEVEL_TRACKS[neighborhood] || null, true);   // Veneza, Colheita e Nevasca: a faixa do bairro já tocando
   ENTRANCE_WALL.x0 = ENTRANCE.x0; ENTRANCE_WALL.x1 = ENTRANCE.x1;   // a entrada depende do bairro
@@ -969,7 +970,7 @@ function endRoofScene() {
 const ROOF_KEY = 'adress.l6.roofTalk';
 const roofDone = () => { try { return localStorage.getItem(ROOF_KEY) === '1'; } catch (e) { return false; } };
 const CHURCH_Z = 1150;                                  // distância ao sul da sebe (bem longe: ~1 min dirigindo)
-let church = null, churchBell = null, churchOn = false, churchT = 0, churchA = 0, churchShown = false;
+let church = null, churchBell = null, greenBell = null, churchOn = false, churchT = 0, churchA = 0, churchShown = false;
 const churchSolids = [];
 function setupChurch() {
   for (const b of churchSolids) { const i = SOLIDS.indexOf(b); if (i >= 0) SOLIDS.splice(i, 1); }
@@ -986,10 +987,15 @@ function setupChurch() {
   if (!church) {
     church = buildChurch();
     churchBell = buildBell(); church.add(churchBell);                // sino azul (1ª conversa): cai no fim da cena de saída
-    church.userData.materials.push(...churchBell.userData.materials);
+    greenBell = buildBell('#00C000', BELL2_X); church.add(greenBell);   // sino verde (2ª conversa): 2º vão do corredor
+    church.userData.materials.push(...churchBell.userData.materials, ...greenBell.userData.materials);
   }
-  churchBell.userData.bell.position.set(0, 0, 0); churchBell.userData.bell.rotation.set(0, 0, 0);
-  churchBell.visible = false;                           // só aparece na cena de saída (fora do quadro, antes de a câmera subir)
+  const st = churchStage();
+  for (const b of [churchBell, greenBell]) { b.userData.bell.position.set(0, 0, 0); b.userData.bell.rotation.set(0, 0, 0); b.visible = false; }
+  // só aparecem na cena de saída (fora do quadro, antes de a câmera subir); depois da 1ª conversa (já na 2ª etapa), o azul fica caído
+  if (st >= 2 && churchTalkDone()) { churchBell.visible = true; churchBell.userData.bell.position.y = -bellDrop(churchBell); }
+  if (st >= 3) { greenBell.visible = true; greenBell.userData.bell.position.y = -bellDrop(greenBell); }
+  church.userData.pewK.visible = st < 3;                // depois da despedida ele já foi embora
   church.position.set(MAP_W() / 2, 0, MAP_W() + CHURCH_Z); church.rotation.y = Math.PI;   // fachada virada para o bairro (norte)
   church.visible = false;
   world.scene.add(church);
@@ -1095,6 +1101,26 @@ function updateChurch(dt) {
 const CHURCH_TALK_KEY = 'adress.church.talk1';
 const churchTalkDone = () => { try { return localStorage.getItem(CHURCH_TALK_KEY) === '1'; } catch (e) { return false; } };
 const P = { p: 0.65 };                                  // pausa dentro da fala ([...] do roteiro)
+// 2ª visita (depois do encontro em Veneza): outra conversa, sem repetir a 1ª nem a queda do sino azul; no fim cai o sino verde
+const CHURCH2_KEY = 'adress.church.talk2', VENICE_TALK_KEY = 'adress.venice.talk1';
+const flagOn = k => { try { return localStorage.getItem(k) === '1'; } catch (e) { return false; } };
+/** 1 = 1ª conversa; 2 = despedida (depois de Veneza); 3 = concluída (ele já foi embora; nada se repete). */
+const churchStage = () => flagOn(CHURCH2_KEY) ? 3 : flagOn(VENICE_TALK_KEY) ? 2 : 1;
+const bellDrop = b => BELL_SPOT.y - b.userData.h - BELL_SPOT.floor;
+const CHURCH2_LINES = [
+  ['Você veio. ', P, 'Que bom.'],
+  ['Eu não queria ir embora sem me despedir direito.'],
+  ['Eu queria poder ficar mais um pouco. ', P, 'Agora que você veio.'],
+  ['Passei tanto tempo querendo ter alguém que me procurasse ', P, 'sem precisar de nada.'],
+  ['E agora que tenho, ', P, 'sou eu quem precisa ir.'],
+  ['Surgiu uma oportunidade longe daqui. ', P, 'Algo que eu também esperei por muito tempo.'],
+  ['Eu tentei encontrar um jeito de ficar ', P, 'e ainda seguir esse caminho. Mas não consegui.'],
+  ['Não é por algo que você fez. ', P, 'Sua companhia me faz bem. É justamente por isso que está sendo difícil.'],
+  ['Não sei se o que me espera vai ser melhor. ', P, 'Só sei que, se eu não for, vou continuar me perguntando.'],
+  ['Queria ter recebido você num momento em que eu pudesse ficar.'],
+  ['Obrigado por ter vindo. ', P, 'Mesmo que hoje eu tenha menos tempo do que gostaria.'],
+  ['Ainda vamos nos encontrar. ', P, 'Espero que, da próxima vez, eu possa ouvir mais sobre você.'],
+];
 const CHURCH_LINES = [
   ['Você encontrou o caminho.'],
   ['Dessa vez, ', P, 'não tenho nenhuma encomenda esperando. ', P, 'Pode descansar um pouco.'],
@@ -1120,8 +1146,7 @@ const CINE = {
 const _frus = new THREE.Frustum(), _m4 = new THREE.Matrix4(), _bb = new THREE.Box3();
 let cine = null;                                        // { phase, t, talkT, total, count, restore, wp, camPos, camLook }
 let unwhite = null;
-const nearChurchK = () => churchShown && state === 'walk' && !cine && !approachLock() &&   // pode repetir (o progresso continua salvo)
- 
+const nearChurchK = () => churchShown && state === 'walk' && !cine && !approachLock() && churchStage() < 3 &&   // 1ª: pode repetir; a despedida, não
   Math.hypot(walker.x - CL(K_PEW.x, 0, K_PEW.z).x, walker.z - CL(K_PEW.x, 0, K_PEW.z).z) < 3.4;
 const ease = x => x * x * (3 - 2 * x);
 function setCam(posL, lookL) { cine.camPos.copy(CL(...posL)); cine.camLook.copy(CL(...lookL)); }
@@ -1129,20 +1154,21 @@ function startChurchTalk() {
   const p = CL(CINE.player.x, 0, CINE.player.z), k = CL(K_PEW.x, 0, K_PEW.z);
   walker.pose(p.x, p.z, Math.atan2(k.z - p.z, k.x - p.x));
   van.stop();
-  const total = CHURCH_LINES.reduce((t, l) => t + lineDuration(l), 0);
-  cine = { phase: 'talk', t: 0, total, count: -1, wp: 0, camPos: new THREE.Vector3(), camLook: new THREE.Vector3() };
+  const stage = churchStage(), lines = stage === 2 ? CHURCH2_LINES : CHURCH_LINES;
+  const total = lines.reduce((t, l) => t + lineDuration(l), 0);
+  cine = { phase: 'talk', t: 0, total, count: -1, wp: 0, stage, bell: stage === 2 ? greenBell : churchBell, camPos: new THREE.Vector3(), camLook: new THREE.Vector3() };
   setCam(...CINE.camA);
   setState('cine');
-  talkBox.show(CHURCH_LINES, churchTalkEnd, { auto: true, onAdvance: i => {
+  talkBox.show(lines, churchTalkEnd, { auto: true, onAdvance: i => {
     if (i !== 6) return;                                // terminou a 6ª fala: começa a contagem para voltar ao bairro
-    const rest = CHURCH_LINES.slice(6).reduce((t, l) => t + lineDuration(l), 0);
+    const rest = lines.slice(6).reduce((t, l) => t + lineDuration(l), 0);
     let path = 0, prev = CINE.player;
     for (const [x, z] of CINE.walk) { path += Math.hypot(x - prev.x, z - prev.z); prev = { x, z }; }
     cine.count = Math.ceil(rest + 3.6 + path / 6.5 + 1.5 + BELL_END + 1.6 + 8);   // falas + volta da câmera + caminhada + entrar + van/sino + fade + folga
   } });
 }
 function churchTalkEnd() {                              // última fala lida: grava o progresso; câmera volta ao jogador, já branco
-  try { localStorage.setItem(CHURCH_TALK_KEY, '1'); } catch (e) { /* */ }
+  try { localStorage.setItem(cine.stage === 2 ? CHURCH2_KEY : CHURCH_TALK_KEY, '1'); } catch (e) { /* */ }
   if (!unwhite) unwhite = whiten(walker.object, van.object);   // (normalmente já ficou branco durante a aproximação)
   const v = CL(CINE.van[0], 0, CINE.van[1]);
   van.teleport(v.x, v.z, -Math.PI / 2);                 // virada para o norte (o bairro)
@@ -1151,6 +1177,7 @@ function churchTalkEnd() {                              // última fala lida: gr
 }
 function restoreLook() { if (unwhite) { unwhite(); unwhite = null; } }
 function churchCineEnd() {                              // de volta ao bairro: cores, câmera e controles normais
+  if (cine && cine.stage === 2 && church) church.userData.pewK.visible = false;   // despedida: ele já foi embora
   restoreLook(); talkBox.warn(null); talkBox.hide();
   cine = null; walker.show(false);
   const z = MAP_W() - HEDGE - 3.9, x = roadCenter(Math.floor(GRID / 2));
@@ -1206,16 +1233,17 @@ function updateChurchCine(dt) {
     }
   } else if (c.phase === 'drive') {                     // a van branca sai em direção ao bairro…
     van.update(dt, { x: 0, z: -1 }, 'car');
-    churchBell.visible = true;                          // a câmera ainda olha para baixo: ele já está pendurado quando ela subir
-    // …a câmera fica no lugar e só gira para cima até o sino azul; ele aparece um instante, solta-se e cai (sem som)
+    const bell = c.bell;
+    bell.visible = true;                                // a câmera ainda olha para baixo: ele já está pendurado quando ela subir
+    // …a câmera fica no lugar e só gira para cima até o sino (azul na 1ª, verde na 2ª); ele aparece um instante, solta-se e cai (sem som)
     if (c.t > BELL_TILT0) {
-      if (!c.dirB) { c.dirB = c.camLook.clone().sub(c.camPos).normalize(); c.dirS = CL(BELL_SPOT.x, BELL_SPOT.y - churchBell.userData.h * 0.6, BELL_SPOT.z).sub(c.camPos).normalize(); }
+      if (!c.dirB) { c.dirB = c.camLook.clone().sub(c.camPos).normalize(); c.dirS = CL(bell.position.x, BELL_SPOT.y - bell.userData.h * 0.6, BELL_SPOT.z).sub(c.camPos).normalize(); }
       const k = ease(Math.min(1, (c.t - BELL_TILT0) / BELL_TILT));
       c.camLook.copy(c.camPos).add(c.dirB.clone().lerp(c.dirS, k).normalize());
     }
-    const ft = c.t - BELL_FALL0, b = churchBell.userData.bell;
+    const ft = c.t - BELL_FALL0, b = bell.userData.bell;
     if (ft > 0) {
-      const drop = BELL_SPOT.y - churchBell.userData.h - BELL_SPOT.floor, fallT = Math.sqrt(2 * drop / 22);
+      const drop = bellDrop(bell), fallT = Math.sqrt(2 * drop / 22);
       if (ft < fallT) { b.position.y = -11 * ft * ft; b.rotation.z = 0.05 * ft; }   // queda livre, quase reta
       else {                                            // bateu no piso do corredor: quique curto, balança e fica parado ali
         const u = Math.min(1, (ft - fallT) / 0.9);
@@ -1230,6 +1258,69 @@ function updateChurchCine(dt) {
 // fim da cena de saída: a van parte (0–1,6 s), a câmera gira para cima até o sino (2,4 s), ele fica parado um instante,
 // solta-se e cai no piso do corredor, fica ali um instante e só então vem o fade-out
 const BELL_TILT0 = 1.6, BELL_TILT = 2.4, BELL_FALL0 = BELL_TILT0 + BELL_TILT + 1.2, BELL_END = BELL_FALL0 + 2.6;
+// ---------- Veneza (Nível 10): o K sentado num banco à beira do canal ----------
+// Só com as 4 conversas salvas (caixa, terraço, igreja, bondinho). Fica num canto sossegado da praça sudoeste (quadra
+// laranja), virado para o canal, longe das casas de entrega e dos píeres. A pé, E: 11 falas automáticas, depois o aviso
+// do jogo. No fim grava VENICE_TALK_KEY (libera a 2ª visita à igreja) e os controles voltam na mesma partida.
+const VENICE_LINES = [
+  ['Olha só quem apareceu. ', P, 'Dessa vez, nenhum bondinho veio junto, espero.'],
+  ['Eu precisava mesmo desse sossego. ', P, 'Mas fico feliz que você tenha vindo.'],
+  ['Tenho pensado no que aconteceu. ', P, 'Você escolheu me ajudar.'],
+  ['Eu agradeço. ', P, 'Mas aquelas cinco pessoas também tinham para onde voltar. ', P, 'Não quero esquecer disso só porque fui eu quem ficou.'],
+  ['Às vezes, a gente cuida de quem conhece ', P, 'e acaba esquecendo que os outros também precisam de cuidado.'],
+  ['Não é preciso conhecer alguém para tratá-lo bem. ', P, 'Nem esperar que essa pessoa faça alguma coisa por você depois.'],
+  ['Pode ser uma ajuda pequena. ', P, 'Ouvir com atenção, ', P, 'oferecer companhia, ', P, 'perceber quando alguém precisa de uma mão.'],
+  ['Você não vai conseguir resolver tudo. ', P, 'Mas pode tornar o dia de alguém um pouco menos difícil.'],
+  ['Há uma coisa que eu queria conversar com você. ', P, 'Mas prefiro um lugar mais tranquilo.'],
+  ['Lembra de onde nos encontramos antes? ', P, 'Vou passar por lá antes de viajar.'],
+  ['Se quiser me encontrar mais uma vez, ', P, 'siga o sol. ', P, { b: 'Estarei lá' }, '.'],
+];
+let venK = null;
+const venKSolid = { x0: 0, x1: 0, z0: 0, z1: 0 };
+function buildVeniceK() {
+  const g = new THREE.Group(); g.name = 'venice-k';
+  const wood = new THREE.MeshStandardMaterial({ color: '#8a5a34', roughness: 0.85, flatShading: true });
+  const iron = new THREE.MeshStandardMaterial({ color: '#2d2a28', roughness: 0.7, flatShading: true });
+  const add = (w, h, d, m, x, y, z) => { const b = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), m); b.position.set(x, y, z); b.castShadow = true; g.add(b); };
+  add(0.5, 0.07, 1.9, wood, 0, 0.6, 0);                 // assento (K olha para +x; o encosto fica atrás, em −x)
+  add(0.07, 0.5, 1.9, wood, -0.27, 0.95, 0);            // encosto
+  for (const z of [-0.85, 0.85]) { add(0.46, 0.56, 0.07, iron, 0, 0.3, z); add(0.05, 0.6, 0.07, iron, -0.27, 0.9, z); }
+  const k = buildPewReader(0.64); k.position.set(0.05, 0, 0.35); g.add(k);
+  return g;
+}
+const venKReady = () => VENICE && ['adress.l1.kParcel', 'adress.l6.roofTalk', 'adress.church.talk1', 'adress.trolley.talk1'].every(flagOn) && !flagOn(VENICE_TALK_KEY);
+function setupVeniceK() {
+  if (venK && venK.parent) venK.parent.remove(venK);
+  const i = SOLIDS.indexOf(venKSolid); if (i >= 0) SOLIDS.splice(i, 1);
+  if (!venKReady()) return;
+  if (!venK) venK = buildVeniceK();
+  const r = VENICE.plazaSW[2], x = r.x0 + 1.5, z = r.z0 + 5.5;   // borda oeste da quadra laranja, de frente para o canal
+  venK.position.set(x, VENICE.LAND, z); venK.rotation.y = Math.PI;
+  Object.assign(venKSolid, { x0: x - 0.6, x1: x + 0.6, z0: z - 1.1, z1: z + 1.1 });
+  SOLIDS.push(venKSolid);
+  world.scene.add(venK);
+}
+const venKPos = () => ({ x: venK.position.x - 0.05, z: venK.position.z - 0.35 });
+const nearVenK = () => state === 'walk' && venK && venK.parent && !flagOn(VENICE_TALK_KEY) &&
+  Math.hypot(walker.x - venKPos().x, walker.z - venKPos().z) < 3;
+function startVeniceTalk() {
+  const k = venKPos(), px = k.x - 0.9, pz = k.z - 1.7;  // em pé na frente dele, um pouco de lado
+  walker.pose(px, pz, Math.atan2(k.z - pz, k.x - px));
+  van.stop();
+  const y = VENICE.LAND;
+  talkCam.pos.set(k.x - 4.4, y + 2.2, k.z - 0.4);       // por cima do canal: ele de frente, o jogador de lado
+  talkCam.look.set((k.x + px) / 2 + 0.2, y + 0.95, (k.z + pz) / 2 + 0.2);
+  talkLines = VENICE_LINES; talkPhase = 'talk';
+  setState('talk');
+  talkBox.show(VENICE_LINES, () => {
+    try { localStorage.setItem(VENICE_TALK_KEY, '1'); } catch (e) { /* */ }   // libera a 2ª visita à igreja
+    talkPhase = 'note';
+    talkBox.note('ORIENTAÇÃO DO JOGO', ['Use o ', { b: 'Modo Livre' }, ' no ', { b: 'Bairro 1' }, ', a qualquer momento, caso tenha interesse.'], () => {
+      talkBox.hide(); talkPhase = ''; actionLock = 0.5;
+      setState('walk');                                 // controles de volta, na mesma partida
+    });
+  }, { auto: true });
+}
 function fadeBlackOff() { talkBox.fadeBlack(0, 300); }
 
 function startNewRound() {
@@ -1249,7 +1340,7 @@ function startNewRound() {
   world.hideResident();
   van.reset();
   rig.snap({ x: van.x, z: van.z, heading: van.heading, speed: 0 });
-  resetParcel(); setupChurch();
+  resetParcel(); setupChurch(); setupVeniceK();
   dialog = null; pending = -1; nearHouse = -1; actionLock = 0;
   nearPump = false; fuelArmed = true; fuelMsgT = 0;
   qualityWarm = 120;                           // a troca de rodada remonta o bairro: não conta como lentidão
@@ -1404,6 +1495,7 @@ function update(dt, t) {
       if (nearGate >= 0) nearHouse = -1;
       if (actionLock > 0 || !input.action()) break;
       if (nearGate >= 0) { openGate(nearGate); nearGate = -1; actionLock = 0.4; break; }
+      if (nearVenK()) { startVeniceTalk(); break; }   // Veneza: falar com o K tem prioridade
       if (nearHouse >= 0) { pending = nearHouse; nearHouse = -1; footDelivery = true; audio.bell(); setState('ring'); }
       else if (nearLounger()) startRoofTalk();             // no terraço a van fica perto: falar com ele tem prioridade
       else if (nearChurchK()) startChurchTalk();       // na igreja também (a van pode ter entrado pela porta)
@@ -1568,15 +1660,15 @@ function updateHUD() {
     else if (state === 'fuel') hud.setMain('⛽ Abastecendo… glub, glub, glub…', 'ring');
     else if (state === 'talk' || state === 'cine' || state === 'trolley' || state === 'trolleyBlack') hud.setMain('', 'clue');
     else if (state === 'walk' && carrying) hud.setMain(walker.nearVan(van) ? 'Entrar na van devolve a caixa ao lugar dela.' : 'Carregando uma caixa… de quem será?', 'clue');
-    else if (state === 'walk') hud.setMain(walker.nearVan(van) && !nearLounger() ? 'Perto da van — aperte E para entrar.' : SPOTS ? game.mainText() : 'Passeando a pé… (não dá para entregar andando)', 'clue');   // Morro: a pé continua valendo a pista
+    else if (state === 'walk') hud.setMain(walker.nearVan(van) && !nearLounger() && !nearVenK() ? 'Perto da van — aperte E para entrar.' : SPOTS ? game.mainText() : 'Passeando a pé… (não dá para entregar andando)', 'clue');   // Morro: a pé continua valendo a pista
     else if (state === 'drive' && fuelMsgT > 0) hud.setMain(fuelMsg, 'dialog');
     else if (state === 'fadeOut') hud.setMain(restartMsg || 'Entrega concluída! Preparando a próxima…', restartMsg ? 'dialog' : 'success');
     else hud.setMain(game.mainText(), 'clue');
   }
 
-  const walkNear = state === 'walk' && walker.nearVan(van) && !nearLounger() && !nearChurchK() && !missions.isOpen;
+  const walkNear = state === 'walk' && walker.nearVan(van) && !nearLounger() && !nearChurchK() && !nearVenK() && !missions.isOpen;
   // a pé no Bairro 1: pegar a caixa / entregar ao K / conversar (balão em cima do personagem)
-  const walkAct = state === 'walk' && nearGate >= 0 && !missions.isOpen ? 'Abrir porteira' : state === 'walk' && nearHouse >= 0 && !missions.isOpen ? 'Entregar' : state === 'walk' && !walkNear && !missions.isOpen ? (nearParcel() ? 'Pegar a caixa' : nearK() ? (carrying ? 'Entregar a caixa' : 'Conversar') : nearLounger() || nearChurchK() ? 'Conversar' : '') : '';
+  const walkAct = state === 'walk' && nearGate >= 0 && !missions.isOpen ? 'Abrir porteira' : state === 'walk' && nearVenK() && !missions.isOpen ? 'Conversar' : state === 'walk' && nearHouse >= 0 && !missions.isOpen ? 'Entregar' : state === 'walk' && !walkNear && !missions.isOpen ? (nearParcel() ? 'Pegar a caixa' : nearK() ? (carrying ? 'Entregar a caixa' : 'Conversar') : nearLounger() || nearChurchK() ? 'Conversar' : '') : '';
   if (walkAct) {
     rig.camera.updateMatrixWorld();
     promptPos.set(walker.x, walker.floor + 2.7, walker.z).project(rig.camera);
@@ -1693,7 +1785,7 @@ window.ADRESS = {
   get dialog() { return dialog; },
   get pixelRatio() { return pixelRatio; },
   get titleDriver() { return titleDriver; },
-  get church() { return church; },
+  get church() { return church; }, get venK() { return venK; }, startVeniceTalk, churchStage, get greenBell() { return greenBell; }, get churchBell() { return churchBell; },
   churchReveal() { if (churchOn && !churchShown) { approach.phase = 'revealed'; revealChurch(true); } },
   get churchMusicTime() { return +churchMusic.time.toFixed(2); }, get approach() { return approach; },
   get cine() { return cine; }, get whiteOn() { return !!unwhite; }, get talkMusicTime() { return talkMusic.time; }, startChurchTalk, talkBox,

@@ -7,9 +7,11 @@ export const BELL_SPOT = { x: -15, y: 47.6, z: -1.25, floor: 40 };   // ponto de
 
 const S = 1.7;                                                       // grande o bastante para ser visto lá de baixo
 
-export function buildBell() {
+export const BELL2_X = -5;                                           // sino verde (2ª conversa): 2º vão do corredor
+
+export function buildBell(color = '#003EFF', x = BELL_SPOT.x) {
   const g = new THREE.Group();
-  const blue = new THREE.MeshStandardMaterial({ color: '#003EFF', roughness: 0.45, metalness: 0.35, flatShading: true });
+  const blue = new THREE.MeshStandardMaterial({ color, roughness: 0.45, metalness: 0.35, flatShading: true });
   const dark = new THREE.MeshStandardMaterial({ color: '#2b2622', roughness: 0.9, flatShading: true });
   // perfil do sino (y para baixo a partir do ponto de pendurar)
   const prof = [[0.01, 0], [0.42, 0.02], [0.62, -0.25], [0.7, -0.9], [0.82, -1.6], [1.12, -2.15], [1.2, -2.3], [1.05, -2.3], [0.9, -2.15]]
@@ -24,7 +26,7 @@ export function buildBell() {
   const chain = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.08, 0.6, 5), dark); chain.position.y = 0.05;
   const bell = new THREE.Group(); bell.add(g); g.scale.setScalar(S);
   const root = new THREE.Group(); root.add(chain, bell);
-  root.position.set(BELL_SPOT.x, BELL_SPOT.y, BELL_SPOT.z);
+  root.position.set(x, BELL_SPOT.y, BELL_SPOT.z);
   root.userData = { bell, materials: [blue, dark], h: 2.85 * S };
   return root;
 }

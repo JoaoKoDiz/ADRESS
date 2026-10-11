@@ -430,6 +430,7 @@ export function buildChurch() {
   // K sentado no 6º banco (contando da entrada para o altar), à direita de quem entra (+x), olhando para o altar (−z).
   // Fica fora da fusão (materiais dele são os do personagem); a colisão do banco já cobre ele.
   const pr = buildPewReader(0.62); pr.position.set(2.3, 0, -16 - 5 * 1.4); pr.rotation.y = Math.PI / 2; root.add(pr);
+  root.userData.pewK = pr;
   root.userData.materials = Object.values(mats);
   return root;
 }
