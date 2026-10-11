@@ -1262,11 +1262,11 @@ function startChurchTalk() {
   walker.pose(p.x, p.z, Math.atan2(k.z - p.z, k.x - p.x));
   van.stop();
   const stage = churchStage(), lines = stage === 2 ? CHURCH2_LINES : CHURCH_LINES;
-  if (stage === 2 && talkMusic.active) { talkMusic.stop(); music.suspend(false); }   // a música da 1ª conversa não entra na 2ª
   const total = lines.reduce((t, l) => t + lineDuration(l), 0);
   cine = { phase: 'talk', t: 0, total, count: -1, wp: 0, stage, bell: stage === 2 ? greenBell : churchBell, camPos: new THREE.Vector3(), camLook: new THREE.Vector3() };
   setCam(...CINE.camA);
   setState('cine');
+  if (stage === 2) startBellMusic();                    // 2ª conversa: "Once Upon An Innocent Time" desde o começo da conversa
   talkBox.show(lines, churchTalkEnd, { auto: true, onAdvance: i => {
     if (i !== 6 || cine.stage === 2) return;           // terminou a 6ª fala: começa a contagem para voltar ao bairro (na 2ª visita, não há contagem)
     const rest = lines.slice(6).reduce((t, l) => t + lineDuration(l), 0);
@@ -1282,6 +1282,12 @@ function churchTalkEnd() {                              // última fala lida: gr
   van.teleport(v.x, v.z, -Math.PI / 2);                 // virada para o norte (o bairro)
   cine.phase = 'back'; cine.t = 0;
   cine.dir0 = cine.camLook.clone().sub(cine.camPos).normalize();   // a câmera fica parada e só gira até o jogador
+}
+/** 2ª conversa: encerra as outras músicas e toca "Once Upon An Innocent Time" do início (vai até o fim, inclusive na volta ao bairro). */
+function startBellMusic() {
+  talkMusic.stop(); if (churchMusic.active) churchMusic.stop(); music.setOverride(null); music.suspend(true);
+  const go = () => bellMusic.play(1);
+  bellMusic.ready ? go() : bellMusic.load().then(go, () => music.suspend(false));
 }
 function restoreLook() { if (unwhite) { unwhite(); unwhite = null; } vanFade = null; }
 // 2ª visita: aos WHITE_AT s da música (depois de ela começar e bem antes de a igreja surgir), a van inteira vai ficando
@@ -1359,12 +1365,6 @@ function updateChurchCine(dt) {
     if (!c.rehung) { c.rehung = true; bell.userData.bell.position.set(0, 0, 0); bell.userData.bell.rotation.set(0, 0, 0); }   // (conversa repetida: o sino volta a pender, fora do quadro, e cai de novo)
     bell.visible = true;                                // a câmera ainda olha para baixo: ele já está pendurado quando ela subir
     // …a câmera fica no lugar e só gira para cima até o sino (azul na 1ª, verde na 2ª); ele aparece um instante, solta-se e cai (sem som)
-    if (c.t > BELL_TILT0 && c.stage === 2 && !c.bellMusic) {   // 2ª visita: a câmera começa a virar → música do sino verde (sem sobrepor)
-      c.bellMusic = true;
-      talkMusic.stop(); if (churchMusic.active) churchMusic.stop(); music.setOverride(null); music.suspend(true);
-      const go = () => bellMusic.play(0.6);
-      bellMusic.ready ? go() : bellMusic.load().then(go, () => music.suspend(false));
-    }
     if (c.t > BELL_TILT0) {
       if (!c.dirB) { c.dirB = c.camLook.clone().sub(c.camPos).normalize(); c.dirS = CL(bell.position.x, BELL_SPOT.y - bell.userData.h * 0.6, BELL_SPOT.z).sub(c.camPos).normalize(); }
       const k = ease(Math.min(1, (c.t - BELL_TILT0) / BELL_TILT));
