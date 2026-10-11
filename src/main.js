@@ -343,6 +343,14 @@ const trolley = createTrolley(stage);
 const sHonk = createChurchMusic(audio, honkUrl, 0.9), sDrive = createChurchMusic(audio, driveUrl, 0.9);
 const sTrainProblem = createChurchMusic(audio, trainProblemUrl, 0.7);
 let tseq = null, trolleyCool = 0;
+// História secundária: só com as 3 conversas salvas (casa do K, terraço do Bairro 6 e igreja) salvar o K leva à conversa
+const TROLLEY_TALK_KEY = 'adress.trolley.talk1';
+const storyReady = () => { try { return ['adress.l1.kParcel', 'adress.l6.roofTalk', 'adress.church.talk1'].every(k => localStorage.getItem(k) === '1'); } catch (e) { return false; } };
+const TROLLEY_LINES = [
+  ['Rapaz… Depois dessa, acho que preciso viajar para algum lugar mais tranquilo.'],
+  ['Veneza parece uma boa ideia. Um passeio pelos canais deve ajudar a espairecer.'],
+  ['Só espero que os barcos não resolvam vir atrás de mim também.'],
+];
 function startTrolleySeq(tr) {
   tseq = { phase: 'honk', t: 0, tram: tr, x: van.x, z: van.z };
   sHonk.load().then(() => sHonk.play(0.01), () => {});
@@ -378,7 +386,15 @@ function updateTrolleySeq(dt) {
     setState('trolley'); talkBox.fadeBlack(0, 350); q.phase = 'scene'; q.t = 0;
   } else if (q.phase === 'scene') {
     trolley.update(dt, input.action());
-    if (trolley.done) { talkBox.fadeBlack(1, 300); q.phase = 'out'; q.t = 0; }
+    if (trolley.done) { talkBox.fadeBlack(1, 300); q.phase = trolley.side > 0 && storyReady() ? 'talkIn' : 'out'; q.t = 0; }   // K salvo (história completa): conversa
+  } else if (q.phase === 'talkIn' && q.t > 0.5) {
+    trolley.talkScene(); talkBox.fadeBlack(0, 400); q.phase = 'talk'; q.t = 0;
+    talkBox.show(TROLLEY_LINES, () => {
+      try { localStorage.setItem(TROLLEY_TALK_KEY, '1'); } catch (e) { /* */ }   // conversa concluída (para a continuação em Veneza)
+      talkBox.hide(); talkBox.fadeBlack(1, 300); q.phase = 'out'; q.t = 0;
+    });
+  } else if (q.phase === 'talk') {
+    talkBox.update(dt); if (input.action()) talkBox.press();
   } else if (q.phase === 'out' && q.t > 0.5) {                        // volta à partida normal
     trolley.stop(); sTrainProblem.stop(); train.clearCharge();
     if (!talkMusic.playing) music.suspend(false);

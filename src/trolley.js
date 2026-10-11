@@ -67,6 +67,13 @@ export function createTrolley(stageEl) {
   [3, 8, 13, 21, 27].forEach((h, i) => lie(buildResident(h), HIT_X - 4 + i * 2, 1));
 
   const tram = buildTram(); scene.add(tram);
+  // conversa depois do dilema (K salvo, história secundária): K sentado num banco ao lado dos trilhos, longe do bonde
+  const talk = new THREE.Group(); talk.visible = false; scene.add(talk);
+  talk.add(at(box(2.0, 0.12, 0.7, '#8a5a36'), -14, 0.56, -4.2));
+  for (const s of [-1, 1]) talk.add(at(box(0.12, 0.5, 0.6, '#555555'), -14 + s * 0.85, 0.25, -4.2));
+  talk.add(at(box(2.0, 0.6, 0.1, '#8a5a36'), -14, 1.0, -3.85));
+  const kTalk = buildPewReader(0.62); kTalk.position.set(-14, 0, -4.2); kTalk.rotation.y = Math.PI / 2; talk.add(kTalk);   // de frente para o jogador (-z), trilhos atrás
+  const camSave = { p: camera.position.clone(), q: camera.quaternion.clone() };
   let x = START, side = -1, locked = false, t = 0, active = false, doneT = -1;
   const place = () => {
     const z = zAt(x, side), z2 = zAt(x + 1, side);
@@ -87,7 +94,19 @@ export function createTrolley(stageEl) {
       for (const v of victims) if (v.obj !== k) v.obj.rotation.set(-Math.PI / 2, 0, 0);
       keyHint.classList.remove('off'); ui.classList.add('on'); document.body.classList.add('title-on'); place();   // (a barra e os botões da partida somem)
     },
-    stop() { active = false; ui.classList.remove('on'); document.body.classList.remove('title-on'); },
+    /** Corta para a conversa com o K salvo: jogador de costas, K de frente, vistos um pouco de lado. */
+    talkScene() {
+      tram.visible = false; k.visible = false; for (const v of victims) v.obj.visible = false;
+      talk.visible = true; ui.classList.remove('on');
+      player.position.set(-14.4, 0, -7.0); player.rotation.y = -Math.PI / 2 + 0.1;     // olhando para o K (+z)
+      if (ag) ag.rotation.z = 0;
+      camera.position.set(-9.4, 2.6, -12.2); camera.lookAt(-13.9, 1.1, -4.6);
+    },
+    stop() {
+      tram.visible = true; k.visible = true; talk.visible = false;
+      player.position.set(-3, 0, -7.6); player.rotation.y = -Math.PI / 2; if (ag) ag.rotation.z = 1.2;
+      camera.position.copy(camSave.p); camera.quaternion.copy(camSave.q);
+      active = false; ui.classList.remove('on'); document.body.classList.remove('title-on'); },
     resize(w, h) { camera.aspect = w / h; camera.updateProjectionMatrix(); },
     /** toggle: E apertado neste quadro. */
     update(dt, toggle) {
