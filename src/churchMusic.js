@@ -13,7 +13,7 @@ function decodeDataUrl(url) {
 
 /** `url`: faixa embutida (padrão: a da aproximação); `VOLUME`: volume máximo; `onEnd`: chamada quando a faixa termina sozinha. */
 export function createChurchMusic(audio, url = trackUrl, VOLUME = 0.8, onEnd = null) {
-  let buffer = null, loading = null, src = null, gain = null, t0 = 0, offset = 0, paused = false;
+  let buffer = null, loading = null, src = null, gain = null, t0 = 0, offset = 0, paused = false, fadeEnd = 0;
   function startAt(off, fade) {                        // toca a partir de `off` segundos, subindo o volume em `fade`
     const ac = audio.ctx;
     if (ac.state === 'suspended') ac.resume();
@@ -48,6 +48,8 @@ export function createChurchMusic(audio, url = trackUrl, VOLUME = 0.8, onEnd = n
     get ready() { return !!buffer; },
     /** Tocando agora. */
     get playing() { return !!src; },
+    /** Ainda soando (tocando ou no fade-out final): para os créditos na tela. */
+    get audible() { return !!src || (!!audio.ctx && audio.ctx.currentTime < fadeEnd); },
     /** Pausada pelo jogador (dá para continuar do mesmo ponto). */
     get paused() { return paused; },
     /** Tocando ou pausada (a faixa ainda está "em cena"). */
@@ -57,7 +59,7 @@ export function createChurchMusic(audio, url = trackUrl, VOLUME = 0.8, onEnd = n
     /** Começa do início com fade-in de `fade` segundos. */
     play(fade = 4) {
       const ac = audio.ctx; if (!ac || !buffer) return false;
-      this.stop();
+      this.stop(); fadeEnd = 0;
       startAt(0, fade);
       return true;
     },
@@ -73,10 +75,11 @@ export function createChurchMusic(audio, url = trackUrl, VOLUME = 0.8, onEnd = n
     fadeOut(fade = 1) {
       paused = false; offset = 0;
       if (!src) return;
+      fadeEnd = audio.ctx.currentTime + fade;
       const s = src, g = gain; src = gain = null; release(s, g, fade);
     },
     stop() {
-      paused = false; offset = 0;
+      paused = false; offset = 0; fadeEnd = 0;
       if (!src) return;
       try { src.onended = null; src.stop(); src.disconnect(); gain.disconnect(); } catch (e) { /* */ }
       src = gain = null;

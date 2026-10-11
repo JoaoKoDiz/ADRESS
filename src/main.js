@@ -699,22 +699,21 @@ const LEVEL_TRACKS = { venice8: tarantellaUrl, farm10: sunnyUrl, snow8: snowyUrl
 // Créditos mostrados ao lado do botão de música. Só o que foi informado/confirmado; sem autor cadastrado, só o título;
 // faixa sem título cadastrado (null) não mostra nada.
 const TRACK_INFO = {
-  default: { title: 'Another Day in Hometown' },
-  [tarantellaUrl]: { title: 'Tarantella Napoletana' },
-  [sunnyUrl]: { title: 'Sunnyside Farm' },
+  default: { title: 'Another Day in Hometown', author: 'Toby Fox' },
+  [tarantellaUrl]: { title: 'Tarantella Napoletana', author: 'Luigi Ricci' },
+  [sunnyUrl]: { title: 'Sunnyside Farm', author: 'MasterSwordRemix' },
   [snowyUrl]: { title: 'Snowy', author: 'Toby Fox' },
-  church: { title: 'Dark Sanctuary' },
-  churchTalk: null,
-  train: { title: 'The Train Problem' },
-  jam: null,
+  church: { title: 'Dark Sanctuary', author: 'Toby Fox' },
+  churchTalk: { title: 'Once Upon A Terrible Time', author: 'UTB Team' },
+  train: { title: 'The Train Problem', author: 'MasterSwordRemix' },
 };
 /** O que está tocando agora (cenas especiais primeiro). */
 function nowPlaying() {
-  if (sTrainProblem.playing) return TRACK_INFO.train;
-  if (talkMusic.playing) return TRACK_INFO.churchTalk;
-  if (churchMusic.playing) return TRACK_INFO.church;
-  if (music.playing) return TRACK_INFO[music.track] || (LEVEL_TRACKS[neighborhood] === music.track ? null : TRACK_INFO.default);
-  if (jamSound.debug.playing) return TRACK_INFO.jam;
+  if (state === 'title' || state === 'levelSelect' || state === 'shop') return null;   // telas de menu: sem créditos
+  if (sTrainProblem.audible) return TRACK_INFO.train;          // (audible: inclui o fade-out final)
+  if (talkMusic.audible) return TRACK_INFO.churchTalk;
+  if (churchMusic.audible) return TRACK_INFO.church;
+  if (music.playing) return TRACK_INFO[music.track] || TRACK_INFO.default;   // (a música dos engarrafamentos não entra)
   return null;
 }   // (embutidas no html: funcionam em qualquer lugar)
 
@@ -1524,6 +1523,7 @@ function update(dt, t) {
 const promptPos = new THREE.Vector3();
 function updateHUD() {
   music.setNowPlaying(nowPlaying());              // nome da faixa ao lado do botão de música
+  music.setLift(talkBox.open);
   back.set(state === 'levelSelect' || state === 'shop' || (state === 'map' && !missions.isOpen) || (IN_GAME.includes(state) && !missions.isOpen));
   missionsBtn.set(gameMode === 'career' && IN_GAME.includes(state) && !missions.isOpen,
     `MISSÕES ${career.completedCount(careerLevel)}/5`);

@@ -9,12 +9,17 @@ const CSS = `
   box-shadow: 0 4px 0 #17548f, 0 8px 18px rgba(0,0,0,.28); cursor: pointer; user-select: none; }
 .music-btn:hover { filter: brightness(1.1); }
 .music-btn svg { width: 1.25em; height: 1.25em; display: block; }
-.music-now { position: absolute; left: calc(clamp(10px, 1.4vw, 20px) + 11.1 * clamp(13px, 1.05vw, 17px)); bottom: calc(clamp(10px, 1.6vh, 20px) + 0.72 * clamp(13px, 1.05vw, 17px)); z-index: 3;   /* (medidas do botão de música, que usa outra fonte) */
-  max-width: min(34vw, 420px); padding: .32em .9em; border: 2px solid #ff7a1a; border-radius: 999px; background: #fff3d6; color: #2e1d10;
-  font: 700 clamp(11px, 0.85vw, 14px) "Trebuchet MS","Segoe UI",system-ui,sans-serif; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+.music-now { position: absolute; left: calc(clamp(10px, 1.4vw, 20px) + 11.1 * clamp(13px, 1.05vw, 17px)); bottom: clamp(10px, 1.6vh, 20px); z-index: 45;   /* (medidas do botão de música, que usa outra fonte) */
+  max-width: min(30vw, 280px); padding: .38em .85em .42em; border: 2px solid #ff7a1a; border-radius: 12px; background: #fff3d6; color: #2e1d10;
+  font-family: "Trebuchet MS","Segoe UI",system-ui,sans-serif; text-align: left; line-height: 1.2;
   box-shadow: 0 3px 0 rgba(0,0,0,.18); pointer-events: none; display: none; }
 .music-now.on { display: block; }
-body.title-on .music-now { visibility: hidden; }
+/* caixa de diálogo aberta (embaixo, no centro): os créditos sobem para cima dos botões, sem invadir a caixa */
+.music-now.lift { left: clamp(10px, 1.4vw, 20px); bottom: calc(clamp(10px, 1.6vh, 20px) + 3.7 * clamp(13px, 1.05vw, 17px));
+  max-width: max(120px, calc((100vw - min(820px, 88vw)) / 2 - 34px)); }
+.music-now .mn-t, .music-now .mn-a { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.music-now .mn-t { font-weight: 800; font-size: clamp(12px, 0.95vw, 15px); }
+.music-now .mn-a { font-weight: 600; font-size: clamp(10px, 0.78vw, 12.5px); color: #7a5536; }
 .music-btn[data-on="0"] { background: #5d6a78; box-shadow: 0 4px 0 #3b444e, 0 8px 18px rgba(0,0,0,.25); }
 `;
 
@@ -86,11 +91,16 @@ export function createMusic(stageEl, src = 'assets/musica-fundo.mp3') {
     setOverride(o) { override = o; paint(); },
     /** Faixa de fundo atual (src). */
     get track() { return track; },
+    /** Sobe os créditos (caixa de diálogo aberta embaixo). */
+    setLift(on) { now.classList.toggle('lift', !!on); },
     /** Mostra o que está tocando ({ title, author? }) ou esconde (null). */
     setNowPlaying(info) {
-      const t = info && info.title ? info.title + (info.author ? ' — ' + info.author : '') : null;
+      const t = info && info.title ? info.title + '|' + (info.author || '') : null;
       if (t === nowText) return;
-      nowText = t; now.textContent = t || ''; now.classList.toggle('on', !!t);
+      nowText = t; now.classList.toggle('on', !!t);
+      now.innerHTML = '';                                            // 2 linhas: título (destaque) e compositor (menor)
+      if (!t) return;
+      for (const [cls, txt] of [['mn-t', info.title], ['mn-a', info.author]]) if (txt) { const sp = document.createElement('span'); sp.className = cls; sp.textContent = txt; now.appendChild(sp); }
     },
     /** Redesenha o ícone (o estado da faixa da cena mudou). */
     refresh: () => paint(),
