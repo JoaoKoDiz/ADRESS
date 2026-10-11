@@ -367,7 +367,7 @@ function updateTrolleySeq(dt) {
     return;
   }
   const q = tseq; q.t += dt;
-  if (q.phase === 'honk' && q.t > 0.7) {                              // o bonde já avança: corta direto (sem mostrar batida)
+  if (q.phase === 'honk' && (train.gapToVan(q.tram, van) < 0.45 || q.t > 9)) {   // corta só com a frente quase encostando na van (sem mostrar a batida)
     talkBox.fadeBlack(1, 120); sDrive.load().then(() => sDrive.play(0.01), () => {});
     van.stop(); setState('trolleyBlack'); q.phase = 'black'; q.t = 0;
   } else if (q.phase === 'black' && q.t > 2.0) {

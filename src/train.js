@@ -135,6 +135,15 @@ export function createTrain() {
     blocked() { let best = null; for (const t of trams) if ((t.vanBlock || 0) > (best ? best.vanBlock : 0)) best = t; return best; },
     /** O bonde avança mesmo com a van na frente (início do dilema); clearCharge volta ao normal e zera as contagens. */
     charge(t) { t.charge = true; },
+    /** Folga entre a frente do bonde e a van (círculos de colisão da van: raio 1.25 em -1.5/0/1.5 no eixo). */
+    gapToVan(T, van) {
+      const front = T.dir > 0 ? T.s0 + LEN : T.s0, p = T.line.at(front), q = T.line.at(front + T.dir * 0.5);
+      const fx = q.x - p.x, fz = q.z - p.z, fl = Math.hypot(fx, fz) || 1, lx = -fz / fl * HALF_W, lz = fx / fl * HALF_W;
+      const c = Math.cos(van.heading), s = Math.sin(van.heading);
+      let g = Infinity;
+      for (const k of [-1.5, 0, 1.5]) for (const w of [-1, 0, 1]) g = Math.min(g, Math.hypot(p.x + lx * w - (van.x + c * k), p.z + lz * w - (van.z + s * k)) - 1.25);
+      return g;
+    },
     clearCharge() { for (const t of trams) { t.charge = false; t.vanBlock = 0; } },
     reset() {
       if (!RAIL) return;
@@ -154,8 +163,8 @@ export function createTrain() {
           T.vanBlock = byVan && T.v < 0.3 ? (T.vanBlock || 0) + dt : 0;          // tempo seguido parado pela van (Nível 12: o dilema)
           T.waiting = byVan || lim < Infinity;
           const room = Math.min(left, Math.max(0, lim));
-          const want = T.charge ? 5 : byVan ? 0 : Math.min(6.5, Math.sqrt(2 * 1.4 * Math.max(0, room)) + (room === left ? 0.3 : 0));
-          T.v = T.v < want ? Math.min(want, T.v + 1.4 * dt) : Math.max(want, T.v - 3.5 * dt);
+          const want = T.charge ? 8 : byVan ? 0 : Math.min(6.5, Math.sqrt(2 * 1.4 * Math.max(0, room)) + (room === left ? 0.3 : 0));
+          T.v = T.v < want ? Math.min(want, T.v + (T.charge ? 3.2 : 1.4) * dt) : Math.max(want, T.v - 3.5 * dt);
           T.s0 += T.dir * T.v * dt;
           if (T.dir > 0 && T.s0 >= end) { T.s0 = end; T.dir = -1; T.wait = T.line.wait; T.v = 0; }
           else if (T.dir < 0 && T.s0 <= 0) { T.s0 = 0; T.dir = 1; T.wait = T.line.wait; T.v = 0; }
