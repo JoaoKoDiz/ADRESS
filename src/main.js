@@ -703,7 +703,7 @@ function startLaser(h, slot, kind = 'laser') {
     if (kind === 'solar') {                             // Sistema Solar: 7 planetas (o 4º derruba a construção) e o Sol (quadra arrasada)
       fxCine = solar;
       solar.start({ parent, local, rect, moon: !!MOONV, cam: rig.camera, world,
-        onImpact: i => { if (i === 3) boom.explode(h, slot); if (i === 4 || i === 5) scorch(i); },
+        onImpact: i => { if (i === 3) boom.explode(h, slot); else if (i !== 6) scorch(i); },   // a destruição se acumula
         onSun: () => { if (!boom.isDestroyed(h)) boom.explode(h, slot); scorch(6); boom.markDestroyed(h); },
         onEnd: () => { setState(laserRet); actionLock = 0.6; } });
       return;

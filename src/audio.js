@@ -160,10 +160,18 @@ export function createAudio() {
       uN(0.8, 0.16, 0, 900 - i * 60); uT(70 - i * 4, 0, 1.4, 'sawtooth', 0.09, 1.8); uT(1500 - i * 120, 0, 0.9, 'sine', 0.035, 0.2);
       uN(1.2, 0.07, 0.1, 0, 2600, true); uT(180 + i * 20, 0.05, 1.6, 'square', 0.02, 0.4);
     }),
-    /** o Sol vindo devagar: fogo crepitando, grave subindo, rugido */
-    sunApproach: safe(() => {
-      for (let j = 0; j < 40; j++) uN(0.05 + Math.random() * 0.06, 0.05 + j * 0.002, j * 0.11 + Math.random() * 0.05, 0, 2500 + Math.random() * 2500);   // crepitar
-      uN(4.4, 0.22, 0, 350, 0, true); uN(4.4, 0.08, 0, 0, 1500, true); uT(28, 0, 4.5, 'sawtooth', 0.16, 2.6); uT(42, 0.3, 4.2, 'square', 0.06, 2.4); uT(110, 1.5, 3, 'sawtooth', 0.05, 1.8);
+    /** cada planeta chegando: rugido e assobio que crescem até o impacto (dur s), depois silêncio curto */
+    pApproach: safe((i, dur = 2) => {
+      uN(dur, 0.2, 0, 380 - i * 20, 0, true); uN(dur, 0.07, 0, 0, 2200, true);
+      uT(46 - i * 2, 0, dur, 'sawtooth', 0.09, 1.9); uT(700 + i * 60, 0, dur, 'sine', 0.03, 2.4); uT(140 + i * 12, dur * 0.3, dur * 0.7, 'square', 0.025, 1.8);
+      for (let j = 0; j < 8; j++) uN(0.05, 0.03 + j * 0.008, dur * (0.3 + j * 0.08), 0, 2600 + j * 300);   // fogo estalando
+    }),
+    /** o Sol descendo devagar (dur s): rugido grave prolongado que cresce, fogo crepitando */
+    sunApproach: safe((dur = 4.4) => {
+      const n = Math.round(dur * 9);
+      for (let j = 0; j < n; j++) uN(0.05 + Math.random() * 0.06, 0.04 + j * 0.0025, j * dur / n + Math.random() * 0.05, 0, 2500 + Math.random() * 2500);   // crepitar
+      uN(dur, 0.24, 0, 300, 0, true); uN(dur, 0.08, 0, 0, 1500, true); uT(26, 0, dur, 'sawtooth', 0.16, 2.4); uT(39, 0.3, dur - 0.3, 'square', 0.06, 2.3); uT(110, dur * 0.35, dur * 0.65, 'sawtooth', 0.05, 1.8);
+      uT(18, 0, dur, 'sine', 0.22, 2.8);
     }),
     /** o golpe do Sol: o mais intenso de todos (e ainda distinguível) */
     sunImpact: safe(() => {
