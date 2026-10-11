@@ -36,6 +36,7 @@ import { createWalker } from './walker.js';
 import { createTalkBox, lineDuration } from './talkBox.js';
 import { whiten } from './whiteout.js';
 import { createChurchMusic } from './churchMusic.js';
+import talkTrackUrl from '../assets/church-talk.mp3';
 import { buildChurch, setChurchOpacity, CHURCH_SOLIDS, CHURCH_CAM } from './models/church.js';
 import { buildBell, BELL_SPOT } from './models/bell.js';
 import { createBackButton } from './backButton.js';
@@ -640,6 +641,7 @@ function setupChurch() {
   if (church && church.parent) church.parent.remove(church);
   if (!churchOn) return;
   churchMusic.load().catch(() => {});                   // decodifica já: na hora da aproximação a faixa está pronta
+  talkMusic.load().catch(() => {});                     // (e a da conversa)
   if (!church) {
     church = buildChurch();
     churchBell = buildBell(); church.add(churchBell);                // sino azul (1ª conversa): cai no fim da cena de saída
@@ -658,6 +660,18 @@ const MAP_W = () => MAP;                                // largura do bairro (la
 // pausando a música de fundo. A igreja só aparece quando a POSIÇÃO REAL do áudio chega a 14 s: aí surge rápido e os controles voltam.
 // A faixa continua até o jogador entrar na igreja a pé (fade-out ~1 s). Uma vez por partida.
 const churchMusic = createChurchMusic(audio);
+// Música da conversa com o K na igreja (assets/church-talk.mp3): começa 10 s depois da 1ª fala aparecer, fade-in de 8 s até
+// 50%, toca mesmo com o botão ♪ desligado (sem mudar a preferência) e vai até o fim sem fade-out nem loop, inclusive de
+// volta à vila. Enquanto toca, a música de fundo fica suspensa; ao terminar, volta como o jogador deixou.
+const TALK_MUSIC_AT = 10, TALK_MUSIC_FADE = 8;
+const talkMusic = createChurchMusic(audio, talkTrackUrl, 0.5, () => music.suspend(false));
+function startTalkMusic() {
+  if (talkMusic.playing) return;                        // já tocando (conversa repetida): não reinicia
+  if (churchMusic.active) churchMusic.stop();           // nada de sobrepor com a faixa da aproximação
+  music.setOverride(null);
+  const go = () => { if (talkMusic.play(TALK_MUSIC_FADE)) music.suspend(true); };
+  talkMusic.ready ? go() : talkMusic.load().then(go, () => {});
+}
 const REVEAL_AT = 14, REVEAL_D = 360;                   // segundo da música; distância da fachada nesse instante
 let approach = { phase: 'idle' };
 const approachLock = () => approach.phase === 'auto';
@@ -672,7 +686,7 @@ const MUSIC_OVERRIDE = {
 function endApproachMusic(fade = 1) {
   if (churchMusic.active) churchMusic.fadeOut(fade);
   music.setOverride(null);
-  music.suspend(false);                                 // a música de fundo volta como o jogador deixou
+  if (!talkMusic.playing) music.suspend(false);         // a música de fundo volta como o jogador deixou (se a da conversa já acabou)
 }
 function startApproach() {
   approach = { phase: 'auto', z0: van.z, v0: Math.max(8, van.speed), cmd: Math.max(8, van.speed) };
@@ -718,7 +732,7 @@ function updateChurch(dt) {
     const southSpeed = Math.sin(van.heading) * van.speed;          // velocidade na direção do sol (+Z)
     const going = southSpeed > 4 && Math.sin(van.heading) * Math.sign(van.speed) > 0.6;
     if (approach.phase === 'idle') churchT = state === 'drive' && beyond && going && !heli.on ? churchT + dt : 0;
-    if (approach.phase === 'idle' && churchT >= 1 && !heli.on) {      // ~1 s indo para o sol: espera a faixa estar pronta e começa
+    if (approach.phase === 'idle' && churchT >= 1 && !heli.on && !talkMusic.playing) {   // (a música da conversa ainda tocando: espera)      // ~1 s indo para o sol: espera a faixa estar pronta e começa
       approach.phase = 'loading';
       churchMusic.load().then(() => { if (approach.phase === 'loading' && churchOn) startApproach(); }, () => { approach.phase = 'idle'; churchT = 0; });
     }
@@ -816,6 +830,7 @@ function updateChurchCine(dt) {
     }
   }
   if (c.phase === 'talk') {
+    if (!c.music && c.t >= TALK_MUSIC_AT) { c.music = true; startTalkMusic(); }   // 10 s depois da 1ª fala (pausas incluídas)
     talkBox.update(dt);
     walker.update(dt, { x: 0, z: 0 }, 'car', [], van);
     const k = ease(Math.min(1, c.t / (c.total * 0.92)));   // aproxima devagar durante toda a conversa
@@ -1291,7 +1306,7 @@ window.ADRESS = {
   get church() { return church; },
   churchReveal() { if (churchOn && !churchShown) { approach.phase = 'revealed'; revealChurch(true); } },
   get churchMusicTime() { return +churchMusic.time.toFixed(2); }, get approach() { return approach; },
-  get cine() { return cine; }, get whiteOn() { return !!unwhite; }, startChurchTalk, talkBox,
+  get cine() { return cine; }, get whiteOn() { return !!unwhite; }, get talkMusicTime() { return talkMusic.time; }, startChurchTalk, talkBox,
   get churchState() { return { on: churchOn, t: churchT, a: churchA, shown: churchShown }; },
   get gameMode() { return gameMode; },
   career, missions,

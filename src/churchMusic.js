@@ -3,7 +3,6 @@
 // (relógio do AudioContext), usada para sincronizar a revelação da igreja.
 import trackUrl from '../assets/dark-sanctuary.mp3';
 
-const VOLUME = 0.8;
 
 function decodeDataUrl(url) {
   const bin = atob(url.slice(url.indexOf(',') + 1));
@@ -12,7 +11,8 @@ function decodeDataUrl(url) {
   return bytes.buffer;
 }
 
-export function createChurchMusic(audio) {
+/** `url`: faixa embutida (padrão: a da aproximação); `VOLUME`: volume máximo; `onEnd`: chamada quando a faixa termina sozinha. */
+export function createChurchMusic(audio, url = trackUrl, VOLUME = 0.8, onEnd = null) {
   let buffer = null, loading = null, src = null, gain = null, t0 = 0, offset = 0, paused = false;
   function startAt(off, fade) {                        // toca a partir de `off` segundos, subindo o volume em `fade`
     const ac = audio.ctx;
@@ -23,7 +23,7 @@ export function createChurchMusic(audio) {
     t0 = at - off;
     gain.gain.setValueAtTime(0, at); gain.gain.linearRampToValueAtTime(VOLUME, at + fade);
     src.start(at, off);
-    const me = src; src.onended = () => { if (src === me) { src = null; } };
+    const me = src; src.onended = () => { if (src === me) { src = null; if (onEnd) onEnd(); } };
   }
   function release(s, g, fade) {                       // some com fade e libera os nós
     const now = audio.ctx.currentTime;
@@ -39,7 +39,7 @@ export function createChurchMusic(audio) {
       if (!ac) return Promise.reject(new Error('sem áudio'));
       if (!loading) loading = new Promise((res, rej) => {
         try {
-          const p = ac.decodeAudioData(decodeDataUrl(trackUrl), b => { buffer = b; res(); }, rej);
+          const p = ac.decodeAudioData(decodeDataUrl(url), b => { buffer = b; res(); }, rej);
           if (p && p.catch) p.catch(rej);
         } catch (e) { rej(e); }
       }).catch(e => { loading = null; throw e; });
