@@ -9,6 +9,12 @@ const CSS = `
   box-shadow: 0 4px 0 #17548f, 0 8px 18px rgba(0,0,0,.28); cursor: pointer; user-select: none; }
 .music-btn:hover { filter: brightness(1.1); }
 .music-btn svg { width: 1.25em; height: 1.25em; display: block; }
+.music-now { position: absolute; left: calc(clamp(10px, 1.4vw, 20px) + 11.1 * clamp(13px, 1.05vw, 17px)); bottom: calc(clamp(10px, 1.6vh, 20px) + 0.72 * clamp(13px, 1.05vw, 17px)); z-index: 3;   /* (medidas do botão de música, que usa outra fonte) */
+  max-width: min(34vw, 420px); padding: .32em .9em; border: 2px solid #ff7a1a; border-radius: 999px; background: #fff3d6; color: #2e1d10;
+  font: 700 clamp(11px, 0.85vw, 14px) "Trebuchet MS","Segoe UI",system-ui,sans-serif; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  box-shadow: 0 3px 0 rgba(0,0,0,.18); pointer-events: none; display: none; }
+.music-now.on { display: block; }
+body.title-on .music-now { visibility: hidden; }
 .music-btn[data-on="0"] { background: #5d6a78; box-shadow: 0 4px 0 #3b444e, 0 8px 18px rgba(0,0,0,.25); }
 `;
 
@@ -55,6 +61,9 @@ export function createMusic(stageEl, src = 'assets/musica-fundo.mp3') {
   btn.addEventListener('click', () => { btn.blur(); if (override) { override.toggle(); paint(); } else toggle(); });
   paint();
   stageEl.appendChild(btn);
+  // nome da faixa tocando agora ("Título — Autor"; sem autor cadastrado, só o título)
+  const now = document.createElement('div'); now.className = 'music-now'; stageEl.appendChild(now);
+  let nowText = null;
 
   return {
     /** Chamado no primeiro gesto do jogador: começa a tocar (se não estiver pausada). */
@@ -75,6 +84,14 @@ export function createMusic(stageEl, src = 'assets/musica-fundo.mp3') {
     get playing() { return !audio.paused; },
     /** Cena: o botão passa a controlar outra faixa ({ on, toggle() }); null devolve. A preferência salva não muda. */
     setOverride(o) { override = o; paint(); },
+    /** Faixa de fundo atual (src). */
+    get track() { return track; },
+    /** Mostra o que está tocando ({ title, author? }) ou esconde (null). */
+    setNowPlaying(info) {
+      const t = info && info.title ? info.title + (info.author ? ' — ' + info.author : '') : null;
+      if (t === nowText) return;
+      nowText = t; now.textContent = t || ''; now.classList.toggle('on', !!t);
+    },
     /** Redesenha o ícone (o estado da faixa da cena mudou). */
     refresh: () => paint(),
     audio,

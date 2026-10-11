@@ -695,7 +695,28 @@ let dialog = null, pending = -1, nearHouse = -1;
 let actionLock = 0;                 // depois de fechar uma reclamação, E não toca a mesma campainha de novo na hora
 const setState = s => { state = s; stateT = 0; if (s === 'title' || s === 'mapIn' || s === 'map') music.setTrack(null); };   // fora da partida: a música padrão
 // Músicas próprias de alguns bairros (assets/): começam sozinhas ao entrar no bairro (Livre e Carreira)
-const LEVEL_TRACKS = { venice8: tarantellaUrl, farm10: sunnyUrl, snow8: snowyUrl };   // (embutidas no html: funcionam em qualquer lugar)
+const LEVEL_TRACKS = { venice8: tarantellaUrl, farm10: sunnyUrl, snow8: snowyUrl };
+// Créditos mostrados ao lado do botão de música. Só o que foi informado/confirmado; sem autor cadastrado, só o título;
+// faixa sem título cadastrado (null) não mostra nada.
+const TRACK_INFO = {
+  default: { title: 'Another Day in Hometown' },
+  [tarantellaUrl]: { title: 'Tarantella Napoletana' },
+  [sunnyUrl]: { title: 'Sunnyside Farm' },
+  [snowyUrl]: { title: 'Snowy', author: 'Toby Fox' },
+  church: { title: 'Dark Sanctuary' },
+  churchTalk: null,
+  train: { title: 'The Train Problem' },
+  jam: null,
+};
+/** O que está tocando agora (cenas especiais primeiro). */
+function nowPlaying() {
+  if (sTrainProblem.playing) return TRACK_INFO.train;
+  if (talkMusic.playing) return TRACK_INFO.churchTalk;
+  if (churchMusic.playing) return TRACK_INFO.church;
+  if (music.playing) return TRACK_INFO[music.track] || (LEVEL_TRACKS[neighborhood] === music.track ? null : TRACK_INFO.default);
+  if (jamSound.debug.playing) return TRACK_INFO.jam;
+  return null;
+}   // (embutidas no html: funcionam em qualquer lugar)
 
 // Posto de gasolina: parado embaixo da cobertura, ao lado das bombas, E abastece (não conta como entrega).
 // Para abastecer de novo, a van precisa sair de perto das bombas e voltar.
@@ -1502,6 +1523,7 @@ function update(dt, t) {
 // ---------- HUD ----------
 const promptPos = new THREE.Vector3();
 function updateHUD() {
+  music.setNowPlaying(nowPlaying());              // nome da faixa ao lado do botão de música
   back.set(state === 'levelSelect' || state === 'shop' || (state === 'map' && !missions.isOpen) || (IN_GAME.includes(state) && !missions.isOpen));
   missionsBtn.set(gameMode === 'career' && IN_GAME.includes(state) && !missions.isOpen,
     `MISSÕES ${career.completedCount(careerLevel)}/5`);

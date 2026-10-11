@@ -69,7 +69,7 @@ ADRESS é um jogo 3D de entregas, aconchegante e meio cômico.
 | M | missões (Carreira) |
 | H / F | helicóptero / míssil (só Livre) |
 | Esc ou botão MENU | opções: "Casa explode na entrega errada", "Van imparável" |
-| botão ♪ (só ícone) | pausar/continuar a música (`assets/musica-fundo.mp3`). Níveis com faixa própria (`LEVEL_TRACKS` em `main.js` → `music.setTrack`): 10 Veneza `tarantella.mp3` (primeiros 3 min 20 s), 15 Colheita `sunnyside-farm.mp3`, 16 Nevasca `snowy.mp3`, recomprimidas a 64 kbps e EMBUTIDAS no html (import dataurl) — começam sozinhas ao entrar no bairro (Livre e Carreira), mesmo com o botão desligado; o botão pausa/continua do mesmo ponto sem mudar a preferência salva; título/mapa voltam à faixa padrão |
+| botão ♪ (só ícone) | pausar/continuar a música (`assets/musica-fundo.mp3`). Níveis com faixa própria (`LEVEL_TRACKS` em `main.js` → `music.setTrack`): 10 Veneza `tarantella.mp3` (primeiros 3 min 20 s), 15 Colheita `sunnyside-farm.mp3`, 16 Nevasca `snowy.mp3`, recomprimidas a 64 kbps e EMBUTIDAS no html (import dataurl) — começam sozinhas ao entrar no bairro (Livre e Carreira), mesmo com o botão desligado; o botão pausa/continua do mesmo ponto sem mudar a preferência salva; título/mapa voltam à faixa padrão. Enquanto toca, ao lado do botão aparece "Título — Autor" (`.music-now`, `music.setNowPlaying`; `TRACK_INFO`/`nowPlaying()` em `main.js`, cenas especiais primeiro): só créditos confirmados — sem autor, só o título; sem título cadastrado (conversa da igreja, música do engarrafamento), nada |
 
 ## 3. Tecnologia, build e publicação
 
