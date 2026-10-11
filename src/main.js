@@ -208,7 +208,7 @@ const npcBoats = (() => {
   const root = new THREE.Group(); root.name = 'npcBoats';
   const list = [];
   const ROUTES = () => [                                              // [x0, z0, x1, z1]: canais retos sem vielas no caminho
-    [roadCenter(0) + 4, roadCenter(2), roadCenter(8) - 4, roadCenter(2)],
+    [roadCenter(0) + 4, roadCenter(1), roadCenter(8) - 4, roadCenter(1)],   // (canais que não cortam as praças)
     [roadCenter(7), roadCenter(1) + 4, roadCenter(7), roadCenter(8) - 4],
     [roadCenter(1), roadCenter(8), roadCenter(6), roadCenter(8)],
     [roadCenter(5), roadCenter(5), roadCenter(5), roadCenter(8) - 4],

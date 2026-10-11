@@ -51,7 +51,7 @@ function plane(w, d, color) {
 }
 
 // ---------- Chão ----------
-function buildGround() {
+function buildGround(venice = false) {
   const g = new THREE.Group();
   const rand = rng(7);
   const cx = (ENTRANCE.x0 + ENTRANCE.x1) / 2;
@@ -73,6 +73,7 @@ function buildGround() {
   // (vai um pouco por baixo da sebe para não aparecer grama entre a sebe e a rua)
   g.add(at(plane(MAP - 0.6, MAP - 0.6, ASPHALT), MAP / 2, 0, MAP / 2));
   // estrada de acesso: continua para fora pela abertura na sebe norte
+  if (venice) return g;                        // Veneza: só água (sem estrada de acesso, faixas, faixa de pedestres nem bueiros)
   const OUT = 420;
   g.add(at(plane(ROAD, OUT + 0.3, ASPHALT), cx, 0, 0.3 - (OUT + 0.3) / 2));
   for (const x of [ENTRANCE.x0 - 0.3, ENTRANCE.x1]) g.add(slab(x, -OUT, x + 0.3, 0, CURB, 0.12, 0.14));
@@ -389,7 +390,7 @@ export function createWorld({ renderer, buildLot, buildResident, yardBuilders, p
   scene.add(buildSun());
 
   const solidsStart = SOLIDS.length;          // os troncos das árvores de fora entram em SOLIDS aqui
-  const ground = buildGround();
+  const ground = buildGround(venice);
   const outskirts = buildOutskirts(ground);
   if (venice) SOLIDS.length = solidsStart;              // Veneza: sem árvores de fora (laguna)
   const extraSolids = SOLIDS.slice(solidsStart);

@@ -76,7 +76,8 @@ export function bakeStatic(root) {
     const mtl = o.material;
     if (Array.isArray(mtl) || mtl.transparent) return; // mantém transparentes/multimaterial separados
     let g = o.geometry.index ? o.geometry.toNonIndexed() : o.geometry.clone();
-    for (const k of Object.keys(g.attributes)) if (k !== 'position' && k !== 'normal') g.deleteAttribute(k);
+    const keepUv = !!mtl.map && g.attributes.uv;                  // materiais com textura (pedregulho, placas) mantêm o UV
+    for (const k of Object.keys(g.attributes)) if (k !== 'position' && k !== 'normal' && !(keepUv && k === 'uv')) g.deleteAttribute(k);
     if (!g.attributes.normal) g.computeVertexNormals();
     g.morphAttributes = {};
     g.applyMatrix4(new THREE.Matrix4().multiplyMatrices(inv, o.matrixWorld));

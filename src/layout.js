@@ -167,13 +167,14 @@ function setupVenice(kind) {
   const HOUSE = ['########', '#..##..#', '#......#', '##....##', '##....##', '#......#', '#..##..#', '#######.'];
   const houses = [];
   HOUSE.forEach((row, r) => [...row].forEach((ch, c) => { if (ch === '#') houses.push(r * 8 + c); }));
-  // praças (com as ruas entre as quadras delas; inclui a rua da frente das casas 12 e 33, que viram entregas a pé)
+  // praças: só as 6 quadras de cada lado se ligam (3 de pedregulho, 2 de mesas, 1 café), com as ruas entre elas
   const rect = (x0, z0, x1, z1) => ({ x0, z0, x1, z1 });
-  const plazaNE = [rect(X(5), Z(1), X(6) + L, Z(2) + L), rect(X(4), Z(2), X(5) + L, Z(2) + L), rect(X(5), Z(2), X(5) + L, Z(3) + L), rect(X(4), rc(2) - hr, X(4) + L, Z(2))];
-  const plazaSW = [rect(X(1), Z(5), X(2) + L, Z(6) + L), rect(X(2), Z(5), X(3) + L, Z(5) + L), rect(X(2), Z(4), X(2) + L, Z(5) + L), rect(X(1), rc(5) - hr, X(1) + L, Z(5))];
+  const plazaNE = [rect(X(5), Z(1), X(6) + L, Z(2) + L), rect(X(4), Z(2), X(5) + L, Z(2) + L), rect(X(5), Z(2), X(5) + L, Z(3) + L)];
+  const plazaSW = [rect(X(1), Z(5), X(2) + L, Z(6) + L), rect(X(2), Z(5), X(3) + L, Z(5) + L), rect(X(2), Z(4), X(2) + L, Z(5) + L)];
   const zones = {                                           // laranja / roxo / verde (quadras)
     orange: [[2, 4], [2, 5], [3, 5], [4, 2], [5, 2], [5, 3]], purple: [[1, 5], [2, 6], [5, 1], [6, 2]], green: [[1, 6], [6, 1]] };
-  const cafes = zones.green.map(([r, c]) => rect(X(c) + 2.5, Z(r) + 1.5, X(c) + L - 2.5, Z(r) + 9.5));
+  // cafés: maiores e girados na diagonal, alinhados com a ponte (comprimento ao longo da direção da Rialto)
+  const cafes = zones.green.map(([r, c]) => ({ cx: X(c) + L / 2, cz: Z(r) + L / 2, w: 15, d: 8.5, ang: Math.PI / 4 }));
   // Rialto: diagonal da quina interna do L nordeste até a quina interna do L sudoeste
   const A = { x: X(5), z: Z(2) + L }, B = { x: X(2) + L, z: Z(5) }, len = Math.hypot(B.x - A.x, B.z - A.z);
   const rialto = { cx: (A.x + B.x) / 2, cz: (A.z + B.z) / 2, ux: (B.x - A.x) / len, uz: (B.z - A.z) / len, len: len + 6, w: 9, rise: 6.2 };
@@ -192,13 +193,14 @@ function setupVenice(kind) {
   const walkable = (x, z) => {
     if (onRialto(x, z) >= 0) return true;
     for (const b of bridges) if (Math.abs(z - b.z) < b.w / 2 && x > b.x0 && x < b.x1) return true;
-    if (plazaNE.concat(plazaSW).some(r => inR(r, x, z, 0.3))) return !cafes.some(r => inR(r, x, z));
+    if (plazaNE.concat(plazaSW).some(r => inR(r, x, z, 0.3))) return !cafes.some(cf => { const dx = x - cf.cx, dz = z - cf.cz, ca = Math.cos(cf.ang), sa = Math.sin(cf.ang);
+      return Math.abs(dx * ca - dz * sa) < cf.w / 2 + 0.3 && Math.abs(dx * sa + dz * ca) < cf.d / 2 + 0.3; });
     return houses.some(s => inR({ x0: X(s % 8), z0: Z(Math.floor(s / 8)), x1: X(s % 8) + L, z1: Z(Math.floor(s / 8)) + L }, x, z, 0.3));
   };
   const tag = {}; [12, 30].forEach(s => { tag[s] = 'loc:rialto'; }); [33, 51].forEach(s => { tag[s] = 'loc:rialto'; });
   [6, 15, 57, 48].forEach(s => { tag[s] = 'loc:cafe'; });
   VENICE = { houses, nonHouse: [...Array(64).keys()].filter(s => !houses.includes(s)), plazaNE, plazaSW, zones, cafes, rialto, bridges,
-    walkH, walkable, LAND, tags: tag, footOnly: [12, 33], start: { x: X(7) + L / 2, z: Z(7) + L / 2, heading: -3 * Math.PI / 4 } };
+    walkH, walkable, LAND, tags: tag, footOnly: [], start: { x: X(7) + L / 2, z: Z(7) + L / 2, heading: -3 * Math.PI / 4 } };
 }
 
 /** Etiquetas de lugar de um lote (Bairro 9): parte mais alta, depois da subida, ao lado da escadaria. */

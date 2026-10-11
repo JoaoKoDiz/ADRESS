@@ -2,6 +2,7 @@
 // passarelas e placas LADO LESTE / LADO OESTE). Só visual: a colisão está em layout.js (SOLIDS) e a altura em TERRAIN.h.
 import * as THREE from 'three';
 import { box, at, mesh, textTexture } from './models/kit.js';
+import { cobble } from './models/venice.js';
 import { buildRail } from './train.js';
 import { RAIL as RAIL_PATH, VENICE, TERRAIN, CANAL, slotOrigin, doorPoint, lotX, lotZ, GRID, MAP, HEDGE, ROAD, LOT, roadCenter } from './layout.js';
 
@@ -179,24 +180,41 @@ function buildVenice(g) {
   // praças: base de pedra; laranja = pedregulhos, roxo = mesas com sombrinhas, verde = café/restaurante
   for (const r of V.plazaNE.concat(V.plazaSW)) {
     g.add(at(box(r.x1 - r.x0 + 0.6, 0.9, r.z1 - r.z0 + 0.6, '#bfb5a2'), (r.x0 + r.x1) / 2, -0.3, (r.z0 + r.z1) / 2));
-    g.add(at(box(r.x1 - r.x0, 0.04, r.z1 - r.z0, '#d9cfbd'), (r.x0 + r.x1) / 2, 0.15, (r.z0 + r.z1) / 2));
+    g.add(cobble(r.x1 - r.x0, r.z1 - r.z0, (r.x0 + r.x1) / 2, 0.16, (r.z0 + r.z1) / 2));   // chão de pedregulho
   }
   const cell = (r, c) => ({ x: lotX(c), z: lotZ(r) });
-  for (const [r, c] of V.zones.orange) {                                                       // pedregulhos
-    const o = cell(r, c);
-    g.add(at(box(LOT + 4, 0.05, LOT + 4, '#c9bda6'), o.x + LOT / 2, 0.16, o.z + LOT / 2));
-    for (let k = 0; k < 70; k++) g.add(at(box(0.5 + rand() * 0.4, 0.06, 0.5 + rand() * 0.4, rand() < 0.5 ? '#b7aa92' : '#ddd2bd'), o.x - 1.5 + rand() * (LOT + 3), 0.18, o.z - 1.5 + rand() * (LOT + 3), 0, rand() * 3, 0));
-  }
+  // laranja: espaço aberto, só o pedregulho
   const UMB = ['#c8402f', '#3c8f52', '#2f6fb0', '#efbf2a', '#fff3d6'];
-  for (const [r, c] of V.zones.purple) {                                                       // mesas, cadeiras e sombrinhas
+  for (const [r, c] of V.zones.purple) {                                                       // mesas, cadeiras e sombrinhas (maiores)
     const o = cell(r, c);
     for (let i = 0; i < 3; i++) for (let j = 0; j < 3; j++) {
-      const x = o.x + 3.2 + i * 5.4, z = o.z + 3.2 + j * 5.4, col = UMB[(i + j * 2 + r) % UMB.length];
-      g.add(at(cylLike(0.6, 0.08, '#f2efe6'), x, 0.9, z)); g.add(at(box(0.12, 0.8, 0.12, '#444'), x, 0.5, z));
-      for (const [dx, dz] of [[-1, 0], [1, 0], [0, -1], [0, 1]]) { g.add(at(box(0.45, 0.08, 0.45, '#8a5a36'), x + dx, 0.55, z + dz)); g.add(at(box(0.45, 0.5, 0.06, '#8a5a36'), x + dx * 1.2, 0.8, z + dz * 1.2, 0, dx ? Math.PI / 2 : 0, 0)); }
-      g.add(at(box(0.08, 2.6, 0.08, '#e8e8e8'), x, 1.5, z));
-      const um = new THREE.Mesh(new THREE.ConeGeometry(1.7, 0.7, 8), new THREE.MeshLambertMaterial({ color: col }));
-      um.position.set(x, 2.95, z); g.add(um);
+      const x = o.x + 3.0 + i * 5.6, z = o.z + 3.0 + j * 5.6, col = UMB[(i + j * 2 + r) % UMB.length];
+      g.add(at(cylLike(0.85, 0.1, '#f2efe6'), x, 1.2, z)); g.add(at(box(0.16, 1.1, 0.16, '#444'), x, 0.7, z));
+      for (const [dx, dz] of [[-1, 0], [1, 0], [0, -1], [0, 1]]) {
+        g.add(at(box(0.62, 0.1, 0.62, '#8a5a36'), x + dx * 1.35, 0.75, z + dz * 1.35));
+        g.add(at(box(0.62, 0.7, 0.08, '#8a5a36'), x + dx * 1.65, 1.1, z + dz * 1.65, 0, dx ? Math.PI / 2 : 0, 0));
+        for (const [lx, lz] of [[-0.25, -0.25], [0.25, 0.25]]) g.add(at(box(0.07, 0.6, 0.07, '#5a3c22'), x + dx * 1.35 + lx, 0.45, z + dz * 1.35 + lz));
+      }
+      g.add(at(box(0.1, 3.4, 0.1, '#e8e8e8'), x, 1.85, z));
+      const um = new THREE.Mesh(new THREE.ConeGeometry(2.3, 0.9, 8), new THREE.MeshLambertMaterial({ color: col }));
+      um.position.set(x, 3.75, z); g.add(um);
+    }
+  }
+  for (const cf of V.cafes) {                                                                   // café / restaurante: maior, girado na diagonal (alinhado com a ponte)
+    const k = new THREE.Group(); k.position.set(cf.cx, 0, cf.cz); k.rotation.y = cf.ang; g.add(k);
+    const w = cf.w, d = cf.d;
+    k.add(at(box(w, 7.0, d, '#e9c98f'), 0, 3.65, 0));
+    for (const s2 of [-1, 1]) k.add(at(box(w + 0.6, 0.25, d / 2 + 0.7, '#b5532f'), 0, 7.45, s2 * d / 4, s2 * 0.34, 0, 0));
+    for (const fz of [-1, 1]) {                                                               // as duas frentes (dos dois lados)
+      k.add(at(box(w - 1.2, 0.18, 2.2, '#3c8f52'), 0, 3.3, fz * (d / 2 + 0.95), fz * -0.3, 0, 0));
+      for (let x = -w / 2 + 1.5; x < w / 2 - 1; x += 2.4) {
+        k.add(at(box(1.4, 2.3, 0.08, '#2e3a46'), x, 1.45, fz * (d / 2 + 0.04)));
+        k.add(at(box(1.2, 1.3, 0.08, '#2e3a46'), x, 5.0, fz * (d / 2 + 0.04)));
+      }
+      const tex = textTexture('CAFFÈ · RISTORANTE', { width: 768, height: 128, bg: '#2a5a3a', fg: '#fff3d6', font: 'bold 60px "Trebuchet MS", sans-serif' });
+      const sign = new THREE.Mesh(new THREE.PlaneGeometry(w - 3, 1.2), new THREE.MeshLambertMaterial({ map: tex, side: THREE.DoubleSide }));
+      sign.position.set(0, 4.2, fz * (d / 2 + 0.07)); if (fz < 0) sign.rotation.y = Math.PI; k.add(sign);
+      for (const dx of [-4.5, 0, 4.5]) { k.add(at(cylLike(0.75, 0.1, '#f2efe6'), dx, 1.2, fz * (d / 2 + 3.6))); k.add(at(box(0.14, 1.1, 0.14, '#444'), dx, 0.7, fz * (d / 2 + 3.6))); }
     }
   }
   for (const rc2 of V.cafes) {                                                                  // café / restaurante (prédio de 2 andares com toldo e mesas)

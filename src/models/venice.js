@@ -6,7 +6,28 @@ import { box, cyl, cone, sphere, at, mat, bakeStatic, dynamic, textTexture } fro
 import { LOT } from '../layout.js';
 import { VEN_FACADE, VEN_SHUTTER, VEN_AWNING } from '../data.js';
 
-const STONE = '#d6cdbb', QUAY = '#bfb5a2', TILE = '#b5532f', WOOD = '#7a5434', WIN = '#2e3a46', FLOOR_H = 3.0;
+const QUAY = '#bfb5a2', TILE = '#b5532f', WOOD = '#7a5434', WIN = '#2e3a46', FLOOR_H = 3.0;
+// chão de pedregulho (textura desenhada uma vez, repetida a cada 4 unidades)
+let COBBLE = null;
+function cobbleMat() {
+  if (COBBLE) return COBBLE;
+  const c = document.createElement('canvas'); c.width = c.height = 256;
+  const x = c.getContext('2d'); x.fillStyle = '#a99d88'; x.fillRect(0, 0, 256, 256);
+  let k = 3; const r = () => (k = (k * 16807) % 2147483647) / 2147483647;
+  for (let i = 0; i < 260; i++) {
+    const cx = r() * 256, cy = r() * 256, rr = 7 + r() * 7, t = 196 + r() * 34 | 0;
+    x.fillStyle = `rgb(${t},${t - 8 | 0},${t - 22 | 0})`;
+    for (const [dx, dy] of [[0, 0], [256, 0], [-256, 0], [0, 256], [0, -256]]) { x.beginPath(); x.ellipse(cx + dx, cy + dy, rr, rr * (0.75 + r() * 0.25), r() * 3, 0, Math.PI * 2); x.fill(); }
+  }
+  const t = new THREE.CanvasTexture(c); t.wrapS = t.wrapT = THREE.RepeatWrapping; t.colorSpace = THREE.SRGBColorSpace;
+  return (COBBLE = new THREE.MeshLambertMaterial({ map: t }));
+}
+/** Piso de pedregulho w × d, centro (x, z), na altura y. */
+export function cobble(w, d, x, y, z) {
+  const g = new THREE.PlaneGeometry(w, d); g.rotateX(-Math.PI / 2);
+  const uv = g.attributes.uv; for (let i = 0; i < uv.count; i++) uv.setXY(i, uv.getX(i) * w / 4, uv.getY(i) * d / 4);
+  const m = new THREE.Mesh(g, cobbleMat()); m.position.set(x, y, z); m.receiveShadow = true; return m;
+}
 export const VEN_X0 = 1.6, VEN_X1 = 15.6, VEN_Z0 = 2.2, VEN_Z1 = 11.8;   // fileira de casas (as vielas ficam nas laterais e atrás)
 
 /** Uma fachada estreita: largura w, andares n, frente em z = VEN_Z1. */
@@ -37,7 +58,7 @@ export function buildVeniceLot(h) {
   const add = (m, x, y, z, rx = 0, ry = 0, rz = 0) => root.add(at(m, x, y, z, rx, ry, rz));
   // ilha: base de pedra com borda de cais
   add(box(LOT + 0.6, 0.9, LOT + 0.6, QUAY), LOT / 2, -0.3, LOT / 2);
-  add(box(LOT, 0.04, LOT, STONE), LOT / 2, 0.15, LOT / 2);
+  root.add(cobble(LOT, LOT, LOT / 2, 0.16, LOT / 2));
   // vizinhas (neutras, mais baixas) e o destino no meio, colado nelas
   const W = 5.4, xD = (LOT - W) / 2;
   narrow(root, VEN_X0, xD - VEN_X0, 2, '#d8cfc0', '#8a7f72', { chimney: true });
