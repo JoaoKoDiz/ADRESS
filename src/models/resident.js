@@ -40,12 +40,13 @@ function bubbleMaterial(kind) {
   return m;
 }
 
-function makeArm(shirt, side) {
-  // pivô no ombro; braço pendurado para baixo (−y) em repouso
+function makeArm(shirt, side, rolled = false) {
+  // pivô no ombro; braço pendurado para baixo (−y) em repouso (rolled: manga dobrada, antebraço à mostra)
   const pivot = dynamic(new THREE.Group());
   pivot.position.set(side * 0.4, 1.12, 0);
   pivot.add(at(sphere(0.13, shirt, 8, 6), 0, 0, 0));
-  pivot.add(at(cyl(0.1, 0.09, 0.46, shirt, 8), 0, -0.25, 0));
+  if (rolled) { pivot.add(at(cyl(0.1, 0.1, 0.2, shirt, 8), 0, -0.12, 0)); pivot.add(at(cyl(0.11, 0.11, 0.07, shirt, 8), 0, -0.23, 0)); pivot.add(at(cyl(0.085, 0.08, 0.26, SKIN, 8), 0, -0.36, 0)); }
+  else pivot.add(at(cyl(0.1, 0.09, 0.46, shirt, 8), 0, -0.25, 0));
   pivot.add(at(sphere(0.1, SKIN, 8, 6), 0, -0.52, 0));
   return pivot;
 }
@@ -58,27 +59,53 @@ export const VEN_STYLE = {
 };
 const VEN_LOOKS = ['linen', 'stripe', 'apron', 'scarf', 'straw', 'gondolier', 'linen-scarf', 'apron-straw'];
 
+// Colheita: roupa de roça (xadrez ou lisa, mangas dobradas, jardineira, calça e botas; chapéu de palha ou boné)
+export const FARM_STYLE = {
+  plaid: ['#c8402f', '#2f6fb0', '#3f8a4a', '#8a5a36', '#d9a441'], plain: ['#f1ece0', '#9fc0de', '#e8d27a', '#c9d8b4', '#e6b8a8'],
+  denim: ['#3a5f8f', '#2f4a6e', '#6b7f4a'], pants: ['#5a4a3a', '#3d4a66', '#6b5a3a'], cap: ['#c8402f', '#2f6fb0', '#3f8a4a', '#e8b02a'], boots: '#5a3b22',
+};
+function buildFarmResident(h) {
+  const look = FARM_LOOKS[(h * 3) % FARM_LOOKS.length], F = FARM_STYLE, pk = (a, k = 1) => a[(h * k) % a.length];
+  const plaid = look.includes('plaid'), overalls = look.includes('overalls');
+  const farm = { plaid, overalls, rolled: look.includes('rolled'), hat: look.includes('straw') ? 'straw' : look.includes('cap') ? 'cap' : null,
+    pants: overalls ? pk(F.denim, 5) : pk(F.pants, 7), cap: pk(F.cap, 3) };
+  const shirt = plaid ? pk(F.plaid, 2) : pk(F.plain, 3);
+  return buildCore(h, { shirt, hair: HAIRS[(h * 3) % HAIRS.length], farm });
+}
+const FARM_LOOKS = ['plaid-straw', 'plain-cap-rolled', 'overalls-straw', 'plaid-cap', 'overalls-cap-rolled', 'plain-straw-rolled', 'plaid-rolled', 'overalls-plain'];
+
 export function buildResident(houseIndex) {
+  const farm = HOUSES[houseIndex] && HOUSES[houseIndex].kind === 'farm';
+  if (farm) return buildFarmResident(houseIndex);
   const ven = HOUSES[houseIndex] && HOUSES[houseIndex].kind === 'ven';
   const look = ven ? VEN_LOOKS[(houseIndex * 5) % VEN_LOOKS.length] : null, V = VEN_STYLE, pk = (a, k = 1) => a[(houseIndex * k) % a.length];
   const striped = look === 'stripe' || look === 'gondolier';
   const shirt = !ven ? SHIRTS[houseIndex % SHIRTS.length] : striped ? '#f6f4ee' : look.startsWith('linen') ? pk(V.linen) : SHIRTS[houseIndex % SHIRTS.length];
   const hair = HAIRS[(houseIndex * 3) % HAIRS.length];
 
+  return buildCore(houseIndex, { shirt, hair, ven, look, V, pk, striped });
+}
+
+function buildCore(houseIndex, { shirt, hair, ven = false, look = null, V = VEN_STYLE, pk = a => a[0], striped = false, farm = null }) {
   const root = new THREE.Group();
   root.name = 'resident:' + houseIndex;
+  const PANTS_ = farm ? farm.pants : PANTS, SHOES_ = farm ? FARM_STYLE.boots : SHOES;
   const body = new THREE.Group();          // quica sem mexer na posição que o mundo define para root
   body.position.y = LIFT;
   root.add(body);
 
   // pernas e sapatos
   for (const s of [-1, 1]) {
-    body.add(at(box(0.22, 0.5, 0.24, PANTS), s * 0.14, 0.33, 0));
-    body.add(at(box(0.26, 0.12, 0.34, SHOES), s * 0.14, 0.06, 0.04));
+    body.add(at(box(0.22, 0.5, 0.24, PANTS_), s * 0.14, 0.33, 0));
+    body.add(at(box(0.26, farm ? 0.26 : 0.12, 0.34, SHOES_), s * 0.14, farm ? 0.13 : 0.06, 0.04));   // Colheita: botas
   }
   // tronco (camisa) + cinto
   body.add(at(cyl(0.34, 0.37, 0.62, shirt, 10), 0, 0.88, 0));
-  body.add(at(cyl(0.375, 0.375, 0.08, PANTS, 10), 0, 0.6, 0));
+  body.add(at(cyl(0.375, 0.375, 0.08, PANTS_, 10), 0, 0.6, 0));
+  if (farm) {                                                          // xadrez (faixas nos dois sentidos) e jardineira (peito + alças)
+    if (farm.plaid) { for (let k = 0; k < 3; k++) body.add(at(cyl(0.377, 0.38, 0.05, '#2b2b2b', 10), 0, 0.72 + k * 0.17, 0)); for (const x of [-0.18, 0, 0.18]) body.add(at(box(0.05, 0.6, 0.05, '#2b2b2b'), x, 0.88, 0.355)); }
+    if (farm.overalls) { body.add(at(box(0.44, 0.4, 0.06, PANTS_), 0, 0.82, 0.36)); body.add(at(box(0.14, 0.08, 0.07, '#d9b23a'), 0, 0.98, 0.39)); for (const sd of [-1, 1]) body.add(at(box(0.08, 0.5, 0.75, PANTS_), sd * 0.17, 1.02, 0, 0.0, 0, 0)); }
+  }
   if (ven) {                                                           // Veneza: listras, avental, gola de linho
     if (striped) for (let k = 0; k < 4; k++) body.add(at(cyl(0.375 - k * 0.008, 0.38 - k * 0.008, 0.07, look === 'gondolier' ? '#1f3a68' : pk(V.stripe, 3), 10), 0, 0.7 + k * 0.12, 0));
     if (look.startsWith('apron')) { const c = pk(V.apron, 7); body.add(at(box(0.5, 0.62, 0.05, c), 0, 0.72, 0.37)); body.add(at(box(0.36, 0.22, 0.05, c), 0, 1.06, 0.35)); }
@@ -97,6 +124,12 @@ export function buildResident(houseIndex) {
   cap.scale.set(1, 0.72, 1);
   head.add(cap);
   head.add(at(box(0.72, 0.4, 0.22, hair), 0, hy - 0.02, -0.26));
+  if (farm && farm.hat === 'straw') {                                 // chapéu de palha com fita marrom
+    head.add(at(cyl(0.66, 0.66, 0.04, V.straw, 14), 0, hy + 0.38, -0.03)); head.add(at(cyl(0.36, 0.4, 0.26, V.straw, 12), 0, hy + 0.5, -0.03));
+    head.add(at(cyl(0.405, 0.405, 0.06, '#6b4428', 12), 0, hy + 0.42, -0.03));
+  } else if (farm && farm.hat === 'cap') {                             // boné com aba para a frente
+    const c = cyl(0.44, 0.46, 0.22, farm.cap, 12); head.add(at(c, 0, hy + 0.4, -0.02)); head.add(at(box(0.5, 0.05, 0.36, farm.cap), 0, hy + 0.31, 0.38, -0.15, 0, 0));
+  }
   if (ven && (look === 'gondolier' || look.endsWith('straw') || look === 'straw')) {   // chapéu de palha (gondoleiro: com fita)
     head.add(at(cyl(0.62, 0.62, 0.04, V.straw, 14), 0, hy + 0.38, -0.03));
     head.add(at(cyl(0.36, 0.38, 0.24, V.straw, 12), 0, hy + 0.5, -0.03));
@@ -119,7 +152,7 @@ export function buildResident(houseIndex) {
   head.add(brows, frown, smile);
 
   // braços
-  const armL = makeArm(shirt, -1), armR = makeArm(shirt, 1);
+  const armL = makeArm(shirt, -1, !!(farm && farm.rolled)), armR = makeArm(shirt, 1, !!(farm && farm.rolled));
   body.add(armL, armR);
 
   // pacote (só quando feliz)

@@ -1,12 +1,12 @@
 // Lógica das rodadas, independente de renderização.
 import {
-  HOUSES, PHRASE, REF, COMPLAINTS, NARRATOR, FEATURE_COMPLAINTS, HINTS, REPEATS, NOHINT, NOHINT_AGAIN, SUCCESS, VEN_LINES,
+  HOUSES, PHRASE, REF, COMPLAINTS, NARRATOR, FEATURE_COMPLAINTS, HINTS, REPEATS, NOHINT, NOHINT_AGAIN, SUCCESS, VEN_LINES, FARM_LINES,
 } from './data.js';
 
 const rand = n => Math.floor(Math.random() * n);
 const BASE_LINES = { complaints: COMPLAINTS, hints: HINTS, repeats: REPEATS, nohint: NOHINT, nohintAgain: NOHINT_AGAIN, success: SUCCESS };
 /** Falas do morador da casa h (Veneza tem as suas, com um toque italiano). */
-const lines = h => (HOUSES[h].kind === 'ven' ? VEN_LINES : BASE_LINES);
+const lines = h => (HOUSES[h].kind === 'ven' ? VEN_LINES : HOUSES[h].kind === 'farm' ? FARM_LINES : BASE_LINES);   // Veneza e Colheita têm as suas
 
 /** Casas por rodada: 4 entregas erradas + a certa. */
 export const ROUTE_LEN = 5;

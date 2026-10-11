@@ -396,6 +396,39 @@ export const VEN_LINES = {
     'Ah, minha encomenda! Achei que tinha caído no canal. Obrigado!',
   ],
 };
+/** Colheita (moradores comuns): português natural e acolhedor, com jeito de roça sem exagero no sotaque. */
+export const FARM_LINES = {
+  complaints: [
+    'Ô, isso não é meu, não. Eu só encomendei semente de abóbora.',
+    'Pois é… abri a porteira à toa, essa caixa não é daqui.',
+    'Eu estava tratando das galinhas, e isso nem é meu.',
+    'Não é meu, mas obrigado por vir até a roça.',
+    'Ô, moço, aqui só chega adubo e ração. Isso não é meu.',
+    'Pois é, errou de sítio. Acontece, essas estradas confundem mesmo.',
+    'Eu estava colhendo milho desde cedo, e isso não é meu.',
+    'Não é meu, não. Mas leva um pouco de laranja do pomar pra viagem.',
+    'Ô, deu uma volta danada até aqui pra nada… não é meu.',
+    'Pois é, essa encomenda não é minha. Fecha a porteira na saída, viu?',
+  ],
+  hints: [
+    (p, r) => `Ô, acho que é ${r.da} com ${p}.`,
+    (p, r) => `Pode seguir por essa estrada. Deve ser ${r.da} com ${p}.`,
+    (p, r) => `Pois é, se não me engano é ${r.da} com ${p}.`,
+    (p, r) => `Tenta ${r.na} com ${p}. Fica logo ali pra frente.`,
+    (p, r) => `Pergunta ${r.na} com ${p}. Pode seguir, é pertinho.`,
+  ],
+  repeats: [
+    (p, r) => `Ô, de novo você? Já falei: acho que é ${r.da} com ${p}.`,
+    (p, r) => `Pois é, continua não sendo meu. É ${r.da} com ${p}, como eu disse.`,
+  ],
+  nohint: ['Sei lá de quem é. Pode seguir a pista que você tem aí.', 'Não faço ideia, sinceramente. Pergunta pra outro vizinho.', 'Não sei não, moço. Aqui na roça cada um cuida do seu.'],
+  nohintAgain: ['Ô, ainda não é meu! Segue a pista que você tem.', 'Voltou? Continua não sendo meu, viu?'],
+  success: [
+    'Muito obrigado! Já estava esperando essa encomenda desde cedo.',
+    'Chegou numa boa hora! Eu estava voltando da horta.',
+    'Ô, que beleza! Era essa mesmo. Obrigado pela paciência na estrada de terra!',
+  ],
+};
 export const FEATURE_COMPLAINTS = {
   flamingo: 'Só porque eu tenho um flamingo não quer dizer que eu compro tudo pela internet.',
   gnome: 'Nem o meu gnomo sabe de quem é isso, e ele sabe de tudo.',

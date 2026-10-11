@@ -7,7 +7,7 @@ import { buildTractor } from './models/farm.js';
 
 const SIDE = 2.3, LEN = 3.6;
 let SPEED = 3.4;
-const COLORS = ['#c8402f', '#3f8a4a', '#2f6fb0'];
+const COLORS = ['#c8402f', '#3f8a4a', '#2f6fb0', '#e8b02a', '#c8402f', '#5f9a5a'];
 
 export function createTractors(audio) {
   const root = new THREE.Group(); root.name = 'tractors';
@@ -32,7 +32,7 @@ export function createTractors(audio) {
       SPEED = opts.speed || 3.4;
       list = (opts.loops || (FARMLAND ? FARMLAND.tractorLoops : [])).map((loop, i) => {
         const path = makePath(loop), mesh = (opts.build || buildTractor)(COLORS[i % COLORS.length]); root.add(mesh);
-        return { i, path, s: path.S * (0.15 + 0.3 * i), v: 0, mesh, solid: { x0: 0, x1: 0, z0: 0, z1: 0 }, x: 0, z: 0, ux: 1, uz: 0 };
+        return { i, path, s: path.S * ((0.15 + 0.37 * i) % 1), v: 0, mesh, solid: { x0: 0, x1: 0, z0: 0, z1: 0 }, x: 0, z: 0, ux: 1, uz: 0 };
       });
       for (const t of list) this.place(t);
     },
@@ -59,9 +59,13 @@ export function createTractors(audio) {
           const dx = o.x - t.x, dz = o.z - t.z, ahead = dx * t.ux + dz * t.uz, lat = Math.abs(-dx * t.uz + dz * t.ux);
           if (ahead > 0 && ahead < LEN + 5 && lat < 2.6) {
             const mutual = (-dx) * o.ux + (-dz) * o.uz > 0 && Math.abs(dx * o.uz - dz * o.ux) < 2.6;
-            if (!mutual || t.i > o.i) want = 0;                          // os dois "se veem": o de índice maior espera
+            if ((!mutual || t.i > o.i) && !(t.pass > 0)) want = 0;       // os dois "se veem": o de índice maior espera
           }
         }
+        // esperando outro trator há muito tempo (cruzamento): passa assim mesmo por um instante (nunca trava de vez)
+        if (want === 0 && !obs.some(o => o.circles.some(([x, z, r]) => Math.hypot(t.x + t.ux * 4 - x, t.z + t.uz * 4 - z) < r + 4))) t.wait = (t.wait || 0) + dt; else t.wait = 0;
+        if (t.wait > 6) { t.pass = 2.5; t.wait = 0; }
+        if (t.pass > 0) t.pass -= dt;
         t.v = t.v < want ? Math.min(want, t.v + 2 * dt) : Math.max(want, t.v - 6 * dt);
         t.s += t.v * dt;
         this.place(t);

@@ -19,6 +19,7 @@ import { buildModLot, MOD_H } from './models/mod.js';
 import { createTraffic } from './traffic.js';
 import { buildFarmLot } from './models/farm.js';
 import { createTractors } from './tractors.js';
+import { createChickens } from './chickens.js';
 import { buildSnowLot, buildSnowBank, buildPlow } from './models/snow.js';
 import { buildWareLot } from './models/ware.js';
 import { createTrain } from './train.js';
@@ -364,7 +365,8 @@ function walkSolids() {
 }
 const train = createTrain();
 const traffic = createTraffic(audio);
-const tractors = createTractors(audio);
+const tractors = createTractors(audio);   // Nível 15 (Colheita): tratores devagar pelas estradas de terra
+const chickens = createChickens();        // Nível 15 (Colheita): galinhas atravessando as estradas
 // ---------- Nível 16 (Nevasca): gelo, limpa-neve e atalhos ----------
 // O limpa-neve (mesma lógica dos tratores) roda um laço que passa pelos 2 atalhos. Chegando perto de um atalho fechado,
 // o monte de neve some (o sólido sai) por ~45 s; depois ele volta, mas só quando a van, o motorista e o próprio
@@ -531,6 +533,7 @@ function useNeighborhood(kind) {
   hint.attach(world.scene); boom.attach(world.scene);
   if (kind === 'rail8') { world.scene.add(train.object); train.reset(); }
   if (kind === 'flux10') world.scene.add(traffic.object); else { traffic.detach(); traffic.silence(); }
+  if (kind === 'farm10') { world.scene.add(chickens.object); chickens.reset(); } else chickens.detach();
   if (kind === 'farm10') { world.scene.add(tractors.object); tractors.reset(); } else { tractors.detach(); if (kind !== 'flux10') tractors.silence(); }
   van.setIce(kind === 'snow8' ? SNOWV.iceAt : null);   // Nevasca: placas de gelo
   if (kind === 'snow8') { world.scene.add(plow.object); plow.reset({ loops: [SNOWV.plowLoop], build: buildPlow, speed: 4.6 }); } else plow.detach();
@@ -1438,6 +1441,7 @@ function update(dt, t) {
     const playing = IN_GAME.includes(state) || state === 'walk';
     tractors.update(dt, obs, playing ? (walker.visible ? walker : van) : null);
     if (!playing) tractors.silence();
+    chickens.update(dt, heli.flying ? null : { x: van.x, z: van.z, circles: [-1.5, 0, 1.5].map(k => [van.x + c * k, van.z + s2 * k]) });
     updateGates(dt);
   }
   if (neighborhood === 'snow8') {                 // Nevasca: limpa-neve e atalhos
@@ -1667,7 +1671,7 @@ window.ADRESS = {
   get careerLevel() { return careerLevel; },
   setCareerLevel(l) { careerLevel = l; },
   setFreeLevel(l) { freeLevel = l; },
-  walker, jamSound, train, walkSolids, trolley, get tseq() { return tseq; }, get FAVELA() { return FAVELA; }, traffic, tractors, plow, banks, get SNOWV() { return SNOWV; }, get FARMLAND() { return FARMLAND; }, gateOpen, openGate,
+  walker, jamSound, train, walkSolids, trolley, get tseq() { return tseq; }, get FAVELA() { return FAVELA; }, traffic, tractors, chickens, plow, banks, get SNOWV() { return SNOWV; }, get FARMLAND() { return FARMLAND; }, gateOpen, openGate,
   get levelSelect() { return levelSelect; },
   shop,
   startGame: m => startFree(m), newRound: () => startNewRound(),
