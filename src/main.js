@@ -5,6 +5,7 @@ import { Game, ROUTE_LEN } from './logic.js';
 import { MAP, doorPoint, slotOrigin, DELIVERY_RADIUS, DELIVERY_MAX_SPEED, VAN, VAN_START, LOT_ANCHORS, SOLIDS, ENTRANCE, HEDGE, GRID, PLAZA, HOUSE_SLOTS, configureGrid, roadCenter, setGasStations, GAS_LIST, GAS_CANOPY, GAS_ISLANDS, GAS_PARTS, TERRAIN, CANAL, VENICE, RAIL, FAVELA, FLUX, FARMLAND, SPOTS, SNOWV, MOONV, slotPlaceTags, roadTopology, WARE_LIST, WALK as L_WALK, LOT as L_LOT, ROAD as L_ROAD, slotY as L_slotY } from './layout.js';
 import { createLaser } from './laser.js';
 import { createUrsa } from './ursa.js';
+import { createSolar } from './solar.js';
 import { createInput } from './input.js';
 import { createWorld } from './world.js';
 import { createVan } from './van.js';
@@ -640,10 +641,11 @@ function moonUpdate(dt, snap = false) {
 // grosso apaga a quadra inteira (construção, quintal, cercas, morador e chão), que vira um vazio escuro até o fim da partida.
 const laser = createLaser(audio);
 const ursa = createUrsa(audio, stage);
+const solar = createSolar(audio);
 let fxCine = laser;                                    // efeito cinematográfico em andamento (laser ou Ursa Menor)
 const laserVoids = [];
 let laserRet = 'drive';
-function clearLaserVoids() { laser.cancel(); ursa.cancel(); for (const m of laserVoids) if (m.parent) m.parent.remove(m); laserVoids.length = 0; }
+function clearLaserVoids() { laser.cancel(); ursa.cancel(); solar.cancel(); for (const m of laserVoids) if (m.parent) m.parent.remove(m); laserVoids.length = 0; }
 /** Área ocupada pela construção (quadra inteira; galpão = 2 lotes + a rua entre eles). */
 function laserArea(slot) {
   const sp = SPOTS ? SPOTS.spots[slot] : null;
@@ -677,7 +679,7 @@ function startLaser(h, slot, kind = 'laser') {
   }
   world.hideResident(); van.stop(); nearHouse = -1;
   setState('laser');
-  if (kind === 'ursa') {                                // Ursa Menor: 7 impactos; o 4º derruba a construção (escombros), os outros queimam o chão
+  if (kind === 'ursa' || kind === 'solar') {            // Ursa Menor / Sistema Solar: 7 impactos; o 4º derruba a construção (escombros), os outros queimam o chão
     fxCine = ursa;
     const scorch = (i) => {
       const dark = new THREE.MeshStandardMaterial({ color: i === 6 ? '#2a221c' : '#3a2d22', roughness: 1 });
@@ -689,6 +691,14 @@ function startLaser(h, slot, kind = 'laser') {
       m.position.set(local.x + off[0], local.y + (MOONV ? 0.09 : 0.215 + i * 0.002), local.z + off[1]);
       m.receiveShadow = true; parent.add(m); laserVoids.push(m);
     };
+    if (kind === 'solar') {                             // Sistema Solar: 7 planetas (o 4º derruba a construção) e o Sol (quadra arrasada)
+      fxCine = solar;
+      solar.start({ parent, local, rect, moon: !!MOONV, cam: rig.camera, world,
+        onImpact: i => { if (i === 3) boom.explode(h, slot); if (i === 4 || i === 5) scorch(i); },
+        onSun: () => { if (!boom.isDestroyed(h)) boom.explode(h, slot); scorch(6); boom.markDestroyed(h); },
+        onEnd: () => { setState(laserRet); actionLock = 0.6; } });
+      return;
+    }
     ursa.start({ parent, local, rect, moon: !!MOONV, cam: rig.camera, world: world.scene,
       onImpact: i => { if (i === 3) boom.explode(h, slot); if (i >= 4) scorch(i); if (i === 6) boom.markDestroyed(h); },
       onEnd: () => { setState(laserRet); actionLock = 0.6; } });
@@ -1652,7 +1662,7 @@ function update(dt, t) {
           // casa errada explode (se habilitado), menos as que ainda fazem parte da rota desta rodada
           const idx = game.route.indexOf(visited);
           if (gameMode === 'free' && menu.explodeWrong && (idx < 0 || idx < game.step) && !boom.isDestroyed(visited)) {
-            if (menu.wrongFx === 'laser' || menu.wrongFx === 'ursa') startLaser(visited, game.slotOf[visited], menu.wrongFx);   // laser orbital (23 s) / Ursa Menor (25 s)
+            if (menu.wrongFx !== 'boom') startLaser(visited, game.slotOf[visited], menu.wrongFx);   // laser orbital (23 s) / Ursa Menor (25 s)
             else boom.explode(visited, game.slotOf[visited]);
           }
           if (hintStep >= 0 && game.step !== hintStep) { hint.retract(); hintStep = -1; }   // a pista mudou: a seta volta ao céu
@@ -1999,7 +2009,7 @@ window.ADRESS = {
   get moonVan() { return { p: vanSph.p.toArray().map(v => +v.toFixed(3)), f: vanSph.f.toArray().map(v => +v.toFixed(3)), y: +van.simY.toFixed(2) }; },
   FRAME, MOONV: () => MOONV,
   lockCP: n => STORY_CP.apply(n), get parcelVisible() { return !!parcel.parent; },
-  laser, ursa, startLaser,
+  laser, ursa, solar, startLaser,
   get church() { return church; }, get venK() { return venK; }, startVeniceTalk, churchStage, get greenBell() { return greenBell; }, get churchBell() { return churchBell; },
   churchReveal() { if (churchOn && !churchShown) { approach.phase = 'revealed'; revealChurch(true); } },
   get churchMusicTime() { return +churchMusic.time.toFixed(2); }, get bellMusic() { return bellMusic; }, get vanFade() { return vanFade; }, nowPlaying, get approach() { return approach; },

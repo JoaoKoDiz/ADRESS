@@ -16,7 +16,8 @@ const CSS = `
 .menu-row.on .menu-sw { background: #e3262e; }
 .menu-row.on .menu-sw::after { left: 23px; }
 .menu-fx { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 4px 0 6px 14px; font-size: 14px; color: #6a5a40; }
-.menu-fx .seg { display: flex; border: 2px solid #3a2a1a; border-radius: 999px; overflow: hidden; flex: none; }
+.menu-fx .seg { display: grid; grid-template-columns: 1fr 1fr; border: 2px solid #3a2a1a; border-radius: 12px; overflow: hidden; flex: none; }
+.menu-fx .seg span { text-align: center; }
 .menu-fx .seg span { padding: 3px 10px; cursor: pointer; user-select: none; font-weight: 700; font-size: 13px; color: #3a2a1a; background: #fff; }
 .menu-fx .seg span.on { background: #e3262e; color: #fff; }
 .menu-fx.off { opacity: .45; }
@@ -28,8 +29,8 @@ export function createMenu(stageEl) {
   style.textContent = CSS;
   document.head.appendChild(style);
 
-  let explodeWrong = true, unstoppable = false, wrongFx = 'boom';   // wrongFx: 'boom' (explosão) | 'laser' (laser orbital) | 'ursa' (Ursa Menor)
-  try { const v = localStorage.getItem('adress.wrongFx'); if (v === 'laser' || v === 'ursa') wrongFx = v; } catch (e) { /* ignora */ }
+  let explodeWrong = true, unstoppable = false, wrongFx = 'boom';   // wrongFx: 'boom' (explosão) | 'laser' (laser orbital) | 'ursa' (Ursa Menor) | 'solar' (Sistema Solar)
+  try { const v = localStorage.getItem('adress.wrongFx'); if (v === 'laser' || v === 'ursa' || v === 'solar') wrongFx = v; } catch (e) { /* ignora */ }
   try { unstoppable = localStorage.getItem('adress.unstoppable') === '1'; } catch (e) { /* ignora */ }
   try { const v = localStorage.getItem('adress.explodeWrong'); if (v !== null) explodeWrong = v === '1'; } catch (e) { /* ignora */ }
 
@@ -39,7 +40,7 @@ export function createMenu(stageEl) {
   panel.className = 'menu-panel';
   panel.innerHTML = `<h3>OPÇÕES</h3>
     <div class="menu-row" data-opt="explode"><span>Casa explode na entrega errada</span><span class="menu-sw"></span></div>
-    <div class="menu-fx"><span>Efeito</span><span class="seg"><span data-fx="boom">Explosão</span><span data-fx="laser">Laser orbital</span><span data-fx="ursa">Ursa Menor</span></span></div>
+    <div class="menu-fx"><span>Efeito</span><span class="seg"><span data-fx="boom">Explosão</span><span data-fx="laser">Laser orbital</span><span data-fx="ursa">Ursa Menor</span><span data-fx="solar">Sistema Solar</span></span></div>
     <div class="menu-row" data-opt="ghost"><span>Van imparável (atravessa e destrói tudo)</span><span class="menu-sw"></span></div>
     <div class="menu-keys">F: disparar o míssil da van (a rodada reinicia)<br>H: helicóptero (Espaço sobe, Shift desce) · T: dica<br>C: câmera · M: missões (Carreira) · Esc: fechar</div>`;
   const row = panel.querySelector('[data-opt="explode"]');

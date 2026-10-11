@@ -143,6 +143,35 @@ export function createAudio() {
       for (let j = 0; j < 10; j++) uN(0.07, 0.06, j * 0.09 + Math.random() * 0.05, 0, 2500 + Math.random() * 3000);
       [[294, 0.0], [277, 0.28], [262, 0.56], [247, 0.84]].forEach(([f, at], j) => uT(f, 0.9 + at, j === 3 ? 0.7 : 0.26, 'sawtooth', 0.04, j === 3 ? 0.92 : 1));
     }),
+    // ---- Sistema Solar (mesmo barramento) ----
+    /** dia → noite: estrondo grave + sons cósmicos */
+    nightfall: safe(() => {
+      uT(36, 0, 3, 'sine', 0.26, 0.7); uT(54, 0.05, 2.6, 'triangle', 0.12, 0.6); uN(2.2, 0.16, 0, 260);
+      [523, 659, 784, 1046, 1318].forEach((f, i) => uT(f, 0.5 + i * 0.18, 1.8, 'sine', 0.025, 1.02)); uN(3, 0.04, 0.3, 0, 4500, true);
+      uT(220, 0.8, 2.8, 'sawtooth', 0.02, 2.2); uT(330, 1.0, 2.6, 'triangle', 0.02, 0.5);
+    }),
+    /** órbitas: pulsações, vibração e energia crescendo */
+    orbit: safe(() => {
+      for (let k = 0; k < 9; k++) { uT(60 + k * 4, 1.2 + k * 0.3, 0.32, 'sine', 0.12 + k * 0.012, 0.8); uT(440 + k * 55, 1.25 + k * 0.3, 0.25, 'triangle', 0.02 + k * 0.003, 1.3); }
+      uT(90, 1, 3, 'sawtooth', 0.04, 3); uN(3, 0.05, 1, 0, 1800, true);
+    }),
+    /** cada planeta disparando: rajada, rugido e velocidade */
+    dash: safe(i => {
+      uN(0.8, 0.16, 0, 900 - i * 60); uT(70 - i * 4, 0, 1.4, 'sawtooth', 0.09, 1.8); uT(1500 - i * 120, 0, 0.9, 'sine', 0.035, 0.2);
+      uN(1.2, 0.07, 0.1, 0, 2600, true); uT(180 + i * 20, 0.05, 1.6, 'square', 0.02, 0.4);
+    }),
+    /** o Sol vindo devagar: fogo crepitando, grave subindo, rugido */
+    sunApproach: safe(() => {
+      for (let j = 0; j < 40; j++) uN(0.05 + Math.random() * 0.06, 0.05 + j * 0.002, j * 0.11 + Math.random() * 0.05, 0, 2500 + Math.random() * 2500);   // crepitar
+      uN(4.4, 0.22, 0, 350, 0, true); uN(4.4, 0.08, 0, 0, 1500, true); uT(28, 0, 4.5, 'sawtooth', 0.16, 2.6); uT(42, 0.3, 4.2, 'square', 0.06, 2.4); uT(110, 1.5, 3, 'sawtooth', 0.05, 1.8);
+    }),
+    /** o golpe do Sol: o mais intenso de todos (e ainda distinguível) */
+    sunImpact: safe(() => {
+      uN(2.8, 0.42, 0, 900); uT(34, 0, 3, 'sine', 0.38, 0.35); uT(50, 0, 2.6, 'sawtooth', 0.16, 0.4); uT(75, 0.05, 2.2, 'triangle', 0.16, 0.5);
+      uN(3.6, 0.2, 0.25, 260); uN(0.5, 0.14, 0.02, 0, 4500); uN(0.4, 0.1, 0.4, 0, 6500); uN(2, 0.08, 0.6, 0, 1200);
+      for (let j = 0; j < 8; j++) uT(100 + Math.random() * 120, 0.1 + j * 0.09, 0.15, 'square', 0.04, 0.5);
+      [1600, 1300, 1000, 700, 450, 250].forEach((f, j) => uT(f, 0.9 + j * 0.1, 0.22, 'triangle', 0.035));
+    }),
     /** corta tudo (devolução dos controles) */
     end: safe(() => {
       if (!ub) return; const b = ub; ub = null; const now = ac.currentTime;
