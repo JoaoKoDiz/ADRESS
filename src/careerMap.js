@@ -171,24 +171,19 @@ function miniNeighborhood(kind, colors, gray = false) {
     add(box(1.6, 0.3, 0.7, G('#f07a1d', '#9a9a9a')), P(6.6), 0.62, P(6.6), 0, Math.PI / 4, 0);   // lancha na entrada
     return bakeStatic(g);
   }
-  if (kind === 'rail') {                         // Bairro 11: trilhos descendo pela lateral, curva e indo para leste; trem e estação
+  if (kind === 'rail') {                         // Bairro 11: bondinho nas ruas — trilhos no asfalto com curva suave, bonde e parada
+    add(box(14, 0.06, 1.8, ROADC), 0, 0.43, 0); add(box(1.8, 0.06, 14, ROADC), 0, 0.43, 0);
     const pts = [];
-    for (let z = -6.4; z <= 1.0; z += 0.5) pts.push([-5.6, z, 0]);
-    for (let k = 1; k <= 8; k++) { const t = k / 8 * Math.PI / 2; pts.push([-5.6 + 2.6 - 2.6 * Math.cos(t), 1.0 + 2.6 * Math.sin(t), t]); }
-    for (let x = -2.5; x <= 5.8; x += 0.5) pts.push([x, 3.6, Math.PI / 2]);
-    for (const [x, z, t] of pts) {
-      add(box(1.4, 0.08, 0.55, G('#8f877c', '#a0a0a0')), x, 0.44, z, 0, Math.PI / 2 - t, 0);
-      add(box(1.1, 0.06, 0.14, G('#5a4330', '#7a7a7a')), x, 0.5, z, 0, Math.PI / 2 - t, 0);
-    }
-    const car = (x, z, ry, c, l) => add(box(l, 0.8, 0.9, G(c, '#9a9a9a')), x, 0.95, z, 0, ry, 0);
-    car(-5.6, -3.4, Math.PI / 2, '#c8402f', 1.8); car(-5.6, -1.4, Math.PI / 2, '#2f6fb0', 1.6); car(-5.3, 0.4, Math.PI / 2 - 0.25, '#e0a526', 1.5);
-    add(box(0.25, 0.3, 1.6, G('#f2efe6', '#c8c8c8')), -5.6, 1.5, -4.0);                     // cabine da locomotiva
-    add(box(1.5, 0.45, 4.4, G('#c9c2b4', '#b5b5b5')), -4.0, 0.62, -3.6);                     // estação: plataforma, cobertura
-    for (const z of [-5.4, -1.8]) add(box(0.14, 1.4, 0.14, G('#5e646c', '#8a8a8a')), -3.6, 1.5, z);
-    add(box(1.9, 0.14, 4.8, G('#7a2f2a', '#8a8a8a')), -3.9, 2.25, -3.6);
-    house(1.2, -3.6, roof(0), 0.85); house(4.6, -3.6, roof(1), 0.85); house(1.6, 6.0, roof(2), 0.6);
-    add(box(4.0, 1.6, 2.0, G('#d9d4c7', '#c8c8c8')), 4.4, 1.2, 5.8);                          // galpão
-    add(box(4.3, 0.2, 2.3, G('#3a6fbf', '#8c8c8c')), 4.4, 2.1, 5.8);
+    for (let x = -6.6; x <= -1.6; x += 0.4) pts.push([x, 0, 0]);
+    for (let k = 1; k < 10; k++) { const a = -Math.PI / 2 + k / 10 * Math.PI / 2; pts.push([-1.6 + 1.6 * Math.cos(a), 1.6 + 1.6 * Math.sin(a), k / 10 * Math.PI / 2]); }
+    for (let z = 1.6; z <= 6.6; z += 0.4) pts.push([0, z, Math.PI / 2]);
+    for (const [x, z, t] of pts) for (const o of [-0.22, 0.22]) add(box(0.42, 0.04, 0.07, G('#8d949b', '#9a9a9a')), x - Math.sin(t) * o, 0.48, z + Math.cos(t) * o, 0, -t, 0);
+    add(box(2.6, 0.55, 0.95, G('#9e3a26', '#9a9a9a')), -4.4, 0.78, 0); add(box(2.6, 0.55, 0.95, G('#f3e6c8', '#c8c8c8')), -4.4, 1.3, 0);
+    add(box(2.7, 0.1, 1.0, G('#efe9da', '#d0d0d0')), -4.4, 1.62, 0);
+    for (const x of [-5.3, -4.4, -3.5]) for (const z of [-0.49, 0.49]) add(box(0.5, 0.3, 0.03, G('#2e4a63', '#7a7a7a')), x, 1.35, z);
+    add(box(1.6, 0.08, 0.6, G('#9e3a26', '#8a8a8a')), -5.0, 1.5, -1.3);                           // parada
+    for (const x of [-5.6, -4.4]) add(box(0.08, 1.0, 0.08, G('#3f4a52', '#8a8a8a')), x, 0.95, -1.45);
+    house(3.5, -3.5, roof(0), 0.85); house(-3.5, -3.8, roof(1), 0.8); house(3.6, 3.6, roof(2), 0.85); house(-3.6, 3.8, roof(0), 0.8);
     return bakeStatic(g);
   }
   if (kind === 'canal') {                        // Bairro 10: canal norte–sul, 2 pontes, galpão de um lado e casas do outro

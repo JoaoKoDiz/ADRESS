@@ -121,7 +121,7 @@ function composeRound() {
   } else if (rail) {                            // Bairro 11: 2 galpões (fixos nos pares sorteados), 4–5 comerciais, 20 prédios, casas
     const wares = shuffled(WARES).slice(0, wareList.length);
     fixed = {}; wareList.forEach((p, i) => { fixed[p[0]] = wares[i]; });
-    const nShops = 4 + Math.floor(Math.random() * 2), nApts = 20;
+    const nShops = 4 + Math.floor(Math.random() * 2), nApts = 24;
     pool = wares.concat(shuffled(SHOPS).slice(0, nShops), shuffled([...Array(28).keys()].map(k => 38 + k)).slice(0, nApts),
       shuffled(allHouses).slice(0, HOUSE_SLOTS.length - wares.length - nShops - nApts));
   } else if (canal) {                           // Bairro 10: galpões (fixos nos pares sorteados), 2–3 pares de gêmeas, comércio, prédios e casas
@@ -183,7 +183,7 @@ function refreshBarriers() {
   if (lv === 2) barriers.randomize(world.scene, { min: 3, max: 5, types: ['barrier'], topo });
   else if (lv === 3) barriers.randomize(world.scene, { min: 4, max: 6, types: ['barrier', 'truck', 'hole'], topo });
   else if (lv === 6 || lv === 7) barriers.randomize(world.scene, { min: 4, max: 6, types: ['truck'], jams: { min: 3, max: 4 }, topo });
-  else if (lv === 10) barriers.randomize(world.scene, { min: 1, max: 2, types: ['truck'], topo });   // Bairro 11: só caminhões (as cancelas já fecham ruas)
+  else if (lv === 10) barriers.randomize(world.scene, { min: 1, max: 2, types: ['truck'], topo });   // Bairro 11: só caminhões (fora dos trilhos)
   else if (lv === 8 || lv === 9) barriers.randomize(world.scene, { min: 1, max: 2, types: ['truck'], jams: { min: 1, max: 2 }, topo });   // Bairros 9 e 10: poucos   // Bairro 7: caminhões + engarrafamentos
   else barriers.clear();
 }
@@ -1189,7 +1189,7 @@ function update(dt, t) {
 
   if (state !== 'drive') van.relax(dt);          // torre de caixas do bagageiro: para de balançar quando a van não está sendo dirigida
   world.update(t, dt);
-  if (neighborhood === 'rail8') train.update(dt);
+  if (neighborhood === 'rail8') train.update(dt, van);   // Bairro 11: o bonde espera se a van estiver nos trilhos
   if (neighborhood === 'venice8') { npcBoats.update(dt); updateBoat(dt); }
   updateChurch(dt);
   world.updateGas(van.x, van.z, dt);

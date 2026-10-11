@@ -24,7 +24,7 @@ export let WARE_LIST = [];      // galpões (Bairro 10): { slots: [s, s+1] } —
 export let CANAL = null;        // Bairro 10: { x0, x1, bridges: [linhas de rua], foot: [z das passarelas], cols: [3, 4] }
 // Terreno (Bairro 9): altura do chão em (x, z). Fora do Bairro 9 é sempre 0.
 export let VENICE = null;        // Nível 12 (Veneza): canais no lugar das ruas, canal principal sinuoso, vielas, pracinha e pontes
-export let RAIL = null;          // Bairro 11: ferrovia em L (rua lateral oeste → curva → linha 6), 2 estações e 2 passagens de nível
+export let RAIL = null;          // Bairro 11: percurso do bondinho pelas ruas (trilhos no asfalto) e as 2 paradas
 export const TERRAIN = { kind: 'flat', H1: 3, H2: 6, ramps: [], stairs: [], h: () => 0 };
 // Posto de gasolina, em coordenadas locais do modelo (origem no canto noroeste do lote da esquerda, frente +Z).
 // A van entra nele: só a loja, as ilhas das bombas, os pilares da cobertura, o totem, o calibrador e a lixeira barram.
@@ -121,21 +121,40 @@ function setupTerrain(kind) {
     return 0;
   };
 }
-// ---- Bairro 11 (Trilhos): os trilhos descem pela rua lateral oeste (rua 0) desde a estação da entrada (lote 0, canto
-// noroeste), fazem uma curva suave no lote 48 e seguem para leste pela linha 6 até a estação dos galpões (lote 50).
-// Passagens de nível com cancelas nas ruas verticais 1 e 2. `at(s)`: ponto e direção a `s` do começo (norte).
+// ---- Bairro 11 (Trilhos): bondinho urbano com trilhos embutidos no asfalto, no eixo das ruas. Percurso fixo: rua norte
+// (parada da entrada) → desce a rua vertical 3 → rua 3 para leste → desce a rua vertical 6 → rua 6 para oeste (parada dos
+// galpões). Nos cruzamentos, arcos de raio 7 (cabem no cruzamento sem tocar as calçadas). `at(s)`: ponto e direção a `s`.
 function setupRail(kind) {
   if (kind !== 'rail8') { RAIL = null; return; }
-  const rc = roadCenter, R = 10, zc = lotZ(6) + LOT / 2, x0 = rc(0), zN = HEDGE + 2.4, xE = lotX(2) + LOT - 0.6;
-  const a = zc - R - zN, arc = Math.PI * R / 2, b = xE - (x0 + R);
+  const rc = roadCenter, R = 7;
+  const P = [[rc(1) + STEP / 2, rc(0)], [rc(3), rc(0)], [rc(3), rc(3)], [rc(6), rc(3)], [rc(6), rc(6)], [rc(4) + 5, rc(6)]];
+  const segs = []; let prev = { x: P[0][0], z: P[0][1] };
+  const line = (b) => { const L = Math.hypot(b.x - prev.x, b.z - prev.z); if (L > 0.01) segs.push({ type: 'L', a: prev, b, L }); prev = b; };
+  for (let i = 1; i < P.length; i++) {
+    const p = { x: P[i][0], z: P[i][1] };
+    if (i === P.length - 1) { line(p); break; }
+    const q = { x: P[i + 1][0], z: P[i + 1][1] };
+    const d0 = { x: Math.sign(p.x - P[i - 1][0]), z: Math.sign(p.z - P[i - 1][1]) }, d1 = { x: Math.sign(q.x - p.x), z: Math.sign(q.z - p.z) };
+    const t0 = { x: p.x - d0.x * R, z: p.z - d0.z * R }, t1 = { x: p.x + d1.x * R, z: p.z + d1.z * R };
+    line(t0);
+    const c = { x: t0.x + d1.x * R, z: t0.z + d1.z * R }, a0 = Math.atan2(t0.z - c.z, t0.x - c.x), a1 = Math.atan2(t1.z - c.z, t1.x - c.x);
+    let sw = a1 - a0; while (sw > Math.PI) sw -= 2 * Math.PI; while (sw < -Math.PI) sw += 2 * Math.PI;
+    segs.push({ type: 'A', c, a0, sw, L: Math.abs(sw) * R }); prev = t1;
+  }
+  const S = segs.reduce((t, g) => t + g.L, 0);
   const at = s => {
-    if (s <= a) return { x: x0, z: zN + s, dx: 0, dz: 1 };
-    s -= a;
-    if (s <= arc) { const t = s / R; return { x: x0 + R - R * Math.cos(t), z: zc - R + R * Math.sin(t), dx: Math.sin(t), dz: Math.cos(t) }; }
-    s -= arc; return { x: x0 + R + s, z: zc, dx: 1, dz: 0 };
+    s = Math.max(0, Math.min(S, s));
+    for (const g of segs) {
+      if (s > g.L && g !== segs[segs.length - 1]) { s -= g.L; continue; }
+      const u = Math.min(1, s / g.L);
+      if (g.type === 'L') return { x: g.a.x + (g.b.x - g.a.x) * u, z: g.a.z + (g.b.z - g.a.z) * u, dx: (g.b.x - g.a.x) / g.L, dz: (g.b.z - g.a.z) / g.L };
+      const a = g.a0 + g.sw * u, sg = Math.sign(g.sw);
+      return { x: g.c.x + R * Math.cos(a), z: g.c.z + R * Math.sin(a), dx: -Math.sin(a) * sg, dz: Math.cos(a) * sg };
+    }
   };
-  RAIL = { R, zc, x0, zN, xE, S: a + arc + b, at, reserved: [0, 48, 49, 50],
-    crossings: [1, 2].map(j => ({ j, x: rc(j), s: a + arc + rc(j) - (x0 + R) })) };
+  RAIL = { S, at, R, reserved: [],
+    stops: [{ x: P[0][0] + 1, z: rc(0) - 3.0, ry: 0, name: 'PARADA ENTRADA' }, { x: P[P.length - 1][0] - 1, z: rc(6) + 3.0, ry: Math.PI, name: 'PARADA DOS GALPÕES' }],
+    route: ['H,1,0', 'H,2,0', 'V,3,0', 'V,3,1', 'V,3,2', 'H,3,3', 'H,4,3', 'H,5,3', 'V,6,3', 'V,6,4', 'V,6,5', 'H,5,6', 'H,4,6'] };
 }
 
 // ---- Nível 12 (Veneza), estrutura fixa (desenho do dono): casas nas bordas e em alguns pontos; uma faixa larga de água
@@ -183,8 +202,7 @@ function setupVenice(kind) {
 }
 
 /** Etiquetas de lugar de um lote (Bairro 9): parte mais alta, depois da subida, ao lado da escadaria. */
-const RAIL_TAGS = { 1: 'loc:stationN', 8: 'loc:stationN', 42: 'loc:stationS', 51: 'loc:stationS', 58: 'loc:stationS',
-  40: 'loc:crossing', 41: 'loc:crossing', 56: 'loc:crossing', 57: 'loc:crossing' };
+const RAIL_TAGS = { 1: 'loc:stopN', 2: 'loc:stopN', 36: 'loc:stopS', 52: 'loc:stopS' };
 export function slotPlaceTags(s) {
   if (VENICE) return VENICE.tags[s] ? [VENICE.tags[s]] : [];
   if (RAIL) return RAIL_TAGS[s] ? [RAIL_TAGS[s]] : [];
@@ -213,13 +231,7 @@ export function roadTopology() {
       skip.add(k('I', 4, i)); skip.add(k('M', 3, i)); skip.add(k('M', 4, i));
     }
   }
-  if (RAIL) {                                      // rua 0 (oeste) é a ferrovia; as ruas que chegavam nela terminam antes
-    for (let i = 0; i <= 6; i++) {
-      blocked.add(k('H', 0, i, 'L')); blocked.add(k('V', 0, i)); skip.add(k('I', 0, i));
-      exclude.add(k('H', 0, i)); exclude.add(k('V', 0, i));
-    }
-    for (const c of RAIL.crossings) exclude.add(k('V', c.j, 6));   // passagens de nível: sem bloqueio (as cancelas abrem)
-  }
+  if (RAIL) for (const k2 of RAIL.route) exclude.add(k2);   // Bairro 11: nenhum bloqueio sobre os trilhos do bondinho
   for (const w of WARE_LIST) { const c = w.slots[0] % GRID, r = Math.floor(w.slots[0] / GRID); blocked.add(k('V', c + 1, r)); exclude.add(k('V', c + 1, r)); }
   return { blocked, skip, exclude, heightAt: TERRAIN.h };
 }
@@ -258,10 +270,6 @@ function rebuildBaseSolids() {
   if (VENICE) {                                    // Veneza: as praças são só a pé (a lancha não sobe)
     SOLIDS.push({ x0: ENTRANCE.x0, x1: ENTRANCE.x1, z0: -0.5, z1: HEDGE });   // sem a abertura do norte (a entrada é no sudeste)
     for (const r of VENICE.plazaNE.concat(VENICE.plazaSW)) SOLIDS.push({ x0: r.x0 - WALK, z0: r.z0 - WALK, x1: r.x1 + WALK, z1: r.z1 + WALK, vanOnly: true });
-  }
-  if (RAIL) {                                      // ferrovia: faixa da rua 0 (até depois da curva) e os lotes dos trilhos/estações
-    SOLIDS.push({ x0: HEDGE - 0.2, x1: rc(0) + hr + 0.2, z0: HEDGE, z1: RAIL.zc - 1.6 });
-    for (const s of RAIL.reserved) { const o = slotOrigin(s); SOLIDS.push({ x0: o.x - WALK, z0: o.z - WALK, x1: o.x + LOT + WALK, z1: o.z + LOT + WALK }); }
   }
   if (TERRAIN.kind === 'hill') {                   // muros das encostas (nas ladeiras não há muro; nas escadarias, só para a van)
     const isRamp = (j, i) => TERRAIN.ramps.some(r => r.j === j && r.i === i), isStair = (j, i) => TERRAIN.stairs.some(r => r.j === j && r.i === i);

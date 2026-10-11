@@ -238,7 +238,7 @@ export const PHRASE = {
   'v:pots': 'dois vasos na sacada', 'v:flowers': 'flores nas janelas', 'v:laundry': 'roupas no varal', 'v:poles': 'postes listrados na entrada',
   'v:lamp': 'uma lanterna na porta',
   'loc:rialto': 'perto da Ponte de Rialto', 'loc:cafe': 'perto do café',
-  'loc:stationN': 'perto da estação da entrada', 'loc:stationS': 'perto da estação dos galpões', 'loc:crossing': 'ao lado da passagem de trem',
+  'loc:stopN': 'perto da parada do bonde da entrada', 'loc:stopS': 'perto da parada do bonde dos galpões',
   'gnd:dumpster': 'uma caçamba na frente', 'gnd:moto': 'uma moto estacionada na frente', 'gnd:guard': 'uma guarita na entrada', 'gnd:bikes': 'um bicicletário na frente',
 };
 
