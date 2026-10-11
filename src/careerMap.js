@@ -49,7 +49,7 @@ function roadGeometry(curve, samples) {
 //   canal    — canal no meio, pontes e um galpão (Bairro 10, Travessia)
 //   rail     — trilhos em L com curva, trem e estação (Bairro 11, Trilhos)
 //   venice   — canais, fachadas venezianas coloridas e a Ponte de Rialto (Nível 12, Veneza)
-const MINI_KINDS = ['houses', 'plaza', 'barriers', 'trucks', 'gas', 'city', 'jam', 'jam8', 'hill', 'venice', 'canal', 'rail', 'favela', 'flux', 'farm', 'snow'];   // 13 = Morro, 14 = Fluxo, 15 = Colheita, 16 = Nevasca   // 10 = Veneza, 11 = Travessia, 12 = Trilhos
+const MINI_KINDS = ['houses', 'plaza', 'barriers', 'trucks', 'gas', 'city', 'jam', 'jam8', 'hill', 'venice', 'canal', 'rail', 'favela', 'flux', 'farm', 'snow', 'moon'];   // 13 = Morro, 14 = Fluxo, 15 = Colheita, 16 = Nevasca, 17 = Órbita   // 10 = Veneza, 11 = Travessia, 12 = Trilhos
 
 /** Bairro em miniatura do tipo `kind`: base de grama, sebe, ruas e o que caracteriza o bairro. gray = fase bloqueada. */
 function miniNeighborhood(kind, colors, gray = false) {
@@ -132,6 +132,17 @@ function miniNeighborhood(kind, colors, gray = false) {
     return bakeStatic(g);
   }
 
+  if (kind === 'moon') {                         // Nível 17 (Órbita): solo lunar, cratera com ponte, módulos brancos com faixas, cúpula e foguete
+    const RG = G('#b9bcc0', '#b0b0b0'), W = G('#f1ede2', '#d0d0d0');
+    add(box(13.6, 0.1, 13.6, RG), 0, 0.42, 0);
+    add(cyl(2.3, 2.0, 0.1, G('#6f737a', '#8a8a8a'), 16), 3.4, 0.46, 3.4); add(box(1.6, 0.16, 5.2, G('#7d8188', '#8a8a8a')), 3.4, 0.6, 3.4);
+    add(box(1.6, 0.12, 14, G('#7d8188', '#8a8a8a')), 3.4, 0.47, -3); add(box(8, 0.12, 1.6, G('#7d8188', '#8a8a8a')), -1, 0.47, -0.4);
+    add(cyl(1.4, 1.4, 2.6, W, 14), -4.2, 1.75, -3.8); add(cyl(1.45, 1.45, 0.4, G('#2f78d0', '#9a9a9a'), 14), -4.2, 2.3, -3.8);
+    add(sphere(1.7, W, 14, 8), -1.0, 0.45, -4.4); add(cyl(1.72, 1.72, 0.3, G('#ff7a1a', '#9a9a9a'), 14), -1.0, 0.75, -4.4);
+    add(cyl(0.9, 0.9, 3, W, 12), -4.0, 1.25, 3.6, 0, 0, Math.PI / 2); add(cyl(0.95, 0.95, 0.3, G('#3fae5a', '#9a9a9a'), 12), -4.0, 1.25, 3.6, 0, 0, Math.PI / 2);
+    add(cyl(0.5, 0.6, 3.2, W, 10), 5.4, 2.1, -5.2); add(cone(0.5, 1.1, G('#ff7a1a', '#9a9a9a'), 10), 5.4, 4.2, -5.2);
+    return bakeStatic(g);
+  }
   if (kind === 'snow') {                         // Nível 16 (Nevasca): neve, patamar com muro de pedra, ladeira, gelo, pinheiros e casinhas
     const SN = G('#eef3f7', '#c4c4c4'), ST = G('#8f8b85', '#9a9a9a');
     add(box(13.6, 0.1, 13.6, SN), 0, 0.42, 0);
@@ -331,7 +342,7 @@ function boardTexture(gray = false) {
 }
 
 const PALETTES = [['red', 'blue', 'yellow', 'green'], ['purple', 'red', 'gray', 'yellow', 'blue', 'green', 'red', 'yellow'], ['blue', 'green', 'red', 'purple'],
-  ['yellow', 'gray', 'blue', 'red'], ['green', 'purple', 'yellow', 'blue'], ['red'], ['blue'], ['green'], ['red', 'blue', 'yellow', 'purple'], ['red'], ['blue', 'green', 'red'], ['green', 'yellow', 'purple'], ['red'], ['blue', 'red', 'yellow', 'green'], ['red', 'blue'], ['red', 'blue', 'green', 'yellow']];
+  ['yellow', 'gray', 'blue', 'red'], ['green', 'purple', 'yellow', 'blue'], ['red'], ['blue'], ['green'], ['red', 'blue', 'yellow', 'purple'], ['red'], ['blue', 'green', 'red'], ['green', 'yellow', 'purple'], ['red'], ['blue', 'red', 'yellow', 'green'], ['red', 'blue'], ['red', 'blue', 'green', 'yellow'], ['blue']];
 
 /** Miniaturas (data URL) dos 8 bairros, desenhadas uma vez num renderizador próprio. Usadas na seleção do modo Livre. */
 export function renderMiniThumbnails(w = 480, h = 360) {
@@ -383,7 +394,7 @@ export function createCareerMap(stageEl, audio) {
   scene.add(ground);
 
   // estrada com curvas suaves
-  const pts = [[0, 0], [30, -14], [62, 6], [94, -10], [126, 10], [158, -6], [190, 8], [222, -4], [254, 10], [286, -6], [318, 8], [350, -6], [382, 8], [414, -6], [446, 8], [478, -6]]
+  const pts = [[0, 0], [30, -14], [62, 6], [94, -10], [126, 10], [158, -6], [190, 8], [222, -4], [254, 10], [286, -6], [318, 8], [350, -6], [382, 8], [414, -6], [446, 8], [478, -6], [510, 8]]
     .map(([x, z]) => new THREE.Vector3(x, 0, z));
   const curve = new THREE.CatmullRomCurve3(pts, false, 'centripetal');
   const length = curve.getLength();

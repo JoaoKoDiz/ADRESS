@@ -4,7 +4,7 @@
 //     Parada, a câmera sobe para olhar por cima dos telhados; entregando, vira um pouco para a casa visitada.
 //   'overview' (tecla C): visão fixa do SUL, com o bairro inteiro enquadrado na tela.
 import * as THREE from 'three';
-import { MAP, HEDGE, HOUSE_SLOTS, GAS_LIST, GAS_PARTS, BUILD_H, slotOrigin, LOT_ANCHORS, ENTRANCE, FAVELA, FARMLAND, SNOWV } from './layout.js';
+import { MAP, HEDGE, HOUSE_SLOTS, GAS_LIST, GAS_PARTS, BUILD_H, slotOrigin, LOT_ANCHORS, ENTRANCE, FAVELA, FARMLAND, SNOWV, MOONV } from './layout.js';
 import { FAV } from './favelaPlan.js';
 
 const PITCH = THREE.MathUtils.degToRad(57);   // inclinação para baixo
@@ -120,7 +120,12 @@ function buildCamBoxes() {
     for (const sp of SNOWV.spots) CAM_BOXES.push([sp.walkBox.x0 - 0.8, sp.walkBox.z0 - 0.8, sp.walkBox.x1 + 0.8, sp.walkBox.z1 + 0.8, sp.y + 7.8]);
     for (const p of SNOWV.pines) CAM_BOXES.push([p.x - 1.4, p.z - 1.4, p.x + 1.4, p.z + 1.4, p.y + 5.5]);
   }
-  for (const s of FAVELA || FARMLAND || SNOWV ? [] : HOUSE_SLOTS) {
+  if (MOONV) {                                                 // Órbita: patamar, módulos, estufa e foguete
+    const P = MOONV.PLAT; CAM_BOXES.push([P.x0, P.z0, P.x1, P.z1, 3.1]);
+    for (const sp of MOONV.spots) CAM_BOXES.push([sp.walkBox.x0 - 0.6, sp.walkBox.z0 - 0.6, sp.walkBox.x1 + 0.6, sp.walkBox.z1 + 0.6, sp.y + 9.5]);
+    const G = MOONV.greenhouse, pd = MOONV.pad; CAM_BOXES.push([G.x0, G.z0, G.x1, G.z1, 7.5], [pd.x - 2, pd.z - 2, pd.x + 2, pd.z + 2, 13]);
+  }
+  for (const s of FAVELA || FARMLAND || SNOWV || MOONV ? [] : HOUSE_SLOTS) {
     const o = slotOrigin(s), H = LOT_ANCHORS.house;
     CAM_BOXES.push([o.x + H.x0 - 0.7 - CAM_PAD, o.z + H.z0 - 0.7 - CAM_PAD, o.x + H.x1 + 0.7 + CAM_PAD, o.z + H.z1 + 1.1 + CAM_PAD, BUILD_H + CAM_PAD]);
   }

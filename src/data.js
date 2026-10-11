@@ -220,6 +220,26 @@ export const FARM_GATE = { blue: '#2f6fd0', red: '#d0352a', yellow: '#f0c22a', w
 /** Índices das propriedades da Colheita em HOUSES. */
 export const FARMS = [...Array(40).keys()].map(k => 246 + k);
 
+// ---- Órbita (Nível 17, índices 286–317): módulos lunares (cilindro em pé, cápsula deitada ou cúpula), faixa colorida,
+// janelas circulares (1–3), porta de moldura grossa colorida e um detalhe no teto. Combinações distintas → pista única.
+export const MOON_COL = { blue: '#2f78d0', orange: '#ff7a1a', green: '#3fae5a', yellow: '#f0c22a' };
+{
+  const names = ['Cmdte. Lia', 'Eng. Bento', 'Dra. Íris', 'Téc. Caio', 'Cmdte. Nara', 'Eng. Davi', 'Dra. Vega', 'Téc. Luna',
+    'Piloto Raul', 'Dra. Estela', 'Eng. Hugo', 'Téc. Mira'];
+  const SH = ['cyl', 'capsule', 'dome'], C = Object.keys(MOON_COL), TOP = ['antenna', 'dish', 'solar'];
+  let seed = 17; const rnd = n => { seed = (seed * 16807) % 2147483647; return seed % n; };
+  const seen = new Set();
+  while (HOUSES.length < 318) {
+    const v = { shape: SH[rnd(3)], stripe: C[rnd(4)], win: 1 + rnd(3), door: C[rnd(4)], top: TOP[rnd(3)], tall: rnd(2) === 1 };
+    if (v.door === v.stripe) continue;
+    const t = ['mshape:' + v.shape, 'mstripe:' + v.stripe, 'mwin:' + v.win, 'mdoor:' + v.door, 'mtop:' + v.top];
+    const k = t.join('|'); if (seen.has(k)) continue; seen.add(k);
+    HOUSES.push({ name: names[(HOUSES.length - 286) % names.length], kind: 'moon', ...v, ftags: t });
+  }
+}
+/** Índices dos módulos da Órbita em HOUSES. */
+export const MOONS = [...Array(32).keys()].map(k => 286 + k);
+
 export const ROOF_ITEMS = ['chimney', 'dish', 'solar', 'tank', 'rooster', 'kite', 'patch'];
 export const YARD_ITEMS = ['fruit', 'bare', 'cactus', 'sunflowers', 'ballbush', 'doghouse', 'pool', 'trampoline',
   'swing', 'bike', 'flamingo', 'gnome', 'clothesline', 'tires', 'fountain'];
@@ -241,6 +261,11 @@ HOUSES.forEach((h, i) => {
   if (h.kind === 'ven') {
     h.f = [];
     h.tags = ['vfac:' + h.fac, 'vsh:' + h.sh, 'vfl:' + h.floors].concat(h.arch ? ['varch'] : [], h.awning ? ['vaw:' + h.awning] : [], h.items.map(k => 'v:' + k));
+    h.roofItems = []; h.yardItems = [];
+    return;
+  }
+  if (h.kind === 'moon') {
+    h.f = []; h.tags = h.ftags.slice();
     h.roofItems = []; h.yardItems = [];
     return;
   }
@@ -319,6 +344,13 @@ export const PHRASE = {
   'loc:rialto': 'perto da Ponte de Rialto', 'loc:cafe': 'perto do café',
   'loc:stopN': 'perto da parada do bonde da entrada', 'loc:stopS': 'perto da parada do bonde dos galpões', 'loc:stopW': 'perto da parada oeste do bonde', 'loc:stopE': 'perto da parada leste do bonde',
   'loc:stopSul': 'perto da parada sul do bonde', 'loc:stopC': 'perto da parada central do bonde',
+  // Órbita (Nível 17)
+  'mshape:cyl': 'formato de cilindro em pé', 'mshape:capsule': 'formato de cápsula deitada', 'mshape:dome': 'formato de cúpula',
+  'mstripe:blue': 'faixa azul', 'mstripe:orange': 'faixa laranja', 'mstripe:green': 'faixa verde', 'mstripe:yellow': 'faixa amarela',
+  'mwin:1': 'uma janela circular', 'mwin:2': 'duas janelas circulares', 'mwin:3': 'três janelas circulares',
+  'mdoor:blue': 'porta azul', 'mdoor:orange': 'porta laranja', 'mdoor:green': 'porta verde', 'mdoor:yellow': 'porta amarela',
+  'mtop:antenna': 'uma antena no teto', 'mtop:dish': 'uma parabólica no teto', 'mtop:solar': 'painéis solares no teto',
+  'loc:greenhouse': 'ao lado da estufa', 'loc:rocket': 'perto do foguete',
   // Colheita (Nível 15)
   'rgate:blue': 'porteira azul', 'rgate:red': 'porteira vermelha', 'rgate:yellow': 'porteira amarela', 'rgate:white': 'porteira branca', 'rgate:green': 'porteira verde',
   'rwall:white': 'paredes brancas', 'rwall:yellow': 'paredes amarelas', 'rwall:blue': 'paredes azuis', 'rwall:pink': 'paredes cor-de-rosa',
@@ -346,6 +378,7 @@ export const REF = {
   house: { a: 'a casa', da: 'da casa', na: 'na casa', n: 'casa' },
   shop: { a: 'o prédio', da: 'do prédio', na: 'no prédio', n: 'prédio' },
   ware: { a: 'o galpão', da: 'do galpão', na: 'no galpão', n: 'galpão' },
+  module: { a: 'o módulo', da: 'do módulo', na: 'no módulo', n: 'módulo' },
   barn: { a: 'o celeiro', da: 'do celeiro', na: 'no celeiro', n: 'celeiro' },
 };
 

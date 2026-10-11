@@ -248,7 +248,7 @@ export function createVan(scene, opts) {
     // Bairro 9: acompanha o chão (altura e inclinação das ladeiras)
     const cx = Math.cos(heading) * 1.8, cz = Math.sin(heading) * 1.8;
     const slope = TERRAIN.kind === 'flat' ? 0 : Math.atan2(TERRAIN.h(x + cx, z + cz) - TERRAIN.h(x - cx, z - cz), 3.6);
-    root.position.set(x, TERRAIN.h(x, z), z);
+    root.position.set(x, lowG ? simY : TERRAIN.h(x, z), z);
     root.rotation.set(0, -heading, slope);
     body.position.y = -squat;
     body.rotation.set(roll, 0, pitch);
@@ -298,6 +298,8 @@ export function createVan(scene, opts) {
   // Gelo (Nível 16): iceFn(x, z) → 0..1. Sobre o gelo a aderência cai aos poucos (iceK): freia e acelera menos, a direção
   // de movimento demora a seguir a frente (desliza nas curvas) e nas descidas ela embala. Fora do gelo volta ao normal.
   let iceFn = null, iceK = 0, moveAngle = VAN_START.heading;
+  // Gravidade baixa (Nível 17): a altura da van tem velocidade própria; saindo de uma subida/degrau ela dá um saltinho e cai devagar
+  let lowG = false, simY = 0, vy = 0, lastG = 0;
   function driveCar(dt, axis) {
     const throttle = axis ? -axis.z : 0, steer = axis ? axis.x : 0;
     const BRK = CAR_BRAKE * (1 - 0.65 * iceK), ACCL = CAR_ACC * (1 - 0.45 * iceK);
@@ -352,6 +354,12 @@ export function createVan(scene, opts) {
     if (iceK < 0.01) { iceK = 0; moveAngle = heading; }
     else moveAngle = angleDiff(moveAngle + angleDiff(heading, moveAngle) * Math.min(1, (14 - 12.2 * iceK) * dt), 0);   // desliza
     const c = Math.cos(moveAngle), s = Math.sin(moveAngle);
+    if (lowG) {                                                      // gravidade baixa: cai devagar, pula de leve nas cristas
+      const g0 = TERRAIN.h(x, z);
+      vy -= 4.2 * dt; simY += vy * dt;
+      if (simY <= g0) { const gv = (g0 - lastG) / dt; simY = g0; vy = Math.min(2.2, Math.max(0, gv)); }
+      lastG = g0;
+    }
     for (let i = 0; i < n; i++) {
       x += c * dist / n;
       z += s * dist / n;
@@ -390,7 +398,7 @@ export function createVan(scene, opts) {
   }
 
   function teleport(nx, nz, nh) {
-    x = nx; z = nz; heading = angleDiff(nh, 0); moveAngle = heading; iceK = 0;
+    x = nx; z = nz; heading = angleDiff(nh, 0); moveAngle = heading; iceK = 0; simY = lastG = TERRAIN.h(nx, nz); vy = 0;
     speed = 0; prevSpeed = 0; roll = 0; pitch = 0; swR = swVR = swP = swVP = 0; if (sway) sway.rotation.set(0, 0, 0);
     sync();
   }
@@ -413,6 +421,10 @@ export function createVan(scene, opts) {
     /** Gelo: fn(x, z) → 0..1 (null = sem gelo). */
     setIce(fn) { iceFn = fn; iceK = 0; moveAngle = heading; },
     get iceLevel() { return iceK; },
+    /** Gravidade baixa (Órbita). */
+    setLowGravity(on) { lowG = !!on; simY = lastG = TERRAIN.h(x, z); vy = 0; sync(); },
+    get lowGravity() { return lowG; },
+    get simY() { return lowG ? simY : TERRAIN.h(x, z); },
     setGhost(v) { ghost = !!v; },
     /** Troca o modelo das rodas (Shop): 0 = padrão. */
     /** Troca a carga do teto (Shop): 0 = caixas. */

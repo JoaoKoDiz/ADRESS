@@ -3,7 +3,7 @@
 // e os moradores (criados sob demanda na primeira visita).
 import * as THREE from 'three';
 import {
-  HEDGE, ROAD, LOT, WALK, MAP, GRID, PLAZA, lotX, lotZ, slotOrigin, slotY, roadCenter, ENTRANCE, LOT_ANCHORS, SOLIDS, TERRAIN, CANAL, RAIL, VENICE, FAVELA, FLUX, FARMLAND, SPOTS, SNOWV,
+  HEDGE, ROAD, LOT, WALK, MAP, GRID, PLAZA, lotX, lotZ, slotOrigin, slotY, roadCenter, ENTRANCE, LOT_ANCHORS, SOLIDS, TERRAIN, CANAL, RAIL, VENICE, FAVELA, FLUX, FARMLAND, SPOTS, SNOWV, MOONV,
 } from './layout.js';
 import { HOUSES } from './data.js';
 import { buildTerrain } from './terrain.js';
@@ -16,6 +16,7 @@ const SKY = '#bfe3f2';
 // grama de fora do bairro (a cidade usa uma versão amarelada e seca)
 const GREEN_GRASS = { grass: '#7fb158', patches: ['#79ab53', '#86b85e'], shadow: '#669347' };
 const LAGOON = { grass: '#3f8fb0', patches: ['#468fb0', '#3a88a8'], shadow: '#367f9e' };   // Veneza: laguna em volta
+const MOON_GROUND = { grass: '#a9adb3', patches: ['#9fa3a9', '#b3b6bb'], shadow: '#8f9399' };   // Órbita: regolito
 const SNOW_GROUND = { grass: '#e9eef2', patches: ['#e2e9ef', '#f2f5f8'], shadow: '#cdd6de' };   // Nevasca
 const DRY_GRASS = { grass: '#a9ab5e', patches: ['#b3a95c', '#9fa457'], shadow: '#8d8f4c' };
 let GRASS = GREEN_GRASS.grass, GRASS_PATCHES = GREEN_GRASS.patches, GRASS_SHADOW = GREEN_GRASS.shadow;
@@ -72,7 +73,7 @@ function buildGround(venice = false) {
 
   // asfalto dentro da sebe (os lotes com suas calçadas ficam por cima)
   // (vai um pouco por baixo da sebe para não aparecer grama entre a sebe e a rua)
-  g.add(at(plane(MAP - 0.6, MAP - 0.6, FAVELA ? '#b3a993' : FARMLAND ? '#86b85c' : SNOWV ? '#eef3f7' : ASPHALT), MAP / 2, 0, MAP / 2));   // Colheita: grama (estradas de terra à parte)   // Morro: chão de cimento (as ruas são desenhadas à parte)
+  g.add(at(plane(MAP - 0.6, MAP - 0.6, FAVELA ? '#b3a993' : FARMLAND ? '#86b85c' : SNOWV ? '#eef3f7' : MOONV ? '#b9bcc0' : ASPHALT), MAP / 2, 0, MAP / 2));   // Colheita: grama (estradas de terra à parte)   // Morro: chão de cimento (as ruas são desenhadas à parte)
   // estrada de acesso: continua para fora pela abertura na sebe norte
   if (venice) return g;                        // Veneza: só água (sem estrada de acesso, faixas, faixa de pedestres nem bueiros)
   const OUT = 420;
@@ -374,8 +375,8 @@ function buildPlaza() {
 }
 
 // ---------- API ----------
-export function createWorld({ renderer, buildLot, buildResident, yardBuilders, pool = [...Array(16).keys()], dry = false, venice = false, snow = false }) {
-  const pal = venice ? LAGOON : snow ? SNOW_GROUND : dry ? DRY_GRASS : GREEN_GRASS;
+export function createWorld({ renderer, buildLot, buildResident, yardBuilders, pool = [...Array(16).keys()], dry = false, venice = false, snow = false, moon = false }) {
+  const pal = venice ? LAGOON : moon ? MOON_GROUND : snow ? SNOW_GROUND : dry ? DRY_GRASS : GREEN_GRASS;
   GRASS = pal.grass; GRASS_PATCHES = pal.patches; GRASS_SHADOW = pal.shadow;
   if (renderer) {
     renderer.toneMapping = THREE.NeutralToneMapping;
@@ -384,25 +385,25 @@ export function createWorld({ renderer, buildLot, buildResident, yardBuilders, p
   }
 
   const scene = new THREE.Scene();
-  scene.background = new THREE.Color(SKY);
+  scene.background = new THREE.Color(moon ? '#05070d' : SKY);   // Órbita: céu escuro
   // névoa leve na cor do céu: o horizonte fica suave na câmera atrás da van (main.js a afasta na visão geral)
-  scene.fog = new THREE.Fog(SKY, 3000, 3200);
+  scene.fog = new THREE.Fog(moon ? '#05070d' : SKY, 3000, 3200);
   buildLights(scene);
   scene.add(buildSun());
 
   const solidsStart = SOLIDS.length;          // os troncos das árvores de fora entram em SOLIDS aqui
   const ground = buildGround(venice);
   const outskirts = buildOutskirts(ground);
-  if (venice) SOLIDS.length = solidsStart;              // Veneza: sem árvores de fora (laguna)
+  if (venice || moon) SOLIDS.length = solidsStart;              // Veneza: sem árvores de fora (laguna)
   const extraSolids = SOLIDS.slice(solidsStart);
   scene.add(baked(ground, false, true));
   // A grama de fora do bairro não recebe sombras (nada relevante projeta nela; as árvores de fora usam sombras
   // falsas): economiza o filtro de sombra em boa parte da tela — ~15% do tempo de GPU na UHD integrada.
   const outside = new Set([GRASS, ...GRASS_PATCHES, GRASS_SHADOW].map(c => mat(c)));
   ground.traverse(o => { if (o.isMesh && outside.has(o.material)) o.receiveShadow = false; });
-  if (!venice) { scene.add(baked(buildHedge(), true, true)); scene.add(baked(outskirts, false, false)); }   // Veneza: só laguna em volta
+  if (!venice && !moon) { scene.add(baked(buildHedge(), true, true)); scene.add(baked(outskirts, false, false)); }   // Veneza: só laguna em volta
   if (PLAZA) scene.add(baked(buildPlaza(), true, true));
-  if (TERRAIN.kind !== 'flat' || CANAL || RAIL || VENICE || FLUX || FARMLAND || SNOWV) scene.add(baked(buildTerrain(), true, true));   // Bairros 9, 10 e 11
+  if (TERRAIN.kind !== 'flat' || CANAL || RAIL || VENICE || FLUX || FARMLAND || SNOWV || MOONV) scene.add(baked(buildTerrain(), true, true));   // Bairros 9, 10 e 11
 
   // os 16 lotes, construídos uma única vez (cada casa mantém sua identidade; só muda de lugar)
   // (só as casas deste bairro: `pool`; o array é indexado pelo índice da casa)

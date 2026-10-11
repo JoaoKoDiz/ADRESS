@@ -50,7 +50,8 @@ export function makeClue(h, pool = ALL) {
 }
 
 /** Artigos e preposições para falar do destino h (casa ou prédio). */
-export const ref = h => { const H = HOUSES[h]; if (H.kind === 'farm') return REF[H.type === 'barn' ? 'barn' : H.type === 'shed' ? 'ware' : 'house'];   // Colheita: casa, celeiro ou galpão
+export const ref = h => { const H = HOUSES[h]; if (H.kind === 'farm') return REF[H.type === 'barn' ? 'barn' : H.type === 'shed' ? 'ware' : 'house'];
+  if (H.kind === 'moon') return REF.module;   // Órbita: "o módulo"   // Colheita: casa, celeiro ou galpão
   return REF[H.kind === 'house' || H.kind === 'ven' || H.kind === 'fav' ? 'house' : H.kind === 'ware' ? 'ware' : 'shop']; };   // prédios (comercial ou residencial): "o prédio"
 
 export function phrase(tags) {

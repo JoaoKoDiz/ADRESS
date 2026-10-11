@@ -28,13 +28,15 @@ export let RAIL = null;          // Bairro 11: percurso do bondinho pelas ruas (
 export let FLUX = null;          // Nível 14 (Fluxo): avenida central (ruas 5 e 6, mão única) com canteiro na fileira 5, cruzamentos e retornos
 export let FAVELA = null;        // Nível 13 (Morro): plano fixo sem grade (favelaPlan.js); os "lotes" são as casas de entrega
 export let FARMLAND = null;      // Nível 15 (Colheita): plano fixo rural (farmPlan.js); os "lotes" são as propriedades
-export let SNOWV = null;         // Nível 16 (Nevasca): plano fixo da vila nevada (snowPlan.js)
+export let SNOWV = null;
+export let MOONV = null;         // Nível 17 (Órbita): plano fixo da colônia lunar (moonPlan.js)         // Nível 16 (Nevasca): plano fixo da vila nevada (snowPlan.js)
 /** Plano de pontos (Morro, Colheita ou Nevasca): os lotes são pontos com posição, frente e porta próprias. */
 export let SPOTS = null;
 export const TERRAIN = { kind: 'flat', H1: 3, H2: 6, ramps: [], stairs: [], h: () => 0 };
 import { planFavela, FAV } from './favelaPlan.js';
 import { planFarm } from './farmPlan.js';
 import { planSnow, SNOW } from './snowPlan.js';
+import { planMoon, MOON } from './moonPlan.js';
 // Posto de gasolina, em coordenadas locais do modelo (origem no canto noroeste do lote da esquerda, frente +Z).
 // A van entra nele: só a loja, as ilhas das bombas, os pilares da cobertura, o totem, o calibrador e a lixeira barram.
 export const GAS_W = LOT * 2 + ROAD;
@@ -73,7 +75,7 @@ export const SOLIDS = [];
 
 /** Troca a grade do bairro e refaz os obstáculos-base (lotes, praça e sebe). */
 export function configureGrid(kind) {
-  GRID = kind === 'plaza6' || kind === 'grid6s' || kind === 'city6' || kind === 'city7' ? 6 : kind === 'city8' || kind === 'hill8' || kind === 'canal8' || kind === 'rail8' || kind === 'venice8' || kind === 'favela8' || kind === 'snow8' ? 8 : kind === 'flux10' || kind === 'farm10' ? 10 : kind === 'snow8' ? 14 : kind === 'grid5' ? 5 : 4;
+  GRID = kind === 'plaza6' || kind === 'grid6s' || kind === 'city6' || kind === 'city7' ? 6 : kind === 'city8' || kind === 'hill8' || kind === 'canal8' || kind === 'rail8' || kind === 'venice8' || kind === 'favela8' || kind === 'snow8' || kind === 'moon8' ? 8 : kind === 'flux10' || kind === 'farm10' ? 10 : kind === 'snow8' ? 14 : kind === 'moon8' ? 12 : kind === 'grid5' ? 5 : 4;
   BUILD_H = kind === 'city8' || kind === 'canal8' || kind === 'rail8' ? 31 : kind === 'hill8' ? 23 : kind === 'favela8' ? 20 : kind === 'flux10' ? 16.5 : kind === 'farm10' ? 10 : kind === 'city6' || kind === 'city7' ? 16.5 : 9.2;
   // praça: bloco 2×2 central (linhas e colunas 2–3 do 6×6)
   const plazaSlots = kind === 'plaza6' ? [2 * GRID + 2, 2 * GRID + 3, 3 * GRID + 2, 3 * GRID + 3] : [];
@@ -91,7 +93,8 @@ export function configureGrid(kind) {
   FAVELA = kind === 'favela8' ? planFavela(HEDGE * 2 + ROAD * 9 + LOT * 8, HEDGE) : null;
   FARMLAND = kind === 'farm10' ? planFarm(HEDGE * 2 + ROAD * 11 + LOT * 10, HEDGE) : null;
   SNOWV = kind === 'snow8' ? planSnow(HEDGE * 2 + ROAD * 9 + LOT * 8, HEDGE) : null;
-  SPOTS = FAVELA || FARMLAND || SNOWV;
+  MOONV = kind === 'moon8' ? planMoon(HEDGE * 2 + ROAD * 9 + LOT * 8, HEDGE) : null;
+  SPOTS = FAVELA || FARMLAND || SNOWV || MOONV;
   setupFlux(kind);
   setupTerrain(kind);
   setupRail(kind);
@@ -127,6 +130,7 @@ export function setGasStations(list, wares = []) {
 function setupTerrain(kind) {
   const T = TERRAIN;
   if (FAVELA) { T.kind = 'favela'; T.ramps = []; T.stairs = []; T.H1 = FAV.H1; T.H2 = FAV.H2; T.h = FAVELA.h; return; }
+  if (MOONV) { T.kind = 'moon'; T.ramps = []; T.stairs = []; T.H1 = MOON.PH; T.H2 = MOON.PH; T.h = MOONV.h; return; }
   if (SNOWV) { T.kind = 'snow'; T.ramps = []; T.stairs = []; T.H1 = SNOW.MIDH; T.H2 = SNOW.HIGHH; T.h = SNOWV.h; return; }
   T.H1 = 3; T.H2 = 6;
   if (kind !== 'hill8') { T.kind = 'flat'; T.ramps = []; T.stairs = []; T.h = () => 0; return; }
@@ -341,6 +345,7 @@ function rebuildBaseSolids() {
   if (FLUX) fluxSolids();
   if (FARMLAND) farmSolids();
   if (SNOWV) snowSolids();
+  if (MOONV) moonSolids();
   if (TERRAIN.kind === 'hill') {                   // muros das encostas (nas ladeiras não há muro; nas escadarias, só para a van)
     const isRamp = (j, i) => TERRAIN.ramps.some(r => r.j === j && r.i === i), isStair = (j, i) => TERRAIN.stairs.some(r => r.j === j && r.i === i);
     const wall = (j, i, top) => { const z = top ? rc(i + 1) - hr : rc(i) + hr; SOLIDS.push({ x0: rc(j) - hr, x1: rc(j) + hr, z0: z - 0.3, z1: z + 0.3, vanOnly: isStair(j, i) }); };
@@ -361,6 +366,28 @@ function setupFlux(kind) {
 }
 /** Nevasca: muros nas bordas dos patamares (abertos nas ladeiras), laterais das ladeiras, montes de neve dos atalhos
  *  (sólidos próprios: o limpa-neve os abre e fecha — main.js) e os pinheiros. */
+/** Órbita: bordas do patamar (abertas nas rampas), laterais das rampas, crateras (com a passagem da ponte livre), estufa,
+ *  plataforma do foguete, torre de antenas, pedras e túneis. */
+function moonSolids() {
+  const V = MOONV, P = V.PLAT, hw = MOON.RW / 2;
+  const gapsX = V.ramps.filter(r => r.axis === 'z').map(r => [r.x0 - 0.6, r.x1 + 0.6]), gapsZ = V.ramps.filter(r => r.axis === 'x').map(r => [r.z0 - 0.6, r.z1 + 0.6]);
+  const line = (from, to, gaps, mk) => { let a = from; for (const g of gaps.slice().sort((p, q) => p[0] - q[0])) { if (g[0] > a) mk(a, g[0]); a = Math.max(a, g[1]); } if (to > a) mk(a, to); };
+  for (const z of [P.z0, P.z1]) line(P.x0, P.x1, gapsX, (a, b) => SOLIDS.push({ x0: a, x1: b, z0: z - 0.35, z1: z + 0.35 }));
+  for (const x of [P.x0, P.x1]) line(P.z0, P.z1, gapsZ, (a, b) => SOLIDS.push({ x0: x - 0.35, x1: x + 0.35, z0: a, z1: b }));
+  for (const r of V.ramps) {
+    if (r.axis === 'z') SOLIDS.push({ x0: r.x0 - 0.6, x1: r.x0, z0: r.z0, z1: r.z1 }, { x0: r.x1, x1: r.x1 + 0.6, z0: r.z0, z1: r.z1 });
+    else SOLIDS.push({ x0: r.x0, x1: r.x1, z0: r.z0 - 0.6, z1: r.z0 }, { x0: r.x0, x1: r.x1, z0: r.z1, z1: r.z1 + 0.6 });
+  }
+  for (const c of V.craters) {
+    const b = { x0: c.x - c.r + 0.6, x1: c.x + c.r - 0.6, z0: c.z - c.r + 0.6, z1: c.z + c.r - 0.6 };
+    if (c.bridge === 'z') SOLIDS.push({ ...b, x1: c.x - hw - 0.2 }, { ...b, x0: c.x + hw + 0.2 });
+    else if (c.bridge === 'x') SOLIDS.push({ ...b, z1: c.z - hw - 0.2 }, { ...b, z0: c.z + hw + 0.2 });
+    else SOLIDS.push(b);
+  }
+  SOLIDS.push({ ...V.greenhouse }, { x0: V.pad.x - V.pad.r, x1: V.pad.x + V.pad.r, z0: V.pad.z - V.pad.r, z1: V.pad.z + V.pad.r }, { x0: 119.4, x1: 120.6, z0: 129.4, z1: 130.6 });
+  for (const p of V.rocks) SOLIDS.push({ ...p.box });
+  for (const t of V.tunnels) SOLIDS.push({ x0: Math.min(t.a.x, t.b.x) - 1.2, x1: Math.max(t.a.x, t.b.x) + 1.2, z0: Math.min(t.a.z, t.b.z) - 1.2, z1: Math.max(t.a.z, t.b.z) + 1.2 });
+}
 function snowSolids() {
   const V = SNOWV, edge = (P, along, fixed, from, to, gaps) => {      // along 'x' (borda norte) ou 'z' (borda oeste)
     let a = from;

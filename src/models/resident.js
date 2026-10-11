@@ -2,7 +2,8 @@
 // userData.setMood('angry' | 'happy') troca pose e balão; userData.update(t) anima.
 import * as THREE from 'three';
 import { box, cyl, sphere, torus, at, dynamic, bakeStatic } from './kit.js';
-import { SHIRTS, HAIRS, HOUSES } from '../data.js';
+import { SHIRTS, HAIRS, HOUSES, MOON_COL } from '../data.js';
+import { spaceSuit } from './moon.js';
 
 const SKIN = '#f0c49a', PANTS = '#3d4a66', SHOES = '#2b2522', EYES = '#2a1d14', CHEEK = '#f29a8a';
 const CARDBOARD = '#c98a4a', TAPE = '#f3d9a6';
@@ -77,6 +78,13 @@ const FARM_LOOKS = ['plaid-straw', 'plain-cap-rolled', 'overalls-straw', 'plaid-
 export function buildResident(houseIndex) {
   const farm = HOUSES[houseIndex] && HOUSES[houseIndex].kind === 'farm';
   if (farm) return buildFarmResident(houseIndex);
+  if (HOUSES[houseIndex] && HOUSES[houseIndex].kind === 'moon') {     // Órbita: traje espacial branco, faixa na cor do módulo, capacete transparente
+    const H = HOUSES[houseIndex], r = buildCore(houseIndex, { shirt: '#f1ede2', hair: HAIRS[(houseIndex * 3) % HAIRS.length], farm: { pants: '#e6e2d6', boots: '#8d9198' } });
+    const body = r.children[0];
+    body.add(at(cyl(0.38, 0.38, 0.12, MOON_COL[H.stripe], 10), 0, 1.0, 0));
+    spaceSuit(body, { headY: 1.18 + 0.34, r: 0.64, back: [0, -0.44], backY: 0.92 });
+    return r;
+  }
   const ven = HOUSES[houseIndex] && HOUSES[houseIndex].kind === 'ven';
   const look = ven ? VEN_LOOKS[(houseIndex * 5) % VEN_LOOKS.length] : null, V = VEN_STYLE, pk = (a, k = 1) => a[(houseIndex * k) % a.length];
   const striped = look === 'stripe' || look === 'gondolier';
@@ -89,7 +97,7 @@ export function buildResident(houseIndex) {
 function buildCore(houseIndex, { shirt, hair, ven = false, look = null, V = VEN_STYLE, pk = a => a[0], striped = false, farm = null }) {
   const root = new THREE.Group();
   root.name = 'resident:' + houseIndex;
-  const PANTS_ = farm ? farm.pants : PANTS, SHOES_ = farm ? FARM_STYLE.boots : SHOES;
+  const PANTS_ = farm ? farm.pants : PANTS, SHOES_ = farm ? (farm.boots || FARM_STYLE.boots) : SHOES;
   const body = new THREE.Group();          // quica sem mexer na posição que o mundo define para root
   body.position.y = LIFT;
   root.add(body);

@@ -27,8 +27,9 @@ export function createWalker(scene) {
   const blocked = (x, z, boxes, van) => hits(x, z, boxes) || hitsVan(x, z, van);
 
   let floorY = 0;                              // altura do chão (0; no terraço de um prédio, a laje)
+  let lowG = false, yAbs = 0, vy = 0;          // gravidade baixa (Órbita): passos saltitantes e quedas lentas
   function apply() {
-    root.position.set(st.x, floorY, st.z);
+    root.position.set(st.x, lowG ? yAbs : floorY, st.z);
     root.rotation.y = -st.heading;
   }
 
@@ -77,14 +78,17 @@ export function createWalker(scene) {
     /** Muda a altura do chão em que ele anda (terraço de prédio). */
     setFloor(y) { floorY = y; apply(); },
     setArea(fn) { area = fn; },
+    /** Gravidade baixa (Órbita). */
+    setLowGravity(on) { lowG = !!on; yAbs = floorY; vy = 0; apply(); },
     /** Põe o personagem num ponto, olhando para `heading` (Shop). */
-    pose(x, z, heading) { st.x = x; st.z = z; st.heading = heading; apply(); },
+    pose(x, z, heading) { st.x = x; st.z = z; st.heading = heading; yAbs = floorY; vy = 0; apply(); },
     show(on) { root.visible = on; if (!on) st.speed = 0; },
     /** Põe o personagem ao lado da porta do motorista (tenta os dois lados da van; sem espaço, afasta mais). */
     /** strict (Veneza): sem lugar livre ao lado (só água), não desce e retorna false. */
     placeBesideVan(van, boxes, strict = false) {
       const fx = Math.cos(van.heading), fz = Math.sin(van.heading);
       for (const d of [3.4, 4.2, 5.0]) for (const side of [1, -1]) {
+        yAbs = -999;                                                   // (gravidade baixa: começa apoiado no chão)
         const x = van.x + side * fz * d, z = van.z - side * fx * d;
         if (!hits(x, z, boxes)) { st.x = x; st.z = z; st.heading = van.heading; st.speed = 0; apply(); return true; }
       }
@@ -118,6 +122,10 @@ export function createWalker(scene) {
       if (!blocked(st.x + dx, st.z, boxes, van)) st.x += dx;     // desliza: tenta cada eixo separado
       if (!blocked(st.x, st.z + dz, boxes, van)) st.z += dz;
       animate(dt, move);
+      if (lowG) {                                                    // gravidade baixa: cai devagar; andando, dá pulinhos
+        vy -= 3.2 * dt; yAbs += vy * dt;
+        if (yAbs <= floorY) { yAbs = floorY; vy = Math.abs(move) > 0.5 ? 1.5 : 0; }
+      }
       apply();
     },
   };
