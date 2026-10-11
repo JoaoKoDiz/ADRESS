@@ -1108,7 +1108,7 @@ function update(dt, t) {
   heli.update(dt, state === 'drive' && heli.on ? input.lift() : 0);
   boom.update(dt);
   { const foot = state === 'walk';              // quem está perto: a van ou, a pé, o personagem
-    jamSound.update(dt, IN_GAME.includes(state) && [6, 7].includes(gameMode === 'career' ? careerLevel : freeLevel) && !missions.isOpen,
+    jamSound.update(dt, IN_GAME.includes(state) && [6, 7, 9].includes(gameMode === 'career' ? careerLevel : freeLevel) && !missions.isOpen,   // Bairros 7, 8 e 10
       barriers.jamRects, foot ? walker.x : van.x, foot ? walker.z : van.z); }
   // entregando (campainha/diálogo) ou com o balão "E — Entregar" à vista: a câmera se volta para a casa
   const focusH = (state === 'ring' || state === 'dialog') ? pending : state === 'drive' ? nearHouse : -1;

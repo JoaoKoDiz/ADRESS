@@ -20,16 +20,21 @@ export function buildWareLot(h) {
   const BX0 = 1.5, BX1 = W - 1.5, BZ0 = 0.8, BZ1 = 10.5, BH = 6.4;
   add(box(BX1 - BX0, BH, BZ1 - BZ0, '#d9d4c7'), (BX0 + BX1) / 2, G + BH / 2, (BZ0 + BZ1) / 2);
   for (let x = BX0 + 1.2; x < BX1 - 0.5; x += 1.6) add(box(0.18, BH - 0.4, 0.12, '#c4bfb2'), x, G + BH / 2, BZ1 + 0.06);
-  // telhado amplo de duas águas (baixo), na cor do galpão, com beiral
-  const rc = WROOF_COL[h.wroof] || '#7d838c', D = BZ1 - BZ0 + 1.6, rise = 2.2;
+  // telhado de duas águas: as duas águas se encontram na cumeeira (ao longo do comprimento, eixo X), apoiadas no topo das
+  // paredes, com beiral uniforme; oitões triangulares nas duas pontas preenchem exatamente o vão sob o telhado
+  const rc = WROOF_COL[h.wroof] || '#7d838c', zc = (BZ0 + BZ1) / 2, half = (BZ1 - BZ0) / 2, rise = 2.2, O = 0.6, T = 0.3;
+  const ang = Math.atan2(rise, half), yTop = G + BH + rise, run = half + O, len = run / Math.cos(ang);
   for (const s of [-1, 1]) {
-    const len = Math.hypot(D / 2, rise), ang = Math.atan2(rise, D / 2);
-    add(box(BX1 - BX0 + 1.4, 0.35, len, rc), (BX0 + BX1) / 2, G + BH + rise / 2, (BZ0 + BZ1) / 2 + s * D / 4, -s * ang, 0, 0);
+    // face de baixo da água: reta da cumeeira (zc, yTop) até o beiral; passa exatamente sobre o topo da parede
+    const mz = zc + s * run / 2, my = yTop - Math.tan(ang) * run / 2;
+    add(box(BX1 - BX0 + 2 * O, T, len, rc), (BX0 + BX1) / 2, my + (T / 2) / Math.cos(ang), mz, s * ang, 0, 0);
   }
-  for (const x of [BX0 - 0.6, BX1 + 0.6]) {                          // oitões (triângulos) nas pontas
-    const sh = new THREE.Shape(); sh.moveTo(-D / 2 + 0.8, 0); sh.lineTo(D / 2 - 0.8, 0); sh.lineTo(0, rise); sh.lineTo(-D / 2 + 0.8, 0);
-    const m = new THREE.Mesh(new THREE.ExtrudeGeometry(sh, { depth: 0.3, bevelEnabled: false }), mat('#d9d4c7'));
-    m.position.set(x - 0.15, G + BH, (BZ0 + BZ1) / 2); m.rotation.y = Math.PI / 2; root.add(m);
+  add(box(BX1 - BX0 + 2 * O, 0.32, 0.5, rc), (BX0 + BX1) / 2, yTop + T / Math.cos(ang) - 0.06, zc);   // cumeeira (fecha a junta)
+  const gable = new THREE.Shape(); gable.moveTo(-half, 0); gable.lineTo(half, 0); gable.lineTo(0, rise); gable.lineTo(-half, 0);
+  const gGeo = new THREE.ExtrudeGeometry(gable, { depth: 0.3, bevelEnabled: false });
+  for (const x of [BX0, BX1 - 0.3]) {                                   // oitões no plano das paredes das pontas
+    const m = new THREE.Mesh(gGeo, mat('#d9d4c7'));
+    m.position.set(x, G + BH, zc); m.rotation.y = Math.PI / 2; root.add(m);
   }
   // portão grande de enrolar (na frente do lote da esquerda: o ponto de entrega fica ali na rua)
   const gc = GATE_COL[h.gate] || '#2f78d0', GX = 8.6, GW = 6.2, GH = 4.8;
