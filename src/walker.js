@@ -20,7 +20,8 @@ export function createWalker(scene) {
   const st = { x: 0, z: 0, heading: 0, speed: 0 };
   let phase = 0;
 
-  const hits = (x, z, boxes) => boxes.some(b => x > b.x0 - RADIUS && x < b.x1 + RADIUS && z > b.z0 - RADIUS && z < b.z1 + RADIUS);
+  let area = null;                             // Veneza: onde dá para pisar (ilhas, praças, pontes); fora disso é água
+  const hits = (x, z, boxes) => (area && !area(x, z)) || boxes.some(b => x > b.x0 - RADIUS && x < b.x1 + RADIUS && z > b.z0 - RADIUS && z < b.z1 + RADIUS);
   // a van é um círculo; se o personagem já está dentro dele (acabou de descer), só impede de entrar mais fundo
   const hitsVan = (x, z, van) => { const d = Math.hypot(x - van.x, z - van.z); return d < 2.5 + RADIUS && d < Math.hypot(st.x - van.x, st.z - van.z) - 1e-6; };
   const blocked = (x, z, boxes, van) => hits(x, z, boxes) || hitsVan(x, z, van);
@@ -75,6 +76,7 @@ export function createWalker(scene) {
     get floor() { return floorY; },
     /** Muda a altura do chão em que ele anda (terraço de prédio). */
     setFloor(y) { floorY = y; apply(); },
+    setArea(fn) { area = fn; },
     /** Põe o personagem num ponto, olhando para `heading` (Shop). */
     pose(x, z, heading) { st.x = x; st.z = z; st.heading = heading; apply(); },
     show(on) { root.visible = on; if (!on) st.speed = 0; },

@@ -266,7 +266,7 @@ const FOOT = { house: [4.1, 13.1, 1.5, 8.5], shop: [3.8, 13.4, 1.5, 8.5], apt: [
 /** Obstáculos de quem anda a pé: tudo menos os lotes inteiros e a praça (dá para entrar nos quintais); só as paredes das casas. */
 function walkSolids() {
   const out = SOLIDS.slice(HOUSE_SLOTS.length + (PLAZA ? 1 : 0)).filter(b => !b.vanOnly);   // escadarias e passarelas: só a pé
-  if (VENICE) out.push(...VENICE.waterBoxes);                       // Veneza: a pé não se entra nos canais (só pontes e vielas)   // postos, sebe, troncos, parede da entrada, bloqueios
+   // postos, sebe, troncos, parede da entrada, bloqueios
   for (const s of HOUSE_SLOTS) {
     const h = game.layout[s];
     if (h < 0 || boom.isDestroyed(h)) continue;
@@ -297,7 +297,8 @@ function useNeighborhood(kind) {
   train.detach();
   game.placeTags = kind === 'venice8' ? layout => { const m = {}; layout.forEach((h, s) => { if (h >= 0) m[h] = slotPlaceTags(s); }); return m; } : null;
   game.arrange = null;
-  setBoatMode(kind === 'venice8');   // antes de construir a cena do bairro
+  setBoatMode(kind === 'venice8');
+  walker.setArea(kind === 'venice8' ? (x, z) => VENICE.walkable(x, z) : null);   // Veneza: a pé só em terra e nas pontes   // antes de construir a cena do bairro
   configureGrid(kind);
   let w = worlds[kind];
   if (!w) {                                     // primeira vez: constrói (escondido pelo fade)

@@ -79,6 +79,8 @@ export function configureGrid(kind) {
   setupTerrain(kind);
   setupRail(kind);
   setupVenice(kind);
+  VAN_START.z = HEDGE + ROAD / 2 + 0.2; VAN_START.heading = Math.PI / 2;
+  if (VENICE) Object.assign(VAN_START, VENICE.start);   // Veneza: a lancha começa na entrada do canto sudeste, virada para o noroeste
   GAS_LIST = []; WARE_LIST = [];
   HOUSE_SLOTS = baseSlots();
   rebuildBaseSolids();
@@ -86,7 +88,7 @@ export function configureGrid(kind) {
 
 /** Lotes que podem ter construção (sem praça e sem o canal). */
 function baseSlots() {
-  return [...Array(GRID * GRID).keys()].filter(s => !(PLAZA && PLAZA.slots.includes(s)) && !(CANAL && CANAL.cols.includes(s % GRID)) && !(RAIL && RAIL.reserved.includes(s)) && !(VENICE && VENICE.water.concat(VENICE.campo).includes(s)));
+  return [...Array(GRID * GRID).keys()].filter(s => !(PLAZA && PLAZA.slots.includes(s)) && !(CANAL && CANAL.cols.includes(s % GRID)) && !(RAIL && RAIL.reserved.includes(s)) && !(VENICE && VENICE.nonHouse.includes(s)));
 }
 /** Postos (e galpões, Bairro 10) em pares de lotes vizinhos ([s, s+1], mesma linha). O galpão fica no lote da esquerda
  *  (é um destino de entrega); o da direita e a rua entre os dois ficam por baixo dele. Refaz os obstáculos-base. */
@@ -136,41 +138,48 @@ function setupRail(kind) {
     crossings: [1, 2].map(j => ({ j, x: rc(j), s: a + arc + rc(j) - (x0 + R) })) };
 }
 
-// ---- Nível 12 (Veneza): todas as ruas são canais; o canal principal (mais largo) serpenteia por 10 quadras em S, de oeste a
-// leste; a Ponte de Rialto o cruza na quadra 27 (linha 3, coluna 3). Alguns trechos de rua são vielas de pedra (só a pé) e
-// a quadra 54 é uma pracinha. Pontes menores ligam os cais da frente das ilhas. A lancha passa por baixo de todas as pontes.
+// ---- Nível 12 (Veneza), estrutura fixa (desenho do dono): casas nas bordas e em alguns pontos; uma faixa larga de água
+// em diagonal (noroeste → sudeste); duas praças em L, simétricas (laranja = pedregulhos, roxo = mesas com sombrinhas,
+// verde = café/restaurante); a Ponte de Rialto em diagonal ligando as duas praças; entrada da lancha no canto sudeste.
+// Linhas de cima para baixo (0 = norte), colunas da esquerda para a direita (0 = oeste). Só as casas mudam a cada partida.
 function setupVenice(kind) {
   if (kind !== 'venice8') { VENICE = null; return; }
-  const rc = roadCenter, hr = ROAD / 2;
-  const water = [[4, 0], [4, 1], [4, 2], [3, 2], [3, 3], [3, 4], [3, 5], [4, 5], [4, 6], [4, 7]].map(([r, c]) => r * 8 + c);
-  const walkways = [[1, 6], [2, 6], [5, 1]].map(([j, i]) => ({ x0: rc(j) + hr, x1: rc(j + 1) - hr, z0: rc(i) - hr, z1: rc(i) + hr }));
-  const rialto = { x: lotX(3) + LOT / 2, w: 8.4, z0: lotZ(2) + LOT, z1: lotZ(4), rise: 5.4 };
-  const bridges = [[1, 3], [6, 4], [5, 6], [0, 2], [7, 2]].map(([i, j]) => ({ x0: rc(j) - hr - 0.3, x1: rc(j) + hr + 0.3, z: lotZ(i) + 14.6, w: 2.6, rise: 2.5 }));
+  const rc = roadCenter, hr = ROAD / 2, X = lotX, Z = lotZ, L = LOT;
+  const HOUSE = ['########', '#..##..#', '#......#', '##....##', '##....##', '#......#', '#..##..#', '#######.'];
+  const houses = [];
+  HOUSE.forEach((row, r) => [...row].forEach((ch, c) => { if (ch === '#') houses.push(r * 8 + c); }));
+  // praças (com as ruas entre as quadras delas; inclui a rua da frente das casas 12 e 33, que viram entregas a pé)
+  const rect = (x0, z0, x1, z1) => ({ x0, z0, x1, z1 });
+  const plazaNE = [rect(X(5), Z(1), X(6) + L, Z(2) + L), rect(X(4), Z(2), X(5) + L, Z(2) + L), rect(X(5), Z(2), X(5) + L, Z(3) + L), rect(X(4), rc(2) - hr, X(4) + L, Z(2))];
+  const plazaSW = [rect(X(1), Z(5), X(2) + L, Z(6) + L), rect(X(2), Z(5), X(3) + L, Z(5) + L), rect(X(2), Z(4), X(2) + L, Z(5) + L), rect(X(1), rc(5) - hr, X(1) + L, Z(5))];
+  const zones = {                                           // laranja / roxo / verde (quadras)
+    orange: [[2, 4], [2, 5], [3, 5], [4, 2], [5, 2], [5, 3]], purple: [[1, 5], [2, 6], [5, 1], [6, 2]], green: [[1, 6], [6, 1]] };
+  const cafes = zones.green.map(([r, c]) => rect(X(c) + 2.5, Z(r) + 1.5, X(c) + L - 2.5, Z(r) + 9.5));
+  // Rialto: diagonal da quina interna do L nordeste até a quina interna do L sudoeste
+  const A = { x: X(5), z: Z(2) + L }, B = { x: X(2) + L, z: Z(5) }, len = Math.hypot(B.x - A.x, B.z - A.z);
+  const rialto = { cx: (A.x + B.x) / 2, cz: (A.z + B.z) / 2, ux: (B.x - A.x) / len, uz: (B.z - A.z) / len, len: len + 6, w: 9, rise: 6.2 };
+  // pontes menores (atravessam canais verticais entre duas quadras vizinhas): casa↔casa e praça↔casa
+  const bridges = [[0, 2], [0, 6], [7, 3], [7, 5], [1, 4], [6, 4], [6, 3], [1, 5]].map(([i, j]) => ({ x0: rc(j) - hr - 0.4, x1: rc(j) + hr + 0.4, z: Z(i) + 14.6, w: 2.6, rise: 2.5 }));
   const LAND = 0.15;
+  const onRialto = (x, z) => { const dx = x - rialto.cx, dz = z - rialto.cz, a = dx * rialto.ux + dz * rialto.uz, b = -dx * rialto.uz + dz * rialto.ux;
+    return Math.abs(b) < rialto.w / 2 && Math.abs(a) < rialto.len / 2 ? (a + rialto.len / 2) / rialto.len : -1; };
+  const inR = (r, x, z, m = 0) => x > r.x0 - m && x < r.x1 + m && z > r.z0 - m && z < r.z1 + m;
   const walkH = (x, z) => {
-    const R = rialto;
-    if (Math.abs(x - R.x) < R.w / 2 && z > R.z0 - 1.2 && z < R.z1 + 1.2) { const t = Math.min(1, Math.max(0, (z - R.z0 + 1.2) / (R.z1 - R.z0 + 2.4))); return LAND + R.rise * 4 * t * (1 - t); }
-    for (const b of bridges) if (Math.abs(z - b.z) < b.w / 2 && x > b.x0 && x < b.x1) { const t = (x - b.x0) / (b.x1 - b.x0); return LAND + b.rise * 4 * t * (1 - t); }
+    const t = onRialto(x, z); if (t >= 0) return LAND + rialto.rise * 4 * t * (1 - t);
+    for (const b of bridges) if (Math.abs(z - b.z) < b.w / 2 && x > b.x0 && x < b.x1) { const u = (x - b.x0) / (b.x1 - b.x0); return LAND + b.rise * 4 * u * (1 - u); }
     return LAND;
   };
-  // água (para quem anda a pé): ruas-canal e quadras do canal principal, menos vielas, pontes e a Rialto
-  const holesX = (z0, z1) => walkways.filter(w => w.z0 < z1 && w.z1 > z0).map(w => [w.x0, w.x1])
-    .concat(rialto.z0 - 0.1 < z1 && rialto.z1 + 0.1 > z0 ? [[rialto.x - rialto.w / 2, rialto.x + rialto.w / 2]] : []);
-  const holesZ = (x0, x1) => bridges.filter(b => b.x0 < x1 && b.x1 > x0).map(b => [b.z - b.w / 2, b.z + b.w / 2]);
-  const cut = (a0, a1, holes) => { const out = []; let a = a0; for (const [h0, h1] of holes.sort((p, q) => p[0] - q[0])) { if (h0 > a) out.push([a, h0]); a = Math.max(a, h1); } if (a < a1) out.push([a, a1]); return out; };
-  const waterBoxes = [];
-  for (let i = 0; i <= GRID; i++) {
-    const z0 = rc(i) - hr, z1 = rc(i) + hr;
-    for (const [x0, x1] of cut(HEDGE, MAP - HEDGE, holesX(z0, z1))) waterBoxes.push({ x0, x1, z0, z1 });
-    const X0 = rc(i) - hr, X1 = rc(i) + hr;
-    for (const [a, b] of cut(HEDGE, MAP - HEDGE, holesZ(X0, X1))) waterBoxes.push({ x0: X0, x1: X1, z0: a, z1: b });
-  }
-  for (const s of water) {
-    const o = slotOrigin(s), z0 = o.z - 0.5, z1 = o.z + LOT + 0.5;
-    for (const [x0, x1] of cut(o.x - 0.5, o.x + LOT + 0.5, holesX(z0, z1))) waterBoxes.push({ x0, x1, z0, z1 });
-  }
-  VENICE = { water, campo: [54], walkways, rialto, bridges, walkH, waterBoxes, LAND,
-    tags: { 19: 'loc:rialto', 20: 'loc:rialto', 35: 'loc:rialto', 36: 'loc:rialto', 46: 'loc:campo', 53: 'loc:campo', 55: 'loc:campo', 62: 'loc:campo' } };
+  // onde dá para andar: ilhas das casas, praças, pontes (o resto é água)
+  const walkable = (x, z) => {
+    if (onRialto(x, z) >= 0) return true;
+    for (const b of bridges) if (Math.abs(z - b.z) < b.w / 2 && x > b.x0 && x < b.x1) return true;
+    if (plazaNE.concat(plazaSW).some(r => inR(r, x, z, 0.3))) return !cafes.some(r => inR(r, x, z));
+    return houses.some(s => inR({ x0: X(s % 8), z0: Z(Math.floor(s / 8)), x1: X(s % 8) + L, z1: Z(Math.floor(s / 8)) + L }, x, z, 0.3));
+  };
+  const tag = {}; [12, 30].forEach(s => { tag[s] = 'loc:rialto'; }); [33, 51].forEach(s => { tag[s] = 'loc:rialto'; });
+  [6, 15, 57, 48].forEach(s => { tag[s] = 'loc:cafe'; });
+  VENICE = { houses, nonHouse: [...Array(64).keys()].filter(s => !houses.includes(s)), plazaNE, plazaSW, zones, cafes, rialto, bridges,
+    walkH, walkable, LAND, tags: tag, footOnly: [12, 33], start: { x: X(7) + L / 2, z: Z(7) + L / 2, heading: -3 * Math.PI / 4 } };
 }
 
 /** Etiquetas de lugar de um lote (Bairro 9): parte mais alta, depois da subida, ao lado da escadaria. */
@@ -246,9 +255,9 @@ function rebuildBaseSolids() {
     }
     SOLIDS.push({ x0: CANAL.x0, x1: CANAL.x1, z0: z, z1: MAP - HEDGE });
   }
-  if (VENICE) {                                    // Veneza: vielas e pracinha são só a pé (a lancha não sobe)
-    for (const w of VENICE.walkways) SOLIDS.push({ ...w, vanOnly: true });
-    for (const s of VENICE.campo) { const o = slotOrigin(s); SOLIDS.push({ x0: o.x - WALK, z0: o.z - WALK, x1: o.x + LOT + WALK, z1: o.z + LOT + WALK, vanOnly: true }); }
+  if (VENICE) {                                    // Veneza: as praças são só a pé (a lancha não sobe)
+    SOLIDS.push({ x0: ENTRANCE.x0, x1: ENTRANCE.x1, z0: -0.5, z1: HEDGE });   // sem a abertura do norte (a entrada é no sudeste)
+    for (const r of VENICE.plazaNE.concat(VENICE.plazaSW)) SOLIDS.push({ x0: r.x0 - WALK, z0: r.z0 - WALK, x1: r.x1 + WALK, z1: r.z1 + WALK, vanOnly: true });
   }
   if (RAIL) {                                      // ferrovia: faixa da rua 0 (até depois da curva) e os lotes dos trilhos/estações
     SOLIDS.push({ x0: HEDGE - 0.2, x1: rc(0) + hr + 0.2, z0: HEDGE, z1: RAIL.zc - 1.6 });

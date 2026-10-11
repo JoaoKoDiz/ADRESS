@@ -3,7 +3,7 @@
 import * as THREE from 'three';
 import { box, at, mesh, textTexture } from './models/kit.js';
 import { buildRail } from './train.js';
-import { RAIL as RAIL_PATH, VENICE, TERRAIN, CANAL, slotOrigin, doorPoint, GRID, MAP, HEDGE, ROAD, LOT, roadCenter } from './layout.js';
+import { RAIL as RAIL_PATH, VENICE, TERRAIN, CANAL, slotOrigin, doorPoint, lotX, lotZ, GRID, MAP, HEDGE, ROAD, LOT, roadCenter } from './layout.js';
 
 const ASPHALT = '#5d6470', WALLC = '#b9ad98', CAP = '#d8cfbe', RAIL = '#e8e2d4', STEPC = '#cfc6b4';
 const WATER = '#3d8fc4', WATER_DEEP = '#2f78ad', STONE = '#a99f8f', WOOD = '#8a6a44';
@@ -164,45 +164,75 @@ function signPost(g, text, x, z, ry = 0, bg = '#1f4f8a') {
   g.add(p);
 }
 function buildVenice(g) {
-  const V = VENICE, W = MAP - 2 * HEDGE;
-  g.add(at(box(W, 0.06, W, '#3f8fb0'), MAP / 2, 0.02, MAP / 2));                                // água dos canais (as ilhas ficam por cima)
-  for (let k = 0; k < 120; k++) {                                                              // reflexos
-    const x = HEDGE + ((k * 37) % 97) / 97 * W, z = HEDGE + ((k * 53) % 89) / 89 * W;
-    g.add(at(box(1.8, 0.07, 0.18, '#8cc6ea'), x, 0.03, z));
+  const V = VENICE, W = MAP - 2 * HEDGE, rand = (() => { let k = 7; return () => (k = (k * 16807) % 2147483647) / 2147483647; })();
+  g.add(at(box(W, 0.06, W, '#3f8fb0'), MAP / 2, 0.02, MAP / 2));                                // água (as ilhas ficam por cima)
+  for (let k = 0; k < 120; k++) g.add(at(box(1.8, 0.07, 0.18, '#8cc6ea'), HEDGE + rand() * W, 0.03, HEDGE + rand() * W));   // reflexos
+  // muro baixo de pedra em volta (no lugar da sebe), aberto no canto sudeste: a entrada da lancha
+  const E = MAP - HEDGE, gap = lotX(7) - 0.4;
+  g.add(at(box(W + 3.2, 1.2, 1.6, '#cfc6b4'), MAP / 2, 0.4, HEDGE / 2));
+  g.add(at(box(1.6, 1.2, W + 3.2, '#cfc6b4'), HEDGE / 2, 0.4, MAP / 2));
+  g.add(at(box(gap, 1.2, 1.6, '#cfc6b4'), gap / 2, 0.4, E + 0.8));
+  g.add(at(box(1.6, 1.2, gap, '#cfc6b4'), E + 0.8, 0.4, gap / 2));
+  for (const [x, z] of [[gap, E + 0.8], [E + 0.8, gap]]) {                                     // postes listrados da entrada
+    for (let k = 0; k < 5; k++) g.add(at(cylLike(0.3, 0.7, k % 2 ? '#ffffff' : '#c8402f'), x, 0.35 + k * 0.7, z));
   }
-  for (const w of V.walkways) {                                                                // vielas de pedra (só a pé)
-    g.add(at(box(w.x1 - w.x0 + 0.6, 0.6, w.z1 - w.z0, '#d6cdbb'), (w.x0 + w.x1) / 2, -0.15, (w.z0 + w.z1) / 2));
-    for (let x = w.x0 + 0.8; x < w.x1; x += 1.6) g.add(at(box(0.05, 0.02, w.z1 - w.z0 - 0.4, '#bfb5a2'), x, 0.16, (w.z0 + w.z1) / 2));
+  // praças: base de pedra; laranja = pedregulhos, roxo = mesas com sombrinhas, verde = café/restaurante
+  for (const r of V.plazaNE.concat(V.plazaSW)) {
+    g.add(at(box(r.x1 - r.x0 + 0.6, 0.9, r.z1 - r.z0 + 0.6, '#bfb5a2'), (r.x0 + r.x1) / 2, -0.3, (r.z0 + r.z1) / 2));
+    g.add(at(box(r.x1 - r.x0, 0.04, r.z1 - r.z0, '#d9cfbd'), (r.x0 + r.x1) / 2, 0.15, (r.z0 + r.z1) / 2));
   }
-  for (const s of V.campo) {                                                                   // pracinha: piso, poço e bancos
-    const o = slotOrigin(s);
-    g.add(at(box(LOT + 0.6, 0.9, LOT + 0.6, '#bfb5a2'), o.x + LOT / 2, -0.3, o.z + LOT / 2));
-    g.add(at(box(LOT, 0.04, LOT, '#e2dacb'), o.x + LOT / 2, 0.15, o.z + LOT / 2));
-    g.add(at(box(2.4, 1.0, 2.4, '#cfc6b4'), o.x + LOT / 2, 0.65, o.z + LOT / 2));
-    g.add(at(box(1.6, 0.1, 1.6, '#2e3a46'), o.x + LOT / 2, 1.16, o.z + LOT / 2));
-    for (const [dx, dz] of [[-5, 0], [5, 0], [0, -5], [0, 5]]) g.add(at(box(dz ? 2.2 : 0.6, 0.45, dz ? 0.6 : 2.2, '#8a5a36'), o.x + LOT / 2 + dx, 0.4, o.z + LOT / 2 + dz));
-    for (const [dx, dz] of [[-6.5, -6.5], [6.5, 6.5]]) { g.add(at(box(0.4, 1.6, 0.4, '#5a3c22'), o.x + LOT / 2 + dx, 0.9, o.z + LOT / 2 + dz)); }
+  const cell = (r, c) => ({ x: lotX(c), z: lotZ(r) });
+  for (const [r, c] of V.zones.orange) {                                                       // pedregulhos
+    const o = cell(r, c);
+    g.add(at(box(LOT + 4, 0.05, LOT + 4, '#c9bda6'), o.x + LOT / 2, 0.16, o.z + LOT / 2));
+    for (let k = 0; k < 70; k++) g.add(at(box(0.5 + rand() * 0.4, 0.06, 0.5 + rand() * 0.4, rand() < 0.5 ? '#b7aa92' : '#ddd2bd'), o.x - 1.5 + rand() * (LOT + 3), 0.18, o.z - 1.5 + rand() * (LOT + 3), 0, rand() * 3, 0));
   }
-  // Ponte de Rialto: pedra clara, grande arco, escadarias nas pontas e duas fileiras de lojinhas cobertas
-  const R = V.rialto;
-  deckSteps(g, 'z', R.z0 - 1.2, R.z1 + 1.2, R.x, R.w, R.rise, 28, '#ece4d2');
-  const lojas = (sx) => {
-    for (const z of [R.z0 + 4.6, R.z0 + 8.0, R.z0 + 11.4, R.z1 - 11.4, R.z1 - 8.0, R.z1 - 4.6]) {
-      const t = (z - R.z0 + 1.2) / (R.z1 - R.z0 + 2.4), y = 0.15 + R.rise * 4 * t * (1 - t);
-      g.add(at(box(2.0, 2.4, 3.0, '#f2ead8'), R.x + sx * 2.9, y + 1.2, z));
-      g.add(at(box(0.08, 1.5, 1.8, '#5b3a22'), R.x + sx * 1.88, y + 1.0, z));
-      g.add(at(box(2.4, 0.3, 3.4, '#b5532f'), R.x + sx * 2.9, y + 2.55, z, 0, 0, sx * 0.25));
+  const UMB = ['#c8402f', '#3c8f52', '#2f6fb0', '#efbf2a', '#fff3d6'];
+  for (const [r, c] of V.zones.purple) {                                                       // mesas, cadeiras e sombrinhas
+    const o = cell(r, c);
+    for (let i = 0; i < 3; i++) for (let j = 0; j < 3; j++) {
+      const x = o.x + 3.2 + i * 5.4, z = o.z + 3.2 + j * 5.4, col = UMB[(i + j * 2 + r) % UMB.length];
+      g.add(at(cylLike(0.6, 0.08, '#f2efe6'), x, 0.9, z)); g.add(at(box(0.12, 0.8, 0.12, '#444'), x, 0.5, z));
+      for (const [dx, dz] of [[-1, 0], [1, 0], [0, -1], [0, 1]]) { g.add(at(box(0.45, 0.08, 0.45, '#8a5a36'), x + dx, 0.55, z + dz)); g.add(at(box(0.45, 0.5, 0.06, '#8a5a36'), x + dx * 1.2, 0.8, z + dz * 1.2, 0, dx ? Math.PI / 2 : 0, 0)); }
+      g.add(at(box(0.08, 2.6, 0.08, '#e8e8e8'), x, 1.5, z));
+      const um = new THREE.Mesh(new THREE.ConeGeometry(1.7, 0.7, 8), new THREE.MeshLambertMaterial({ color: col }));
+      um.position.set(x, 2.95, z); g.add(um);
     }
-  };
-  lojas(-1); lojas(1);
-  const mid = (R.z0 + R.z1) / 2, yTop = 0.15 + R.rise;
-  g.add(at(box(R.w, 0.6, 2.4, '#f2ead8'), R.x, yTop + 3.4, mid));                               // pórtico central
-  for (const sx of [-1, 1]) g.add(at(box(0.8, 3.2, 2.4, '#f2ead8'), R.x + sx * (R.w / 2 - 0.4), yTop + 1.6, mid));
-  g.add(at(box(R.w + 0.4, 0.8, 3.0, '#b5532f'), R.x, yTop + 4.0, mid));
-  for (const z of [R.z0 - 0.4, R.z1 + 0.4]) for (const sx of [-1, 1]) g.add(at(box(1.6, 1.4, 1.6, '#cfc6b4'), R.x + sx * (R.w / 2 + 0.3), 0.6, z));   // pegões
-  signPost(g, 'PONTE DE RIALTO', R.x + R.w / 2 + 1.4, R.z0 - 2.2, 0, '#7a2f2a');
+  }
+  for (const rc2 of V.cafes) {                                                                  // café / restaurante (prédio de 2 andares com toldo e mesas)
+    const cx = (rc2.x0 + rc2.x1) / 2, cz = (rc2.z0 + rc2.z1) / 2, w = rc2.x1 - rc2.x0, d = rc2.z1 - rc2.z0;
+    g.add(at(box(w, 6.2, d, '#e9c98f'), cx, 3.25, cz));
+    for (const s of [-1, 1]) g.add(at(box(w + 0.5, 0.22, d / 2 + 0.6, '#b5532f'), cx, 6.6, cz + s * d / 4, s * 0.32, 0, 0));
+    g.add(at(box(w - 1, 0.15, 1.8, '#3c8f52'), cx, 3.1, rc2.z1 + 0.8, 0.3, 0, 0));
+    for (let x = rc2.x0 + 1.4; x < rc2.x1 - 1; x += 2.4) {
+      g.add(at(box(1.4, 2.2, 0.08, '#2e3a46'), x, 1.4, rc2.z1 + 0.04));
+      g.add(at(box(1.2, 1.2, 0.08, '#2e3a46'), x, 4.6, rc2.z1 + 0.04));
+    }
+    const tex = textTexture('CAFFÈ · RISTORANTE', { width: 768, height: 128, bg: '#2a5a3a', fg: '#fff3d6', font: 'bold 60px "Trebuchet MS", sans-serif' });
+    const sign = new THREE.Mesh(new THREE.PlaneGeometry(w - 2, 1.0), new THREE.MeshLambertMaterial({ map: tex }));
+    sign.position.set(cx, 3.9, rc2.z1 + 0.06); g.add(sign);
+    for (const dx of [-3, 0, 3]) { g.add(at(cylLike(0.5, 0.08, '#f2efe6'), cx + dx, 0.9, rc2.z1 + 3.2)); g.add(at(box(0.1, 0.75, 0.1, '#444'), cx + dx, 0.5, rc2.z1 + 3.2)); }
+  }
+  // Ponte de Rialto em diagonal (de uma praça à outra): pedra clara, grande arco, degraus e lojinhas cobertas
+  const R = V.rialto, rg = new THREE.Group();
+  rg.position.set(R.cx, 0, R.cz); rg.rotation.y = Math.atan2(R.ux, R.uz); g.add(rg);
+  deckSteps(rg, 'z', -R.len / 2, R.len / 2, 0, R.w, R.rise, 36, '#ece4d2');
+  const yAt = z => 0.15 + R.rise * 4 * ((z + R.len / 2) / R.len) * (1 - (z + R.len / 2) / R.len);
+  for (const sx of [-1, 1]) for (const z of [-26, -21, -16, -11, 11, 16, 21, 26]) {
+    const y = yAt(z);
+    rg.add(at(box(2.2, 2.4, 4.4, '#f2ead8'), sx * 3.1, y + 1.2, z));
+    rg.add(at(box(0.08, 1.5, 2.6, '#5b3a22'), sx * 1.98, y + 1.0, z));
+    rg.add(at(box(2.6, 0.3, 4.8, '#b5532f'), sx * 3.1, y + 2.55, z, 0, 0, sx * 0.25));
+  }
+  const yTop = 0.15 + R.rise;
+  rg.add(at(box(R.w, 0.7, 3.0, '#f2ead8'), 0, yTop + 3.6, 0));                                   // pórtico central
+  for (const sx of [-1, 1]) rg.add(at(box(0.9, 3.4, 3.0, '#f2ead8'), sx * (R.w / 2 - 0.45), yTop + 1.7, 0));
+  rg.add(at(box(R.w + 0.4, 0.9, 3.6, '#b5532f'), 0, yTop + 4.3, 0));
+  signPost(g, 'PONTE DE RIALTO', V.rialto.cx + 32 * R.ux * -1 + 4, V.rialto.cz - 32 * R.uz + 2, Math.PI / 4, '#7a2f2a');
   for (const b of V.bridges) deckSteps(g, 'x', b.x0, b.x1, b.z, b.w, b.rise, 10, '#e2dacb');     // pontes menores
-  // entregas a pé: placa no ponto de entrega (viela) e "ATRACAR" nos cais de onde se chega a pé
-  for (const s of [41, 42, 5]) { const d = doorPoint(s); signPost(g, '▼ ENTREGA A PÉ', d.x + 2.8, d.z - 1.4, 0, '#c8402f'); }
-  for (const s of [49, 50, 13]) { const o = slotOrigin(s); signPost(g, '⚓ ATRACAR AQUI', o.x + 3.4, o.z + LOT - 0.6, 0, '#c8402f'); }
+  // entregas a pé: placa na porta (praça) e "ATRACAR AQUI" na borda das praças
+  for (const s of V.footOnly) { const d = doorPoint(s); signPost(g, '▼ ENTREGA A PÉ', d.x + 3.0, d.z + 1.2, 0, '#c8402f'); }
+  signPost(g, '⚓ ATRACAR AQUI', lotX(4) + 2, lotZ(2) + LOT - 0.4, 0, '#c8402f');
+  signPost(g, '⚓ ATRACAR AQUI', lotX(3) + LOT - 2, lotZ(5) + 0.4, Math.PI, '#c8402f');
 }
+function cylLike(r, h, color) { return new THREE.Mesh(new THREE.CylinderGeometry(r, r, h, 10), new THREE.MeshLambertMaterial({ color })); }

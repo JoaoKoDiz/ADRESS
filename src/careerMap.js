@@ -148,25 +148,27 @@ function miniNeighborhood(kind, colors, gray = false) {
     for (let f = 1; f < 4; f++) add(box(2.2, 0.4, 0.06, G('#4a6a8a', '#7a7a7a')), 3.6, 3.7 + f * 1.3, -3.78);
     return bakeStatic(g);
   }
-  if (kind === 'venice') {                       // Nível 12: água por todo lado, canal principal em S, fachadas e Rialto
+  if (kind === 'venice') {                       // Nível 12: casas nas bordas, água em diagonal, 2 praças em L e a Rialto em diagonal
     add(box(13.6, 0.12, 13.6, G('#3f8fb0', '#8f8f8f')), 0, 0.46, 0);
-    const FAC = ['#efe0bd', '#d9a441', '#c8693f', '#d99a94', '#a8432e', '#d9a441'];
-    const block = (x, z, k) => {                                // conjunto de 3 casas estreitas sobre uma ilha de pedra
-      add(box(4.0, 0.3, 3.0, G('#d6cdbb', '#b5b5b5')), x, 0.6, z);
-      for (let i = 0; i < 3; i++) {
-        const hgt = 1.4 + ((k + i) % 3) * 0.5;
-        add(box(1.2, hgt, 1.8, G(FAC[(k + i) % FAC.length], '#c4c4c4')), x - 1.3 + i * 1.3, 0.75 + hgt / 2, z - 0.2);
-        add(box(1.3, 0.2, 2.0, G('#b5532f', '#8c8c8c')), x - 1.3 + i * 1.3, 0.85 + hgt, z - 0.2);
-      }
-    };
-    block(-4.4, -4.6, 0); block(0.6, -4.6, 1); block(4.6, -1.2, 2); block(-4.4, 1.0, 3); block(-0.2, 4.6, 4); block(4.6, 4.6, 5);
-    for (let k = 0; k < 9; k++) {                              // Rialto: arco de pedra clara com lojinhas em cima
-      const t = k / 8, y = 0.6 + Math.sin(t * Math.PI) * 1.4;
-      add(box(1.4, 0.3, 0.6, G('#ece4d2', '#c8c8c8')), 1.8, y, -2.4 + t * 4.8);
+    const FAC = ['#efe0bd', '#d9a441', '#c8693f', '#d99a94', '#a8432e'];
+    const MAP8 = ['########', '#..##..#', '#......#', '##....##', '##....##', '#......#', '#..##..#', '#######.'];
+    const P = c => -6.1 + c * 1.74;
+    MAP8.forEach((row, r) => [...row].forEach((ch, c) => {
+      if (ch !== '#') return;
+      const hgt = 1.0 + ((r * 3 + c) % 3) * 0.45;
+      add(box(1.3, hgt, 1.3, G(FAC[(r + c) % FAC.length], '#c4c4c4')), P(c), 0.5 + hgt / 2, P(r));
+      add(box(1.4, 0.18, 1.4, G('#b5532f', '#8c8c8c')), P(c), 0.6 + hgt, P(r));
+    }));
+    for (const [r, c, col] of [[2, 4, '#c9bda6'], [2, 5, '#c9bda6'], [3, 5, '#c9bda6'], [1, 5, '#d9cfbd'], [2, 6, '#d9cfbd'], [1, 6, '#e9c98f'],
+      [4, 2, '#c9bda6'], [5, 2, '#c9bda6'], [5, 3, '#c9bda6'], [5, 1, '#d9cfbd'], [6, 2, '#d9cfbd'], [6, 1, '#e9c98f']]) {
+      add(box(1.78, 0.2, 1.78, G(col, '#b5b5b5')), P(c), 0.6, P(r));
+      if (col === '#e9c98f') add(box(1.1, 1.2, 1.1, G('#e9c98f', '#b5b5b5')), P(c), 1.3, P(r));
+      if (col === '#d9cfbd') for (const [dx, dz] of [[-0.4, -0.4], [0.4, 0.4]]) add(cone(0.42, 0.25, G(['#c8402f', '#3c8f52'][(r + c) % 2], '#9a9a9a'), 8), P(c) + dx, 1.25, P(r) + dz);
     }
-    add(box(1.6, 0.7, 2.2, G('#f2ead8', '#c8c8c8')), 1.8, 2.25, 0); add(box(1.8, 0.2, 2.4, G('#b5532f', '#8c8c8c')), 1.8, 2.7, 0);
-    add(box(2.6, 0.3, 1.1, G('#f07a1d', '#9a9a9a')), -1.6, 0.6, 0.0, 0, 0.3, 0);       // lancha laranja
-    add(box(0.8, 0.4, 0.8, G('#fff3d6', '#c8c8c8')), -1.4, 0.95, 0.0);
+    const rb = new THREE.Group(); rb.position.set((P(5) + P(2)) / 2 - 0.5, 0, (P(2) + P(5)) / 2 + 0.5); rb.rotation.y = -Math.PI / 4; g.add(rb);
+    for (let k = 0; k <= 10; k++) { const t = k / 10; rb.add(at(box(0.9, 0.25, 0.6, G('#ece4d2', '#c8c8c8')), 0, 0.75 + Math.sin(t * Math.PI) * 1.3, -3 + t * 6)); }
+    rb.add(at(box(1.0, 0.5, 1.2, G('#b5532f', '#8c8c8c')), 0, 2.4, 0));
+    add(box(1.6, 0.3, 0.7, G('#f07a1d', '#9a9a9a')), P(6.6), 0.62, P(6.6), 0, Math.PI / 4, 0);   // lancha na entrada
     return bakeStatic(g);
   }
   if (kind === 'rail') {                         // Bairro 11: trilhos descendo pela lateral, curva e indo para leste; trem e estação
