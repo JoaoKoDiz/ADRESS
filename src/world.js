@@ -3,7 +3,7 @@
 // e os moradores (criados sob demanda na primeira visita).
 import * as THREE from 'three';
 import {
-  HEDGE, ROAD, LOT, WALK, MAP, GRID, PLAZA, lotX, lotZ, slotOrigin, roadCenter, ENTRANCE, LOT_ANCHORS, SOLIDS, TERRAIN, CANAL,
+  HEDGE, ROAD, LOT, WALK, MAP, GRID, PLAZA, lotX, lotZ, slotOrigin, roadCenter, ENTRANCE, LOT_ANCHORS, SOLIDS, TERRAIN, CANAL, RAIL,
 } from './layout.js';
 import { HOUSES } from './data.js';
 import { buildTerrain } from './terrain.js';
@@ -399,7 +399,7 @@ export function createWorld({ renderer, buildLot, buildResident, yardBuilders, p
   scene.add(baked(buildHedge(), true, true));
   scene.add(baked(outskirts, false, false));
   if (PLAZA) scene.add(baked(buildPlaza(), true, true));
-  if (TERRAIN.kind !== 'flat' || CANAL) scene.add(baked(buildTerrain(), true, true));   // Bairros 9 e 10
+  if (TERRAIN.kind !== 'flat' || CANAL || RAIL) scene.add(baked(buildTerrain(), true, true));   // Bairros 9, 10 e 11
 
   // os 16 lotes, construídos uma única vez (cada casa mantém sua identidade; só muda de lugar)
   // (só as casas deste bairro: `pool`; o array é indexado pelo índice da casa)

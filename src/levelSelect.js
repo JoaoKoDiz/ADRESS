@@ -34,7 +34,7 @@ body.lsel-on .title-play, body.lsel-on .title-driver { visibility: hidden; }   /
 .lsel-hint b { display: inline-block; min-width: 1.3em; text-align: center; color: #fff; background: #ff7a1a; border-radius: 5px; padding: .05em .3em; margin: 0 .12em; }
 `;
 // nomes dos bairros (só nesta tela do Modo Livre)
-const NAMES = ['Bairro Raízes', 'Bairro Horizontes', 'Bairro Constância', 'Bairro Veredas', 'Bairro Ofício', 'Bairro Mirante', 'Bairro Altitude', 'Bairro Ápice', 'Bairro Encostas', 'Bairro Travessia'];
+const NAMES = ['Bairro Raízes', 'Bairro Horizontes', 'Bairro Constância', 'Bairro Veredas', 'Bairro Ofício', 'Bairro Mirante', 'Bairro Altitude', 'Bairro Ápice', 'Bairro Encostas', 'Bairro Travessia', 'Bairro Trilhos'];
 const COLS = 4, PER = 8;                    // 8 por página (4×2); as páginas seguem sozinhas conforme entram bairros
 
 export function createLevelSelect(onPick) {

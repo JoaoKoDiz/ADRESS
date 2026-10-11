@@ -15,6 +15,7 @@ import { YARD_BUILDERS } from './models/yard.js';
 import { buildShopLot } from './models/shop.js';
 import { SHOPS, HOUSES, FUTS, L1_FIXED, L6_FIXED, WARES, TWINS } from './data.js';
 import { buildWareLot } from './models/ware.js';
+import { createTrain } from './train.js';
 import { buildAptLot, APT_ROOF, aptRoofHeight, aptRoofY, APT_BUILD } from './models/apt.js';
 import { buildFutLot, futRoofHeight } from './models/fut.js';
 import { createHintArrow } from './hint.js';
@@ -64,7 +65,7 @@ const game = new Game();
 // Bairros (grade em layout.js): 'grid4' (4×4 — Bairros 1 e 3, e o modo Livre), 'plaza6' (6×6 com praça — Bairro 2),
 // 'grid5' (5×5 com posto — Bairro 4), 'grid6s' (6×6 com postos e comércio — Bairro 5), 'city6' (6×6 de prédios — Bairro 6),
 // 'city7' (a mesma cidade, com 1–2 postos e 4–5 prédios comerciais — Bairro 7), 'city8' (igual ao Bairro 7, porém 8×8 — Bairro 8).
-const COMPOSED = ['grid5', 'grid6s', 'city6', 'city7', 'city8', 'hill8', 'canal8'];   // bairros com composição sorteada a cada partida
+const COMPOSED = ['grid5', 'grid6s', 'city6', 'city7', 'city8', 'hill8', 'canal8', 'rail8'];   // bairros com composição sorteada a cada partida
 // Cada um tem sua própria cena, construída só na primeira vez que for jogado.
 const POOLS = { grid4: [...Array(16).keys(), ...Object.values(L1_FIXED)],   // grid4: as 16 casas + a casa fixa do Bairro 1 (só aparece nele)
   plaza6: [...Array(32).keys()], grid5: [...Array(25).keys(), ...SHOPS],   // grid5: Bairro 4 (25 casas + prédios comerciais)
@@ -73,7 +74,8 @@ const POOLS = { grid4: [...Array(16).keys(), ...Object.values(L1_FIXED)],   // g
   city7: [...Array(32).keys()].concat([...Array(28).keys()].map(k => 38 + k), SHOPS),   // city7 (Bairro 7): a cidade com postos e prédios comerciais
   city8: [...Array(32).keys()].concat([...Array(28).keys()].map(k => 38 + k), SHOPS, USE_FUTS ? FUTS : []),
   hill8: [...Array(32).keys()].concat([...Array(28).keys()].map(k => 38 + k), SHOPS),   // Bairro 9 (Encostas): casas, prédios, comércio
-  canal8: [...Array(32).keys()].concat([...Array(28).keys()].map(k => 38 + k), SHOPS, WARES, TWINS.map(t => t[1])) };   // Bairro 10 (Travessia): + galpões e casas gêmeas   // city8 (Bairro 8): o mesmo, em 8×8, com prédios mais altos (e os futuristas, se USE_FUTS)
+  canal8: [...Array(32).keys()].concat([...Array(28).keys()].map(k => 38 + k), SHOPS, WARES, TWINS.map(t => t[1])),   // Bairro 10 (Travessia): + galpões e casas gêmeas
+  rail8: [...Array(32).keys()].concat([...Array(28).keys()].map(k => 38 + k), SHOPS, WARES) };   // Bairro 11 (Trilhos): ferrovia, estações e galpões   // Bairro 10 (Travessia): + galpões e casas gêmeas   // city8 (Bairro 8): o mesmo, em 8×8, com prédios mais altos (e os futuristas, se USE_FUTS)
 // lote de casa ou de prédio comercial
 const buildAnyLot = (h, opts) => h.kind === 'ware' ? buildWareLot(h) : h.kind === 'shop' ? buildShopLot(h) : h.kind === 'apt' ? buildAptLot(h) : h.kind === 'fut' ? buildFutLot(h) : buildLot(h, opts);
 const USE_FUTS = false;                        // prédios futuristas (models/fut.js): guardados, desligados — troque para true para voltarem ao Bairro 8
@@ -89,13 +91,18 @@ function composeRound() {
   const city = neighborhood === 'city6', city7 = neighborhood === 'city7', city8 = neighborhood === 'city8';
   const shuffled = a => { a = a.slice(); for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; };
   // postos (2 lotes vizinhos da mesma linha): Bairro 4 tem 1; Bairro 5, 1 ou 2 (em linhas diferentes); a cidade, nenhum
-  const hill = neighborhood === 'hill8', canal = neighborhood === 'canal8';
-  const nGas = city ? 0 : neighborhood === 'grid6s' || city7 || city8 || hill || canal ? 1 + Math.floor(Math.random() * 2) : 1;
+  const hill = neighborhood === 'hill8', canal = neighborhood === 'canal8', rail = neighborhood === 'rail8';
+  const nGas = city ? 0 : neighborhood === 'grid6s' || city7 || city8 || hill || canal || rail ? 1 + Math.floor(Math.random() * 2) : 1;
   // Bairro 9: postos só na parte baixa (linhas 0–3). Bairro 10: postos e galpões sempre de um lado só do canal, em linhas diferentes.
   const rows = shuffled([...Array(hill ? 4 : GRID).keys()]);
   const pairCol = () => canal ? [0, 1, 5, 6][Math.floor(Math.random() * 4)] : Math.floor(Math.random() * (GRID - 1));
   const gasList = rows.slice(0, nGas).map(r => { const c = pairCol(); return [r * GRID + c, r * GRID + c + 1]; });
-  const wareList = canal ? rows.slice(nGas, nGas + 2 + Math.floor(Math.random() * 2)).map(r => { const c = pairCol(); return [r * GRID + c, r * GRID + c + 1]; }) : [];
+  // Bairro 11: postos nas linhas 1–4 (fora da coluna dos trilhos); 2 galpões perto da estação dos galpões (fundo do bairro)
+  if (rail) {
+    gasList.length = 0;
+    shuffled([1, 2, 3, 4]).slice(0, nGas).forEach(r => { const c = 1 + Math.floor(Math.random() * 5); gasList.push([r * GRID + c, r * GRID + c + 1]); });
+  }
+  const wareList = rail ? shuffled([[59, 60], [61, 62], [44, 45], [52, 53]]).slice(0, 2) : canal ? rows.slice(nGas, nGas + 2 + Math.floor(Math.random() * 2)).map(r => { const c = pairCol(); return [r * GRID + c, r * GRID + c + 1]; }) : [];
   setGasStations(gasList, wareList);
   SOLIDS.push(...world.extraSolids);                                  // troncos das árvores de fora
   if (gameMode === 'career') {
@@ -109,6 +116,12 @@ function composeRound() {
   if (hill) {                                   // Bairro 9: os 28 residenciais, 4–5 comerciais e casas no resto
     const nShops = 4 + Math.floor(Math.random() * 2), apts = [...Array(28).keys()].map(k => 38 + k);
     pool = apts.concat(shuffled(SHOPS).slice(0, nShops), shuffled(allHouses).slice(0, HOUSE_SLOTS.length - nShops - apts.length));
+  } else if (rail) {                            // Bairro 11: 2 galpões (fixos nos pares sorteados), 4–5 comerciais, 20 prédios, casas
+    const wares = shuffled(WARES).slice(0, wareList.length);
+    fixed = {}; wareList.forEach((p, i) => { fixed[p[0]] = wares[i]; });
+    const nShops = 4 + Math.floor(Math.random() * 2), nApts = 20;
+    pool = wares.concat(shuffled(SHOPS).slice(0, nShops), shuffled([...Array(28).keys()].map(k => 38 + k)).slice(0, nApts),
+      shuffled(allHouses).slice(0, HOUSE_SLOTS.length - wares.length - nShops - nApts));
   } else if (canal) {                           // Bairro 10: galpões (fixos nos pares sorteados), 2–3 pares de gêmeas, comércio, prédios e casas
     const wares = shuffled(WARES).slice(0, wareList.length);
     fixed = {}; wareList.forEach((p, i) => { fixed[p[0]] = wares[i]; });
@@ -150,7 +163,7 @@ function composeRound() {
     pool = shuffled(allHouses).slice(0, HOUSE_SLOTS.length - nShops).concat(shuffled(SHOPS).slice(0, nShops));
   }
   // etiquetas de lugar das pistas: Bairro 9 (alto / subida / escadaria), Bairro 10 (Lado Leste / Oeste)
-  game.placeTags = hill ? layout => { const m = {}; layout.forEach((h, s) => { if (h >= 0) m[h] = slotPlaceTags(s); }); return m; }
+  game.placeTags = hill || rail ? layout => { const m = {}; layout.forEach((h, s) => { if (h >= 0) m[h] = slotPlaceTags(s); }); return m; }
     : canal ? layout => { const m = {}; layout.forEach((h, s) => { if (h >= 0) m[h] = [(s % GRID) < 4 ? 'side:west' : 'side:east']; }); return m; }
     : null;
   game.setNeighborhood(pool, HOUSE_SLOTS, GRID * GRID, fixed);
@@ -168,6 +181,7 @@ function refreshBarriers() {
   if (lv === 2) barriers.randomize(world.scene, { min: 3, max: 5, types: ['barrier'], topo });
   else if (lv === 3) barriers.randomize(world.scene, { min: 4, max: 6, types: ['barrier', 'truck', 'hole'], topo });
   else if (lv === 6 || lv === 7) barriers.randomize(world.scene, { min: 4, max: 6, types: ['truck'], jams: { min: 3, max: 4 }, topo });
+  else if (lv === 10) barriers.randomize(world.scene, { min: 1, max: 2, types: ['truck'], topo });   // Bairro 11: só caminhões (as cancelas já fecham ruas)
   else if (lv === 8 || lv === 9) barriers.randomize(world.scene, { min: 1, max: 2, types: ['truck'], jams: { min: 1, max: 2 }, topo });   // Bairros 9 e 10: poucos   // Bairro 7: caminhões + engarrafamentos
   else barriers.clear();
 }
@@ -210,6 +224,7 @@ function walkSolids() {
   }
   return out;
 }
+const train = createTrain();                // Bairro 11: trem entre as estações e cancelas das passagens de nível
 const jamSound = createJamSound(audio);     // Bairro 7: música perto dos engarrafamentos (fade-in/out, loop perfeito)
 const monster = createMonster(world.scene, stage, audio);   // final secreto: 16 casas destruídas
 const allDestroyed = () => game.pool.every(h => boom.isDestroyed(h));
@@ -227,7 +242,8 @@ function useNeighborhood(kind) {
   if (kind === neighborhood) return;
   boom.reset(); hint.clear(); heli.reset(); monster.reset();
   APT_BUILD.floors = kind === 'city8' ? TALL_FLOORS : 5;
-  APT_BUILD.mixed = kind === 'canal8';                     // Bairro 10: prédios das duas alturas
+  APT_BUILD.mixed = kind === 'canal8' || kind === 'rail8';  // Bairros 10 e 11: prédios das duas alturas
+  train.detach();
   game.placeTags = null; game.arrange = null;   // antes de construir a cena do bairro
   configureGrid(kind);
   let w = worlds[kind];
@@ -240,6 +256,7 @@ function useNeighborhood(kind) {
   world.scene.add(van.object);
   world.scene.add(walker.object); walker.show(false);
   hint.attach(world.scene);
+  if (kind === 'rail8') { world.scene.add(train.object); train.reset(); }   // Bairro 11: trem e cancelas
   if (COMPOSED.includes(kind)) composeRound();   // Bairros 4 a 7: composição sorteada a cada partida
   else setupGrid4();
   van.reset();
@@ -347,7 +364,7 @@ function goBack() {
 function startFree(mode = 'free') {
   // Bairro 2: 6×6 com praça; Bairro 4: 5×5 com bloqueios; o resto: 4×4
   const lv = mode === 'career' ? careerLevel : freeLevel;
-  useNeighborhood(lv === 1 ? 'plaza6' : lv === 3 ? 'grid5' : lv === 4 ? 'grid6s' : lv === 5 ? 'city6' : lv === 6 ? 'city7' : lv === 7 ? 'city8' : lv === 8 ? 'hill8' : lv === 9 ? 'canal8' : 'grid4');
+  useNeighborhood(lv === 1 ? 'plaza6' : lv === 3 ? 'grid5' : lv === 4 ? 'grid6s' : lv === 5 ? 'city6' : lv === 6 ? 'city7' : lv === 7 ? 'city8' : lv === 8 ? 'hill8' : lv === 9 ? 'canal8' : lv === 10 ? 'rail8' : 'grid4');
   gameMode = mode;
   if (!COMPOSED.includes(neighborhood)) setupGrid4();   // Bairro 1 tem a casa fixa; o 3 (mesma grade) não
   setupChurch();
@@ -1100,6 +1117,7 @@ function update(dt, t) {
 
   if (state !== 'drive') van.relax(dt);          // torre de caixas do bagageiro: para de balançar quando a van não está sendo dirigida
   world.update(t, dt);
+  if (neighborhood === 'rail8') train.update(dt);
   updateChurch(dt);
   world.updateGas(van.x, van.z, dt);
   fuelMsgT = Math.max(0, fuelMsgT - dt);
@@ -1316,7 +1334,7 @@ window.ADRESS = {
   get careerLevel() { return careerLevel; },
   setCareerLevel(l) { careerLevel = l; },
   setFreeLevel(l) { freeLevel = l; },
-  walker, jamSound,
+  walker, jamSound, train,
   get levelSelect() { return levelSelect; },
   shop,
   startGame: m => startFree(m),

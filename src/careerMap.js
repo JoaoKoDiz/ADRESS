@@ -47,7 +47,8 @@ function roadGeometry(curve, samples) {
 //   jam8     — como o jam, com 4 prédios altos (cidade maior: Bairro 8, 8×8)
 //   hill     — dois patamares elevados com ladeira e escadaria (Bairro 9, Encostas)
 //   canal    — canal no meio, pontes e um galpão (Bairro 10, Travessia)
-const MINI_KINDS = ['houses', 'plaza', 'barriers', 'trucks', 'gas', 'city', 'jam', 'jam8', 'hill', 'canal'];
+//   rail     — trilhos em L com curva, trem e estação (Bairro 11, Trilhos)
+const MINI_KINDS = ['houses', 'plaza', 'barriers', 'trucks', 'gas', 'city', 'jam', 'jam8', 'hill', 'canal', 'rail'];
 
 /** Bairro em miniatura do tipo `kind`: base de grama, sebe, ruas e o que caracteriza o bairro. gray = fase bloqueada. */
 function miniNeighborhood(kind, colors, gray = false) {
@@ -146,6 +147,26 @@ function miniNeighborhood(kind, colors, gray = false) {
     for (let f = 1; f < 4; f++) add(box(2.2, 0.4, 0.06, G('#4a6a8a', '#7a7a7a')), 3.6, 3.7 + f * 1.3, -3.78);
     return bakeStatic(g);
   }
+  if (kind === 'rail') {                         // Bairro 11: trilhos descendo pela lateral, curva e indo para leste; trem e estação
+    const pts = [];
+    for (let z = -6.4; z <= 1.0; z += 0.5) pts.push([-5.6, z, 0]);
+    for (let k = 1; k <= 8; k++) { const t = k / 8 * Math.PI / 2; pts.push([-5.6 + 2.6 - 2.6 * Math.cos(t), 1.0 + 2.6 * Math.sin(t), t]); }
+    for (let x = -2.5; x <= 5.8; x += 0.5) pts.push([x, 3.6, Math.PI / 2]);
+    for (const [x, z, t] of pts) {
+      add(box(1.4, 0.08, 0.55, G('#8f877c', '#a0a0a0')), x, 0.44, z, 0, Math.PI / 2 - t, 0);
+      add(box(1.1, 0.06, 0.14, G('#5a4330', '#7a7a7a')), x, 0.5, z, 0, Math.PI / 2 - t, 0);
+    }
+    const car = (x, z, ry, c, l) => add(box(l, 0.8, 0.9, G(c, '#9a9a9a')), x, 0.95, z, 0, ry, 0);
+    car(-5.6, -3.4, Math.PI / 2, '#c8402f', 1.8); car(-5.6, -1.4, Math.PI / 2, '#2f6fb0', 1.6); car(-5.3, 0.4, Math.PI / 2 - 0.25, '#e0a526', 1.5);
+    add(box(0.25, 0.3, 1.6, G('#f2efe6', '#c8c8c8')), -5.6, 1.5, -4.0);                     // cabine da locomotiva
+    add(box(1.5, 0.45, 4.4, G('#c9c2b4', '#b5b5b5')), -4.0, 0.62, -3.6);                     // estação: plataforma, cobertura
+    for (const z of [-5.4, -1.8]) add(box(0.14, 1.4, 0.14, G('#5e646c', '#8a8a8a')), -3.6, 1.5, z);
+    add(box(1.9, 0.14, 4.8, G('#7a2f2a', '#8a8a8a')), -3.9, 2.25, -3.6);
+    house(1.2, -3.6, roof(0), 0.85); house(4.6, -3.6, roof(1), 0.85); house(1.6, 6.0, roof(2), 0.6);
+    add(box(4.0, 1.6, 2.0, G('#d9d4c7', '#c8c8c8')), 4.4, 1.2, 5.8);                          // galpão
+    add(box(4.3, 0.2, 2.3, G('#3a6fbf', '#8c8c8c')), 4.4, 2.1, 5.8);
+    return bakeStatic(g);
+  }
   if (kind === 'canal') {                        // Bairro 10: canal norte–sul, 2 pontes, galpão de um lado e casas do outro
     add(box(2.8, 0.12, 13.6, G('#3d8fc4', '#8f8f8f')), 0, 0.46, 0);
     for (const x of [-1.45, 1.45]) add(box(0.25, 0.3, 13.6, G('#a99f8f', '#9a9a9a')), x, 0.55, 0);
@@ -240,7 +261,7 @@ function boardTexture(gray = false) {
 }
 
 const PALETTES = [['red', 'blue', 'yellow', 'green'], ['purple', 'red', 'gray', 'yellow', 'blue', 'green', 'red', 'yellow'], ['blue', 'green', 'red', 'purple'],
-  ['yellow', 'gray', 'blue', 'red'], ['green', 'purple', 'yellow', 'blue'], ['red'], ['blue'], ['green'], ['red', 'blue', 'yellow', 'purple'], ['blue', 'green', 'red']];
+  ['yellow', 'gray', 'blue', 'red'], ['green', 'purple', 'yellow', 'blue'], ['red'], ['blue'], ['green'], ['red', 'blue', 'yellow', 'purple'], ['blue', 'green', 'red'], ['green', 'yellow', 'purple']];
 
 /** Miniaturas (data URL) dos 8 bairros, desenhadas uma vez num renderizador próprio. Usadas na seleção do modo Livre. */
 export function renderMiniThumbnails(w = 480, h = 360) {
@@ -292,7 +313,7 @@ export function createCareerMap(stageEl, audio) {
   scene.add(ground);
 
   // estrada com curvas suaves
-  const pts = [[0, 0], [30, -14], [62, 6], [94, -10], [126, 10], [158, -6], [190, 8], [222, -4], [254, 10], [286, -6]]
+  const pts = [[0, 0], [30, -14], [62, 6], [94, -10], [126, 10], [158, -6], [190, 8], [222, -4], [254, 10], [286, -6], [318, 8]]
     .map(([x, z]) => new THREE.Vector3(x, 0, z));
   const curve = new THREE.CatmullRomCurve3(pts, false, 'centripetal');
   const length = curve.getLength();
@@ -309,7 +330,7 @@ export function createCareerMap(stageEl, audio) {
   // fases: bairros em miniatura alternando os lados da estrada, com placa numerada
   const stops = [], boards = [];
   let clock = 0;
-  [0.04, 0.14, 0.24, 0.34, 0.44, 0.54, 0.64, 0.74, 0.84, 0.94].forEach((u, i) => {
+  [0.04, 0.132, 0.224, 0.316, 0.408, 0.5, 0.592, 0.684, 0.776, 0.868, 0.96].forEach((u, i) => {
     curve.getPointAt(u, p); curve.getTangentAt(u, tg);
     const side = i % 2 ? 1 : -1;
     const nx = -tg.z * side, nz = tg.x * side;
@@ -346,7 +367,7 @@ export function createCareerMap(stageEl, audio) {
   const trees = new THREE.Group();
   const samples = curve.getSpacedPoints(120);
   for (let k = 0; k < 170; k++) {
-    const x = -40 + rnd() * 370, z = -70 + rnd() * 140;
+    const x = -40 + rnd() * 400, z = -70 + rnd() * 140;
     if (samples.some(s => Math.hypot(s.x - x, s.z - z) < 24)) continue;
     trees.add(tree(x, z, 0.8 + rnd() * 0.7));
   }

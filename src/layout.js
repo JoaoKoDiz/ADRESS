@@ -23,6 +23,7 @@ export let GAS_LIST = [];       // postos da partida: { slots, x0, z0, x1, z1 } 
 export let WARE_LIST = [];      // galpões (Bairro 10): { slots: [s, s+1] } — ocupam 2 lotes vizinhos + a rua entre eles (fechada)
 export let CANAL = null;        // Bairro 10: { x0, x1, bridges: [linhas de rua], foot: [z das passarelas], cols: [3, 4] }
 // Terreno (Bairro 9): altura do chão em (x, z). Fora do Bairro 9 é sempre 0.
+export let RAIL = null;          // Bairro 11: ferrovia em L (rua lateral oeste → curva → linha 6), 2 estações e 2 passagens de nível
 export const TERRAIN = { kind: 'flat', H1: 3, H2: 6, ramps: [], stairs: [], h: () => 0 };
 // Posto de gasolina, em coordenadas locais do modelo (origem no canto noroeste do lote da esquerda, frente +Z).
 // A van entra nele: só a loja, as ilhas das bombas, os pilares da cobertura, o totem, o calibrador e a lixeira barram.
@@ -59,8 +60,8 @@ export const SOLIDS = [];
 
 /** Troca a grade do bairro e refaz os obstáculos-base (lotes, praça e sebe). */
 export function configureGrid(kind) {
-  GRID = kind === 'plaza6' || kind === 'grid6s' || kind === 'city6' || kind === 'city7' ? 6 : kind === 'city8' || kind === 'hill8' || kind === 'canal8' ? 8 : kind === 'grid5' ? 5 : 4;
-  BUILD_H = kind === 'city8' || kind === 'canal8' ? 31 : kind === 'hill8' ? 23 : kind === 'city6' || kind === 'city7' ? 16.5 : 9.2;
+  GRID = kind === 'plaza6' || kind === 'grid6s' || kind === 'city6' || kind === 'city7' ? 6 : kind === 'city8' || kind === 'hill8' || kind === 'canal8' || kind === 'rail8' ? 8 : kind === 'grid5' ? 5 : 4;
+  BUILD_H = kind === 'city8' || kind === 'canal8' || kind === 'rail8' ? 31 : kind === 'hill8' ? 23 : kind === 'city6' || kind === 'city7' ? 16.5 : 9.2;
   // praça: bloco 2×2 central (linhas e colunas 2–3 do 6×6)
   const plazaSlots = kind === 'plaza6' ? [2 * GRID + 2, 2 * GRID + 3, 3 * GRID + 2, 3 * GRID + 3] : [];
   ENTRANCE.road = kind === 'canal8' ? 2 : Math.floor(GRID / 2);   // rua do meio (no 5×5, a 3ª rua); no Bairro 10 o meio é o canal
@@ -75,6 +76,7 @@ export function configureGrid(kind) {
     ? { x0: roadCenter(3) + ROAD / 2, x1: roadCenter(5) - ROAD / 2, cols: [3, 4], bridges: [1, 4, 7], foot: [lotZ(2) + LOT / 2, lotZ(5) + LOT / 2] }
     : null;
   setupTerrain(kind);
+  setupRail(kind);
   GAS_LIST = []; WARE_LIST = [];
   HOUSE_SLOTS = baseSlots();
   rebuildBaseSolids();
@@ -82,7 +84,7 @@ export function configureGrid(kind) {
 
 /** Lotes que podem ter construção (sem praça e sem o canal). */
 function baseSlots() {
-  return [...Array(GRID * GRID).keys()].filter(s => !(PLAZA && PLAZA.slots.includes(s)) && !(CANAL && CANAL.cols.includes(s % GRID)));
+  return [...Array(GRID * GRID).keys()].filter(s => !(PLAZA && PLAZA.slots.includes(s)) && !(CANAL && CANAL.cols.includes(s % GRID)) && !(RAIL && RAIL.reserved.includes(s)));
 }
 /** Postos (e galpões, Bairro 10) em pares de lotes vizinhos ([s, s+1], mesma linha). O galpão fica no lote da esquerda
  *  (é um destino de entrega); o da direita e a rua entre os dois ficam por baixo dele. Refaz os obstáculos-base. */
@@ -115,8 +117,28 @@ function setupTerrain(kind) {
     return 0;
   };
 }
+// ---- Bairro 11 (Trilhos): os trilhos descem pela rua lateral oeste (rua 0) desde a estação da entrada (lote 0, canto
+// noroeste), fazem uma curva suave no lote 48 e seguem para leste pela linha 6 até a estação dos galpões (lote 50).
+// Passagens de nível com cancelas nas ruas verticais 1 e 2. `at(s)`: ponto e direção a `s` do começo (norte).
+function setupRail(kind) {
+  if (kind !== 'rail8') { RAIL = null; return; }
+  const rc = roadCenter, R = 10, zc = lotZ(6) + LOT / 2, x0 = rc(0), zN = HEDGE + 2.4, xE = lotX(2) + LOT - 0.6;
+  const a = zc - R - zN, arc = Math.PI * R / 2, b = xE - (x0 + R);
+  const at = s => {
+    if (s <= a) return { x: x0, z: zN + s, dx: 0, dz: 1 };
+    s -= a;
+    if (s <= arc) { const t = s / R; return { x: x0 + R - R * Math.cos(t), z: zc - R + R * Math.sin(t), dx: Math.sin(t), dz: Math.cos(t) }; }
+    s -= arc; return { x: x0 + R + s, z: zc, dx: 1, dz: 0 };
+  };
+  RAIL = { R, zc, x0, zN, xE, S: a + arc + b, at, reserved: [0, 48, 49, 50],
+    crossings: [1, 2].map(j => ({ j, x: rc(j), s: a + arc + rc(j) - (x0 + R) })) };
+}
+
 /** Etiquetas de lugar de um lote (Bairro 9): parte mais alta, depois da subida, ao lado da escadaria. */
+const RAIL_TAGS = { 1: 'loc:stationN', 8: 'loc:stationN', 42: 'loc:stationS', 51: 'loc:stationS', 58: 'loc:stationS',
+  40: 'loc:crossing', 41: 'loc:crossing', 56: 'loc:crossing', 57: 'loc:crossing' };
 export function slotPlaceTags(s) {
+  if (RAIL) return RAIL_TAGS[s] ? [RAIL_TAGS[s]] : [];
   if (TERRAIN.kind !== 'hill') return [];
   const r = Math.floor(s / GRID), c = s % GRID, out = [];
   if (r >= 6 && c >= 4) out.push('loc:top');
@@ -141,6 +163,13 @@ export function roadTopology() {
       for (const j of [3, 4]) { blocked.add(k('H', j, i, 'L')); blocked.add(k('H', j, i, 'R')); exclude.add(k('H', j, i)); }
       skip.add(k('I', 4, i)); skip.add(k('M', 3, i)); skip.add(k('M', 4, i));
     }
+  }
+  if (RAIL) {                                      // rua 0 (oeste) é a ferrovia; as ruas que chegavam nela terminam antes
+    for (let i = 0; i <= 6; i++) {
+      blocked.add(k('H', 0, i, 'L')); blocked.add(k('V', 0, i)); skip.add(k('I', 0, i));
+      exclude.add(k('H', 0, i)); exclude.add(k('V', 0, i));
+    }
+    for (const c of RAIL.crossings) exclude.add(k('V', c.j, 6));   // passagens de nível: sem bloqueio (as cancelas abrem)
   }
   for (const w of WARE_LIST) { const c = w.slots[0] % GRID, r = Math.floor(w.slots[0] / GRID); blocked.add(k('V', c + 1, r)); exclude.add(k('V', c + 1, r)); }
   return { blocked, skip, exclude, heightAt: TERRAIN.h };
@@ -176,6 +205,10 @@ function rebuildBaseSolids() {
       z = m.b;
     }
     SOLIDS.push({ x0: CANAL.x0, x1: CANAL.x1, z0: z, z1: MAP - HEDGE });
+  }
+  if (RAIL) {                                      // ferrovia: faixa da rua 0 (até depois da curva) e os lotes dos trilhos/estações
+    SOLIDS.push({ x0: HEDGE - 0.2, x1: rc(0) + hr + 0.2, z0: HEDGE, z1: RAIL.zc - 1.6 });
+    for (const s of RAIL.reserved) { const o = slotOrigin(s); SOLIDS.push({ x0: o.x - WALK, z0: o.z - WALK, x1: o.x + LOT + WALK, z1: o.z + LOT + WALK }); }
   }
   if (TERRAIN.kind === 'hill') {                   // muros das encostas (nas ladeiras não há muro; nas escadarias, só para a van)
     const isRamp = (j, i) => TERRAIN.ramps.some(r => r.j === j && r.i === i), isStair = (j, i) => TERRAIN.stairs.some(r => r.j === j && r.i === i);

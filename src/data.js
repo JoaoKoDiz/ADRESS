@@ -197,6 +197,7 @@ export const PHRASE = {
   // lugar (Bairros 9 e 10): vão no fim da pista
   'loc:top': 'na parte mais alta do bairro', 'loc:ramp': 'logo depois da subida', 'loc:stairs': 'ao lado da escadaria',
   'side:east': 'no Lado Leste', 'side:west': 'no Lado Oeste',
+  'loc:stationN': 'perto da estação da entrada', 'loc:stationS': 'perto da estação dos galpões', 'loc:crossing': 'ao lado da passagem de trem',
   'gnd:dumpster': 'uma caçamba na frente', 'gnd:moto': 'uma moto estacionada na frente', 'gnd:guard': 'uma guarita na entrada', 'gnd:bikes': 'um bicicletário na frente',
 };
 
