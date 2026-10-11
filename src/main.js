@@ -4,6 +4,7 @@ import * as THREE from 'three';
 import { Game, ROUTE_LEN } from './logic.js';
 import { MAP, doorPoint, slotOrigin, DELIVERY_RADIUS, DELIVERY_MAX_SPEED, VAN, VAN_START, LOT_ANCHORS, SOLIDS, ENTRANCE, HEDGE, GRID, PLAZA, HOUSE_SLOTS, configureGrid, roadCenter, setGasStations, GAS_LIST, GAS_CANOPY, GAS_ISLANDS, GAS_PARTS, TERRAIN, CANAL, VENICE, RAIL, FAVELA, FLUX, FARMLAND, SPOTS, SNOWV, MOONV, slotPlaceTags, roadTopology, WARE_LIST, WALK as L_WALK, LOT as L_LOT, ROAD as L_ROAD, slotY as L_slotY } from './layout.js';
 import { createLaser } from './laser.js';
+import { createUrsa } from './ursa.js';
 import { createInput } from './input.js';
 import { createWorld } from './world.js';
 import { createVan } from './van.js';
@@ -638,9 +639,11 @@ function moonUpdate(dt, snap = false) {
 // Sequência de 23 s (laser.js): raio fino do céu, viagem pela cena espacial separada até o satélite e volta, e o raio
 // grosso apaga a quadra inteira (construção, quintal, cercas, morador e chão), que vira um vazio escuro até o fim da partida.
 const laser = createLaser(audio);
+const ursa = createUrsa(audio, stage);
+let fxCine = laser;                                    // efeito cinematográfico em andamento (laser ou Ursa Menor)
 const laserVoids = [];
 let laserRet = 'drive';
-function clearLaserVoids() { laser.cancel(); for (const m of laserVoids) if (m.parent) m.parent.remove(m); laserVoids.length = 0; }
+function clearLaserVoids() { laser.cancel(); ursa.cancel(); for (const m of laserVoids) if (m.parent) m.parent.remove(m); laserVoids.length = 0; }
 /** Área ocupada pela construção (quadra inteira; galpão = 2 lotes + a rua entre eles). */
 function laserArea(slot) {
   const sp = SPOTS ? SPOTS.spots[slot] : null;
@@ -657,7 +660,7 @@ function pushOut(a, ent, isVan) {
   const [nx, nz] = opts[0];
   if (isVan) van.teleport(nx, nz, van.heading); else walker.pose(nx, nz, walker.heading);
 }
-function startLaser(h, slot) {
+function startLaser(h, slot, kind = 'laser') {
   laserRet = state === 'walk' ? 'walk' : 'drive';
   const sp = SPOTS ? SPOTS.spots[slot] : null;
   let parent, local, outerR, makeVoid, rect = null;
@@ -674,6 +677,24 @@ function startLaser(h, slot) {
   }
   world.hideResident(); van.stop(); nearHouse = -1;
   setState('laser');
+  if (kind === 'ursa') {                                // Ursa Menor: 7 impactos; o 4º derruba a construção (escombros), os outros queimam o chão
+    fxCine = ursa;
+    const scorch = (i) => {
+      const dark = new THREE.MeshStandardMaterial({ color: i === 6 ? '#2a221c' : '#3a2d22', roughness: 1 });
+      let m;
+      if (MOONV) m = new THREE.Mesh(new THREE.CylinderGeometry(i === 6 ? 8.6 : 3 + i * 0.4, i === 6 ? 8.6 : 3 + i * 0.4, 0.06, 28), dark);
+      else if (i === 6) m = new THREE.Mesh(new THREE.BoxGeometry(rect.w - 0.2, 0.05, rect.d - 0.2), dark);
+      else m = new THREE.Mesh(new THREE.CylinderGeometry(2.6 + i * 0.5, 3 + i * 0.5, 0.05, 20), dark);
+      const off = i === 6 ? [0, 0] : [(Math.random() - 0.5) * (MOONV ? 6 : rect.w * 0.45), (Math.random() - 0.5) * (MOONV ? 6 : rect.d * 0.45)];
+      m.position.set(local.x + off[0], local.y + (MOONV ? 0.09 : 0.215 + i * 0.002), local.z + off[1]);
+      m.receiveShadow = true; parent.add(m); laserVoids.push(m);
+    };
+    ursa.start({ parent, local, rect, moon: !!MOONV, cam: rig.camera, world: world.scene,
+      onImpact: i => { if (i === 3) boom.explode(h, slot); if (i >= 4) scorch(i); if (i === 6) boom.markDestroyed(h); },
+      onEnd: () => { setState(laserRet); actionLock = 0.6; } });
+    return;
+  }
+  fxCine = laser;
   laser.start({ parent, local, outerR, rect, moon: !!MOONV, cam: rig.camera,
     onErase: () => { boom.markDestroyed(h); world.hideResident(); laserVoids.push(makeVoid()); },
     onEnd: () => { setState(laserRet); actionLock = 0.6; } });
@@ -1631,7 +1652,7 @@ function update(dt, t) {
           // casa errada explode (se habilitado), menos as que ainda fazem parte da rota desta rodada
           const idx = game.route.indexOf(visited);
           if (gameMode === 'free' && menu.explodeWrong && (idx < 0 || idx < game.step) && !boom.isDestroyed(visited)) {
-            if (menu.wrongFx === 'laser') startLaser(visited, game.slotOf[visited]);   // laser orbital (23 s)
+            if (menu.wrongFx === 'laser' || menu.wrongFx === 'ursa') startLaser(visited, game.slotOf[visited], menu.wrongFx);   // laser orbital (23 s) / Ursa Menor (25 s)
             else boom.explode(visited, game.slotOf[visited]);
           }
           if (hintStep >= 0 && game.step !== hintStep) { hint.retract(); hintStep = -1; }   // a pista mudou: a seta volta ao céu
@@ -1684,8 +1705,8 @@ function update(dt, t) {
     case 'laser':                                    // laser orbital: sem controles nem entregas até o fim da sequência
       van.stop();
       if (walker.visible) walker.update(dt, { x: 0, z: 0 }, 'car', [], van);
-      if (laser.camera) laser.camera.aspect = rig.camera.aspect;
-      laser.update(dt);
+      if (fxCine.camera) fxCine.camera.aspect = rig.camera.aspect;
+      fxCine.update(dt);
       break;
     case 'cine':                                     // sequência automática (igreja): sem controles
       if (cine) updateChurchCine(dt);
@@ -1780,7 +1801,7 @@ function update(dt, t) {
   moonUpdate(dt);                                 // Órbita: a lua gira por baixo de quem o jogador controla
   rig.update(dt, onFoot ? { x: walker.x, z: walker.z, y: walker.floor, heading: walker.heading, speed: walker.speed, focus: null } : { x: van.x, z: van.z, y: heli.altitude, heading: van.heading, speed: van.speed, focus: null });   // sem câmera automática: quem controla é o jogador
   if (state === 'talk') { rig.camera.position.copy(talkCam.pos); rig.camera.lookAt(talkCam.look); }   // enquadramento fixo da conversa
-  if (state === 'laser') laser.applyCamera(rig.camera);
+  if (state === 'laser') fxCine.applyCamera(rig.camera);
   if (state === 'cine' && cine) { rig.camera.position.copy(cine.camPos); rig.camera.lookAt(cine.camLook); }
   // névoa só na câmera atrás da van (suaviza o horizonte); a visão geral fica nítida
   const fb = rig.blend, fog = world.scene.fog;
@@ -1955,7 +1976,7 @@ renderer.setAnimationLoop(now => {
   elapsed += dt;
   update(dt, elapsed);
   updateHUD();
-  if (inMap()) renderer.render(careerMap.scene, careerMap.camera); else if (state === 'trolley') renderer.render(trolley.scene, trolley.camera); else if (state === 'laser' && laser.inSpace) renderer.render(laser.scene, laser.camera); else renderer.render(world.scene, rig.camera);
+  if (inMap()) renderer.render(careerMap.scene, careerMap.camera); else if (state === 'trolley') renderer.render(trolley.scene, trolley.camera); else if (state === 'laser' && fxCine.inSpace) renderer.render(fxCine.scene, fxCine.camera); else renderer.render(world.scene, rig.camera);
 });
 
 // ---------- Ganchos para testes automatizados ----------
@@ -1978,7 +1999,7 @@ window.ADRESS = {
   get moonVan() { return { p: vanSph.p.toArray().map(v => +v.toFixed(3)), f: vanSph.f.toArray().map(v => +v.toFixed(3)), y: +van.simY.toFixed(2) }; },
   FRAME, MOONV: () => MOONV,
   lockCP: n => STORY_CP.apply(n), get parcelVisible() { return !!parcel.parent; },
-  laser, startLaser,
+  laser, ursa, startLaser,
   get church() { return church; }, get venK() { return venK; }, startVeniceTalk, churchStage, get greenBell() { return greenBell; }, get churchBell() { return churchBell; },
   churchReveal() { if (churchOn && !churchShown) { approach.phase = 'revealed'; revealChurch(true); } },
   get churchMusicTime() { return +churchMusic.time.toFixed(2); }, get bellMusic() { return bellMusic; }, get vanFade() { return vanFade; }, nowPlaying, get approach() { return approach; },
@@ -2004,5 +2025,5 @@ window.ADRESS = {
   /** Coloca a van parada no ponto de entrega da casa h, virada para leste. */
   placeVanAtDoor(h) { const p = doorPoint(game.slotOf[h]); van.teleport(p.x, p.z, 0); },
   /** Executa n quadros de simulação com passo fixo (útil quando o requestAnimationFrame está parado). */
-  step(n = 1, dt = 1 / 60) { for (let i = 0; i < n; i++) { elapsed += dt; update(dt, elapsed); updateHUD(); } if (inMap()) renderer.render(careerMap.scene, careerMap.camera); else if (state === 'trolley') renderer.render(trolley.scene, trolley.camera); else if (state === 'laser' && laser.inSpace) renderer.render(laser.scene, laser.camera); else renderer.render(world.scene, rig.camera); },
+  step(n = 1, dt = 1 / 60) { for (let i = 0; i < n; i++) { elapsed += dt; update(dt, elapsed); updateHUD(); } if (inMap()) renderer.render(careerMap.scene, careerMap.camera); else if (state === 'trolley') renderer.render(trolley.scene, trolley.camera); else if (state === 'laser' && fxCine.inSpace) renderer.render(fxCine.scene, fxCine.camera); else renderer.render(world.scene, rig.camera); },
 };

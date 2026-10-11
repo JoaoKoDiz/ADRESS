@@ -70,6 +70,87 @@ export function createAudio() {
 
   const safe = fn => (...args) => { if (!ac) return; try { fn(...args); } catch (e) { /* som é opcional */ } };
 
+  // ---- Ursa Menor (Modo Livre): sons exagerados num barramento próprio (compressor evita estourar; end() corta tudo) ----
+  let ub = null;
+  function uT(freq, at, dur, type = 'sine', vol = 0.1, glide = 1) {
+    if (!ac || !ub) return;
+    const t0 = ac.currentTime + at, o = ac.createOscillator(), g = ac.createGain();
+    o.type = type; o.frequency.setValueAtTime(freq, t0);
+    if (glide !== 1) o.frequency.exponentialRampToValueAtTime(Math.max(20, freq * glide), t0 + dur);
+    g.gain.setValueAtTime(0, t0); g.gain.linearRampToValueAtTime(vol, t0 + Math.min(0.03, dur * 0.2)); g.gain.exponentialRampToValueAtTime(0.0008, t0 + dur);
+    o.connect(g); g.connect(ub); o.start(t0); o.stop(t0 + dur + 0.05);
+    o.onended = () => { try { o.disconnect(); g.disconnect(); } catch (e) { /* */ } };
+  }
+  /** swell: o volume sobe até o fim (em vez de cair). */
+  function uN(dur, vol, at = 0, lp = 1600, hp = 0, swell = false) {
+    if (!ac || !ub) return;
+    const len = Math.floor(ac.sampleRate * dur), buf = ac.createBuffer(1, len, ac.sampleRate), d = buf.getChannelData(0);
+    for (let i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * (swell ? Math.pow(i / len, 1.5) : Math.pow(1 - i / len, 2));
+    const s = ac.createBufferSource(), f = ac.createBiquadFilter(), g = ac.createGain();
+    s.buffer = buf; f.type = hp ? 'highpass' : 'lowpass'; f.frequency.value = hp || lp; g.gain.value = vol;
+    s.connect(f); f.connect(g); g.connect(ub); s.start(ac.currentTime + at);
+    s.onended = () => { try { s.disconnect(); f.disconnect(); g.disconnect(); } catch (e) { /* */ } };
+  }
+  const ursa = {
+    begin: safe(() => {
+      if (ub) { try { ub.disconnect(); } catch (e) { /* */ } }
+      const comp = ac.createDynamicsCompressor(); comp.threshold.value = -16; comp.ratio.value = 8; comp.attack.value = 0.003; comp.release.value = 0.25;
+      ub = ac.createGain(); ub.gain.value = 0.85; ub.connect(comp); comp.connect(master); ub._comp = comp;
+    }),
+    /** a constelação aparecendo: brilho mágico crescente, sinos cristalinos e um grave enorme */
+    shine: safe(() => {
+      [1318, 1568, 1976, 2349, 2637, 3136, 3951].forEach((f, i) => { uT(f, i * 0.22, 1.4, 'sine', 0.035 + i * 0.004); uT(f * 2.01, i * 0.22 + 0.01, 0.9, 'triangle', 0.012); });
+      uN(2.2, 0.05, 0, 0, 5000, true);
+      uT(44, 1.3, 2.4, 'sine', 0.22, 0.85); uT(66, 1.35, 2.2, 'triangle', 0.1, 0.8); uN(1.8, 0.12, 1.3, 220);
+    }),
+    /** viagem: aceleração, rajadas e passagens cada vez mais fortes */
+    travel: safe(() => {
+      uT(70, 0, 4, 'sawtooth', 0.05, 7); uT(105, 0.1, 3.9, 'square', 0.025, 6);
+      [0, 0.6, 1.1, 1.5, 1.85, 2.15, 2.4, 2.62, 2.82, 3.0, 3.16, 3.3, 3.43, 3.55].forEach((at, i) => {
+        uN(0.45, 0.06 + i * 0.012, at, 900 + i * 220); uT(1400 - i * 30, at, 0.35, 'sine', 0.02 + i * 0.003, 0.3);   // rajada + passagem (efeito Doppler)
+      });
+      uN(4, 0.06, 0, 0, 2500, true);
+    }),
+    /** cada estrela de perto: pulsação grave + energia própria */
+    pulse: safe(i => {
+      uT(48 + i * 7, 0, 0.5, 'sine', 0.22, 0.7); uT(96 + i * 14, 0.05, 0.45, 'triangle', 0.08, 0.8);
+      uT(320 + i * 110, 0, 0.5, ['sawtooth', 'square', 'triangle'][i % 3], 0.03, 1.6 + i * 0.1); uN(0.4, 0.04, 0.02, 0, 3000 + i * 400);
+    }),
+    /** partida de cada estrela: estrondo, estalo de energia e rastro longo */
+    launch: safe(i => {
+      uN(0.9, 0.22, 0, 500 - i * 30); uT(58 - i * 3, 0, 0.9, 'sine', 0.24, 0.5);
+      uN(0.12, 0.12, 0.02, 0, 3500); uT(2200 - i * 140, 0.02, 0.12, 'square', 0.04, 0.5);
+      uT(900 + i * 70, 0.1, 1.6, 'sawtooth', 0.035, 0.18); uT(1300 + i * 90, 0.15, 1.4, 'sine', 0.03, 0.25);
+    }),
+    /** chegada à Terra: rugido crescente e entrada na atmosfera */
+    arrive: safe(() => {
+      uN(3, 0.16, 0, 400, 0, true); uN(3, 0.07, 0, 0, 2000, true); uT(38, 0, 3, 'sawtooth', 0.09, 2.2); uT(57, 0.2, 2.8, 'triangle', 0.08, 2);
+      for (let i = 0; i < 7; i++) uN(0.35, 0.08, 0.4 + i * 0.32, 0, 1800);    // cada estrela atravessando a atmosfera
+    }),
+    /** um impacto: pancada grave, trovão, estilhaços, parede quebrando e um som cômico (o 7º é o maior) */
+    impact: safe(i => {
+      const last = i === 6, k = last ? 1.6 : 1;
+      uN(0.9 * k, 0.28 * k, 0, 700); uT(52 - i * 2, 0, 1.2 * k, 'sine', 0.3, 0.4); uT(78, 0, 0.8 * k, 'triangle', 0.15, 0.5);
+      uN(1.6 * k, 0.14, 0.12, 300);                                             // trovão rolando
+      uN(0.25, 0.1, 0.02, 0, 4200); uN(0.18, 0.07, 0.2, 0, 6000);               // estilhaços
+      for (let j = 0; j < 4; j++) uT(110 + Math.random() * 90, 0.05 + j * 0.07, 0.12, 'square', 0.035, 0.6);   // parede quebrando
+      const comic = [[600, 0.25, 0.4, 'sine'], [300, 0.3, 2.4, 'triangle'], [900, 0.2, 0.3, 'square'], [200, 0.4, 3, 'sine'], [1200, 0.25, 0.5, 'triangle'], [450, 0.35, 2, 'square']][i % 6];
+      uT(comic[0], 0.25, comic[1], comic[3], 0.04, comic[2]);                    // "boing", "bonk", "fiuu"…
+      if (last) { uN(2.4, 0.25, 0.3, 200); uT(30, 0.1, 2.4, 'sawtooth', 0.12, 0.6); [1400, 1100, 800, 500, 300].forEach((f, j) => uT(f, 0.5 + j * 0.12, 0.25, 'triangle', 0.04)); uT(1800, 0.35, 1.2, 'sine', 0.04, 0.12); }
+    }),
+    /** depois: destroços caindo e um "uá-uá" engraçado */
+    debris: safe(() => {
+      for (let j = 0; j < 10; j++) uN(0.07, 0.06, j * 0.09 + Math.random() * 0.05, 0, 2500 + Math.random() * 3000);
+      [[294, 0.0], [277, 0.28], [262, 0.56], [247, 0.84]].forEach(([f, at], j) => uT(f, 0.9 + at, j === 3 ? 0.7 : 0.26, 'sawtooth', 0.04, j === 3 ? 0.92 : 1));
+    }),
+    /** corta tudo (devolução dos controles) */
+    end: safe(() => {
+      if (!ub) return; const b = ub; ub = null; const now = ac.currentTime;
+      b.gain.cancelScheduledValues(now); b.gain.setValueAtTime(b.gain.value, now); b.gain.linearRampToValueAtTime(0, now + 0.25);
+      setTimeout(() => { try { b.disconnect(); b._comp.disconnect(); } catch (e) { /* */ } }, 400);
+    }),
+  };
+
   // Ao esconder a aba o laço para: silencia o motor para ele não ficar zumbindo sozinho.
   try {
     document.addEventListener('visibilitychange', () => {
@@ -119,6 +200,7 @@ export function createAudio() {
     /** Assobio descendo (seta caindo do céu). */
     whistle: safe(() => { tone(1500, 0, 1.25, "sine", 0.05, 0.3); }),
     /** Laser orbital: zumbido fino descendo do céu / carga do satélite / disparo forte. */
+    ursa,
     laserZap: safe(() => { tone(2200, 0, 0.7, "sawtooth", 0.03, 0.2); tone(1100, 0.05, 1.2, "sine", 0.05, 0.6); }),
     laserCharge: safe(() => { tone(180, 0, 2.6, "sawtooth", 0.04, 6); tone(90, 0, 2.6, "square", 0.025, 5); }),
     laserBlast: safe(() => { noise(2.0, 0.4); tone(60, 0, 2.2, "sawtooth", 0.18, 0.5); tone(900, 0, 1.6, "sawtooth", 0.05, 0.3); }),

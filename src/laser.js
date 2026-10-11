@@ -16,16 +16,16 @@ const ease = x => (x <= 0 ? 0 : x >= 1 ? 1 : x * x * (3 - 2 * x));
 const clamp01 = x => Math.max(0, Math.min(1, x));
 const T_SKY = 3, T_SAT = 13, T_BACK = 16, T_HOME = 19, T_ERASE = 19.9, T_FADE = 21.1, T_CAM = 21.8, T_END = 23;
 
-function glowTexture(inner = 'rgba(255,255,255,1)', mid = 'rgba(255,120,200,0.6)') {
+export function glowTexture(inner = 'rgba(255,255,255,1)', mid = 'rgba(255,120,200,0.6)') {
   const c = document.createElement('canvas'); c.width = c.height = 128;
   const g = c.getContext('2d'), gr = g.createRadialGradient(64, 64, 0, 64, 64, 64);
   gr.addColorStop(0, inner); gr.addColorStop(0.25, mid); gr.addColorStop(1, 'rgba(0,0,0,0)');
   g.fillStyle = gr; g.fillRect(0, 0, 128, 128);
   const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; return t;
 }
-const add = (mat) => Object.assign(mat, { blending: THREE.AdditiveBlending, transparent: true, depthWrite: false, fog: false, toneMapped: false });
+export const add = (mat) => Object.assign(mat, { blending: THREE.AdditiveBlending, transparent: true, depthWrite: false, fog: false, toneMapped: false });
 /** Cilindro unitário de y = 0 a y = 1 (escala: raio em x/z, comprimento em y). */
-const BEAM_GEO = new THREE.CylinderGeometry(1, 1, 1, 18, 1, true).translate(0, 0.5, 0);
+export const BEAM_GEO = new THREE.CylinderGeometry(1, 1, 1, 18, 1, true).translate(0, 0.5, 0);
 /** Prisma quadrado (camada vermelha do tamanho exato da quadra): meia-largura 1 em x e z. */
 const BOX_GEO = new THREE.CylinderGeometry(Math.SQRT2, Math.SQRT2, 1, 4, 1, true).rotateY(Math.PI / 4).translate(0, 0.5, 0);
 

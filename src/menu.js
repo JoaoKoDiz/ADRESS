@@ -28,8 +28,8 @@ export function createMenu(stageEl) {
   style.textContent = CSS;
   document.head.appendChild(style);
 
-  let explodeWrong = true, unstoppable = false, wrongFx = 'boom';   // wrongFx: 'boom' (explosão) | 'laser' (laser orbital)
-  try { if (localStorage.getItem('adress.wrongFx') === 'laser') wrongFx = 'laser'; } catch (e) { /* ignora */ }
+  let explodeWrong = true, unstoppable = false, wrongFx = 'boom';   // wrongFx: 'boom' (explosão) | 'laser' (laser orbital) | 'ursa' (Ursa Menor)
+  try { const v = localStorage.getItem('adress.wrongFx'); if (v === 'laser' || v === 'ursa') wrongFx = v; } catch (e) { /* ignora */ }
   try { unstoppable = localStorage.getItem('adress.unstoppable') === '1'; } catch (e) { /* ignora */ }
   try { const v = localStorage.getItem('adress.explodeWrong'); if (v !== null) explodeWrong = v === '1'; } catch (e) { /* ignora */ }
 
@@ -39,7 +39,7 @@ export function createMenu(stageEl) {
   panel.className = 'menu-panel';
   panel.innerHTML = `<h3>OPÇÕES</h3>
     <div class="menu-row" data-opt="explode"><span>Casa explode na entrega errada</span><span class="menu-sw"></span></div>
-    <div class="menu-fx"><span>Efeito</span><span class="seg"><span data-fx="boom">Explosão</span><span data-fx="laser">Laser orbital</span></span></div>
+    <div class="menu-fx"><span>Efeito</span><span class="seg"><span data-fx="boom">Explosão</span><span data-fx="laser">Laser orbital</span><span data-fx="ursa">Ursa Menor</span></span></div>
     <div class="menu-row" data-opt="ghost"><span>Van imparável (atravessa e destrói tudo)</span><span class="menu-sw"></span></div>
     <div class="menu-keys">F: disparar o míssil da van (a rodada reinicia)<br>H: helicóptero (Espaço sobe, Shift desce) · T: dica<br>C: câmera · M: missões (Carreira) · Esc: fechar</div>`;
   const row = panel.querySelector('[data-opt="explode"]');
