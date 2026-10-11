@@ -4,7 +4,8 @@ import * as THREE from 'three';
 import { box, at, mesh, textTexture } from './models/kit.js';
 import { cobble, gableRoof } from './models/venice.js';
 import { buildRail } from './train.js';
-import { RAIL as RAIL_PATH, VENICE, TERRAIN, CANAL, slotOrigin, doorPoint, lotX, lotZ, GRID, MAP, HEDGE, ROAD, LOT, roadCenter } from './layout.js';
+import { buildFavelaScene } from './models/favela.js';
+import { FAVELA, RAIL as RAIL_PATH, VENICE, TERRAIN, CANAL, slotOrigin, doorPoint, lotX, lotZ, GRID, MAP, HEDGE, ROAD, LOT, roadCenter } from './layout.js';
 
 const ASPHALT = '#5d6470', WALLC = '#b9ad98', CAP = '#d8cfbe', RAIL = '#e8e2d4', STEPC = '#cfc6b4';
 const WATER = '#3d8fc4', WATER_DEEP = '#2f78ad', STONE = '#a99f8f', WOOD = '#8a6a44';
@@ -16,6 +17,7 @@ export function buildTerrain() {
   if (CANAL) buildCanal(g);
   if (RAIL_PATH) buildRail(g);
   if (VENICE) buildVenice(g);
+  if (FAVELA) buildFavelaScene(g, FAVELA, MAP, HEDGE);
   return g;
 }
 

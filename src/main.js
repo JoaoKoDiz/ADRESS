@@ -2,7 +2,7 @@
 // Este arquivo define como cada módulo é usado (o "contrato" entre eles).
 import * as THREE from 'three';
 import { Game, ROUTE_LEN } from './logic.js';
-import { MAP, doorPoint, slotOrigin, DELIVERY_RADIUS, DELIVERY_MAX_SPEED, VAN, VAN_START, LOT_ANCHORS, SOLIDS, ENTRANCE, HEDGE, GRID, PLAZA, HOUSE_SLOTS, configureGrid, roadCenter, setGasStations, GAS_LIST, GAS_CANOPY, GAS_ISLANDS, GAS_PARTS, TERRAIN, CANAL, VENICE, RAIL, slotPlaceTags, roadTopology } from './layout.js';
+import { MAP, doorPoint, slotOrigin, DELIVERY_RADIUS, DELIVERY_MAX_SPEED, VAN, VAN_START, LOT_ANCHORS, SOLIDS, ENTRANCE, HEDGE, GRID, PLAZA, HOUSE_SLOTS, configureGrid, roadCenter, setGasStations, GAS_LIST, GAS_CANOPY, GAS_ISLANDS, GAS_PARTS, TERRAIN, CANAL, VENICE, RAIL, FAVELA, slotPlaceTags, roadTopology } from './layout.js';
 import { createInput } from './input.js';
 import { createWorld } from './world.js';
 import { createVan } from './van.js';
@@ -13,7 +13,8 @@ import { buildLot } from './models/house.js';
 import { buildResident } from './models/resident.js';
 import { YARD_BUILDERS } from './models/yard.js';
 import { buildShopLot } from './models/shop.js';
-import { SHOPS, HOUSES, FUTS, L1_FIXED, L6_FIXED, WARES, TWINS, VENS } from './data.js';
+import { SHOPS, HOUSES, FUTS, L1_FIXED, L6_FIXED, WARES, TWINS, VENS, FAVS } from './data.js';
+import { buildFavelaLot } from './models/favela.js';
 import { buildWareLot } from './models/ware.js';
 import { createTrain } from './train.js';
 import { createTrolley } from './trolley.js';
@@ -81,9 +82,9 @@ const POOLS = { grid4: [...Array(16).keys(), ...Object.values(L1_FIXED)],   // g
   hill8: [...Array(32).keys()].concat([...Array(28).keys()].map(k => 38 + k), SHOPS),   // Bairro 9 (Encostas): casas, prédios, comércio
   canal8: [...Array(32).keys()].concat([...Array(28).keys()].map(k => 38 + k), SHOPS, WARES, TWINS.map(t => t[1])),   // Bairro 10 (Travessia): + galpões e casas gêmeas
   rail8: [...Array(32).keys()].concat([...Array(28).keys()].map(k => 38 + k), SHOPS, WARES),
-  venice8: VENS };   // Nível 12 (Veneza): casas venezianas   // Bairro 11 (Trilhos): ferrovia, estações e galpões   // Bairro 10 (Travessia): + galpões e casas gêmeas   // city8 (Bairro 8): o mesmo, em 8×8, com prédios mais altos (e os futuristas, se USE_FUTS)
+  venice8: VENS, favela8: FAVS };   // Nível 13 (Morro): casas de laje   // Nível 12 (Veneza): casas venezianas   // Bairro 11 (Trilhos): ferrovia, estações e galpões   // Bairro 10 (Travessia): + galpões e casas gêmeas   // city8 (Bairro 8): o mesmo, em 8×8, com prédios mais altos (e os futuristas, se USE_FUTS)
 // lote de casa ou de prédio comercial
-const buildAnyLot = (h, opts) => h.kind === 'ven' ? buildVeniceLot(h) : h.kind === 'ware' ? buildWareLot(h) : h.kind === 'shop' ? buildShopLot(h) : h.kind === 'apt' ? buildAptLot(h) : h.kind === 'fut' ? buildFutLot(h) : buildLot(h, opts);
+const buildAnyLot = (h, opts) => h.kind === 'fav' ? buildFavelaLot(h) : h.kind === 'ven' ? buildVeniceLot(h) : h.kind === 'ware' ? buildWareLot(h) : h.kind === 'shop' ? buildShopLot(h) : h.kind === 'apt' ? buildAptLot(h) : h.kind === 'fut' ? buildFutLot(h) : buildLot(h, opts);
 const USE_FUTS = false;                        // prédios futuristas (models/fut.js): guardados, desligados — troque para true para voltarem ao Bairro 8
 const TALL_FLOORS = 9;                         // Bairro 8: prédios residenciais mais altos (os outros bairros têm 5 andares)
 let world = createWorld({ renderer, buildLot: buildAnyLot, buildResident, yardBuilders: YARD_BUILDERS, pool: POOLS.grid4 });
@@ -305,7 +306,7 @@ const hint = createHintArrow(world.scene, audio);
 let hintUsed = false, hintStep = -1;
 const hintBtn = createHintButton(stage, () => requestHint());
 // Explosões (entrega errada, opcional no menu) e míssil da van (tecla F; a rodada reinicia)
-const boom = createBoom(world.scene, world, audio);
+const boom = createBoom(world.scene, () => world, audio);
 boom.attachHatch(van.object);
 const menu = createMenu(stage);
 const heli = createHeli(van, audio);        // tecla H: vira helicóptero
@@ -321,7 +322,7 @@ heli.setGround((x, z) => {
 });
 heli.setTerrain((x, z) => TERRAIN.h(x, z));   // Bairro 9: o chão sobe nas encostas
 const walker = createWalker(world.scene);   // tecla L: o motorista desce e anda a pé
-const FOOT = { house: [4.1, 13.1, 1.5, 8.5], shop: [3.8, 13.4, 1.5, 8.5], apt: [3.4, 13.8, 1.2, 8.5], fut: [3.4, 13.8, 1.2, 8.5], ware: [1.5, 40.5, 0.8, 10.6], ven: [VEN_X0, VEN_X1, VEN_Z0, VEN_Z1] };   // paredes (locais do lote)
+const FOOT = { house: [4.1, 13.1, 1.5, 8.5], shop: [3.8, 13.4, 1.5, 8.5], apt: [3.4, 13.8, 1.2, 8.5], fut: [3.4, 13.8, 1.2, 8.5], ware: [1.5, 40.5, 0.8, 10.6], ven: [VEN_X0, VEN_X1, VEN_Z0, VEN_Z1], fav: [5.3, 11.9, 1.7, 8.3] };   // paredes (locais do lote)
 /** Obstáculos de quem anda a pé: tudo menos os lotes inteiros e a praça (dá para entrar nos quintais); só as paredes das casas. */
 function walkSolids() {
   const out = SOLIDS.slice(HOUSE_SLOTS.length + (PLAZA ? 1 : 0)).filter(b => !b.vanOnly);   // escadarias e passarelas: só a pé
@@ -407,7 +408,7 @@ function useNeighborhood(kind) {
   APT_BUILD.floors = kind === 'city8' ? TALL_FLOORS : 5;
   APT_BUILD.mixed = kind === 'canal8' || kind === 'rail8';  // Bairros 10 e 11: prédios das duas alturas
   train.detach();
-  game.placeTags = kind === 'venice8' ? layout => { const m = {}; layout.forEach((h, s) => { if (h >= 0) m[h] = slotPlaceTags(s); }); return m; } : null;
+  game.placeTags = kind === 'venice8' || kind === 'favela8' ? layout => { const m = {}; layout.forEach((h, s) => { if (h >= 0) m[h] = slotPlaceTags(s); }); return m; } : null;
   game.arrange = null;
   setBoatMode(kind === 'venice8');
   walker.setArea(kind === 'venice8' ? (x, z) => VENICE.walkable(x, z) : null);   // Veneza: a pé só em terra e nas pontes   // antes de construir a cena do bairro
@@ -421,7 +422,7 @@ function useNeighborhood(kind) {
   neighborhood = kind;
   world.scene.add(van.object);
   world.scene.add(walker.object); walker.show(false);
-  hint.attach(world.scene);
+  hint.attach(world.scene); boom.attach(world.scene);
   if (kind === 'rail8') { world.scene.add(train.object); train.reset(); }
   if (kind === 'venice8') { world.scene.add(npcBoats.object); npcBoats.reset(); world.scene.add(rope); } else npcBoats.detach();   // Bairro 11: trem e cancelas
   if (COMPOSED.includes(kind)) composeRound();   // Bairros 4 a 7: composição sorteada a cada partida
@@ -531,7 +532,7 @@ function goBack() {
 function startFree(mode = 'free') {
   // Bairro 2: 6×6 com praça; Bairro 4: 5×5 com bloqueios; o resto: 4×4
   const lv = mode === 'career' ? careerLevel : freeLevel;
-  useNeighborhood(lv === 1 ? 'plaza6' : lv === 3 ? 'grid5' : lv === 4 ? 'grid6s' : lv === 5 ? 'city6' : lv === 6 ? 'city7' : lv === 7 ? 'city8' : lv === 8 ? 'hill8' : lv === 9 ? 'venice8' : lv === 10 ? 'canal8' : lv === 11 ? 'rail8' : 'grid4');   // 10 = Veneza, 11 = Travessia, 12 = Trilhos
+  useNeighborhood(lv === 1 ? 'plaza6' : lv === 3 ? 'grid5' : lv === 4 ? 'grid6s' : lv === 5 ? 'city6' : lv === 6 ? 'city7' : lv === 7 ? 'city8' : lv === 8 ? 'hill8' : lv === 9 ? 'venice8' : lv === 10 ? 'canal8' : lv === 11 ? 'rail8' : lv === 12 ? 'favela8' : 'grid4');   // 10 = Veneza, 11 = Travessia, 12 = Trilhos
   gameMode = mode;
   if (!COMPOSED.includes(neighborhood)) setupGrid4();   // Bairro 1 tem a casa fixa; o 3 (mesma grade) não
   setupChurch();
@@ -607,6 +608,7 @@ function findNearHouse() {
   if (Math.abs(van.speed) > DELIVERY_MAX_SPEED) return -1;
   let best = DELIVERY_RADIUS, found = -1;
   for (const h of game.pool) {
+    if (FAVELA && FAVELA.spots[game.slotOf[h]].foot) continue;   // Morro: casas dos becos e escadarias só a pé
     const p = doorPoint(game.slotOf[h]);
     const d = Math.hypot(van.x - p.x, van.z - p.z);
     if (d < best) { best = d; found = h; }
@@ -1248,7 +1250,7 @@ function update(dt, t) {
         parcel.position.set(walker.x + hc * 0.62, 0.62, walker.z + hs * 0.62); parcel.rotation.set(0, -walker.heading, 0);
       }
       actionLock = Math.max(0, actionLock - dt);
-      nearHouse = VENICE ? findNearHouseFoot() : -1;   // Veneza: dá para entregar a pé (vielas)
+      nearHouse = VENICE || FAVELA ? findNearHouseFoot() : -1;   // Veneza: dá para entregar a pé (vielas)
       if (actionLock > 0 || !input.action()) break;
       if (nearHouse >= 0) { pending = nearHouse; nearHouse = -1; footDelivery = true; audio.bell(); setState('ring'); }
       else if (nearLounger()) startRoofTalk();             // no terraço a van fica perto: falar com ele tem prioridade
@@ -1384,7 +1386,7 @@ function updateHUD() {
     else if (state === 'fuel') hud.setMain('⛽ Abastecendo… glub, glub, glub…', 'ring');
     else if (state === 'talk' || state === 'cine' || state === 'trolley' || state === 'trolleyBlack') hud.setMain('', 'clue');
     else if (state === 'walk' && carrying) hud.setMain(walker.nearVan(van) ? 'Entrar na van devolve a caixa ao lugar dela.' : 'Carregando uma caixa… de quem será?', 'clue');
-    else if (state === 'walk') hud.setMain(walker.nearVan(van) && !nearLounger() ? 'Perto da van — aperte E para entrar.' : 'Passeando a pé… (não dá para entregar andando)', 'clue');
+    else if (state === 'walk') hud.setMain(walker.nearVan(van) && !nearLounger() ? 'Perto da van — aperte E para entrar.' : FAVELA ? game.mainText() : 'Passeando a pé… (não dá para entregar andando)', 'clue');   // Morro: a pé continua valendo a pista
     else if (state === 'drive' && fuelMsgT > 0) hud.setMain(fuelMsg, 'dialog');
     else if (state === 'fadeOut') hud.setMain(restartMsg || 'Entrega concluída! Preparando a próxima…', restartMsg ? 'dialog' : 'success');
     else hud.setMain(game.mainText(), 'clue');
@@ -1520,7 +1522,7 @@ window.ADRESS = {
   get careerLevel() { return careerLevel; },
   setCareerLevel(l) { careerLevel = l; },
   setFreeLevel(l) { freeLevel = l; },
-  walker, jamSound, train, walkSolids, trolley, get tseq() { return tseq; },
+  walker, jamSound, train, walkSolids, trolley, get tseq() { return tseq; }, get FAVELA() { return FAVELA; },
   get levelSelect() { return levelSelect; },
   shop,
   startGame: m => startFree(m), newRound: () => startNewRound(),

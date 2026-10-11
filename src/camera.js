@@ -4,7 +4,8 @@
 //     Parada, a câmera sobe para olhar por cima dos telhados; entregando, vira um pouco para a casa visitada.
 //   'overview' (tecla C): visão fixa do SUL, com o bairro inteiro enquadrado na tela.
 import * as THREE from 'three';
-import { MAP, HOUSE_SLOTS, GAS_LIST, GAS_PARTS, BUILD_H, slotOrigin, LOT_ANCHORS, ENTRANCE } from './layout.js';
+import { MAP, HEDGE, HOUSE_SLOTS, GAS_LIST, GAS_PARTS, BUILD_H, slotOrigin, LOT_ANCHORS, ENTRANCE, FAVELA } from './layout.js';
+import { FAV } from './favelaPlan.js';
 
 const PITCH = THREE.MathUtils.degToRad(57);   // inclinação para baixo
 const FOV = 32;                               // campo de visão vertical (graus): pouca diferença de escala entre fileiras
@@ -103,7 +104,14 @@ const EXTRA_BOXES = [];          // caixas extras fora do bairro (ex.: paredes d
 function buildCamBoxes() {
   CAM_BOXES.length = 0;
   for (const b of EXTRA_BOXES) CAM_BOXES.push([b[0] - CAM_PAD * 0.6, b[1] - CAM_PAD * 0.6, b[2] + CAM_PAD * 0.6, b[3] + CAM_PAD * 0.6, b[4]]);
-  for (const s of HOUSE_SLOTS) {
+  if (FAVELA) {                                                // Morro: faixas do morro (o braço não entra na encosta), casario e mercadinho
+    const X0 = HEDGE, X1 = MAP - HEDGE;
+    CAM_BOXES.push([X0, FAV.B1, X1, MAP, FAV.H1 + 0.6], [X0, FAV.B2, X1, MAP, FAV.H2 + 0.6]);
+    for (const f of FAVELA.fillers) CAM_BOXES.push([f.x0 - 0.5, f.z0 - 0.5, f.x1 + 0.5, f.z1 + 0.5, f.y + f.floors * 2.8 + 1.2]);
+    for (const sp of FAVELA.spots) CAM_BOXES.push([sp.box.x0 - 0.6, sp.box.z0 - 0.6, sp.box.x1 + 0.6, sp.box.z1 + 0.6, sp.y + 3 * 2.8 + 1.8]);
+    const m = FAVELA.market; CAM_BOXES.push([m.x0 - 0.6, m.z0 - 0.6, m.x1 + 0.6, m.z1 + 0.6, 7]);
+  }
+  for (const s of FAVELA ? [] : HOUSE_SLOTS) {
     const o = slotOrigin(s), H = LOT_ANCHORS.house;
     CAM_BOXES.push([o.x + H.x0 - 0.7 - CAM_PAD, o.z + H.z0 - 0.7 - CAM_PAD, o.x + H.x1 + 0.7 + CAM_PAD, o.z + H.z1 + 1.1 + CAM_PAD, BUILD_H + CAM_PAD]);
   }
@@ -128,11 +136,12 @@ function rebuildGrid() { buildFit(); buildCamBoxes(); CAM_LIM1 = MAP + 0.5; }
 rebuildGrid();
 
 /** O segmento P→C (P no pivô) atravessa alguma caixa? (método das placas; as caixas vão do chão até yTopo) */
+let CAM_BASE = 0;                // altura do chão sob o alvo (Morro/encostas): o topo das caixas é absoluto
 function segmentBlocked(px, pz, cx, cy, cz) {
   const dx = cx - px, dy = cy - PIVOT_Y, dz = cz - pz;
   const mnx = Math.min(px, cx), mxx = Math.max(px, cx), mnz = Math.min(pz, cz), mxz = Math.max(pz, cz);
   for (let i = 0; i < CAM_BOXES.length; i++) {
-    const b = CAM_BOXES[i];
+    const b = CAM_BOXES[i], top = b[4] - CAM_BASE;
     if (mxx < b[0] || mnx > b[2] || mxz < b[1] || mnz > b[3]) continue;
     let t0 = 0, t1 = 1;
     if (Math.abs(dx) > 1e-9) {
@@ -147,8 +156,8 @@ function segmentBlocked(px, pz, cx, cy, cz) {
     } else if (pz < b[1] || pz > b[3]) continue;
     if (t0 > t1) continue;
     // abaixo do topo da caixa: y(t) = PIVOT_Y + dy·t ≤ yTopo
-    if (dy > 1e-9) { const a = (b[4] - PIVOT_Y) / dy; if (a < t1) t1 = a; }
-    else if (PIVOT_Y > b[4]) continue;
+    if (dy > 1e-9) { const a = (top - PIVOT_Y) / dy; if (a < t1) t1 = a; }
+    else if (PIVOT_Y > top) continue;
     if (t0 <= t1) return true;
   }
   return false;
@@ -195,7 +204,7 @@ export function createCameraRig() {
     const cx = piv.x + d.x * r, cy = piv.y - tgtY + d.y * r, cz = piv.z + d.z * r;
     const inside = tgt.x > 0 && tgt.x < MAP && tgt.z > 0 && tgt.z < MAP;      // só segura a câmera dentro da sebe enquanto está no bairro
     if (inside && (cx < CAM_LIM0 || cx > CAM_LIM1 || cz < CAM_LIM0 || cz > CAM_LIM1)) return false;
-    return !segmentBlocked(piv.x, piv.z, cx, cy, cz);
+    CAM_BASE = tgtY; return !segmentBlocked(piv.x, piv.z, cx, cy, cz);
   }
   /** Maior distância (≤ a pedida pelo zoom) que fica livre ao longo do raio: a câmera para na frente da primeira parede/casa. */
   function armGoal(wanted, d) {

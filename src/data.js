@@ -156,6 +156,29 @@ export const VEN_AWNING = { red: '#c8402f', green: '#3c8f52', blue: '#2f6fb0' };
 /** Índices das casas de Veneza em HOUSES. */
 export const VENS = [...Array(60).keys()].map(k => 110 + k);
 
+// ---- Morro (Nível 13, índices 170–233): casas de laje de 1 a 3 andares, pintadas ou de tijolo aparente ----
+export const FAV_FACADE = { blue: '#3f7fc4', yellow: '#f0c43a', coral: '#ee7a5f', green: '#5cae5a', beige: '#dcc79e', brick: '#b5603d' };
+export const FAV_AWNING = { red: '#d23a2e', blue: '#2a64c2', green: '#2f9a4a' };
+{
+  const names = ['Dona Cida', 'Seu Zé', 'Dona Neide', 'Seu Tião', 'Dona Rosinha', 'Seu Valdir', 'Dona Lurdes', 'Seu Jorginho',
+    'Dona Marlene', 'Seu Nenê', 'Dona Zezé', 'Seu Raimundo', 'Dona Socorro', 'Seu Moacir', 'Dona Penha', 'Seu Biu', 'Dona Glória',
+    'Seu Damião', 'Dona Iracema', 'Seu Chico'];
+  const FAC = Object.keys(FAV_FACADE), AW = Object.keys(FAV_AWNING), ITEMS = ['laundry', 'pots', 'stairs'];
+  let seed = 31;
+  const rnd = n => { seed = (seed * 16807) % 2147483647; return seed % n; };
+  const seen = [];
+  while (HOUSES.length < 234) {
+    const v = { fac: FAC[rnd(6)], floors: 1 + rnd(3), tanks: rnd(3), awning: rnd(3) === 0 ? AW[rnd(3)] : null, items: ITEMS.filter(() => rnd(3) === 0) };
+    const t = ['ffac:' + v.fac, 'ffl:' + v.floors].concat(v.tanks ? ['ftank:' + v.tanks] : [], v.awning ? ['faw:' + v.awning] : [], v.items.map(k => 'fv:' + k));
+    const sub = (x, y) => x.every(k => y.includes(k));          // nenhuma casa "contém" outra: cada uma tem pista única
+    if (seen.some(o => sub(o, t) || sub(t, o))) continue;
+    seen.push(t);
+    HOUSES.push({ name: names[(HOUSES.length - 170) % names.length], kind: 'fav', ...v, ftags: t });
+  }
+}
+/** Índices das casas do Morro em HOUSES. */
+export const FAVS = [...Array(64).keys()].map(k => 170 + k);
+
 export const ROOF_ITEMS = ['chimney', 'dish', 'solar', 'tank', 'rooster', 'kite', 'patch'];
 export const YARD_ITEMS = ['fruit', 'bare', 'cactus', 'sunflowers', 'ballbush', 'doghouse', 'pool', 'trampoline',
   'swing', 'bike', 'flamingo', 'gnome', 'clothesline', 'tires', 'fountain'];
@@ -177,6 +200,11 @@ HOUSES.forEach((h, i) => {
   if (h.kind === 'ven') {
     h.f = [];
     h.tags = ['vfac:' + h.fac, 'vsh:' + h.sh, 'vfl:' + h.floors].concat(h.arch ? ['varch'] : [], h.awning ? ['vaw:' + h.awning] : [], h.items.map(k => 'v:' + k));
+    h.roofItems = []; h.yardItems = [];
+    return;
+  }
+  if (h.kind === 'fav') {
+    h.f = []; h.tags = h.ftags.slice();
     h.roofItems = []; h.yardItems = [];
     return;
   }
@@ -240,6 +268,14 @@ export const PHRASE = {
   'loc:rialto': 'perto da Ponte de Rialto', 'loc:cafe': 'perto do café',
   'loc:stopN': 'perto da parada do bonde da entrada', 'loc:stopS': 'perto da parada do bonde dos galpões', 'loc:stopW': 'perto da parada oeste do bonde', 'loc:stopE': 'perto da parada leste do bonde',
   'loc:stopSul': 'perto da parada sul do bonde', 'loc:stopC': 'perto da parada central do bonde',
+  // Morro
+  'ffac:blue': 'fachada azul', 'ffac:yellow': 'fachada amarela', 'ffac:coral': 'fachada coral', 'ffac:green': 'fachada verde',
+  'ffac:beige': 'fachada bege', 'ffac:brick': 'tijolo aparente', 'ffl:1': 'um andar só', 'ffl:2': 'dois andares', 'ffl:3': 'três andares',
+  'ftank:1': 'uma caixa-d’água azul', 'ftank:2': 'duas caixas-d’água azuis', 'faw:red': 'toldo vermelho', 'faw:blue': 'toldo azul',
+  'faw:green': 'toldo verde', 'fv:laundry': 'um varal com roupas na laje', 'fv:pots': 'vasos de plantas na porta', 'fv:stairs': 'uma escada até a laje',
+  'loc:low': 'na parte baixa do bairro', 'loc:mid': 'no meio do morro', 'loc:high': 'na parte alta do bairro',
+  'loc:stairtop': 'no alto da escadaria', 'loc:stairfoot': 'ao pé da escadaria', 'loc:market': 'ao lado do mercadinho',
+  'loc:court': 'perto da quadra', 'loc:square': 'perto da pracinha',
   'gnd:dumpster': 'uma caçamba na frente', 'gnd:moto': 'uma moto estacionada na frente', 'gnd:guard': 'uma guarita na entrada', 'gnd:bikes': 'um bicicletário na frente',
 };
 

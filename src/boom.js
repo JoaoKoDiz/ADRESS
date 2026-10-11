@@ -17,7 +17,8 @@ function basic(color, opacity = 1) {
   return m;
 }
 
-export function createBoom(scene, world, audio) {
+export function createBoom(scene, getWorld, audio) {
+  const W = () => (typeof getWorld === 'function' ? getWorld() : getWorld);   // o bairro atual (cada bairro tem sua cena)
   const fx = new THREE.Group();
   scene.add(fx);
   const destroyed = new Set();
@@ -114,7 +115,7 @@ export function createBoom(scene, world, audio) {
     destroyed.add(h);
     const o = slotOrigin(slot);
     const cx = o.x + HX, cz = o.z + HZ;
-    world.setHidden(h, true);
+    W().setHidden(h, true);
     buildRubble(h, o);
     spawnFireball(cx, 3, cz, 1);
     spawnDebris(cx, 4, cz, h, 70, 1);
@@ -124,7 +125,7 @@ export function createBoom(scene, world, audio) {
   }
 
   function reset() {
-    world.showAll();
+    W().showAll();
     destroyed.clear();
     for (const c of [...fx.children]) {
       fx.remove(c);
@@ -283,6 +284,8 @@ export function createBoom(scene, world, audio) {
   }
 
   return {
+    /** Leva as explosões e o míssil para a cena do bairro atual. */
+    attach(sc) { sc.add(fx); sc.add(missile); },
     explode, smash, reset() { reset(); resetMissile(); },
     update(dt) { updateMissile(dt); update(dt); },
     isDestroyed: h => destroyed.has(h),

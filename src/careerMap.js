@@ -49,7 +49,7 @@ function roadGeometry(curve, samples) {
 //   canal    — canal no meio, pontes e um galpão (Bairro 10, Travessia)
 //   rail     — trilhos em L com curva, trem e estação (Bairro 11, Trilhos)
 //   venice   — canais, fachadas venezianas coloridas e a Ponte de Rialto (Nível 12, Veneza)
-const MINI_KINDS = ['houses', 'plaza', 'barriers', 'trucks', 'gas', 'city', 'jam', 'jam8', 'hill', 'venice', 'canal', 'rail'];   // 10 = Veneza, 11 = Travessia, 12 = Trilhos
+const MINI_KINDS = ['houses', 'plaza', 'barriers', 'trucks', 'gas', 'city', 'jam', 'jam8', 'hill', 'venice', 'canal', 'rail', 'favela'];   // 13 = Morro   // 10 = Veneza, 11 = Travessia, 12 = Trilhos
 
 /** Bairro em miniatura do tipo `kind`: base de grama, sebe, ruas e o que caracteriza o bairro. gray = fase bloqueada. */
 function miniNeighborhood(kind, colors, gray = false) {
@@ -129,6 +129,23 @@ function miniNeighborhood(kind, colors, gray = false) {
     add(box(0.18, 2.6, 0.18, G('#3a3d44', '#6a6a6a')), 5.7, 1.82, 5.9);                // totem de preços
     add(box(1.1, 1.0, 0.14, G('#d8312a', '#8a8a8a')), 5.7, 3.0, 5.9);
     add(box(0.9, 0.25, 0.16, G('#1d1d1f', '#5a5a5a')), 5.7, 2.85, 5.92);
+    return bakeStatic(g);
+  }
+
+  if (kind === 'favela') {                       // Nível 13 (Morro): 3 patamares, rua em zigue-zague e casinhas coloridas de laje
+    const WALLC = G('#9a9285', '#a0a0a0'), TOP = G('#b3a993', '#b0b0b0');
+    add(box(13.4, 1.4, 8.6, WALLC), 0, 0.4 + 0.7, -2.3); add(box(13.4, 0.1, 8.6, TOP), 0, 1.85, -2.3);
+    add(box(13.4, 1.4, 4.2, WALLC), 0, 1.8 + 0.7, -4.5); add(box(13.4, 0.1, 4.2, TOP), 0, 3.25, -4.5);
+    for (const [x, y, z, l, r] of [[0, 0.46, 4.2, 9, 0.25], [-4.2, 1.92, 0.4, 7, -0.35], [2.5, 3.32, -4.0, 8, 0.2]]) add(box(l, 0.1, 1.4, ROADC), x, y, z, 0, r, 0);
+    const COLS = ['#3f7fc4', '#f0c43a', '#ee7a5f', '#5cae5a', '#dcc79e', '#b5603d'];
+    let k = 0;
+    for (const [y, z0, z1] of [[0.4, 5.6, 6.4], [0.4, 1.6, 2.4], [1.8, -0.8, -1.2], [1.8, 2.0 - 4.2, -2.6], [3.2, -5.6, -6.2]]) for (let x = -5.6; x <= 5.6; x += 1.6) {
+      const hh = 0.6 + ((k * 7) % 3) * 0.35, z = (z0 + z1) / 2 + ((k * 5) % 3 - 1) * 0.15;
+      add(box(1.3, hh, 1.2, G(COLS[k % 6], '#c4c4c4')), x, y + hh / 2, z);
+      if (k % 3 === 0) add(cyl(0.22, 0.22, 0.3, G('#1f78d1', '#8a8a8a'), 8), x + 0.2, y + hh + 0.15, z);
+      k++;
+    }
+    for (let i = 0; i < 6; i++) add(box(0.9, 0.2 * (i + 1), 0.35, G('#cfc6b4', '#bdbdbd')), 3.8, 0.4 + 0.1 * (i + 1), 2.0 - i * 0.35);   // escadaria
     return bakeStatic(g);
   }
 
@@ -280,7 +297,7 @@ function boardTexture(gray = false) {
 }
 
 const PALETTES = [['red', 'blue', 'yellow', 'green'], ['purple', 'red', 'gray', 'yellow', 'blue', 'green', 'red', 'yellow'], ['blue', 'green', 'red', 'purple'],
-  ['yellow', 'gray', 'blue', 'red'], ['green', 'purple', 'yellow', 'blue'], ['red'], ['blue'], ['green'], ['red', 'blue', 'yellow', 'purple'], ['red'], ['blue', 'green', 'red'], ['green', 'yellow', 'purple']];
+  ['yellow', 'gray', 'blue', 'red'], ['green', 'purple', 'yellow', 'blue'], ['red'], ['blue'], ['green'], ['red', 'blue', 'yellow', 'purple'], ['red'], ['blue', 'green', 'red'], ['green', 'yellow', 'purple'], ['red']];
 
 /** Miniaturas (data URL) dos 8 bairros, desenhadas uma vez num renderizador próprio. Usadas na seleção do modo Livre. */
 export function renderMiniThumbnails(w = 480, h = 360) {
@@ -332,7 +349,7 @@ export function createCareerMap(stageEl, audio) {
   scene.add(ground);
 
   // estrada com curvas suaves
-  const pts = [[0, 0], [30, -14], [62, 6], [94, -10], [126, 10], [158, -6], [190, 8], [222, -4], [254, 10], [286, -6], [318, 8], [350, -6]]
+  const pts = [[0, 0], [30, -14], [62, 6], [94, -10], [126, 10], [158, -6], [190, 8], [222, -4], [254, 10], [286, -6], [318, 8], [350, -6], [382, 8]]
     .map(([x, z]) => new THREE.Vector3(x, 0, z));
   const curve = new THREE.CatmullRomCurve3(pts, false, 'centripetal');
   const length = curve.getLength();
@@ -349,7 +366,7 @@ export function createCareerMap(stageEl, audio) {
   // fases: bairros em miniatura alternando os lados da estrada, com placa numerada
   const stops = [], boards = [];
   let clock = 0;
-  [0.04, 0.124, 0.207, 0.291, 0.375, 0.458, 0.542, 0.625, 0.709, 0.793, 0.876, 0.96].forEach((u, i) => {
+  MINI_KINDS.map((_, i) => 0.04 + i * 0.92 / (MINI_KINDS.length - 1)).forEach((u, i) => {
     curve.getPointAt(u, p); curve.getTangentAt(u, tg);
     const side = i % 2 ? 1 : -1;
     const nx = -tg.z * side, nz = tg.x * side;
