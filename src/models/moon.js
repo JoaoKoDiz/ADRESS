@@ -1,11 +1,12 @@
 // Nível 17 (Órbita): módulos lunares (cilindro em pé, cápsula deitada ou cúpula; branco/creme com faixa colorida, janelas
-// circulares, porta de moldura grossa tipo escotilha e antena/parabólica/painéis no teto), o cenário da colônia
-// (patamar, rampas, ruas, crateras com pontes, estufa, plataforma com foguete, pedras, túneis, estrelas e a Terra)
-// e o traje espacial dos moradores (capacete transparente, mochila).
+// circulares, porta de moldura grossa tipo escotilha e antena/parabólica/painéis no teto), o cenário da lua esférica
+// (chão, estradas em faixas que seguem a curvatura, rotatórias, pontes sobre crateras, praças das vilas — estufa, foguete,
+// antenas… —, enchimento e decoração, estrelas e a Terra) e o capacete do jogador.
 import * as THREE from 'three';
 import { box, cyl, sphere, cone, torus, at, mat, bakeStatic } from './kit.js';
 import { MOON_COL } from '../data.js';
-import { MOON } from '../moonPlan.js';
+import { MOON, tangentBasis } from '../moonPlan.js';
+import { FRAME } from '../moonFrame.js';
 
 const WHITE = '#f1ede2', CREAM = '#e6dcc4', GRAY = '#9da1a7', DARK = '#2b2f36', GLASS = '#5fa3d8', PANEL = '#1d3a7a';
 const REG = '#b9bcc0', REG2 = '#a4a8ae', ROAD = '#7d8188';
@@ -15,8 +16,8 @@ export function buildMoonLot(h) {
   const root = new THREE.Group(); root.name = 'moon:' + h.name;
   const add = (m, x, y, z, rx = 0, ry = 0, rz = 0) => { root.add(at(m, x, y, z, rx, ry, rz)); return m; };
   const stripe = MOON_COL[h.stripe], doorC = MOON_COL[h.door], body = h.index % 3 ? WHITE : CREAM;
-  add(cyl(7.6, 7.8, 0.12, '#c9cbcf', 24), 0, 0.06, 0);                                    // base de pouso do módulo
-  add(box(3.2, 0.13, 4.6, '#d6d8dc'), 0, 0.07, 6.2);                                      // calçada até a rua
+  add(cyl(7.6, 7.8, 1.1, '#c9cbcf', 24), 0, -0.49, 0);                                    // base do módulo (grossa: a borda encosta na curvatura do chão)
+  add(box(3.2, 1.2, 4.6, '#d6d8dc'), 0, -0.53, 6.2);                                      // calçada até a rua
   let front = 4, topY = 6, winAt;                                                         // frente (z), topo, janelas
   if (h.shape === 'cyl') {
     const H = h.tall ? 7.2 : 5.2, R = 4;
@@ -60,77 +61,164 @@ export function buildMoonLot(h) {
   return bakeStatic(root);
 }
 
-/** Cenário fixo da colônia lunar. */
-export function buildMoonScene(g, V, MAP, HEDGE) {
-  const add = (m, x, y, z, rx = 0, ry = 0, rz = 0) => { g.add(at(m, x, y, z, rx, ry, rz)); return m; };
-  const { PH, RW, DECK } = MOON;
-  // patamar central (regolito) e mureta baixa nas bordas (aberta nas rampas)
-  const P = V.PLAT;
-  add(box(P.x1 - P.x0, PH - 0.04, P.z1 - P.z0, REG2), (P.x0 + P.x1) / 2, (PH - 0.04) / 2, (P.z0 + P.z1) / 2);
-  add(box(P.x1 - P.x0, 0.06, P.z1 - P.z0, REG), (P.x0 + P.x1) / 2, PH - 0.03, (P.z0 + P.z1) / 2);
-  for (const r of V.ramps) {
-    const along = r.axis === 'z' ? r.z1 - r.z0 : r.x1 - r.x0, len = Math.hypot(along, PH), ang = Math.atan2(r.h1 - r.h0, along), cx = (r.x0 + r.x1) / 2, cz = (r.z0 + r.z1) / 2;
-    if (r.axis === 'z') { add(box(r.x1 - r.x0, 0.3, len, ROAD), cx, PH / 2 - 0.12, cz, -ang, 0, 0); for (const x of [r.x0 - 0.3, r.x1 + 0.3]) add(box(0.6, PH + 0.8, along, REG2), x, (PH + 0.8) / 2 - 0.4, cz); }
-    else { add(box(len, 0.3, r.z1 - r.z0, ROAD), cx, PH / 2 - 0.12, cz, 0, 0, ang); for (const z of [r.z0 - 0.3, r.z1 + 0.3]) add(box(along, PH + 0.8, 0.6, REG2), cx, (PH + 0.8) / 2 - 0.4, z); }
-    for (let k = 0; k < 6; k++) { const u = (k + 0.5) / 6, top = (r.h0 + (r.h1 - r.h0) * u) - 0.25; if (top > 0.1) { if (r.axis === 'z') add(box(r.x1 - r.x0, top, along / 6, REG2), cx, top / 2, r.z0 + along * u); else add(box(along / 6, top, r.z1 - r.z0, REG2), r.x0 + along * u, top / 2, cz); } }
-  }
-  // ruas de regolito batido (mais escuras), com faixas claras nas bordas
-  for (const s of V.segs) {
-    if (s.type === 'ramp') continue;
-    const [ax, az] = s.a, [bx, bz] = s.b, len = Math.hypot(bx - ax, bz - az), ry = Math.atan2(bx - ax, bz - az), y = V.h((ax + bx) / 2, (az + bz) / 2) > MOON.PH - 0.1 ? PH : 0;
-    add(box(RW, 0.06, len, ROAD), (ax + bx) / 2, y + 0.035, (az + bz) / 2, 0, ry, 0);
-    for (const o of [-RW / 2 + 0.3, RW / 2 - 0.3]) add(box(0.18, 0.07, len, '#d8dade'), (ax + bx) / 2 + Math.cos(ry) * o, y + 0.04, (az + bz) / 2 - Math.sin(ry) * o, 0, ry, 0);
-  }
-  for (const [x, z] of Object.values(V.N)) add(cyl(RW / 2, RW / 2, 0.06, ROAD, 18), x, V.level(x, z) ? PH + 0.034 : 0.034, z);
-  // crateras: borda clara e fundo escuro; nas que têm rua, uma ponte curta por cima
-  for (const c of V.craters) {
-    const rim = torus(c.r, 1.0, '#c9ccd0', 6, 28); add(rim, c.x, 0.15, c.z, Math.PI / 2, 0, 0).scale.set(1, 1, 0.35);
-    add(cyl(c.r - 0.6, c.r - 1.8, 0.05, '#6f737a', 24), c.x, 0.06, c.z);
-    add(cyl(c.r * 0.45, c.r * 0.45, 0.06, '#5e6268', 18), c.x, 0.08, c.z);
-    if (c.bridge) {
-      const L = 2 * c.r + 1, alongZ = c.bridge === 'z';
-      add(box(alongZ ? RW : L, 0.3, alongZ ? L : RW, '#8d9198'), c.x, DECK - 0.15, c.z);
-      for (const s of [-1, 1]) {
-        const ox = alongZ ? s * (RW / 2 + 0.1) : 0, oz = alongZ ? 0 : s * (RW / 2 + 0.1);
-        add(box(alongZ ? 0.18 : L, 0.9, alongZ ? L : 0.18, '#ffb347'), c.x + ox, DECK + 0.45, c.z + oz);
-        for (let k = -2; k <= 2; k++) add(box(0.4, 1.4, 0.4, GRAY), c.x + ox + (alongZ ? 0 : k * c.r / 2.5), DECK - 0.9, c.z + oz + (alongZ ? k * c.r / 2.5 : 0));
-      }
+/** Altura do topo de um módulo (seta da dica). */
+export function moonTopY(h) { return h.shape === 'cyl' ? (h.tall ? 7.2 : 5.2) + 1.4 : h.shape === 'capsule' ? 6.3 : 4.6; }
+
+// ---------- cenário da lua esférica (coordenadas da esfera: centro na origem, raio MOON.R) ----------
+const Rm = MOON.R;
+const lifted = (p, lift) => p.clone().multiplyScalar(Rm + lift);
+/** Faixa que acompanha a superfície ao longo dos pontos `pts` (unitários). valid(i): o trecho i→i+1 entra. */
+function strip(pts, closed, width, lift, offsetSide = 0, valid = null) {
+  const pos = [], n = pts.length, side = new THREE.Vector3(), t = new THREE.Vector3();
+  const L = i => { const p = pts[(i + n) % n]; return typeof lift === 'function' ? lift(i, p) : lift; };
+  const corner = (i, s) => {                            // s: −1 (borda esquerda) … 1 (direita)
+    const p = pts[i], a = pts[closed ? (i + 1) % n : Math.min(n - 1, i + 1)], b = pts[closed ? (i - 1 + n) % n : Math.max(0, i - 1)];
+    t.copy(a).sub(b); side.copy(t).cross(p).normalize();
+    return p.clone().addScaledVector(side, (offsetSide + s * width / 2) / Rm).normalize().multiplyScalar(Rm + L(i));
+  };
+  const cols = Math.max(1, Math.ceil(width / 1.2));      // subdividida na largura: acompanha a curvatura de lado também
+  const segs = closed ? n : n - 1;
+  for (let i = 0; i < segs; i++) {
+    if (valid && !valid(i)) continue;
+    const j = (i + 1) % n;
+    for (let c = 0; c < cols; c++) {
+      const s0 = -1 + 2 * c / cols, s1 = -1 + 2 * (c + 1) / cols;
+      const a0 = corner(i, s0), a1 = corner(i, s1), b0 = corner(j, s0), b1 = corner(j, s1);
+      pos.push(...a0.toArray(), ...a1.toArray(), ...b0.toArray(), ...a1.toArray(), ...b1.toArray(), ...b0.toArray());
     }
   }
-  // estufa comunitária transparente com canteiros e plantas
-  { const G = V.greenhouse, cx = (G.x0 + G.x1) / 2, cz = (G.z0 + G.z1) / 2, w = G.x1 - G.x0, d = G.z1 - G.z0;
-    add(box(w, 0.4, d, '#d6d8dc'), cx, 0.2, cz);
-    for (let x = G.x0 + 2; x < G.x1 - 1; x += 3.2) for (const z of [cz - 2.5, cz + 2.5]) { add(box(2.4, 0.6, 1.6, '#7a5a34'), x, 0.7, z); for (let k = 0; k < 3; k++) add(sphere(0.45, k % 2 ? '#3f8f3a' : '#5cae4a', 6, 5), x - 0.7 + k * 0.7, 1.25, z); }
-    const gl = new THREE.Mesh(new THREE.CylinderGeometry(d / 2, d / 2, w, 24), new THREE.MeshStandardMaterial({ color: '#cfeaff', transparent: true, opacity: 0.3, roughness: 0.1, depthWrite: false }));
-    gl.position.set(cx, 0.4, cz); gl.rotation.set(0, 0, Math.PI / 2); g.add(gl);           // abóbada de vidro (a metade de baixo fica sob o chão)
-    for (let x = G.x0; x <= G.x1 + 0.01; x += w / 4) add(torus(d / 2, 0.1, WHITE, 4, 24), x, 0.4, cz, 0, Math.PI / 2, 0);
+  const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.computeVertexNormals();
+  return g;
+}
+/** Calota esférica de raio (na superfície) r em volta de n. */
+function cap(n, r, lift, color, seg = 28) {
+  const m = new THREE.Mesh(new THREE.SphereGeometry(Rm + lift, Math.min(72, Math.max(seg, Math.ceil(2 * Math.PI * r / 1.6))), Math.max(3, Math.ceil(r / 1.1)), 0, Math.PI * 2, 0, r / Rm), mat(color));
+  m.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), n); return m;
+}
+const ringPts = (c, r, k = 40) => { const { u, v } = tangentBasis(c), out = []; for (let i = 0; i < k; i++) { const a = i / k * Math.PI * 2; out.push(c.clone().multiplyScalar(Math.cos(r / Rm)).addScaledVector(u.clone().multiplyScalar(Math.cos(a)).addScaledVector(v, Math.sin(a)), Math.sin(r / Rm)).normalize()); } return out; };
+/** Objeto local (cima +Y, frente +Z) posto sobre a esfera em n, de frente para f. */
+function placed(obj, n, f, sink = 0.08) { FRAME.pose(obj, n, f, -sink); return obj; }
+
+/** Peças pequenas (enchimento e decoração), no referencial local. */
+function decoPiece(d) {
+  const g = new THREE.Group(), add = (m, x, y, z, rx = 0, ry = 0, rz = 0) => { g.add(at(m, x, y, z, rx, ry, rz)); return m; };
+  const k = d.seed || 0, stripe = Object.values(MOON_COL)[k % 4];
+  switch (d.kind) {
+    case 'depot': {                                     // depósito: cápsula deitada sobre pés, com faixa e porta
+      add(cyl(1.5, 1.5, 3.6, k % 2 ? WHITE : CREAM, 14), 0, 1.9, 0, 0, 0, Math.PI / 2);
+      for (const s of [-1, 1]) { add(sphere(1.5, k % 2 ? WHITE : CREAM, 14, 8), s * 1.8, 1.9, 0); add(box(0.4, 0.7, 1.2, GRAY), s * 1.2, 0.35, 0); }
+      add(cyl(1.53, 1.53, 0.4, stripe, 14), 0, 1.9, 0, 0, 0, Math.PI / 2); add(box(1, 1.3, 0.1, DARK), 0, 1.7, 1.48); break;
+    }
+    case 'minidome': {                                  // casinha-cúpula (sem entrega)
+      add(cyl(2.9, 3, 0.4, '#c9cbcf', 18), 0, 0.2, 0); add(sphere(2.5, k % 3 ? WHITE : CREAM, 16, 8), 0, 0.3, 0).scale.set(1, 0.9, 1);
+      add(cyl(2.52, 2.55, 0.35, stripe, 16), 0, 0.6, 0); add(box(1.2, 1.5, 0.8, DARK), 0, 0.95, 2.2);
+      add(cyl(0.35, 0.35, 0.1, GLASS, 12), 0.9, 1.8, 1.95, Math.PI / 2 - 0.5, 0, 0); add(cyl(0.05, 0.05, 1.6, GRAY, 5), -0.8, 3.0, -0.6); break;
+    }
+    case 'tank': add(cyl(1.3, 1.3, 3.6, '#e8e8e8', 14), 0, 1.8, 0); add(sphere(1.3, '#e8e8e8', 14, 6), 0, 3.6, 0).scale.set(1, 0.4, 1); add(cyl(1.33, 1.33, 0.35, stripe, 14), 0, 2.6, 0); add(box(0.2, 3.6, 0.2, GRAY), 1.4, 1.8, 0); break;
+    case 'crates': for (const [x, y, z, s] of [[-0.6, 0.5, 0, 1], [0.6, 0.5, 0.2, 1], [0, 1.45, 0.1, 0.9], [0.9, 0.4, -1.0, 0.8]]) { add(box(s, s, s, k % 2 ? '#cfd3d8' : '#e6dcc4'), x, y * s, z, 0, x, 0); add(box(s * 1.01, s * 0.15, s * 1.01, stripe), x, y * s, z, 0, x, 0); } break;
+    case 'solar': for (const x of [-1.5, 1.5]) { add(cyl(0.08, 0.08, 1.2, GRAY, 6), x, 0.6, 0); add(box(2.6, 0.08, 1.8, PANEL), x, 1.25, 0, 0.45, 0, 0); for (let i = -1; i <= 1; i++) add(box(0.05, 0.1, 1.82, '#8fb0ee'), x + i * 0.85, 1.27, 0, 0.45, 0, 0); } break;
+    case 'rock': { const m = sphere(d.r, REG2, 6, 4); m.scale.set(1, 0.65, 0.85); add(m, 0, d.r * 0.25, 0, 0, k, 0); break; }
+    case 'rocks': for (const [x, z, r] of [[-0.6, 0.2, 0.8], [0.7, -0.3, 0.6], [0.1, 0.8, 0.45]]) { const m = sphere(r, k % 2 ? REG2 : '#8f939a', 6, 4); m.scale.set(1, 0.6, 0.9); add(m, x, r * 0.2, z, 0, k + x, 0); } break;
+    case 'minigreen': {                                 // estufinha: meio cilindro de vidro com canteiros
+      add(box(5, 0.3, 3.6, '#d6d8dc'), 0, 0.15, 0);
+      for (const z of [-0.8, 0.8]) { add(box(4.2, 0.4, 0.8, '#7a5a34'), 0, 0.5, z); for (let i = 0; i < 4; i++) add(sphere(0.32, i % 2 ? '#3f8f3a' : '#5cae4a', 6, 5), -1.5 + i, 0.85, z); }
+      const gl = new THREE.Mesh(new THREE.CylinderGeometry(1.8, 1.8, 5, 16, 1, false, 0, Math.PI), new THREE.MeshStandardMaterial({ color: '#cfeaff', transparent: true, opacity: 0.3, roughness: 0.1, depthWrite: false }));
+      gl.rotation.set(0, 0, Math.PI / 2); gl.position.y = 0.3; g.add(gl);
+      for (const x of [-2.5, 0, 2.5]) add(torus(1.8, 0.07, WHITE, 4, 16, {}), x, 0.3, 0, 0, Math.PI / 2, 0); break;
+    }
+    case 'antenna': add(cyl(0.12, 0.2, 7, GRAY, 6), 0, 3.5, 0); add(cone(0.9, 0.5, '#e8e8e8', 12), 0.5, 5.6, 0, 0, 0, -2.2); add(sphere(0.2, '#e0402a', 8, 6, { emissive: '#ff3a20', emissiveIntensity: 0.8 }), 0, 7.1, 0); add(box(1.4, 0.08, 0.08, GRAY), 0, 6, 0); break;
+    case 'rover': {                                     // jipe lunar parado
+      add(box(3, 0.6, 1.8, '#e8e8e8'), 0, 1.0, 0); add(box(1.2, 0.5, 1.6, stripe), -0.7, 1.5, 0); add(box(0.6, 0.45, 1.5, GLASS), 0.4, 1.5, 0);
+      for (const [x, z] of [[-1.1, 1], [1.1, 1], [-1.1, -1], [1.1, -1]]) add(cyl(0.45, 0.45, 0.35, DARK, 10), x, 0.45, z, Math.PI / 2, 0, 0);
+      add(cyl(0.04, 0.04, 1.4, GRAY, 5), -1.2, 2.2, 0.5); add(cone(0.4, 0.2, '#e8e8e8', 10), -1.2, 2.9, 0.5, -2, 0, 0); break;
+    }
   }
-  // plataforma de pouso com foguete
-  { const { x, z, r } = V.pad;
-    add(cyl(r, r + 0.4, 0.6, '#c9ccd0', 24), x, 0.3, z); add(cyl(r * 0.6, r * 0.6, 0.62, '#ffb347', 24), x, 0.31, z); add(cyl(r * 0.5, r * 0.5, 0.64, '#c9ccd0', 24), x, 0.32, z);
-    add(cyl(1.5, 1.7, 9, WHITE, 16), x, 5.1, z); add(cone(1.5, 3.2, '#ff7a1a', 16), x, 11.2, z);
-    add(cyl(1.55, 1.55, 0.7, '#2f78d0', 16), x, 7.5, z); add(sphere(0.45, GLASS, 10, 8), x, 8.6, z + 1.4);
-    for (let k = 0; k < 4; k++) { const a = k * Math.PI / 2; add(box(0.2, 2.6, 1.6, '#e0402a'), x + Math.cos(a) * 1.8, 1.9, z + Math.sin(a) * 1.8, 0, -a, 0); }
+  return g;
+}
+/** Praça central de cada vila. */
+function featurePiece(kind) {
+  const g = new THREE.Group(), add = (m, x, y, z, rx = 0, ry = 0, rz = 0) => { g.add(at(m, x, y, z, rx, ry, rz)); return m; };
+  switch (kind) {
+    case 'greenhouse': {                                // estufa comunitária: cúpula de vidro com canteiros
+      add(cyl(7.6, 7.8, 0.8, '#d6d8dc', 28), 0, 0.0, 0);
+      for (let i = 0; i < 6; i++) { const a = i / 6 * Math.PI * 2; add(box(2.6, 0.6, 1.4, '#7a5a34'), Math.cos(a) * 4.2, 0.6, Math.sin(a) * 4.2, 0, -a, 0); for (let j = -1; j <= 1; j++) add(sphere(0.5, j ? '#3f8f3a' : '#6cbf4a', 6, 5), Math.cos(a) * 4.2 - Math.sin(a) * j * 0.8, 1.2, Math.sin(a) * 4.2 + Math.cos(a) * j * 0.8); }
+      add(cyl(0.3, 0.4, 3, '#6b4428', 6), 0, 1.9, 0); add(sphere(1.6, '#4fae5a', 8, 6), 0, 3.8, 0);
+      const gl = new THREE.Mesh(new THREE.SphereGeometry(7, 24, 10, 0, Math.PI * 2, 0, Math.PI / 2), new THREE.MeshStandardMaterial({ color: '#cfeaff', transparent: true, opacity: 0.28, roughness: 0.1, depthWrite: false }));
+      gl.position.y = 0.3; g.add(gl);
+      for (let i = 0; i < 4; i++) add(torus(7, 0.12, WHITE, 4, 28), 0, 0.3, 0, 0, i * Math.PI / 4, 0).scale.set(1, 1, 1);
+      break;
+    }
+    case 'pad': {                                       // plataforma de pouso com foguete (ponto de referência: aparece de longe)
+      add(cyl(8.6, 9, 1.2, '#c9ccd0', 28), 0, 0.0, 0); add(cyl(5.4, 5.4, 1.22, '#ffb347', 28), 0, 0.01, 0); add(cyl(4.4, 4.4, 1.24, '#c9ccd0', 28), 0, 0.02, 0);
+      add(cyl(1.8, 2, 12, WHITE, 18), 0, 6.6, 0); add(cone(1.8, 4, '#ff7a1a', 18), 0, 14.6, 0);
+      add(cyl(1.85, 1.85, 0.9, '#2f78d0', 18), 0, 9.5, 0); add(sphere(0.5, GLASS, 10, 8), 0, 11, 1.7);
+      for (let k = 0; k < 4; k++) { const a = k * Math.PI / 2; add(box(0.25, 3.2, 2, '#e0402a'), Math.cos(a) * 2.2, 2.2, Math.sin(a) * 2.2, 0, -a, 0); }
+      add(cone(1.4, 1.6, '#3a3d44', 14), 0, 0.9, 0, Math.PI, 0, 0); add(box(0.5, 9, 0.5, GRAY), 5.5, 4.5, 0); add(box(3, 0.3, 0.3, GRAY), 4, 8.5, 0);
+      break;
+    }
+    case 'antenna': add(cyl(5, 5.4, 0.6, '#c9ccd0', 20), 0, 0, 0); add(cyl(0.35, 0.6, 15, GRAY, 8), 0, 7.5, 0); for (const y of [6, 10]) add(cone(1.8, 0.8, '#e8e8e8', 16), 1.2, y, 0, 0, 0, -2.2); add(sphere(0.35, '#e0402a', 8, 6, { emissive: '#ff3a20', emissiveIntensity: 1 }), 0, 15.2, 0); for (const a of [0, 2.1, 4.2]) add(box(0.15, 8, 0.15, GRAY), Math.cos(a) * 2.2, 3.5, Math.sin(a) * 2.2, Math.sin(a) * 0.28, 0, -Math.cos(a) * 0.28); break;
+    case 'tanks': for (const [x, z] of [[-3, -2], [3, -2], [0, 3]]) { add(cyl(2, 2, 5, '#e8e8e8', 16), x, 2.5, z); add(sphere(2, '#e8e8e8', 16, 6), x, 5, z).scale.set(1, 0.45, 1); add(cyl(2.03, 2.03, 0.5, '#2f78d0', 16), x, 3.4, z); } add(box(6.5, 0.4, 0.4, GRAY), 0, 1.2, -2); add(box(0.4, 0.4, 5, GRAY), 0, 1.2, 0.5); break;
+    case 'solar': for (let r = -1; r <= 1; r++) for (let c = -1; c <= 1; c++) { add(cyl(0.1, 0.1, 1.4, GRAY, 6), c * 3.4, 0.7, r * 2.6); add(box(3, 0.08, 2, PANEL), c * 3.4, 1.45, r * 2.6, 0.4, 0, 0); } break;
+    case 'garden': for (let i = 0; i < 7; i++) { const a = i / 7 * Math.PI * 2, rr = i ? 4.5 : 0; add(cyl(0.9, 1.1, 0.8, '#c9cbcf', 10), Math.cos(a) * rr, 0.4, Math.sin(a) * rr); add(cyl(0.12, 0.15, 1.6, '#7a3fa0', 6), Math.cos(a) * rr, 1.6, Math.sin(a) * rr); add(sphere(0.8, i % 2 ? '#c06ad8' : '#4fd0a8', 8, 6), Math.cos(a) * rr, 2.6, Math.sin(a) * rr); } break;
+    case 'beacon': add(cyl(3, 3.4, 0.6, '#c9ccd0', 16), 0, 0, 0); add(cyl(0.8, 1.4, 9, WHITE, 6), 0, 4.8, 0); add(sphere(1.1, '#7af0ff', 12, 8, { emissive: '#3ad8ff', emissiveIntensity: 1.2 }), 0, 10, 0); for (let k = 0; k < 3; k++) add(box(0.3, 2, 2.2, '#2f78d0'), Math.cos(k * 2.1) * 1.3, 1.3, Math.sin(k * 2.1) * 1.3, 0, -k * 2.1, 0); break;
+    case 'dish': add(cyl(3.6, 4, 0.6, '#c9ccd0', 16), 0, 0, 0); add(cyl(0.5, 0.8, 4, GRAY, 8), 0, 2, 0); add(cone(5, 2, '#e8e8e8', 24), 0, 5.6, 0, -2.5, 0, 0); add(cyl(0.08, 0.08, 3, GRAY, 5), 0, 6.2, 1.2, 0.9, 0, 0); break;
   }
-  // pedras, túneis entre módulos, mureta de regolito em volta e uma torre de antenas no patamar
-  for (const p of V.rocks) { const m = sphere(p.s, REG2, 6, 4); m.scale.set(1, 0.6, 0.85); add(m, p.x, p.s * 0.3, p.z, 0, p.x, 0); }
-  for (const t of V.tunnels) {
-    const dx = t.b.x - t.a.x, dz = t.b.z - t.a.z, L = Math.hypot(dx, dz), ry = Math.atan2(dx, dz);
-    const tube = cyl(1.1, 1.1, L, WHITE, 12); tube.position.set((t.a.x + t.b.x) / 2, t.y + 1.5, (t.a.z + t.b.z) / 2); tube.rotation.order = 'YXZ'; tube.rotation.set(Math.PI / 2, ry, 0); g.add(tube);
-    for (const u of [0.3, 0.7]) { const r = torus(1.15, 0.12, GRAY, 6, 14); r.position.set(t.a.x + dx * u, t.y + 1.5, t.a.z + dz * u); r.rotation.set(0, ry, 0); g.add(r); }
+  return g;
+}
+
+/** Cenário fixo da lua (num grupo na origem = centro da lua). */
+export function buildMoonScene(g, V) {
+  // chão: a esfera de regolito e manchas mais escuras ("mares")
+  const ground = new THREE.Mesh(new THREE.SphereGeometry(Rm, 160, 110), new THREE.MeshStandardMaterial({ color: REG, roughness: 1 }));
+  ground.receiveShadow = true; ground.name = 'moon-ground'; g.add(ground);
+  const top = g; g = new THREE.Group(); g.name = 'moon-flat'; top.add(g);   // camadas rentes ao chão (não projetam sombra)
+  let sd = 9; const rnd = () => (sd = (sd * 16807) % 2147483647) / 2147483647;
+  for (let i = 0; i < 26; i++) { const n = new THREE.Vector3(rnd() - 0.5, rnd() - 0.5, rnd() - 0.5).normalize(); g.add(cap(n, 8 + rnd() * 14, 0.015, i % 2 ? '#aeb2b8' : '#a7abb1', 30)); }
+  // estradas: anéis, ramais e laços, com faixas claras nas bordas (abertas nos cruzamentos e nas pontes)
+  const roadMat = mat(ROAD), lineMat = mat('#d8dade');
+  const nearJ = p => V.junctions.some(j => p.angleTo(j.p) * Rm < j.r + 0.6) || V.bridges.some(b => p.angleTo(b.p) * Rm < b.half + 0.5);
+  const LIFT = { ring: 0.06, branch: 0.075, loop: 0.09 };
+  for (const r of V.roads) {
+    const pts = r.pts;
+    g.add(new THREE.Mesh(strip(pts, r.closed, MOON.RW, LIFT[r.kind]), roadMat));
+    for (const s of [-1, 1]) g.add(new THREE.Mesh(strip(pts, r.closed, 0.2, LIFT[r.kind] + 0.025, s * (MOON.RW / 2 - 0.35), i => !nearJ(pts[i]) && !nearJ(pts[(i + 1) % pts.length])), lineMat));
   }
-  const ex0 = 100.8, ex1 = 108.4;                                     // mureta de regolito em volta (aberta na entrada, ao norte)
-  for (const [x0, z0, x1, z1] of [[0, 0, ex0, 1.6], [ex1, 0, MAP, 1.6], [0, MAP - 1.6, MAP, MAP], [0, 0, 1.6, MAP], [MAP - 1.6, 0, MAP, MAP]]) add(box(x1 - x0, 1.2, z1 - z0, REG2), (x0 + x1) / 2, 0.6, (z0 + z1) / 2);
-  { const x = 120, z = 130; add(cyl(0.25, 0.35, 10, GRAY, 6), x, PH + 5, z); add(cone(1.4, 0.7, '#e8e8e8', 14), x, PH + 9, z, -2.2, 0, 0); add(sphere(0.3, '#e0402a', 8, 6), x, PH + 10.2, z); }
-  // céu: estrelas e a Terra ao longe
-  const N = 900, pos = new Float32Array(N * 3); let sd = 77; const rnd = () => (sd = (sd * 16807) % 2147483647) / 2147483647;
-  for (let i = 0; i < N; i++) { const a = rnd() * Math.PI * 2, e = 0.05 + rnd() * 1.4, R = 1300; pos[i * 3] = MAP / 2 + Math.cos(a) * Math.cos(e) * R; pos[i * 3 + 1] = Math.sin(e) * R; pos[i * 3 + 2] = MAP / 2 + Math.sin(a) * Math.cos(e) * R; }
+  for (const j of V.junctions) g.add(cap(j.p, MOON.RW / 2 + 0.6, 0.1, ROAD, 20));
+  // pontes sobre crateras: cratera embaixo, tabuleiro com rampas acompanhando a curvatura, guarda-corpos laranja
+  for (const b of V.bridges) {
+    g.add(cap(b.p, b.cr, 0.03, '#5e6268', 24));
+    g.add(new THREE.Mesh(strip(ringPts(b.p, b.cr + 0.4, 36), true, 1.4, 0.22), mat('#c9ccd0')));
+    const pts = []; for (let s = -b.half; s <= b.half + 0.01; s += 0.75) pts.push(b.p.clone().multiplyScalar(Math.cos(s / Rm)).addScaledVector(b.along, Math.sin(s / Rm)).normalize());
+    const prof = p => V.bump(p);
+    g.add(new THREE.Mesh(strip(pts, false, MOON.RW, (i, p) => prof(p) + 0.11), mat('#8d9198')));
+    for (const s of [-1, 1]) for (let i = 2; i < pts.length - 2; i += 2) {
+      const p = pts[i]; if (prof(p) < MOON.DECK - 0.01) continue;
+      const q = p.clone().addScaledVector(b.n, s * (MOON.RW / 2 + 0.1) / Rm).normalize();
+      g.add(placed(at(box(0.25, 0.9, 0.25, '#ffb347'), 0, 0, 0), q, b.along, -(MOON.DECK + 0.45)));
+    }
+  }
+  // crateras (beirada clara + fundo escuro), na superfície
+  for (const d of V.deco) if (d.kind === 'crater') {
+    g.add(cap(d.n, d.cr, 0.03, '#6f737a', 24)); g.add(cap(d.n, d.cr * 0.45, 0.045, '#5e6268', 16));
+    g.add(new THREE.Mesh(strip(ringPts(d.n, d.cr + 0.3, 36), true, Math.max(0.8, d.cr * 0.18), 0.2), mat('#c9ccd0')));
+  }
+  // praças das vilas, enchimento e decoração
+  const flat = g; g = top;
+  for (const d of V.deco) {
+    if (d.kind === 'crater' || d.kind === 'bridge') continue;
+    if (d.kind.startsWith('feature:')) { flat.add(cap(d.n, 10.6, 0.05, '#cfd2d6', 30)); g.add(placed(featurePiece(d.kind.slice(8)), d.n, d.f, 0.1)); continue; }
+    g.add(placed(decoPiece(d), d.n, d.f));
+  }
+  // céu: estrelas e a Terra ao longe (giram com a lua)
+  const N = 1400, pos = new Float32Array(N * 3);
+  for (let i = 0; i < N; i++) { const v = new THREE.Vector3(rnd() - 0.5, rnd() - 0.5, rnd() - 0.5).normalize().multiplyScalar(1300); pos.set(v.toArray(), i * 3); }
   const sg = new THREE.BufferGeometry(); sg.setAttribute('position', new THREE.BufferAttribute(pos, 3));
   const stars = new THREE.Points(sg, new THREE.PointsMaterial({ color: '#ffffff', size: 2.2, sizeAttenuation: false, fog: false })); stars.frustumCulled = false; g.add(stars);
-  const earth = new THREE.Group(); earth.position.set(MAP / 2 - 300, 420, MAP / 2 + 900); g.add(earth);
+  const earth = new THREE.Group(); earth.position.set(-0.35, 0.45, 0.82).normalize().multiplyScalar(900); g.add(earth);
   earth.add(new THREE.Mesh(new THREE.SphereGeometry(70, 32, 20), new THREE.MeshBasicMaterial({ color: '#3a7bd5', fog: false })));
   for (const [x, y, z, r] of [[20, 25, 58, 22], [-30, -10, 60, 18], [10, -35, 58, 16], [-15, 40, 54, 14]]) { const c = new THREE.Mesh(new THREE.SphereGeometry(r, 12, 8), new THREE.MeshBasicMaterial({ color: '#4fae5a', fog: false })); c.position.set(x, y, z); c.scale.set(1, 0.7, 0.3); earth.add(c); }
-  const cl = new THREE.Mesh(new THREE.SphereGeometry(71.5, 32, 20), new THREE.MeshBasicMaterial({ color: '#ffffff', transparent: true, opacity: 0.25, fog: false })); earth.add(cl);
+  earth.lookAt(0, 0, 0); earth.rotateY(Math.PI);
+  earth.add(new THREE.Mesh(new THREE.SphereGeometry(71.5, 32, 20), new THREE.MeshBasicMaterial({ color: '#ffffff', transparent: true, opacity: 0.25, fog: false })));
   return g;
 }
 

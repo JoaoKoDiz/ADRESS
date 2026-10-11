@@ -7,6 +7,8 @@ import {
 } from './layout.js';
 import { HOUSES } from './data.js';
 import { buildTerrain } from './terrain.js';
+import { buildMoonScene } from './models/moon.js';
+import { FRAME } from './moonFrame.js';
 import { buildGasStation } from './models/gas.js';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { mat, mesh, box, cyl, cone, sphere, at, bakeStatic, dynamic, textTexture } from './models/kit.js';
@@ -388,12 +390,16 @@ export function createWorld({ renderer, buildLot, buildResident, yardBuilders, p
   scene.background = new THREE.Color(moon ? '#05070d' : SKY);   // Órbita: céu escuro
   // névoa leve na cor do céu: o horizonte fica suave na câmera atrás da van (main.js a afasta na visão geral)
   scene.fog = new THREE.Fog(moon ? '#05070d' : SKY, 3000, 3200);
-  buildLights(scene);
+  const lights = buildLights(scene);
   scene.add(buildSun());
+  // Órbita: tudo da lua fica num grupo cuja matriz (esfera → mundo) o jogo refaz a cada quadro (moonFrame.js)
+  const moonRoot = moon ? new THREE.Group() : null;
+  if (moonRoot) { moonRoot.name = 'moon-root'; moonRoot.matrixAutoUpdate = false; scene.add(moonRoot); }
+  const home = moonRoot || scene;
 
   const solidsStart = SOLIDS.length;          // os troncos das árvores de fora entram em SOLIDS aqui
-  const ground = buildGround(venice);
-  const outskirts = buildOutskirts(ground);
+  const ground = moon ? new THREE.Group() : buildGround(venice);
+  const outskirts = moon ? new THREE.Group() : buildOutskirts(ground);
   if (venice || moon) SOLIDS.length = solidsStart;              // Veneza: sem árvores de fora (laguna)
   const extraSolids = SOLIDS.slice(solidsStart);
   scene.add(baked(ground, false, true));
@@ -403,7 +409,12 @@ export function createWorld({ renderer, buildLot, buildResident, yardBuilders, p
   ground.traverse(o => { if (o.isMesh && outside.has(o.material)) o.receiveShadow = false; });
   if (!venice && !moon) { scene.add(baked(buildHedge(), true, true)); scene.add(baked(outskirts, false, false)); }   // Veneza: só laguna em volta
   if (PLAZA) scene.add(baked(buildPlaza(), true, true));
-  if (TERRAIN.kind !== 'flat' || CANAL || RAIL || VENICE || FLUX || FARMLAND || SNOWV || MOONV) scene.add(baked(buildTerrain(), true, true));   // Bairros 9, 10 e 11
+  if (MOONV) {                                  // Órbita: a esfera (só recebe sombra) e o cenário fundido
+    const ms = buildMoonScene(new THREE.Group(), MOONV), gr = ms.getObjectByName('moon-ground');
+    const fl = ms.getObjectByName('moon-flat');
+    ms.remove(gr); home.add(gr); ms.remove(fl); home.add(baked(fl, false, true));
+    home.add(baked(ms, true, true));
+  } else if (TERRAIN.kind !== 'flat' || CANAL || RAIL || VENICE || FLUX || FARMLAND || SNOWV) scene.add(baked(buildTerrain(), true, true));   // Bairros 9, 10 e 11
 
   // os 16 lotes, construídos uma única vez (cada casa mantém sua identidade; só muda de lugar)
   // (só as casas deste bairro: `pool`; o array é indexado pelo índice da casa)
@@ -411,7 +422,7 @@ export function createWorld({ renderer, buildLot, buildResident, yardBuilders, p
   for (const h of pool) {
     const lot = buildLot(HOUSES[h], { yardBuilders });
     lot.name = 'lot:' + h;
-    scene.add(lot);
+    home.add(lot);
     lots[h] = lot;
   }
 
@@ -420,7 +431,7 @@ export function createWorld({ renderer, buildLot, buildResident, yardBuilders, p
   // As partes animadas (dynamic) continuam dentro dos grupos dos lotes.
   const neighborhood = new THREE.Group();
   neighborhood.name = 'neighborhood';
-  scene.add(neighborhood);
+  home.add(neighborhood);
   const staticParts = [];
   pool.forEach(h => { const lot = lots[h]; staticParts[h] = (() => {
     const parts = [];
@@ -441,6 +452,8 @@ export function createWorld({ renderer, buildLot, buildResident, yardBuilders, p
   let present = new Set(pool);         // casas/prédios que estão nesta partida (Bairro 5 sorteia quais entram)
   function mergeLots() {
     clearMerged();
+    const keep = moonRoot && moonRoot.matrix.clone();     // Órbita: funde no referencial da lua (sem a rotação do quadro)
+    if (moonRoot) { moonRoot.matrix.identity(); moonRoot.updateMatrixWorld(true); }
     const buckets = new Map();
     for (const h of pool) {
       if (hidden.has(h) || !present.has(h)) continue;
@@ -462,6 +475,7 @@ export function createWorld({ renderer, buildLot, buildResident, yardBuilders, p
       m.matrixAutoUpdate = false;
       neighborhood.add(m);
     }
+    if (moonRoot) { moonRoot.matrix.copy(keep); moonRoot.updateMatrixWorld(true); }
     if (!ok) clearMerged();               // geometrias incompatíveis: volta a desenhar lote por lote
     for (const h of pool) for (const m of staticParts[h]) m.visible = !ok;
   }
@@ -478,6 +492,10 @@ export function createWorld({ renderer, buildLot, buildResident, yardBuilders, p
     for (let s = 0; s < layout.length; s++) {
       if (layout[s] < 0) continue;                // lote sem casa (praça, posto)
       const o = slotOrigin(s), lot = lots[layout[s]];
+      if (MOONV) {                                  // Órbita: módulo na esfera, de frente para a rua do laço
+        const sp = SPOTS.spots[s]; FRAME.pose(lot, sp.n, sp.f, 0); lot.userData.res = { n: sp.resN, f: sp.f };
+        continue;
+      }
       if (SPOTS) {                                  // Morro/Colheita: construção no ponto, virada para a rua, o beco ou a estrada
         const sp = SPOTS.spots[s], ry = Math.atan2(sp.fx, sp.fz);
         lot.position.set(sp.px ?? sp.cx, sp.y, sp.pz ?? sp.cz); lot.rotation.y = ry;
@@ -494,13 +512,14 @@ export function createWorld({ renderer, buildLot, buildResident, yardBuilders, p
     if (!r) {
       r = residents[h] = buildResident(h);
       r.visible = false;
-      scene.add(r);
+      home.add(r);
     }
     if (current && current !== r) current.visible = false;
     const lot = lots[h];
     // y = 0 do lote: o próprio morador se eleva sobre o caminho de pedras
     const rs = lot.userData.res;                  // Morro: na frente da porta, virado para fora
-    if (rs) { r.position.set(rs.x, lot.position.y, rs.z); r.rotation.y = rs.ry; }
+    if (rs && rs.n) FRAME.pose(r, rs.n, rs.f, 0);   // Órbita: em pé na esfera, virado para a rua
+    else if (rs) { r.position.set(rs.x, lot.position.y, rs.z); r.rotation.y = rs.ry; }
     else r.position.set(lot.position.x + LOT_ANCHORS.residentSpot.x, lot.position.y, lot.position.z + LOT_ANCHORS.residentSpot.z);
     if (current !== r || currentH !== h || currentMood !== mood) {
       r.userData.setMood && r.userData.setMood(mood);
@@ -525,6 +544,8 @@ export function createWorld({ renderer, buildLot, buildResident, yardBuilders, p
 
   return {
     scene,
+    moonRoot,
+    sunLight: lights.sun,
     setLayout,
     showResident,
     hideResident,

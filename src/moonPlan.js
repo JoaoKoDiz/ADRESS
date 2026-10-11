@@ -1,109 +1,148 @@
-// Nível 17 (Órbita — planejado como o especial 20): plano FIXO da colônia lunar (área ~8×8, sem grade). Solo baixo (0) e um
-// patamar central (PLAT, altura 2.5) com 4 rampas suaves. Ruas curvas em anel com ramificações, 3 pontes curtas sobre
-// crateras (a ponte é um pouco mais alta que o chão: a van dá pequenos saltos na gravidade baixa), crateras de enfeite
-// fora das ruas, estufa comunitária e plataforma de pouso com foguete. Módulos (destinos) de frente para a rua; alguns
-// ligados por túneis curtos. Tudo é geometria pura.
+// Nível 17 (Órbita — planejado como o especial 20): uma pequena lua ESFÉRICA de verdade (raio MOON.R). Tudo é descrito
+// em coordenadas da esfera (vetores unitários a partir do centro): 3 estradas em anel (grandes círculos que se cruzam em
+// 6 rotatórias, dá para dar a volta na lua por qualquer uma), 8 vilas de módulos — cada uma com uma rua em laço em volta
+// de uma praça central e 2 ramais até os anéis —, crateras com ponte nos anéis (saltinhos na gravidade baixa) e, no resto,
+// crateras, pedras, depósitos, tanques, painéis solares, estufinhas, antenas e jipes. A simulação plana usa um mapa local
+// recentrado a cada quadro no jogador (moonFrame.js).
+import * as THREE from 'three';
 
-export const MOON = { PH: 2.5, RW: 8, S: 8, DECK: 0.35 };
+export const MOON = { R: 70, RW: 8, S: 8, DECK: 0.5 };
 
-export function planMoon(MAP, HEDGE) {
-  const { PH, RW, S, DECK } = MOON, hw = RW / 2, X = 104.6;
-  const PLAT = { x0: 78, z0: 96, x1: 132, z1: 140 };
-  const ramps = [
-    { x0: X - 4, x1: X + 4, z0: 80, z1: 96, axis: 'z', h0: 0, h1: PH },       // norte (rua principal)
-    { x0: X - 4, x1: X + 4, z0: 140, z1: 156, axis: 'z', h0: PH, h1: 0 },     // sul
-    { x0: 62, x1: 78, z0: 112, z1: 120, axis: 'x', h0: 0, h1: PH },           // oeste
-    { x0: 132, x1: 148, z0: 112, z1: 120, axis: 'x', h0: PH, h1: 0 },         // leste
-  ];
-  const N = {
-    n0: [X, -4], n1: [X, 22], n12: [X, 80], n13: [X, 96], n14: [X, 116], n15: [X, 140], n16: [X, 156], n17: [X, 196],
-    n2: [60, 30], n3: [28, 58], n4: [34, 116], n5: [34, 170], n6: [66, 196],
-    n7: [150, 30], n8: [186, 60], n9: [186, 116], n10: [186, 170], n11: [150, 196],
-    n18: [62, 116], n19: [78, 116], n20: [132, 116], n21: [148, 116],
-  };
-  const E = [
-    ['n0', 'n1'], ['n1', 'n12'], ['n12', 'n13', 'ramp'], ['n13', 'n14'], ['n14', 'n15'], ['n15', 'n16', 'ramp'], ['n16', 'n17'],
-    ['n1', 'n2'], ['n2', 'n3'], ['n3', 'n4'], ['n4', 'n5'], ['n5', 'n6'], ['n6', 'n17'], ['n17', 'n11'], ['n11', 'n10'], ['n10', 'n9'], ['n9', 'n8'], ['n8', 'n7'], ['n7', 'n1'],
-    ['n4', 'n18'], ['n18', 'n19', 'ramp'], ['n19', 'n14'], ['n14', 'n20'], ['n20', 'n21', 'ramp'], ['n21', 'n9'],
-  ];
-  const segs = E.map(([a, b, type]) => ({ a: N[a], b: N[b], na: a, nb: b, type: type || 'road' }));
-  // crateras: com ponte (a rua atravessa por cima, no eixo) e de enfeite (fora das ruas)
-  const craters = [
-    { x: X, z: 50, r: 11, bridge: 'z' }, { x: 160, z: 116, r: 9, bridge: 'x' }, { x: 34, z: 143, r: 9, bridge: 'z' },
-    { x: 155, z: 76, r: 11 }, { x: 62, z: 80, r: 9 }, { x: 72, z: 170, r: 8 }, { x: 128, z: 176, r: 7 },
-  ];
-  const greenhouse = { x0: 48, x1: 66, z0: 136, z1: 150 };
-  const pad = { x: 152, z: 150, r: 9 };
-  const segDist = (x, z, s) => {
-    const [ax, az] = s.a, [bx, bz] = s.b, dx = bx - ax, dz = bz - az, L2 = dx * dx + dz * dz;
-    const t = Math.max(0, Math.min(1, ((x - ax) * dx + (z - az) * dz) / L2));
-    return { d: Math.hypot(x - ax - dx * t, z - az - dz * t), t, x: ax + dx * t, z: az + dz * t };
-  };
-  const roadDist = (x, z) => Math.min(...segs.map(s => segDist(x, z, s).d));
-  const inR = (r, x, z, m = 0) => x > r.x0 - m && x < r.x1 + m && z > r.z0 - m && z < r.z1 + m;
-  const onBridge = (x, z) => craters.some(c => c.bridge && (c.bridge === 'z' ? Math.abs(x - c.x) < hw && Math.abs(z - c.z) < c.r : Math.abs(z - c.z) < hw && Math.abs(x - c.x) < c.r));
-  const h = (x, z) => {
-    for (const r of ramps) if (inR(r, x, z)) return r.h0 + (r.h1 - r.h0) * (r.axis === 'z' ? (z - r.z0) / (r.z1 - r.z0) : (x - r.x0) / (r.x1 - r.x0));
-    if (inR(PLAT, x, z)) return PH;
-    return onBridge(x, z) ? DECK : 0;
-  };
-  const level = (x, z) => (inR(PLAT, x, z) ? 1 : 0);
-  const hit = (a, b, m = 0) => a.x0 < b.x1 + m && a.x1 > b.x0 - m && a.z0 < b.z1 + m && a.z1 > b.z0 - m;
-  const crBox = c => ({ x0: c.x - c.r, x1: c.x + c.r, z0: c.z - c.r, z1: c.z + c.r });
-  const padBox = { x0: pad.x - pad.r, x1: pad.x + pad.r, z0: pad.z - pad.r, z1: pad.z + pad.r };
-  const blocks = [...craters.map(crBox), greenhouse, padBox, ...ramps.map(r => ({ x0: r.x0 - 2, x1: r.x1 + 2, z0: r.z0 - 2, z1: r.z1 + 2 }))];
-  const oneLevel = b => { const l = level(b.x0, b.z0); for (const [x, z] of [[b.x1, b.z0], [b.x0, b.z1], [b.x1, b.z1]]) if (level(x, z) !== l) return -1;
-    if (l === 0 && hit(b, PLAT, 1.5)) return -1; if (l === 1 && (b.x0 < PLAT.x0 + 1.5 || b.x1 > PLAT.x1 - 1.5 || b.z0 < PLAT.z0 + 1.5 || b.z1 > PLAT.z1 - 1.5)) return -1; return l; };
-  const clearOfRoads = (b, m) => { for (let x = b.x0; x <= b.x1 + 0.01; x += (b.x1 - b.x0) / 5) for (let z = b.z0; z <= b.z1 + 0.01; z += (b.z1 - b.z0) / 5) if (roadDist(x, z) < hw + m) return false; return true; };
+const V = (x, y, z) => new THREE.Vector3(x, y, z);
+const R = MOON.R, hw = MOON.RW / 2;
 
-  // ---- módulos de entrega: terreno 16 × 16 de frente para a rua ----
-  const toW = (sp, x, z) => { const c = Math.cos(sp.ry), s = Math.sin(sp.ry); return { x: sp.px + x * c + z * s, z: sp.pz - x * s + z * c }; };
+/** Base tangente (u, v) em n. */
+export function tangentBasis(n) {
+  const a = Math.abs(n.y) < 0.9 ? V(0, 1, 0) : V(1, 0, 0);
+  const u = a.clone().cross(n).normalize(), v = n.clone().cross(u).normalize();
+  return { u, v };
+}
+/** Ponto à distância angular `ang` de c, na direção tangente d. */
+const offset = (c, d, ang) => c.clone().multiplyScalar(Math.cos(ang)).addScaledVector(d, Math.sin(ang)).normalize();
+/** Direção tangente em p apontando para q (ao longo do grande círculo). */
+export const towards = (p, q) => q.clone().addScaledVector(p, -p.dot(q)).normalize();
+const arcPts = (a, b, step = 1.6) => {
+  const ang = a.angleTo(b), n = Math.max(1, Math.ceil(ang * R / step)), out = [];
+  for (let i = 0; i <= n; i++) { const t = i / n, s = Math.sin(ang); out.push(a.clone().multiplyScalar(Math.sin((1 - t) * ang) / s).addScaledVector(b, Math.sin(t * ang) / s)); }
+  return out;
+};
+const circlePts = (c, ang, n) => { const { u, v } = tangentBasis(c), out = [];
+  for (let i = 0; i < n; i++) { const a = i / n * Math.PI * 2; out.push(offset(c, u.clone().multiplyScalar(Math.cos(a)).addScaledVector(v, Math.sin(a)), ang)); }
+  return out; };
+/** Distância (na superfície) de p ao trecho de grande círculo a→b. */
+function segDist(p, a, b) {
+  const m = a.clone().cross(b); const L = m.length(); if (L < 1e-9) return p.angleTo(a) * R; m.divideScalar(L);
+  const s = p.dot(m), q = p.clone().addScaledVector(m, -s);
+  if (q.lengthSq() > 1e-12) { q.normalize(); if (a.clone().cross(q).dot(m) >= 0 && q.clone().cross(b).dot(m) >= 0) return Math.abs(Math.asin(Math.max(-1, Math.min(1, s)))) * R; }
+  return Math.min(p.angleTo(a), p.angleTo(b)) * R;
+}
+
+export function planMoon() {
+  const AX = [V(1, 0, 0), V(0, 1, 0), V(0, 0, 1)];
+  const roads = [];                                     // { pts, closed, kind }
+  // ---- 3 anéis (normais X, Y e Z) ----
+  const rings = AX.map(n => { const { u, v } = n.x ? { u: V(0, 1, 0), v: V(0, 0, 1) } : n.y ? { u: V(1, 0, 0), v: V(0, 0, 1) } : { u: V(1, 0, 0), v: V(0, 1, 0) };
+    const pts = []; for (let i = 0; i < 280; i++) { const a = i / 280 * Math.PI * 2; pts.push(u.clone().multiplyScalar(Math.cos(a)).addScaledVector(v, Math.sin(a))); }
+    return { n, u, v, pts }; });
+  rings.forEach(r => roads.push({ pts: r.pts, closed: true, kind: 'ring' }));
+  const ringAt = (ri, deg) => { const r = rings[ri], a = deg * Math.PI / 180; return r.u.clone().multiplyScalar(Math.cos(a)).addScaledVector(r.v, Math.sin(a)); };
+  const junctions = [...AX, ...AX.map(a => a.clone().negate())].map(p => ({ p, r: hw + 1.5 }));   // rotatórias (cruzamentos dos anéis)
+
+  // ---- 8 vilas nos cantos do cubo: rua em laço (raio LOOP) + 2 ramais até os anéis ----
+  const LOOP = 15 / R, MODA = (15 + hw + 1.2 + MOON.S) / R;
+  const FEATURES = ['greenhouse', 'pad', 'antenna', 'tanks', 'solar', 'garden', 'beacon', 'dish'];
+  const clusters = [];
+  let k = 0;
+  for (const sx of [1, -1]) for (const sy of [1, -1]) for (const sz of [1, -1]) {
+    const c = V(sx, sy, sz).normalize(), skip = k % 3, branches = [];
+    for (let ri = 0; ri < 3; ri++) {
+      if (ri === skip) continue;
+      const n = rings[ri].n, t = c.clone().addScaledVector(n, -c.dot(n)).normalize(), d = towards(c, t);
+      const s = offset(c, d, LOOP);
+      roads.push({ pts: arcPts(s, t), closed: false, kind: 'branch' });
+      junctions.push({ p: t, r: hw + 1 }, { p: s, r: hw + 0.5 });
+      branches.push(d);
+    }
+    roads.push({ pts: circlePts(c, LOOP, 72), closed: true, kind: 'loop' });
+    clusters.push({ c, branches, feature: FEATURES[k], k });
+    k++;
+  }
+  // trechos (para distâncias) e pontos de rua
+  const segs = [];
+  for (const r of roads) for (let i = 0; i < r.pts.length - (r.closed ? 0 : 1); i++) segs.push([r.pts[i], r.pts[(i + 1) % r.pts.length]]);
+  const roadDist = p => { let m = 1e9; for (const [a, b] of segs) { if (p.dot(a) < 0.9) continue; const d = segDist(p, a, b); if (d < m) m = d; } return m; };
+
+  // ---- crateras com ponte nos anéis (a rua passa por cima: saltinho) ----
+  const bridges = [[1, 70], [1, 250], [0, 160], [2, 290]].map(([ri, deg]) => {
+    const p = ringAt(ri, deg), r = rings[ri], a = deg * Math.PI / 180, along = r.u.clone().multiplyScalar(-Math.sin(a)).addScaledVector(r.v, Math.cos(a)).normalize();
+    return { p, n: r.n, along, cr: 6.5, half: 9 };       // half: meio comprimento do tabuleiro + rampas
+  });
+  /** Altura do chão (tabuleiro das pontes) no ponto p da esfera. */
+  const bump = p => {
+    for (const b of bridges) {
+      if (p.dot(b.p) < 0.98) continue;
+      const across = Math.asin(Math.max(-1, Math.min(1, p.dot(b.n)))) * R;
+      if (Math.abs(across) > hw) continue;
+      const q = p.clone().addScaledVector(b.n, -p.dot(b.n)).normalize(), x = q.angleTo(b.p) * R;
+      if (x > b.half) continue;
+      const flat = b.half - 3; return x < flat ? MOON.DECK : MOON.DECK * (b.half - x) / 3;
+    }
+    return 0;
+  };
+
+  // ---- módulos de entrega: 4 por vila, em volta do laço, de frente para a rua ----
   const spots = [];
-  for (const sg of segs) {
-    if (sg.type === 'ramp' || sg.na === 'n0') continue;
-    const [ax, az] = sg.a, [bx, bz] = sg.b, len = Math.hypot(bx - ax, bz - az), ux = (bx - ax) / len, uz = (bz - az) / len;
-    for (let t = 8; t < len - 5; t += 4) for (const side of [-1, 1]) {
-      const nx = -uz * side, nz = ux * side, ax2 = Math.abs(nx) > Math.abs(nz), fx = ax2 ? -Math.sign(nx) : 0, fz = ax2 ? 0 : -Math.sign(nz);
-      for (const off of [hw + 2.4 + S, hw + 4 + S, hw + 6 + S, hw + 9 + S]) {
-        const px = ax + ux * t + nx * off, pz = az + uz * t + nz * off;
-        const b = { x0: px - S, z0: pz - S, x1: px + S, z1: pz + S };
-        if (b.x0 < HEDGE + 1 || b.z0 < HEDGE + 1 || b.x1 > MAP - HEDGE - 1 || b.z1 > MAP - HEDGE - 1) continue;
-        const lv = oneLevel(b);
-        if (lv < 0 || lv !== level(ax + ux * t, az + uz * t) || !clearOfRoads(b, 0.5) || blocks.some(r => hit(b, r, 1.5)) || spots.some(o => hit(b, o.box, 2.5))) continue;
-        if (Math.abs(px - X) < 18 && pz < 32) continue;                  // entrada livre
-        const sp = { px, pz, ry: Math.atan2(fx, fz), fx, fz, y: lv ? PH : 0, box: b, tags: [] };
-        const c = toW(sp, 0, -1), d = toW(sp, 0, S + 1.2), r = toW(sp, 0, 6.6), w0 = toW(sp, -5.2, -6.2), w1 = toW(sp, 5.2, 4.6);
-        if (craters.some(cr => Math.abs(d.x - cr.x) < cr.r + 3 && Math.abs(d.z - cr.z) < cr.r + 3)) continue;   // entrada nunca de frente para uma cratera
-        Object.assign(sp, { cx: c.x, cz: c.z, door: d, res: { x: r.x, z: r.z, ry: sp.ry },
-          walkBox: { x0: Math.min(w0.x, w1.x), x1: Math.max(w0.x, w1.x), z0: Math.min(w0.z, w1.z), z1: Math.max(w0.z, w1.z) } });
-        spots.push(sp); break;
-      }
+  for (const cl of clusters) {
+    const { u, v } = tangentBasis(cl.c), ang = d => Math.atan2(d.dot(v), d.dot(u));
+    const bAng = cl.branches.map(ang), allowed = [];
+    for (let deg = 0; deg < 360; deg += 1) { const a = deg * Math.PI / 180; if (bAng.every(b => Math.abs(Math.atan2(Math.sin(a - b), Math.cos(a - b))) > 0.55)) allowed.push(a); }
+    // 4 posições espalhadas pelos ângulos livres (começando logo depois de um ramal, para ficar regular)
+    const b0 = bAng[0]; allowed.sort((p, q) => ((p - b0 + 4 * Math.PI) % (2 * Math.PI)) - ((q - b0 + 4 * Math.PI) % (2 * Math.PI)));
+    for (let i = 0; i < 4; i++) {
+      const a = allowed[Math.floor((i + 0.5) * allowed.length / 4)], d = u.clone().multiplyScalar(Math.cos(a)).addScaledVector(v, Math.sin(a));
+      const n = offset(cl.c, d, MODA), f = towards(n, cl.c);            // frente (porta) virada para o laço
+      const at = dist => offset(n, f, dist / R);
+      spots.push({ n, f, doorN: at(MOON.S + 1.2), resN: at(6.6), cluster: cl.k, a, tags: [], y: 0, foot: false,
+        // campos do mapa local (refeitos a cada quadro): centro, porta, morador, caixa
+        cx: 0, cz: 0, px: 0, pz: 0, fx: 0, fz: 1, door: { x: 0, z: 0 }, res: null, box: { x0: 1e9, x1: 1e9 + 1, z0: 1e9, z1: 1e9 + 1 } });
     }
   }
-  while (spots.length > 32) spots.splice(Math.floor(spots.length / 2), 1);
-  // lugar nas pistas: ao lado da estufa / perto do foguete / no patamar central
-  const near = (sp, b, d) => sp.cx > b.x0 - d && sp.cx < b.x1 + d && sp.cz > b.z0 - d && sp.cz < b.z1 + d;
-  for (const sp of spots) {
-    if (near(sp, greenhouse, 18)) sp.tags.push('loc:greenhouse');
-    else if (near(sp, padBox, 18)) sp.tags.push('loc:rocket');
-    if (sp.y > 0) sp.tags.push('loc:plateau');
+  const FEAT_TAG = { greenhouse: 'loc:greenhouse', pad: 'loc:rocket', antenna: 'loc:antenna', solar: 'loc:solar' };
+  for (const sp of spots) { const t = FEAT_TAG[clusters[sp.cluster].feature]; if (t) sp.tags.push(t); }
+
+  // ---- obstáculos (círculos na esfera): módulos, praças das vilas, enchimento e decoração ----
+  const obstacles = [];                                  // { n, r, top, kind, ... }
+  const deco = [];                                       // peças visuais (o que é sólido também entra em obstacles)
+  const free = (p, r, m = 1.2) => roadDist(p) > hw + r + m && spots.every(s => p.angleTo(s.n) * R > 8.2 + r && p.angleTo(s.doorN) * R > 3.5 + r)
+    && obstacles.every(o => p.angleTo(o.n) * R > o.r + r + 0.8) && deco.every(o => o.kind === 'bridge' || p.angleTo(o.n) * R > (o.cr || o.r) + r + 0.8) && bridges.every(b => p.angleTo(b.p) * R > b.half + r + 1);
+  const add = (kind, n, r, top, extra = {}) => { const d = { kind, n, r, top, f: tangentBasis(n).u, ...extra }; deco.push(d); if (r > 0) obstacles.push(d); return d; };
+  // praça de cada vila (dentro do laço): estufa grande, plataforma com foguete, torre de antenas…
+  for (const cl of clusters) add('feature:' + cl.feature, cl.c, cl.feature === 'pad' ? 9 : 8.2, cl.feature === 'pad' ? 20 : 9, { f: tangentBasis(cl.c).u });
+  // crateras com ponte: as beiradas ao lado do tabuleiro são sólidas (a van passa só pela ponte)
+  for (const b of bridges) { deco.push({ kind: 'bridge', ...b }); for (const s of [-1, 1]) for (const al of [-3.2, 0, 3.2]) obstacles.push({ kind: 'rim', n: offset(offset(b.p, b.n, s * (hw + 1.7) / R), b.along, al / R), r: 1.3, top: 0.6 }); }
+  // enchimento entre os módulos de cada vila: depósitos, tanques e casinhas-cúpula (sem entrega)
+  for (const cl of clusters) {
+    const { u, v } = tangentBasis(cl.c);
+    for (let deg = 0; deg < 360; deg += 9) {
+      const a = deg * Math.PI / 180, d = u.clone().multiplyScalar(Math.cos(a)).addScaledVector(v, Math.sin(a));
+      for (const rr of [MODA * R, MODA * R + 6]) { const p = offset(cl.c, d, rr / R), kind = ['depot', 'minidome', 'tank', 'crates'][(deg / 9 + cl.k) % 4], r = kind === 'minidome' ? 3 : kind === 'depot' ? 2.8 : 1.8;
+        if (free(p, r, 1.5)) add(kind, p, r, kind === 'tank' ? 5 : 4.5, { f: towards(p, cl.c), seed: deg + cl.k * 7 }); }
+    }
   }
-  // túneis curtos entre módulos vizinhos do mesmo lado da rua (enfeite)
-  const tunnels = [];
-  for (let i = 0; i < spots.length && tunnels.length < 4; i++) for (let j = i + 1; j < spots.length && tunnels.length < 4; j++) {
-    const a = spots[i], b = spots[j], d = Math.hypot(a.cx - b.cx, a.cz - b.cz);
-    if (d < 13 || d > 22 || a.ry !== b.ry || a.y !== b.y || tunnels.some(t => t.i === i || t.j === i || t.i === j || t.j === j)) continue;
-    let ok = true; for (let k = 0.2; k <= 0.8; k += 0.15) if (roadDist(a.cx + (b.cx - a.cx) * k, a.cz + (b.cz - a.cz) * k) < hw + 3) ok = false;
-    if (ok) tunnels.push({ i, j, a: { x: a.cx, z: a.cz }, b: { x: b.cx, z: b.cz }, y: a.y });
+  // resto da lua: pontos espalhados (espiral de Fibonacci) com crateras, pedras, painéis, estufinhas, antenas e jipes
+  const N = 2600, gold = Math.PI * (3 - Math.sqrt(5));
+  let sd = 4242; const rnd = () => (sd = (sd * 16807) % 2147483647) / 2147483647;
+  const TYPES = ['rock', 'solar', 'rock', 'minigreen', 'antenna', 'rover', 'rocks', 'depot', 'tank', 'solar', 'rocks', 'minigreen'];
+  for (let pass = 0; pass < 2; pass++) for (let i = pass; i < N; i += pass ? 1 : 5) {      // 1ª passada: crateras (cabem antes do resto)
+    const y = 1 - (i + 0.5) / N * 2, rad = Math.sqrt(1 - y * y), th = gold * i, p = V(Math.cos(th) * rad, y, Math.sin(th) * rad);
+    const kind = pass ? TYPES[Math.floor(rnd() * TYPES.length)] : 'crater';
+    if (pass && kind === 'crater') continue;
+    const r = kind === 'crater' ? 2.5 + rnd() * 7 : kind === 'rock' ? 0.6 + rnd() * 1.2 : kind === 'rocks' ? 1.6 : kind === 'solar' ? 3 : kind === 'minigreen' ? 3 : kind === 'rover' ? 2 : kind === 'depot' ? 2.8 : kind === 'tank' ? 1.8 : 1.2;
+    if (!free(p, r, kind === 'crater' ? 0.6 : 1.2)) continue;
+    // crateras rasas (pequenas) não barram; as grandes, sim
+    add(kind, p, kind === 'crater' && r < 4 ? 0 : kind === 'crater' ? r * 0.75 : r, kind === 'crater' ? 0.8 : kind === 'antenna' ? 9 : kind === 'rock' ? r : 4, { cr: r, f: tangentBasis(p).u.applyAxisAngle(p, rnd() * 6.28), seed: i });
   }
-  // pedras espalhadas (sólidas) fora das ruas e dos terrenos
-  let seed = 1717; const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
-  const rocks = [];
-  for (let k = 0; k < 140 && rocks.length < 60; k++) {
-    const x = HEDGE + 6 + rnd() * (MAP - 2 * HEDGE - 12), z = HEDGE + 6 + rnd() * (MAP - 2 * HEDGE - 12), s = 0.6 + rnd() * 1.1;
-    const b = { x0: x - s, x1: x + s, z0: z - s, z1: z + s };
-    if (roadDist(x, z) < hw + 3 || blocks.some(r => hit(b, r, 1)) || spots.some(o => hit(b, o.box, 1)) || hit(b, PLAT, 1.5)) continue;
-    rocks.push({ x, z, s, box: b });
-  }
-  return { N, segs, ramps, PLAT, craters, greenhouse, pad, spots, tunnels, rocks, h, level, roadDist };
+  // início: no anel do equador (normal Y), perto da rotatória de +X, andando para a primeira vila
+  const start = { p: ringAt(1, 12), f: null }; start.f = towards(start.p, ringAt(1, 20));
+  return { R, roads, rings, clusters, junctions, bridges, spots, obstacles, deco, start, bump, roadDist };
 }

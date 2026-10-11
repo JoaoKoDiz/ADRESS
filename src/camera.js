@@ -104,6 +104,7 @@ const EXTRA_BOXES = [];          // caixas extras fora do bairro (ex.: paredes d
 function buildCamBoxes() {
   CAM_BOXES.length = 0;
   for (const b of EXTRA_BOXES) CAM_BOXES.push([b[0] - CAM_PAD * 0.6, b[1] - CAM_PAD * 0.6, b[2] + CAM_PAD * 0.6, b[3] + CAM_PAD * 0.6, b[4]]);
+  if (MOONV) return;                                           // Órbita: só os obstáculos perto do jogador (main.js, a cada quadro)
   if (FAVELA) {                                                // Morro: faixas do morro (o braço não entra na encosta), casario e mercadinho
     const X0 = HEDGE, X1 = MAP - HEDGE;
     CAM_BOXES.push([X0, FAV.B1, X1, MAP, FAV.H1 + 0.6], [X0, FAV.B2, X1, MAP, FAV.H2 + 0.6]);
@@ -119,11 +120,6 @@ function buildCamBoxes() {
     CAM_BOXES.push([SNOWV.MID.x0, SNOWV.MID.z0, MAP, MAP, 3.6], [SNOWV.HIGH.x0, SNOWV.HIGH.z0, MAP, MAP, 6.6]);
     for (const sp of SNOWV.spots) CAM_BOXES.push([sp.walkBox.x0 - 0.8, sp.walkBox.z0 - 0.8, sp.walkBox.x1 + 0.8, sp.walkBox.z1 + 0.8, sp.y + 7.8]);
     for (const p of SNOWV.pines) CAM_BOXES.push([p.x - 1.4, p.z - 1.4, p.x + 1.4, p.z + 1.4, p.y + 5.5]);
-  }
-  if (MOONV) {                                                 // Órbita: patamar, módulos, estufa e foguete
-    const P = MOONV.PLAT; CAM_BOXES.push([P.x0, P.z0, P.x1, P.z1, 3.1]);
-    for (const sp of MOONV.spots) CAM_BOXES.push([sp.walkBox.x0 - 0.6, sp.walkBox.z0 - 0.6, sp.walkBox.x1 + 0.6, sp.walkBox.z1 + 0.6, sp.y + 9.5]);
-    const G = MOONV.greenhouse, pd = MOONV.pad; CAM_BOXES.push([G.x0, G.z0, G.x1, G.z1, 7.5], [pd.x - 2, pd.z - 2, pd.x + 2, pd.z + 2, 13]);
   }
   for (const s of FAVELA || FARMLAND || SNOWV || MOONV ? [] : HOUSE_SLOTS) {
     const o = slotOrigin(s), H = LOT_ANCHORS.house;
@@ -216,7 +212,7 @@ export function createCameraRig() {
   /** O ponto a distância r do pivô, nessa direção, é uma posição livre (dentro da sebe, sem casa entre ele e a van)? */
   function freeAt(r, d) {
     const cx = piv.x + d.x * r, cy = piv.y - tgtY + d.y * r, cz = piv.z + d.z * r;
-    const inside = tgt.x > 0 && tgt.x < MAP && tgt.z > 0 && tgt.z < MAP;      // só segura a câmera dentro da sebe enquanto está no bairro
+    const inside = !MOONV && tgt.x > 0 && tgt.x < MAP && tgt.z > 0 && tgt.z < MAP;      // só segura a câmera dentro da sebe enquanto está no bairro
     if (inside && (cx < CAM_LIM0 || cx > CAM_LIM1 || cz < CAM_LIM0 || cz > CAM_LIM1)) return false;
     CAM_BASE = tgtY; return !segmentBlocked(piv.x, piv.z, cx, cy, cz);
   }
@@ -324,5 +320,7 @@ export function createCameraRig() {
     setLookLift(v) { liftGoal = v; },
     /** Caixas extras que seguram o braço da câmera ([x0, z0, x1, z1, yTopo]); [] tira. */
     setExtraBoxes(list) { EXTRA_BOXES.length = 0; EXTRA_BOXES.push(...list); buildCamBoxes(); },
+    /** Órbita: pose da visão geral (a lua inteira), refeita a cada quadro. */
+    setOverview(pos, quat) { if (!pos) { overviewQuat.setFromEuler(new THREE.Euler(-PITCH, 0, 0)); resize(lastW, lastH); return; } overviewPos.copy(pos); overviewQuat.copy(quat); },
   };
 }

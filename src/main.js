@@ -22,6 +22,8 @@ import { createTractors } from './tractors.js';
 import { createChickens } from './chickens.js';
 import { buildSnowLot, buildSnowBank, buildPlow } from './models/snow.js';
 import { buildMoonLot, spaceSuit } from './models/moon.js';
+import { FRAME } from './moonFrame.js';
+import { MOON } from './moonPlan.js';
 import { buildWareLot } from './models/ware.js';
 import { createTrain } from './train.js';
 import { createTrolley } from './trolley.js';
@@ -549,10 +551,85 @@ function useNeighborhood(kind) {
   if (kind === 'venice8') { world.scene.add(npcBoats.object); npcBoats.reset(); world.scene.add(rope); } else npcBoats.detach();   // Bairro 11: trem e cancelas
   if (COMPOSED.includes(kind)) composeRound();   // Bairros 4 a 7: composição sorteada a cada partida
   else setupGrid4();
-  van.reset();
+  boom.reset(); clearMoonPins(); if (!MOONV) rig.setOverview(null);
   rig.refit();
+  if (!MOONV) rig.setExtraBoxes([]);
+  resetVan();
   rig.snap({ x: van.x, z: van.z, heading: van.heading, speed: 0 });
   renderer.compile(world.scene, rig.camera);
+}
+// ---------- Órbita: a lua esférica ----------
+// A simulação (van, personagem, colisões, câmera, entregas) segue no plano local do mapa; a cada quadro o referencial
+// (moonFrame.js) é levado até quem o jogador controla e a lua é desenhada girada por baixo. Os obstáculos perto viram
+// círculos no mapa local; a van estacionada (a pé) e os efeitos (seta da dica, explosões) ficam presos à esfera.
+const moonAnchor = { x: 0, z: 0 };
+const vanSph = { p: new THREE.Vector3(0, 1, 0), f: new THREE.Vector3(1, 0, 0) };
+const moonPins = [];
+const _mc = { x: 0, z: 0 }, _mv = new THREE.Vector3(), _mq = new THREE.Quaternion(), _mm = new THREE.Matrix4(), _mo = new THREE.Object3D(), _mov = new THREE.Vector3();
+const MOON_NEAR = Math.cos(75 / MOON.R);                // obstáculos a até ~75 do jogador entram nas colisões
+/** Grupo preso à lua no ponto (x, z) do mapa: o que for posto nele em coordenadas do mapa fica naquele lugar da lua. */
+function moonPin(x, z) {
+  const g = new THREE.Group(); g.matrixAutoUpdate = false;
+  FRAME.frameAt(x, z, g.matrix).invert();
+  world.moonRoot.add(g); moonPins.push(g);
+  return g;
+}
+function clearMoonPins() {
+  hint.attach(world.scene);                           // a seta volta para a cena antes de soltar os grupos
+  for (const g of moonPins) if (g.parent) g.parent.remove(g);
+  moonPins.length = 0;
+}
+boom.setPin((x, z) => MOONV && world.moonRoot ? moonPin(x, z) : null);
+const setCircle = (o, x, z, r) => { o.cx = x; o.cz = z; o.r = r; o.x0 = x - r; o.x1 = x + r; o.z0 = z - r; o.z1 = z + r; return o; };
+/** Partida nova na lua: a van no ponto de partida (o mapa local começa ali). */
+function moonReset() {
+  if (!MOONV || !world.moonRoot) return;
+  clearMoonPins();
+  FRAME.reset(MOONV.start.p, MOONV.start.f, van.x, van.z);
+  vanSph.p.copy(MOONV.start.p); vanSph.f.copy(MOONV.start.f);
+  for (const sp of MOONV.spots) if (!sp.solidN) sp.solidN = sp.n.clone().multiplyScalar(Math.cos(0.6 / MOON.R)).addScaledVector(sp.f, -Math.sin(0.6 / MOON.R)).normalize();
+  if (!world.sunOfs) world.sunOfs = world.sunLight.position.clone().sub(world.sunLight.target.position);
+  moonUpdate(0, true);
+}
+function resetVan() { van.reset(); moonReset(); }
+function moonUpdate(dt, snap = false) {
+  if (!MOONV || !world.moonRoot) return;
+  const foot = walker.visible, ent = foot ? walker : van;
+  const k = snap || Math.hypot(ent.x - moonAnchor.x, ent.z - moonAnchor.z) > 20 ? 1 : 1 - Math.exp(-18 * Math.min(dt, 0.1));   // (teletransporte: vai direto)
+  moonAnchor.x += (ent.x - moonAnchor.x) * k; moonAnchor.z += (ent.z - moonAnchor.z) * k;
+  FRAME.recenter(moonAnchor.x, moonAnchor.z);
+  if (!foot) { FRAME.toSphere(van.x, van.z, vanSph.p); FRAME.tangent(vanSph.p, van.heading, vanSph.f); }
+  else { FRAME.toChart(vanSph.p, _mc); van.teleport(_mc.x, _mc.z, FRAME.heading(vanSph.p, vanSph.f)); }
+  const root = world.moonRoot;
+  root.matrix.copy(FRAME.matrix); root.matrixWorldNeedsUpdate = true;
+  if (foot) {                                         // van estacionada: exatamente sobre a esfera (frente do modelo = +X)
+    FRAME.pose(_mo, vanSph.p, _mv.copy(vanSph.f).cross(vanSph.p).normalize(), 0);
+    van.object.position.copy(_mo.position).applyMatrix4(root.matrix);
+    van.object.quaternion.copy(_mq.setFromRotationMatrix(_mm.extractRotation(root.matrix))).multiply(_mo.quaternion);
+  }
+  // módulos e obstáculos → mapa local (os lotes primeiro, na ordem de HOUSE_SLOTS: wreck() depende disso)
+  const O = FRAME.O, cam = [];
+  SOLIDS.length = 0;
+  for (const s of HOUSE_SLOTS) {
+    const sp = MOONV.spots[s];
+    FRAME.toChart(sp.n, _mc); sp.cx = sp.px = _mc.x; sp.cz = sp.pz = _mc.z;
+    FRAME.toChart(sp.doorN, sp.door);
+    sp.solid = sp.solid || {};
+    if (sp.n.dot(O) > MOON_NEAR) { FRAME.toChart(sp.solidN, _mc); setCircle(sp.solid, _mc.x, _mc.z, 6.9); if (Math.hypot(_mc.x - ent.x, _mc.z - ent.z) < 40) cam.push([_mc.x - 6.5, _mc.z - 6.5, _mc.x + 6.5, _mc.z + 6.5, 9.5]); }
+    else setCircle(sp.solid, 1e7, 1e7, 1);
+    sp.box = sp.walkBox = sp.solid;
+    SOLIDS.push(sp.solid);
+  }
+  for (const ob of MOONV.obstacles) {
+    if (ob.n.dot(O) < MOON_NEAR) continue;
+    FRAME.toChart(ob.n, _mc); ob.solid = setCircle(ob.solid || {}, _mc.x, _mc.z, ob.r); SOLIDS.push(ob.solid);
+    if (ob.top > 2.5 && Math.hypot(_mc.x - ent.x, _mc.z - ent.z) < 40) cam.push([_mc.x - ob.r, _mc.z - ob.r, _mc.x + ob.r, _mc.z + ob.r, ob.top]);
+  }
+  rig.setExtraBoxes(cam);
+  // luz do sol acompanha o jogador (é sempre dia por onde ele anda); visão geral: a lua inteira, vista de longe
+  const L = world.sunLight; L.target.position.set(FRAME.ox, 0, FRAME.oz); L.position.copy(L.target.position).add(world.sunOfs); L.target.updateMatrixWorld();
+  _mv.set(FRAME.ox, -MOON.R, FRAME.oz); _mo.position.copy(_mv).add(_mov.set(0, 0.6, 0.8).multiplyScalar(MOON.R * 3.7));
+  rig.setOverview(_mo.position, _mq.setFromRotationMatrix(_mm.lookAt(_mo.position, _mv, _mov.set(0, 1, 0))));
 }
 function startBoss() {
   heli.reset(); van.stop(); nearHouse = -1;
@@ -769,6 +846,7 @@ function requestHint() {
   hintStep = game.step;
   const h = game.route[game.step];
   hint.drop(h, game.slotOf[h]);                // a câmera não muda; o jogador segue dirigindo
+  if (MOONV) { const o = slotOrigin(game.slotOf[h]); hint.attach(moonPin(o.x + 8.6, o.z + 5)); }   // Órbita: a seta cai no módulo, presa à lua
 }
 
 // Van imparável: casas que ela toca explodem; árvores e sebe viram uma chuva de lascas e folhas.
@@ -1338,7 +1416,7 @@ function startNewRound() {
   world.setLayout(game.layout);
   resetGates();                                  // Colheita: porteiras fechadas de novo
   world.hideResident();
-  van.reset();
+  resetVan();
   rig.snap({ x: van.x, z: van.z, heading: van.heading, speed: 0 });
   resetParcel(); setupChurch(); setupVeniceK();
   dialog = null; pending = -1; nearHouse = -1; actionLock = 0;
@@ -1413,7 +1491,7 @@ function update(dt, t) {
       if (nearGate >= 0) nearHouse = -1;
       if (gameMode === 'career') career.tick(van.x, van.z, van.heading);   // ruas, entradas e esquinas (missões)
       if (input.hint()) requestHint();
-      if (free && input.fire()) { van.stop(); nearHouse = -1; boom.fire(van, game.slotOf); setState('missile'); break; }
+      if (free && !MOONV && input.fire()) { van.stop(); nearHouse = -1; boom.fire(van, game.slotOf); setState('missile'); break; }
       actionLock = Math.max(0, actionLock - dt);
       nearPump = nearHouse < 0 && !heli.flying && atPump();
       if (nearPump && actionLock <= 0 && input.action()) {          // abastecer: não é uma entrega
@@ -1580,7 +1658,10 @@ function update(dt, t) {
   updateChurch(dt);
   world.updateGas(van.x, van.z, dt);
   fuelMsgT = Math.max(0, fuelMsgT - dt);
-  if ((state === 'drive' || state === 'missile') && allDestroyed()) startBoss();
+  if ((state === 'drive' || state === 'missile') && allDestroyed()) {
+    if (MOONV) { restartMsg = 'Todos os módulos foram destruídos! A partida vai reiniciar…'; setState('fadeOut'); }   // Órbita: sem o chefe (ele vive fora do bairro plano)
+    else startBoss();
+  }
   hint.update(dt);
   heli.update(dt, state === 'drive' && heli.on ? input.lift() : 0);
   if (MOONV && !heli.on && !heli.flying) van.object.position.y = van.simY;   // Órbita: a altura da gravidade baixa (saltinhos)
@@ -1591,6 +1672,7 @@ function update(dt, t) {
   // entregando (campainha/diálogo) ou com o balão "E — Entregar" à vista: a câmera se volta para a casa
   const focusH = (state === 'ring' || state === 'dialog') ? pending : state === 'drive' ? nearHouse : -1;
   const onFoot = state === 'walk' || (footDelivery && (state === 'ring' || state === 'dialog'));              // a câmera segue o personagem a pé
+  moonUpdate(dt);                                 // Órbita: a lua gira por baixo de quem o jogador controla
   rig.update(dt, onFoot ? { x: walker.x, z: walker.z, y: walker.floor, heading: walker.heading, speed: walker.speed, focus: null } : { x: van.x, z: van.z, y: heli.altitude, heading: van.heading, speed: van.speed, focus: null });   // sem câmera automática: quem controla é o jogador
   if (state === 'talk') { rig.camera.position.copy(talkCam.pos); rig.camera.lookAt(talkCam.look); }   // enquadramento fixo da conversa
   if (state === 'cine' && cine) { rig.camera.position.copy(cine.camPos); rig.camera.lookAt(cine.camLook); }
@@ -1643,7 +1725,7 @@ function updateHUD() {
     hud.setMain(dialog.narrator ? dialog.text : `${dialog.name}: “${dialog.text}”`, dialog.success ? 'success' : 'dialog');   // narrador: só o pensamento, entre parênteses
   } else {
     const extraKeys0 = '  ·  L: descer da van';
-    const extraKeys = extraKeys0 + (gameMode === 'free' ? '  ·  H: helicóptero  ·  F: míssil' : '  ·  M: missões');
+    const extraKeys = extraKeys0 + (gameMode === 'free' ? (MOONV ? '  ·  H: helicóptero' : '  ·  H: helicóptero  ·  F: míssil') : '  ·  M: missões');
     hud.setSub(state === 'talk' || state === 'cine' || state === 'trolley' || state === 'trolleyBlack' ? '' : state === 'walk'
       ? (rig.mode === 'chase' ? 'A PÉ  ·  W/S: andar  ·  A/D: virar  ·  E (perto da van): entrar  ·  C: bairro  ·  botão direito: olhar em volta' : 'A PÉ  ·  WASD: andar  ·  E (perto da van): entrar  ·  C: câmera')
       : heli.landed
@@ -1785,6 +1867,10 @@ window.ADRESS = {
   get dialog() { return dialog; },
   get pixelRatio() { return pixelRatio; },
   get titleDriver() { return titleDriver; },
+  /** Órbita (testes): põe a van no ponto p da lua, virada para f (vetores [x, y, z]). */
+  moonPlace(p, f) { van.teleport(0, 0, 0); FRAME.reset(new THREE.Vector3(...p).normalize(), new THREE.Vector3(...f), 0, 0); moonAnchor.x = moonAnchor.z = 0; FRAME.toSphere(0, 0, vanSph.p); moonUpdate(0, true); },
+  get moonVan() { return { p: vanSph.p.toArray().map(v => +v.toFixed(3)), f: vanSph.f.toArray().map(v => +v.toFixed(3)), y: +van.simY.toFixed(2) }; },
+  FRAME, MOONV: () => MOONV,
   get church() { return church; }, get venK() { return venK; }, startVeniceTalk, churchStage, get greenBell() { return greenBell; }, get churchBell() { return churchBell; },
   churchReveal() { if (churchOn && !churchShown) { approach.phase = 'revealed'; revealChurch(true); } },
   get churchMusicTime() { return +churchMusic.time.toFixed(2); }, get approach() { return approach; },

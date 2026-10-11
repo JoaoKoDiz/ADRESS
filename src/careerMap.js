@@ -3,7 +3,7 @@
 // A recua, D avança. Perto de um bairro aparece "E — Jogar". (Todas as fases levam à mesma partida, por enquanto.)
 import * as THREE from 'three';
 import { createVan } from './van.js';
-import { box, cone, sphere, cyl, at, mat, textTexture, bakeStatic } from './models/kit.js';
+import { box, cone, sphere, cyl, torus, at, mat, textTexture, bakeStatic } from './models/kit.js';
 import { ROOF_COL, WALL_COL } from './data.js';
 
 const ROAD_W = 6;
@@ -132,15 +132,18 @@ function miniNeighborhood(kind, colors, gray = false) {
     return bakeStatic(g);
   }
 
-  if (kind === 'moon') {                         // Nível 17 (Órbita): solo lunar, cratera com ponte, módulos brancos com faixas, cúpula e foguete
-    const RG = G('#b9bcc0', '#b0b0b0'), W = G('#f1ede2', '#d0d0d0');
-    add(box(13.6, 0.1, 13.6, RG), 0, 0.42, 0);
-    add(cyl(2.3, 2.0, 0.1, G('#6f737a', '#8a8a8a'), 16), 3.4, 0.46, 3.4); add(box(1.6, 0.16, 5.2, G('#7d8188', '#8a8a8a')), 3.4, 0.6, 3.4);
-    add(box(1.6, 0.12, 14, G('#7d8188', '#8a8a8a')), 3.4, 0.47, -3); add(box(8, 0.12, 1.6, G('#7d8188', '#8a8a8a')), -1, 0.47, -0.4);
-    add(cyl(1.4, 1.4, 2.6, W, 14), -4.2, 1.75, -3.8); add(cyl(1.45, 1.45, 0.4, G('#2f78d0', '#9a9a9a'), 14), -4.2, 2.3, -3.8);
-    add(sphere(1.7, W, 14, 8), -1.0, 0.45, -4.4); add(cyl(1.72, 1.72, 0.3, G('#ff7a1a', '#9a9a9a'), 14), -1.0, 0.75, -4.4);
-    add(cyl(0.9, 0.9, 3, W, 12), -4.0, 1.25, 3.6, 0, 0, Math.PI / 2); add(cyl(0.95, 0.95, 0.3, G('#3fae5a', '#9a9a9a'), 12), -4.0, 1.25, 3.6, 0, 0, Math.PI / 2);
-    add(cyl(0.5, 0.6, 3.2, W, 10), 5.4, 2.1, -5.2); add(cone(0.5, 1.1, G('#ff7a1a', '#9a9a9a'), 10), 5.4, 4.2, -5.2);
+  if (kind === 'moon') {                         // Nível 17 (Órbita): pequena lua esférica com estradas em anel, módulos e foguete
+    add(box(13.6, 0.1, 13.6, G('#1b2133', '#8a8a8a')), 0, 0.42, 0);
+    for (const [x, z] of [[-5, -4], [4.6, -5.2], [-4.4, 5], [5.2, 3.6], [0.5, -6], [-6, 0.8]]) add(sphere(0.12, G('#ffffff', '#dddddd'), 4, 3), x, 0.55, z);
+    const Rs = 4.2, cy = 4.4, moonG = new THREE.Group(); moonG.position.set(0, cy, 0); g.add(moonG);
+    moonG.add(sphere(Rs, G('#b9bcc0', '#b0b0b0'), 24, 16));
+    for (const [rx, rz] of [[0, 0], [Math.PI / 2, 0], [0, Math.PI / 2]]) moonG.add(at(torus(Rs + 0.02, 0.22, G('#7d8188', '#8a8a8a'), 4, 40), 0, 0, 0, rx + Math.PI / 2, 0, rz));
+    const on = (m, n, h = 0) => { const v = new THREE.Vector3(...n).normalize(); m.position.copy(v).multiplyScalar(Rs + h); m.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), v); moonG.add(m); };
+    const W = G('#f1ede2', '#d0d0d0');
+    [[1, 1, 1, '#2f78d0'], [-1, 1, 1, '#ff7a1a'], [1, 1, -1, '#3fae5a'], [-1, 1, -1, '#f0c22a'], [1, -0.3, 1.2, '#ff7a1a'], [-1.2, 0.2, 1, '#2f78d0']].forEach(([x, y, z, c], k) => {
+      const m = new THREE.Group(); m.add(at(k % 2 ? sphere(0.7, W, 10, 6) : cyl(0.55, 0.55, 1.1, W, 10), 0, k % 2 ? 0 : 0.5, 0)); m.add(at(cyl(k % 2 ? 0.72 : 0.57, k % 2 ? 0.72 : 0.57, 0.18, G(c, '#9a9a9a'), 10), 0, 0.35, 0)); on(m, [x, y, z]);
+    });
+    const r = new THREE.Group(); r.add(at(cyl(0.35, 0.4, 1.8, W, 10), 0, 0.9, 0)); r.add(at(cone(0.35, 0.8, G('#ff7a1a', '#9a9a9a'), 10), 0, 2.2, 0)); on(r, [0.15, 1, -0.1]);
     return bakeStatic(g);
   }
   if (kind === 'snow') {                         // Nível 16 (Nevasca): neve, patamar com muro de pedra, ladeira, gelo, pinheiros e casinhas

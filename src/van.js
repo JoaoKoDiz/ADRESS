@@ -259,6 +259,7 @@ export function createVan(scene, opts) {
   let ghost = false;                 // "van imparável" (menu): atravessa tudo
   function collide() {
     let hit = false;
+    const moon = TERRAIN.kind === 'moon';
     const lo = BOUNDS.min + R, hi = BOUNDS.max - R, hiZ = BOUNDS.zMax - R;
     for (let it = 0; it < 3; it++) {
       for (let k = 0; k < OFFS.length; k++) {
@@ -267,6 +268,12 @@ export function createVan(scene, opts) {
         for (let i = 0; !ghost && i < SOLIDS.length; i++) {
           const b = SOLIDS[i];
           if (cx < b.x0 - R || cx > b.x1 + R || cz < b.z0 - R || cz > b.z1 + R) continue;
+          if (b.r) {                                                  // obstáculo redondo (Órbita)
+            const dx = cx - b.cx, dz = cz - b.cz, d = Math.hypot(dx, dz), m = b.r + R;
+            if (d >= m) continue;
+            const ux = d > 1e-6 ? dx / d : 1, uz = d > 1e-6 ? dz / d : 0;
+            x += ux * (m - d); z += uz * (m - d); cx += ux * (m - d); cz += uz * (m - d); hit = true; continue;
+          }
           const px = Math.max(b.x0, Math.min(cx, b.x1)), pz = Math.max(b.z0, Math.min(cz, b.z1));
           const dx = cx - px, dz = cz - pz, d = Math.hypot(dx, dz);
           let mx = 0, mz = 0;
@@ -281,6 +288,7 @@ export function createVan(scene, opts) {
           }
           x += mx; z += mz; cx += mx; cz += mz; hit = true;
         }
+        if (moon) continue;                                         // Órbita: a lua não tem borda
         if (cx < lo) { x += lo - cx; hit = true; }
         if (cx > hi) { x -= cx - hi; hit = true; }
         if (cz < lo) { z += lo - cz; hit = true; }

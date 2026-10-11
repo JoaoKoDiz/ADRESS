@@ -224,8 +224,7 @@ export const FARMS = [...Array(40).keys()].map(k => 246 + k);
 // janelas circulares (1–3), porta de moldura grossa colorida e um detalhe no teto. Combinações distintas → pista única.
 export const MOON_COL = { blue: '#2f78d0', orange: '#ff7a1a', green: '#3fae5a', yellow: '#f0c22a' };
 {
-  const names = ['Cmdte. Lia', 'Eng. Bento', 'Dra. Íris', 'Téc. Caio', 'Cmdte. Nara', 'Eng. Davi', 'Dra. Vega', 'Téc. Luna',
-    'Piloto Raul', 'Dra. Estela', 'Eng. Hugo', 'Téc. Mira'];
+  const names = ['Zorp', 'Blib', 'Kiki-7', 'Glorbo', 'Nix', 'Pipo Estelar', 'Lumi', 'Quarkinho', 'Vega-9', 'Bzzt', 'Orbi', 'Tilo Cometa'];   // os ETs moradores
   const SH = ['cyl', 'capsule', 'dome'], C = Object.keys(MOON_COL), TOP = ['antenna', 'dish', 'solar'];
   let seed = 17; const rnd = n => { seed = (seed * 16807) % 2147483647; return seed % n; };
   const seen = new Set();
@@ -350,7 +349,7 @@ export const PHRASE = {
   'mwin:1': 'uma janela circular', 'mwin:2': 'duas janelas circulares', 'mwin:3': 'três janelas circulares',
   'mdoor:blue': 'porta azul', 'mdoor:orange': 'porta laranja', 'mdoor:green': 'porta verde', 'mdoor:yellow': 'porta amarela',
   'mtop:antenna': 'uma antena no teto', 'mtop:dish': 'uma parabólica no teto', 'mtop:solar': 'painéis solares no teto',
-  'loc:greenhouse': 'ao lado da estufa', 'loc:rocket': 'perto do foguete',
+  'loc:greenhouse': 'na vila da estufa grande', 'loc:rocket': 'na vila do foguete', 'loc:antenna': 'na vila da torre de antenas', 'loc:solar': 'na vila dos painéis solares',
   // Colheita (Nível 15)
   'rgate:blue': 'porteira azul', 'rgate:red': 'porteira vermelha', 'rgate:yellow': 'porteira amarela', 'rgate:white': 'porteira branca', 'rgate:green': 'porteira verde',
   'rwall:white': 'paredes brancas', 'rwall:yellow': 'paredes amarelas', 'rwall:blue': 'paredes azuis', 'rwall:pink': 'paredes cor-de-rosa',
@@ -460,6 +459,39 @@ export const FARM_LINES = {
     'Muito obrigado! Já estava esperando essa encomenda desde cedo.',
     'Chegou numa boa hora! Eu estava voltando da horta.',
     'Ô, que beleza! Era essa mesmo. Obrigado pela paciência na estrada de terra!',
+  ],
+};
+// Órbita: os moradores são ETs simpáticos (pistas sempre do destino real; comentários sobre a vida espacial)
+export const MOON_LINES = {
+  complaints: [
+    'Entrega terrestre? Que chique! Pena que não é minha.',
+    'Bip-bop… não, isso não é meu. Eu só encomendei poeira de cometa.',
+    'Abri a escotilha à toa: essa caixa não é daqui.',
+    'Que pena! Achei que fossem as minhas meias antigravidade.',
+    'Não é meu. Mas obrigado por vir até este lado da lua!',
+    'Eu estava regando as plantas da estufa, e isso nem é meu.',
+    'Aqui só chegam peças de foguete. Isso não é meu, não.',
+    'Hm, não… meu radar diz que essa caixa é de outro módulo.',
+    'Cuidado com a gravidade: quase deixei cair, e nem é meu!',
+    'Errou de módulo, terráqueo. Acontece, a lua é redondinha.',
+  ],
+  hints: [
+    (p, r) => `Acho que é ${r.da} com ${p}.`,
+    (p, r) => `Tenta ${r.na} com ${p}. Cuidado para não passar direto pelo horizonte!`,
+    (p, r) => `Meu radar apita para ${r.a} com ${p}.`,
+    (p, r) => `Pergunta ${r.na} com ${p}. Dá a volta na lua que você chega.`,
+    (p, r) => `Se não me engano, é ${r.da} com ${p}. Fica logo depois da curva… tudo aqui é curva!`,
+  ],
+  repeats: [
+    (p, r) => `De novo você? Já falei: acho que é ${r.da} com ${p}.`,
+    (p, r) => `Continua não sendo meu, terráqueo. É ${r.da} com ${p}, como eu disse.`,
+  ],
+  nohint: ['Não faço ideia. Meu radar está em manutenção.', 'Sei lá, terráqueo. Segue a pista que você tem.', 'Não sei, não. Aqui cada um cuida da sua cratera.'],
+  nohintAgain: ['Ainda não é meu! Segue a sua pista.', 'Voltou? Continua não sendo meu, viu?'],
+  success: [
+    'Era essa mesmo! Entrega terrestre, que chique! Obrigado!',
+    'Chegou! Nem precisei esperar o próximo foguete.',
+    'Bip-bip de alegria! Obrigado pela viagem até aqui em cima… ou aqui embaixo?',
   ],
 };
 export const FEATURE_COMPLAINTS = {

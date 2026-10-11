@@ -19,8 +19,9 @@ function basic(color, opacity = 1) {
 
 export function createBoom(scene, getWorld, audio) {
   const W = () => (typeof getWorld === 'function' ? getWorld() : getWorld);   // o bairro atual (cada bairro tem sua cena)
-  const fx = new THREE.Group();
-  scene.add(fx);
+  const fxMain = new THREE.Group();
+  let fx = fxMain, pinAt = null;                 // Órbita: cada explosão vai para um grupo preso à lua naquele lugar (pinAt)
+  scene.add(fxMain);
   const destroyed = new Set();
   const parts = [];     // cacos com física
   const flames = [];    // bolas de fogo / fumaça temporárias
@@ -34,8 +35,11 @@ export function createBoom(scene, getWorld, audio) {
     const g = new THREE.Group();
     g.position.set(o.x, 0, o.z);
     const roof = ROOF_COL[HOUSES[h].roof];
-    g.add(at(box(LOT + 0.8, 0.17, LOT + 0.8, '#cfc8b6'), LOT / 2, 0.085, LOT / 2));          // calçada
-    g.add(at(box(LOT, 0.2, LOT, '#6f9a4c'), LOT / 2, 0.1, LOT / 2));                       // grama chamuscada
+    if (HOUSES[h].kind === 'moon') g.add(at(cyl(7.6, 7.8, 1.1, '#8f939a', 20), HX, -0.49, HZ));   // Órbita: base do módulo chamuscada (na curvatura)
+    else {
+      g.add(at(box(LOT + 0.8, 0.17, LOT + 0.8, '#cfc8b6'), LOT / 2, 0.085, LOT / 2));          // calçada
+      g.add(at(box(LOT, 0.2, LOT, '#6f9a4c'), LOT / 2, 0.1, LOT / 2));                       // grama chamuscada
+    }
     const crater = new THREE.Mesh(CRATER_GEO, mat('#2b2119'));
     crater.rotation.x = -Math.PI / 2; crater.position.set(HX, 0.21, HZ + 1);
     g.add(crater);
@@ -97,6 +101,7 @@ export function createBoom(scene, getWorld, audio) {
 
   /** Chuva de lascas/folhas quando a van imparável atropela uma árvore ou a sebe. */
   function smash(x, z, colors, count = 24) {
+    fx = (pinAt && pinAt(x, z)) || fxMain;
     for (let i = 0; i < count; i++) {
       const s = rnd(0.25, 0.7);
       const m = box(s, s * 0.5, s * 0.8, colors[i % colors.length]);
@@ -107,6 +112,7 @@ export function createBoom(scene, getWorld, audio) {
     }
     shake = Math.max(shake, 0.5);
     audio.crash && audio.crash();
+    fx = fxMain;
   }
 
   /** Explode a casa h (que está no lote `slot`). Retorna false se ela já estava destruída. */
@@ -116,9 +122,11 @@ export function createBoom(scene, getWorld, audio) {
     const o = slotOrigin(slot);
     const cx = o.x + HX, cz = o.z + HZ;
     W().setHidden(h, true);
+    fx = (pinAt && pinAt(cx, cz)) || fxMain;
     buildRubble(h, o);
     spawnFireball(cx, 3, cz, 1);
     spawnDebris(cx, 4, cz, h, 70, 1);
+    fx = fxMain;
     shake = 1.6;
     audio.boom && audio.boom();
     return true;
@@ -153,7 +161,7 @@ export function createBoom(scene, getWorld, audio) {
       if (!p.rest) continue;
       p.restT += dt;
       if (p.restT > 5) p.m.position.y -= dt * 0.35;
-      if (p.restT > 7) { fx.remove(p.m); parts.splice(i, 1); }
+      if (p.restT > 7) { p.m.parent && p.m.parent.remove(p.m); parts.splice(i, 1); }
     }
     for (let i = flames.length - 1; i >= 0; i--) {
       const f = flames[i];
@@ -164,7 +172,7 @@ export function createBoom(scene, getWorld, audio) {
       f.m.position.x += f.vx * dt; f.m.position.y += f.vy * dt; f.m.position.z += f.vz * dt;
       f.m.scale.setScalar(f.ring ? 1 + k * f.grow : 0.6 + k * f.grow);
       f.m.material.opacity = Math.max(0, (f.ring ? 0.8 : 0.95) * (1 - k));
-      if (k >= 1) { fx.remove(f.m); f.m.geometry.dispose(); f.m.material.dispose(); flames.splice(i, 1); }
+      if (k >= 1) { f.m.parent && f.m.parent.remove(f.m); f.m.geometry.dispose(); f.m.material.dispose(); flames.splice(i, 1); }
     }
     for (const f of fires) {
       const s = 0.8 + Math.sin(t * 13 + f.ph) * 0.25 + Math.sin(t * 7.3 + f.ph * 2) * 0.15;
@@ -285,7 +293,9 @@ export function createBoom(scene, getWorld, audio) {
 
   return {
     /** Leva as explosões e o míssil para a cena do bairro atual. */
-    attach(sc) { sc.add(fx); sc.add(missile); },
+    attach(sc) { sc.add(fxMain); sc.add(missile); },
+    /** Órbita: fn(x, z) → grupo preso à lua naquele ponto (null: cena normal). */
+    setPin(fn) { pinAt = fn; },
     explode, smash, reset() { reset(); resetMissile(); },
     update(dt) { updateMissile(dt); update(dt); },
     isDestroyed: h => destroyed.has(h),

@@ -21,7 +21,7 @@ export function createWalker(scene) {
   let phase = 0;
 
   let area = null;                             // Veneza: onde dá para pisar (ilhas, praças, pontes); fora disso é água
-  const hits = (x, z, boxes) => (area && !area(x, z)) || boxes.some(b => x > b.x0 - RADIUS && x < b.x1 + RADIUS && z > b.z0 - RADIUS && z < b.z1 + RADIUS);
+  const hits = (x, z, boxes) => (area && !area(x, z)) || boxes.some(b => x > b.x0 - RADIUS && x < b.x1 + RADIUS && z > b.z0 - RADIUS && z < b.z1 + RADIUS && (!b.r || Math.hypot(x - b.cx, z - b.cz) < b.r + RADIUS));   // (b.r: obstáculo redondo, Órbita)
   // a van é um círculo; se o personagem já está dentro dele (acabou de descer), só impede de entrar mais fundo
   const hitsVan = (x, z, van) => { const d = Math.hypot(x - van.x, z - van.z); return d < 2.5 + RADIUS && d < Math.hypot(st.x - van.x, st.z - van.z) - 1e-6; };
   const blocked = (x, z, boxes, van) => hits(x, z, boxes) || hitsVan(x, z, van);

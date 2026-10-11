@@ -1,9 +1,8 @@
 // Morador que aparece no portão durante o diálogo: bonequinho low-poly, cabeçudo, virado para +Z (câmera).
 // userData.setMood('angry' | 'happy') troca pose e balão; userData.update(t) anima.
 import * as THREE from 'three';
-import { box, cyl, sphere, torus, at, dynamic, bakeStatic } from './kit.js';
+import { box, cyl, sphere, cone, torus, at, dynamic, bakeStatic } from './kit.js';
 import { SHIRTS, HAIRS, HOUSES, MOON_COL } from '../data.js';
-import { spaceSuit } from './moon.js';
 
 const SKIN = '#f0c49a', PANTS = '#3d4a66', SHOES = '#2b2522', EYES = '#2a1d14', CHEEK = '#f29a8a';
 const CARDBOARD = '#c98a4a', TAPE = '#f3d9a6';
@@ -41,14 +40,14 @@ function bubbleMaterial(kind) {
   return m;
 }
 
-function makeArm(shirt, side, rolled = false) {
+function makeArm(shirt, side, rolled = false, SKIN_ = SKIN) {
   // pivô no ombro; braço pendurado para baixo (−y) em repouso (rolled: manga dobrada, antebraço à mostra)
   const pivot = dynamic(new THREE.Group());
   pivot.position.set(side * 0.4, 1.12, 0);
   pivot.add(at(sphere(0.13, shirt, 8, 6), 0, 0, 0));
-  if (rolled) { pivot.add(at(cyl(0.1, 0.1, 0.2, shirt, 8), 0, -0.12, 0)); pivot.add(at(cyl(0.11, 0.11, 0.07, shirt, 8), 0, -0.23, 0)); pivot.add(at(cyl(0.085, 0.08, 0.26, SKIN, 8), 0, -0.36, 0)); }
+  if (rolled) { pivot.add(at(cyl(0.1, 0.1, 0.2, shirt, 8), 0, -0.12, 0)); pivot.add(at(cyl(0.11, 0.11, 0.07, shirt, 8), 0, -0.23, 0)); pivot.add(at(cyl(0.085, 0.08, 0.26, SKIN_, 8), 0, -0.36, 0)); }
   else pivot.add(at(cyl(0.1, 0.09, 0.46, shirt, 8), 0, -0.25, 0));
-  pivot.add(at(sphere(0.1, SKIN, 8, 6), 0, -0.52, 0));
+  pivot.add(at(sphere(0.1, SKIN_, 8, 6), 0, -0.52, 0));
   return pivot;
 }
 
@@ -73,17 +72,21 @@ function buildFarmResident(h) {
   const shirt = plaid ? pk(F.plaid, 2) : pk(F.plain, 3);
   return buildCore(h, { shirt, hair: HAIRS[(h * 3) % HAIRS.length], farm });
 }
+// Órbita: ETs (pele verde, azul ou lilás; cabeça redonda, alta ou larga; antenas, orelhas pontudas ou redondas)
+export const ALIEN = {
+  skins: ['#7ccf5a', '#5aa8e8', '#b48ce0', '#4fc7a8', '#9ad85a', '#8f9cf0'], suits: ['#ff7a1a', '#2f78d0', '#f0c22a', '#e0402a', '#3fae5a', '#f1ede2', '#7a4fc0'],
+  tops: ['antennas', 'ears', 'antenna1', 'roundears', 'antennas3'], heads: ['round', 'tall', 'wide'],
+};
 const FARM_LOOKS = ['plaid-straw', 'plain-cap-rolled', 'overalls-straw', 'plaid-cap', 'overalls-cap-rolled', 'plain-straw-rolled', 'plaid-rolled', 'overalls-plain'];
 
 export function buildResident(houseIndex) {
   const farm = HOUSES[houseIndex] && HOUSES[houseIndex].kind === 'farm';
   if (farm) return buildFarmResident(houseIndex);
-  if (HOUSES[houseIndex] && HOUSES[houseIndex].kind === 'moon') {     // Órbita: traje espacial branco, faixa na cor do módulo, capacete transparente
-    const H = HOUSES[houseIndex], r = buildCore(houseIndex, { shirt: '#f1ede2', hair: HAIRS[(houseIndex * 3) % HAIRS.length], farm: { pants: '#e6e2d6', boots: '#8d9198' } });
-    const body = r.children[0];
-    body.add(at(cyl(0.38, 0.38, 0.12, MOON_COL[H.stripe], 10), 0, 1.0, 0));
-    spaceSuit(body, { headY: 1.18 + 0.34, r: 0.64, back: [0, -0.44], backY: 0.92 });
-    return r;
+  if (HOUSES[houseIndex] && HOUSES[houseIndex].kind === 'moon') {     // Órbita: ETs simpáticos de macacão espacial
+    const k = houseIndex - 286, E = ALIEN, pk = (a, m = 1) => a[(k * m) % a.length];
+    const suit = pk(E.suits, 5);
+    return buildCore(houseIndex, { shirt: suit, hair: null, farm: { pants: suit, boots: '#8d9198' },
+      alien: { skin: pk(E.skins, 3), top: pk(E.tops, 7), head: pk(E.heads, 2), badge: MOON_COL[HOUSES[houseIndex].stripe] } });
   }
   const ven = HOUSES[houseIndex] && HOUSES[houseIndex].kind === 'ven';
   const look = ven ? VEN_LOOKS[(houseIndex * 5) % VEN_LOOKS.length] : null, V = VEN_STYLE, pk = (a, k = 1) => a[(houseIndex * k) % a.length];
@@ -94,7 +97,8 @@ export function buildResident(houseIndex) {
   return buildCore(houseIndex, { shirt, hair, ven, look, V, pk, striped });
 }
 
-function buildCore(houseIndex, { shirt, hair, ven = false, look = null, V = VEN_STYLE, pk = a => a[0], striped = false, farm = null }) {
+function buildCore(houseIndex, { shirt, hair, ven = false, look = null, V = VEN_STYLE, pk = a => a[0], striped = false, farm = null, alien = null }) {
+  const SK = alien ? alien.skin : SKIN;
   const root = new THREE.Group();
   root.name = 'resident:' + houseIndex;
   const PANTS_ = farm ? farm.pants : PANTS, SHOES_ = farm ? (farm.boots || FARM_STYLE.boots) : SHOES;
@@ -126,12 +130,25 @@ function buildCore(houseIndex, { shirt, hair, ven = false, look = null, V = VEN_
   head.rotation.x = -0.42;
   body.add(head);
   const hy = 0.34;                          // centro da cabeça acima do pescoço
-  head.add(at(sphere(0.4, SKIN, 12, 9), 0, hy, 0));
-  // cabelo: calota + nuca
-  const cap = at(sphere(0.43, hair, 12, 8), 0, hy + 0.12, -0.06);
-  cap.scale.set(1, 0.72, 1);
-  head.add(cap);
-  head.add(at(box(0.72, 0.4, 0.22, hair), 0, hy - 0.02, -0.26));
+  const skull = head.add(at(sphere(0.4, SK, 12, 9), 0, hy, 0)).children.at(-1);
+  if (alien) {                                                        // ET: cabeça redonda/alta/larga, antenas ou orelhas, gola do macacão
+    skull.scale.set(alien.head === 'wide' ? 1.22 : 1.05, alien.head === 'tall' ? 1.28 : 1.05, 1.02);
+    const top = alien.head === 'tall' ? hy + 0.5 : hy + 0.4;
+    if (alien.top.startsWith('antenna')) {
+      const xs = alien.top === 'antenna1' ? [0] : alien.top === 'antennas3' ? [-0.2, 0, 0.2] : [-0.18, 0.18];
+      for (const x of xs) { head.add(at(cyl(0.025, 0.03, 0.42, SK, 5), x, top + 0.14, 0, 0, 0, -x * 1.2)); head.add(at(sphere(0.08, alien.badge, 8, 6), x * 1.5, top + 0.37, 0)); }
+    } else if (alien.top === 'ears') for (const sd of [-1, 1]) head.add(at(cone(0.13, 0.42, SK, 6), sd * 0.46 * (alien.head === 'wide' ? 1.2 : 1), hy + 0.12, -0.02, 0, 0, -sd * 1.15));
+    else for (const sd of [-1, 1]) head.add(at(cyl(0.17, 0.17, 0.06, SK, 12), sd * 0.44 * (alien.head === 'wide' ? 1.2 : 1), hy + 0.24, -0.02, Math.PI / 2, 0, 0));
+    body.add(at(torus(0.27, 0.06, '#d8dade', 6, 14), 0, 1.17, 0, Math.PI / 2, 0, 0));   // gola de macacão espacial
+    body.add(at(cyl(0.12, 0.12, 0.04, alien.badge, 10), 0.14, 1.0, 0.35, Math.PI / 2, 0, 0));   // emblema na cor do módulo
+    body.add(at(cyl(0.377, 0.377, 0.07, '#d8dade', 10), 0, 0.64, 0));    // cinto
+  } else {
+    // cabelo: calota + nuca
+    const cap = at(sphere(0.43, hair, 12, 8), 0, hy + 0.12, -0.06);
+    cap.scale.set(1, 0.72, 1);
+    head.add(cap);
+    head.add(at(box(0.72, 0.4, 0.22, hair), 0, hy - 0.02, -0.26));
+  }
   if (farm && farm.hat === 'straw') {                                 // chapéu de palha com fita marrom
     head.add(at(cyl(0.66, 0.66, 0.04, V.straw, 14), 0, hy + 0.38, -0.03)); head.add(at(cyl(0.36, 0.4, 0.26, V.straw, 12), 0, hy + 0.5, -0.03));
     head.add(at(cyl(0.405, 0.405, 0.06, '#6b4428', 12), 0, hy + 0.42, -0.03));
@@ -144,15 +161,21 @@ function buildCore(houseIndex, { shirt, hair, ven = false, look = null, V = VEN_
     head.add(at(cyl(0.385, 0.385, 0.07, look === 'gondolier' ? '#c8402f' : pk(V.ribbon, 2), 12), 0, hy + 0.43, -0.03));
   }
   // rosto: olhos, bochechas, nariz
-  for (const s of [-1, 1]) {
-    head.add(at(sphere(0.065, EYES, 6, 4), s * 0.15, hy + 0.05, 0.36));
-    head.add(at(sphere(0.065, CHEEK, 6, 4), s * 0.25, hy - 0.08, 0.31));
+  if (alien) for (const s of [-1, 1]) {                               // ET: olhos grandes e brilhantes
+    const eye = at(sphere(0.14, '#1b1b22', 10, 8), s * 0.17, hy + 0.06, 0.33); eye.scale.set(1, 1.25, 0.6); head.add(eye);
+    head.add(at(sphere(0.04, '#ffffff', 6, 4), s * 0.17 + 0.04, hy + 0.13, 0.41));
   }
-  head.add(at(sphere(0.06, SKIN, 6, 4), 0, hy - 0.04, 0.4));
+  else {
+    for (const s of [-1, 1]) {
+      head.add(at(sphere(0.065, EYES, 6, 4), s * 0.15, hy + 0.05, 0.36));
+      head.add(at(sphere(0.065, CHEEK, 6, 4), s * 0.25, hy - 0.08, 0.31));
+    }
+    head.add(at(sphere(0.06, SKIN, 6, 4), 0, hy - 0.04, 0.4));
+  }
 
   // expressões (trocadas por setMood)
   const brows = dynamic(new THREE.Group());   // sobrancelhas franzidas
-  for (const s of [-1, 1]) brows.add(at(box(0.18, 0.05, 0.05, EYES), s * 0.15, hy + 0.17, 0.35, 0, 0, s * 0.5));
+  for (const s of [-1, 1]) brows.add(at(box(0.18, 0.05, 0.05, EYES), s * 0.15, hy + (alien ? 0.29 : 0.17), alien ? 0.37 : 0.35, 0, 0, s * 0.5));
   const frown = dynamic(at(box(0.2, 0.045, 0.05, EYES), 0, hy - 0.17, 0.36, 0, 0, 0.12));
   const smile = dynamic(new THREE.Group());
   smile.add(at(box(0.14, 0.045, 0.05, EYES), 0, hy - 0.19, 0.36));
@@ -160,7 +183,7 @@ function buildCore(houseIndex, { shirt, hair, ven = false, look = null, V = VEN_
   head.add(brows, frown, smile);
 
   // braços
-  const armL = makeArm(shirt, -1, !!(farm && farm.rolled)), armR = makeArm(shirt, 1, !!(farm && farm.rolled));
+  const armL = makeArm(shirt, -1, !!(farm && farm.rolled), SK), armR = makeArm(shirt, 1, !!(farm && farm.rolled), SK);
   body.add(armL, armR);
 
   // pacote (só quando feliz)
