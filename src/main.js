@@ -2,7 +2,8 @@
 // Este arquivo define como cada módulo é usado (o "contrato" entre eles).
 import * as THREE from 'three';
 import { Game, ROUTE_LEN } from './logic.js';
-import { MAP, doorPoint, slotOrigin, DELIVERY_RADIUS, DELIVERY_MAX_SPEED, VAN, VAN_START, LOT_ANCHORS, SOLIDS, ENTRANCE, HEDGE, GRID, PLAZA, HOUSE_SLOTS, configureGrid, roadCenter, setGasStations, GAS_LIST, GAS_CANOPY, GAS_ISLANDS, GAS_PARTS, TERRAIN, CANAL, VENICE, RAIL, FAVELA, FLUX, FARMLAND, SPOTS, SNOWV, MOONV, slotPlaceTags, roadTopology } from './layout.js';
+import { MAP, doorPoint, slotOrigin, DELIVERY_RADIUS, DELIVERY_MAX_SPEED, VAN, VAN_START, LOT_ANCHORS, SOLIDS, ENTRANCE, HEDGE, GRID, PLAZA, HOUSE_SLOTS, configureGrid, roadCenter, setGasStations, GAS_LIST, GAS_CANOPY, GAS_ISLANDS, GAS_PARTS, TERRAIN, CANAL, VENICE, RAIL, FAVELA, FLUX, FARMLAND, SPOTS, SNOWV, MOONV, slotPlaceTags, roadTopology, WARE_LIST, WALK as L_WALK, LOT as L_LOT, ROAD as L_ROAD, slotY as L_slotY } from './layout.js';
+import { createLaser } from './laser.js';
 import { createInput } from './input.js';
 import { createWorld } from './world.js';
 import { createVan } from './van.js';
@@ -553,7 +554,7 @@ function useNeighborhood(kind) {
   if (kind === 'venice8') { world.scene.add(npcBoats.object); npcBoats.reset(); world.scene.add(rope); } else npcBoats.detach();   // Bairro 11: trem e cancelas
   if (COMPOSED.includes(kind)) composeRound();   // Bairros 4 a 7: composição sorteada a cada partida
   else setupGrid4();
-  boom.reset(); clearMoonPins(); if (!MOONV) rig.setOverview(null);
+  boom.reset(); clearLaserVoids(); clearMoonPins(); if (!MOONV) rig.setOverview(null);
   rig.refit();
   if (!MOONV) rig.setExtraBoxes([]);
   resetVan();
@@ -632,6 +633,50 @@ function moonUpdate(dt, snap = false) {
   const L = world.sunLight; L.target.position.set(FRAME.ox, 0, FRAME.oz); L.position.copy(L.target.position).add(world.sunOfs); L.target.updateMatrixWorld();
   _mv.set(FRAME.ox, -MOON.R, FRAME.oz); _mo.position.copy(_mv).add(_mov.set(0, 0.6, 0.8).multiplyScalar(MOON.R * 3.7));
   rig.setOverview(_mo.position, _mq.setFromRotationMatrix(_mm.lookAt(_mo.position, _mv, _mov.set(0, 1, 0))));
+}
+// ---------- Modo Livre: "Laser orbital" (efeito da entrega errada escolhido no menu) ----------
+// Sequência de 23 s (laser.js): raio fino do céu, viagem pela cena espacial separada até o satélite e volta, e o raio
+// grosso apaga a quadra inteira (construção, quintal, cercas, morador e chão), que vira um vazio escuro até o fim da partida.
+const laser = createLaser(audio);
+const laserVoids = [];
+let laserRet = 'drive';
+function clearLaserVoids() { laser.cancel(); for (const m of laserVoids) if (m.parent) m.parent.remove(m); laserVoids.length = 0; }
+/** Área ocupada pela construção (quadra inteira; galpão = 2 lotes + a rua entre eles). */
+function laserArea(slot) {
+  const sp = SPOTS ? SPOTS.spots[slot] : null;
+  if (FARMLAND) return sp.area;
+  if (SPOTS) return sp.box;
+  const o = slotOrigin(slot), ware = WARE_LIST.some(w => w.slots[0] === slot);
+  return { x0: o.x - L_WALK, z0: o.z - L_WALK, x1: o.x + (ware ? L_LOT * 2 + L_ROAD : L_LOT) + L_WALK, z1: o.z + L_LOT + L_WALK };
+}
+/** Tira a van/o personagem de dentro da área antes do apagão (vai para a borda mais próxima, com folga). */
+function pushOut(a, ent, isVan) {
+  const m = 2.6, x = ent.x, z = ent.z;
+  if (x < a.x0 - m || x > a.x1 + m || z < a.z0 - m || z > a.z1 + m) return;
+  const opts = [[a.x0 - 4, z, x - a.x0], [a.x1 + 4, z, a.x1 - x], [x, a.z0 - 4, z - a.z0], [x, a.z1 + 4, a.z1 - z]].sort((p, q) => p[2] - q[2]);
+  const [nx, nz] = opts[0];
+  if (isVan) van.teleport(nx, nz, van.heading); else walker.pose(nx, nz, walker.heading);
+}
+function startLaser(h, slot) {
+  laserRet = state === 'walk' ? 'walk' : 'drive';
+  const sp = SPOTS ? SPOTS.spots[slot] : null;
+  let parent, local, outerR, makeVoid, rect = null;
+  if (MOONV) {                                          // Órbita: preso ao módulo, na vertical dele; o vazio é uma calota na esfera
+    parent = moonPin(sp.cx, sp.cz); local = new THREE.Vector3(sp.cx, 0, sp.cz); outerR = 9.5;
+    makeVoid = () => { const m = new THREE.Mesh(new THREE.SphereGeometry(MOON.R + 0.18, 48, 8, 0, Math.PI * 2, 0, 9.2 / MOON.R), new THREE.MeshBasicMaterial({ color: '#000000' }));
+      m.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), sp.n); world.moonRoot.add(m); return m; };
+  } else {
+    const a = laserArea(slot), y = sp ? sp.y : L_slotY(slot), w = a.x1 - a.x0, d = a.z1 - a.z0;
+    parent = world.scene; local = new THREE.Vector3((a.x0 + a.x1) / 2, y, (a.z0 + a.z1) / 2); outerR = 0.5 * Math.hypot(w, d); rect = { w, d };
+    pushOut(a, van, true); if (walker.visible) pushOut(a, walker, false);
+    makeVoid = () => { const m = new THREE.Mesh(new THREE.BoxGeometry(w, 40, d), new THREE.MeshBasicMaterial({ color: '#000000' }));
+      m.position.set(local.x, y + 0.34 - 20, local.z); world.scene.add(m); return m; };
+  }
+  world.hideResident(); van.stop(); nearHouse = -1;
+  setState('laser');
+  laser.start({ parent, local, outerR, rect, moon: !!MOONV, cam: rig.camera,
+    onErase: () => { boom.markDestroyed(h); world.hideResident(); laserVoids.push(makeVoid()); },
+    onEnd: () => { setState(laserRet); actionLock = 0.6; } });
 }
 function startBoss() {
   heli.reset(); van.stop(); nearHouse = -1;
@@ -1463,7 +1508,7 @@ function startNewRound() {
   hint.clear(); hintUsed = false; hintStep = -1;
   heli.reset();
   monster.reset();
-  boom.reset(); restartMsg = null;
+  boom.reset(); clearLaserVoids(); restartMsg = null;
   world.setLayout(game.layout);
   resetGates();                                  // Colheita: porteiras fechadas de novo
   world.hideResident();
@@ -1585,7 +1630,10 @@ function update(dt, t) {
           dialog = null; world.hideResident(); setState(footDelivery ? 'walk' : 'drive'); footDelivery = false; actionLock = 0.6;
           // casa errada explode (se habilitado), menos as que ainda fazem parte da rota desta rodada
           const idx = game.route.indexOf(visited);
-          if (gameMode === 'free' && menu.explodeWrong && (idx < 0 || idx < game.step)) boom.explode(visited, game.slotOf[visited]);
+          if (gameMode === 'free' && menu.explodeWrong && (idx < 0 || idx < game.step) && !boom.isDestroyed(visited)) {
+            if (menu.wrongFx === 'laser') startLaser(visited, game.slotOf[visited]);   // laser orbital (23 s)
+            else boom.explode(visited, game.slotOf[visited]);
+          }
           if (hintStep >= 0 && game.step !== hintStep) { hint.retract(); hintStep = -1; }   // a pista mudou: a seta volta ao céu
         }
       }
@@ -1633,6 +1681,12 @@ function update(dt, t) {
       else if (nearK()) startTalk();
       break;
     }
+    case 'laser':                                    // laser orbital: sem controles nem entregas até o fim da sequência
+      van.stop();
+      if (walker.visible) walker.update(dt, { x: 0, z: 0 }, 'car', [], van);
+      if (laser.camera) laser.camera.aspect = rig.camera.aspect;
+      laser.update(dt);
+      break;
     case 'cine':                                     // sequência automática (igreja): sem controles
       if (cine) updateChurchCine(dt);
       break;
@@ -1726,6 +1780,7 @@ function update(dt, t) {
   moonUpdate(dt);                                 // Órbita: a lua gira por baixo de quem o jogador controla
   rig.update(dt, onFoot ? { x: walker.x, z: walker.z, y: walker.floor, heading: walker.heading, speed: walker.speed, focus: null } : { x: van.x, z: van.z, y: heli.altitude, heading: van.heading, speed: van.speed, focus: null });   // sem câmera automática: quem controla é o jogador
   if (state === 'talk') { rig.camera.position.copy(talkCam.pos); rig.camera.lookAt(talkCam.look); }   // enquadramento fixo da conversa
+  if (state === 'laser') laser.applyCamera(rig.camera);
   if (state === 'cine' && cine) { rig.camera.position.copy(cine.camPos); rig.camera.lookAt(cine.camLook); }
   // névoa só na câmera atrás da van (suaviza o horizonte); a visão geral fica nítida
   const fb = rig.blend, fog = world.scene.fog;
@@ -1777,7 +1832,7 @@ function updateHUD() {
   } else {
     const extraKeys0 = '  ·  L: descer da van';
     const extraKeys = extraKeys0 + (gameMode === 'free' ? (MOONV ? '  ·  H: helicóptero' : '  ·  H: helicóptero  ·  F: míssil') : '  ·  M: missões');
-    hud.setSub(state === 'talk' || state === 'cine' || state === 'trolley' || state === 'trolleyBlack' ? '' : state === 'walk'
+    hud.setSub(state === 'talk' || state === 'cine' || state === 'trolley' || state === 'trolleyBlack' || state === 'laser' ? '' : state === 'walk'
       ? (rig.mode === 'chase' ? 'A PÉ  ·  W/S: andar  ·  A/D: virar  ·  E (perto da van): entrar  ·  C: bairro  ·  botão direito: olhar em volta' : 'A PÉ  ·  WASD: andar  ·  E (perto da van): entrar  ·  C: câmera')
       : heli.landed
       ? 'POUSADO NO PRÉDIO  ·  H: decolar  ·  F: míssil'
@@ -1791,7 +1846,7 @@ function updateHUD() {
     else if (state === 'boss') hud.setMain(monster.phase === 'driveOut' ? 'Todas as casas foram destruídas… algo despertou!' : 'O DEVORADOR DE BAIRROS acordou!', 'dialog');
     else if (state === 'missile') hud.setMain('Míssil disparado!', 'ring');
     else if (state === 'fuel') hud.setMain('⛽ Abastecendo… glub, glub, glub…', 'ring');
-    else if (state === 'talk' || state === 'cine' || state === 'trolley' || state === 'trolleyBlack') hud.setMain('', 'clue');
+    else if (state === 'talk' || state === 'cine' || state === 'trolley' || state === 'trolleyBlack' || state === 'laser') hud.setMain('', 'clue');
     else if (state === 'walk' && carrying) hud.setMain(walker.nearVan(van) ? 'Entrar na van devolve a caixa ao lugar dela.' : 'Carregando uma caixa… de quem será?', 'clue');
     else if (state === 'walk') hud.setMain(walker.nearVan(van) && !nearLounger() && !nearVenK() ? 'Perto da van — aperte E para entrar.' : SPOTS ? game.mainText() : 'Passeando a pé… (não dá para entregar andando)', 'clue');   // Morro: a pé continua valendo a pista
     else if (state === 'drive' && fuelMsgT > 0) hud.setMain(fuelMsg, 'dialog');
@@ -1900,7 +1955,7 @@ renderer.setAnimationLoop(now => {
   elapsed += dt;
   update(dt, elapsed);
   updateHUD();
-  if (inMap()) renderer.render(careerMap.scene, careerMap.camera); else if (state === 'trolley') renderer.render(trolley.scene, trolley.camera); else renderer.render(world.scene, rig.camera);
+  if (inMap()) renderer.render(careerMap.scene, careerMap.camera); else if (state === 'trolley') renderer.render(trolley.scene, trolley.camera); else if (state === 'laser' && laser.inSpace) renderer.render(laser.scene, laser.camera); else renderer.render(world.scene, rig.camera);
 });
 
 // ---------- Ganchos para testes automatizados ----------
@@ -1923,6 +1978,7 @@ window.ADRESS = {
   get moonVan() { return { p: vanSph.p.toArray().map(v => +v.toFixed(3)), f: vanSph.f.toArray().map(v => +v.toFixed(3)), y: +van.simY.toFixed(2) }; },
   FRAME, MOONV: () => MOONV,
   lockCP: n => STORY_CP.apply(n), get parcelVisible() { return !!parcel.parent; },
+  laser, startLaser,
   get church() { return church; }, get venK() { return venK; }, startVeniceTalk, churchStage, get greenBell() { return greenBell; }, get churchBell() { return churchBell; },
   churchReveal() { if (churchOn && !churchShown) { approach.phase = 'revealed'; revealChurch(true); } },
   get churchMusicTime() { return +churchMusic.time.toFixed(2); }, get bellMusic() { return bellMusic; }, get vanFade() { return vanFade; }, nowPlaying, get approach() { return approach; },
@@ -1948,5 +2004,5 @@ window.ADRESS = {
   /** Coloca a van parada no ponto de entrega da casa h, virada para leste. */
   placeVanAtDoor(h) { const p = doorPoint(game.slotOf[h]); van.teleport(p.x, p.z, 0); },
   /** Executa n quadros de simulação com passo fixo (útil quando o requestAnimationFrame está parado). */
-  step(n = 1, dt = 1 / 60) { for (let i = 0; i < n; i++) { elapsed += dt; update(dt, elapsed); updateHUD(); } if (inMap()) renderer.render(careerMap.scene, careerMap.camera); else if (state === 'trolley') renderer.render(trolley.scene, trolley.camera); else renderer.render(world.scene, rig.camera); },
+  step(n = 1, dt = 1 / 60) { for (let i = 0; i < n; i++) { elapsed += dt; update(dt, elapsed); updateHUD(); } if (inMap()) renderer.render(careerMap.scene, careerMap.camera); else if (state === 'trolley') renderer.render(trolley.scene, trolley.camera); else if (state === 'laser' && laser.inSpace) renderer.render(laser.scene, laser.camera); else renderer.render(world.scene, rig.camera); },
 };

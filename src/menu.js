@@ -15,6 +15,11 @@ const CSS = `
 .menu-sw::after { content: ""; position: absolute; top: 3px; left: 3px; width: 20px; height: 20px; border-radius: 50%; background: #fff; transition: left .15s; }
 .menu-row.on .menu-sw { background: #e3262e; }
 .menu-row.on .menu-sw::after { left: 23px; }
+.menu-fx { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 4px 0 6px 14px; font-size: 14px; color: #6a5a40; }
+.menu-fx .seg { display: flex; border: 2px solid #3a2a1a; border-radius: 999px; overflow: hidden; flex: none; }
+.menu-fx .seg span { padding: 3px 10px; cursor: pointer; user-select: none; font-weight: 700; font-size: 13px; color: #3a2a1a; background: #fff; }
+.menu-fx .seg span.on { background: #e3262e; color: #fff; }
+.menu-fx.off { opacity: .45; }
 .menu-keys { margin-top: 12px; font-size: 13px; color: #8a7355; line-height: 1.6; }
 `;
 
@@ -23,7 +28,8 @@ export function createMenu(stageEl) {
   style.textContent = CSS;
   document.head.appendChild(style);
 
-  let explodeWrong = true, unstoppable = false;
+  let explodeWrong = true, unstoppable = false, wrongFx = 'boom';   // wrongFx: 'boom' (explosão) | 'laser' (laser orbital)
+  try { if (localStorage.getItem('adress.wrongFx') === 'laser') wrongFx = 'laser'; } catch (e) { /* ignora */ }
   try { unstoppable = localStorage.getItem('adress.unstoppable') === '1'; } catch (e) { /* ignora */ }
   try { const v = localStorage.getItem('adress.explodeWrong'); if (v !== null) explodeWrong = v === '1'; } catch (e) { /* ignora */ }
 
@@ -33,11 +39,18 @@ export function createMenu(stageEl) {
   panel.className = 'menu-panel';
   panel.innerHTML = `<h3>OPÇÕES</h3>
     <div class="menu-row" data-opt="explode"><span>Casa explode na entrega errada</span><span class="menu-sw"></span></div>
+    <div class="menu-fx"><span>Efeito</span><span class="seg"><span data-fx="boom">Explosão</span><span data-fx="laser">Laser orbital</span></span></div>
     <div class="menu-row" data-opt="ghost"><span>Van imparável (atravessa e destrói tudo)</span><span class="menu-sw"></span></div>
     <div class="menu-keys">F: disparar o míssil da van (a rodada reinicia)<br>H: helicóptero (Espaço sobe, Shift desce) · T: dica<br>C: câmera · M: missões (Carreira) · Esc: fechar</div>`;
   const row = panel.querySelector('[data-opt="explode"]');
   const rowG = panel.querySelector('[data-opt="ghost"]');
-  const paint = () => { row.classList.toggle('on', explodeWrong); rowG.classList.toggle('on', unstoppable); };
+  const fxRow = panel.querySelector('.menu-fx'), fxBtns = [...panel.querySelectorAll('[data-fx]')];
+  const paint = () => { row.classList.toggle('on', explodeWrong); rowG.classList.toggle('on', unstoppable);
+    fxRow.classList.toggle('off', !explodeWrong); fxBtns.forEach(b => b.classList.toggle('on', b.dataset.fx === wrongFx)); };
+  fxBtns.forEach(b => b.addEventListener('click', () => {
+    wrongFx = b.dataset.fx; paint();
+    try { localStorage.setItem('adress.wrongFx', wrongFx); } catch (e) { /* ignora */ }
+  }));
   rowG.addEventListener('click', () => {
     unstoppable = !unstoppable; paint();
     try { localStorage.setItem('adress.unstoppable', unstoppable ? '1' : '0'); } catch (e) { /* ignora */ }
@@ -55,5 +68,5 @@ export function createMenu(stageEl) {
   stageEl.appendChild(btn);
   stageEl.appendChild(panel);
 
-  return { get explodeWrong() { return explodeWrong; }, get unstoppable() { return unstoppable; } };
+  return { get explodeWrong() { return explodeWrong; }, get unstoppable() { return unstoppable; }, get wrongFx() { return wrongFx; } };
 }

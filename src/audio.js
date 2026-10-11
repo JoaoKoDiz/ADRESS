@@ -118,6 +118,10 @@ export function createAudio() {
 
     /** Assobio descendo (seta caindo do céu). */
     whistle: safe(() => { tone(1500, 0, 1.25, "sine", 0.05, 0.3); }),
+    /** Laser orbital: zumbido fino descendo do céu / carga do satélite / disparo forte. */
+    laserZap: safe(() => { tone(2200, 0, 0.7, "sawtooth", 0.03, 0.2); tone(1100, 0.05, 1.2, "sine", 0.05, 0.6); }),
+    laserCharge: safe(() => { tone(180, 0, 2.6, "sawtooth", 0.04, 6); tone(90, 0, 2.6, "square", 0.025, 5); }),
+    laserBlast: safe(() => { noise(2.0, 0.4); tone(60, 0, 2.2, "sawtooth", 0.18, 0.5); tone(900, 0, 1.6, "sawtooth", 0.05, 0.3); }),
 
     /** Estrondo da seta quebrando o telhado. */
     crash: safe(() => { noise(0.7, 0.35); tone(95, 0, 0.5, "sine", 0.22, 0.5); tone(62, 0.03, 0.6, "triangle", 0.14, 0.6); }),

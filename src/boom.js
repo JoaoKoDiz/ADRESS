@@ -297,6 +297,8 @@ export function createBoom(scene, getWorld, audio) {
     /** Órbita: fn(x, z) → grupo preso à lua naquele ponto (null: cena normal). */
     setPin(fn) { pinAt = fn; },
     explode, smash, reset() { reset(); resetMissile(); },
+    /** Marca a casa h como destruída sem explosão (laser orbital: a quadra vira um vazio). */
+    markDestroyed(h) { if (destroyed.has(h)) return false; destroyed.add(h); W().setHidden(h, true); return true; },
     update(dt) { updateMissile(dt); update(dt); },
     isDestroyed: h => destroyed.has(h),
     attachHatch, fire,
