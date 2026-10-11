@@ -28,6 +28,27 @@ export function cobble(w, d, x, y, z) {
   const uv = g.attributes.uv; for (let i = 0; i < uv.count; i++) uv.setXY(i, uv.getX(i) * w / 4, uv.getY(i) * d / 4);
   const m = new THREE.Mesh(g, cobbleMat()); m.position.set(x, y, z); m.receiveShadow = true; return m;
 }
+/**
+ * Telhado de duas águas fechado, a partir das medidas reais da construção: paredes de comprimento `len` (ao longo da
+ * cumeeira) e profundidade `depth`, topo das paredes em `y`. As duas águas se encontram na cumeeira (com uma peça de
+ * cumeeira cobrindo a junta), apoiam a face de baixo exatamente no topo das paredes e saem num beiral `over`; os oitões
+ * (triângulos das pontas) preenchem o vão sob a cobertura. ridge 'x' = cumeeira ao longo de X; 'z' = ao longo de Z.
+ */
+export function gableRoof(root, { cx, cz, y, len, depth, rise = 1.5, over = 0.4, t = 0.22, color, wall, ridge = 'x' }) {
+  const g = new THREE.Group(); g.position.set(cx, 0, cz); if (ridge === 'z') g.rotation.y = Math.PI / 2; root.add(g);
+  const half = depth / 2, ang = Math.atan2(rise, half), run = half + over, L = run / Math.cos(ang), yTop = y + rise;
+  for (const s of [-1, 1]) {
+    const m = new THREE.Mesh(new THREE.BoxGeometry(len, t, L), mat(color));
+    m.position.set(0, yTop - Math.tan(ang) * run / 2 + (t / 2) / Math.cos(ang), s * run / 2); m.rotation.x = s * ang; g.add(m);
+  }
+  g.add(at(box(len, 0.2, 0.42, color), 0, yTop + t / Math.cos(ang) - 0.04, 0));          // cumeeira
+  const sh = new THREE.Shape(); sh.moveTo(-half, 0); sh.lineTo(half, 0); sh.lineTo(0, rise); sh.lineTo(-half, 0);
+  const geo = new THREE.ExtrudeGeometry(sh, { depth: 0.2, bevelEnabled: false });
+  for (const x of [-len / 2 + 0.02, len / 2 - 0.22]) {                                     // oitões (no plano das paredes das pontas)
+    const m = new THREE.Mesh(geo, mat(wall)); m.position.set(x, y, 0); m.rotation.y = Math.PI / 2; g.add(m);
+  }
+  return g;
+}
 export const VEN_X0 = 1.6, VEN_X1 = 15.6, VEN_Z0 = 2.2, VEN_Z1 = 11.8;   // fileira de casas (as vielas ficam nas laterais e atrás)
 
 /** Uma fachada estreita: largura w, andares n, frente em z = VEN_Z1. */
@@ -36,10 +57,9 @@ function narrow(root, x0, w, n, color, sh, opts = {}) {
   const H = n * FLOOR_H, cx = x0 + w / 2, D = VEN_Z1 - VEN_Z0, cz = (VEN_Z0 + VEN_Z1) / 2;
   add(box(w, H, D, color), cx, 0.15 + H / 2, cz);
   const ww = w - 0.04;                                                                // (não encosta na vizinha: nada de faces sobrepostas)
-  add(box(ww, 0.25, D + 0.3, '#e8dfcc'), cx, 0.15 + H + 0.1, cz);                    // cornija
-  for (const s of [-1, 1]) add(box(ww, 0.22, D / 2 + 0.6, TILE), cx, 0.15 + H + 0.6, cz + s * D / 4, s * 0.32, 0, 0);   // telhado de telhas
-  add(box(ww, 0.3, 0.4, '#9a4127'), cx, 0.15 + H + 1.1, cz);
-  if (opts.chimney) add(box(0.6, 1.4, 0.6, '#b8a58a'), cx + w * 0.25, 0.15 + H + 1.2, cz - 1.5);
+  add(box(ww, 0.22, D + 0.24, '#e8dfcc'), cx, 0.15 + H - 0.16, cz);                  // cornija (logo abaixo do beiral)
+  gableRoof(root, { cx, cz, y: 0.15 + H, len: ww, depth: D, rise: 1.5, over: 0.45, color: TILE, wall: color });   // telhado de telhas
+  if (opts.chimney) add(box(0.6, 1.6, 0.6, '#b8a58a'), cx + w * 0.25, 0.15 + H + 1.0, cz - 1.8);
   const cols = w > 4.6 ? [cx - w * 0.26, cx + w * 0.26] : [cx];
   for (let f = 0; f < n; f++) {
     const y = 0.15 + f * FLOOR_H + 1.5;

@@ -2,7 +2,7 @@
 // passarelas e placas LADO LESTE / LADO OESTE). Só visual: a colisão está em layout.js (SOLIDS) e a altura em TERRAIN.h.
 import * as THREE from 'three';
 import { box, at, mesh, textTexture } from './models/kit.js';
-import { cobble } from './models/venice.js';
+import { cobble, gableRoof } from './models/venice.js';
 import { buildRail } from './train.js';
 import { RAIL as RAIL_PATH, VENICE, TERRAIN, CANAL, slotOrigin, doorPoint, lotX, lotZ, GRID, MAP, HEDGE, ROAD, LOT, roadCenter } from './layout.js';
 
@@ -233,7 +233,7 @@ function buildVenice(g) {
     const k = new THREE.Group(); k.position.set(cf.cx, 0, cf.cz); k.rotation.y = cf.ang; g.add(k);
     const w = cf.w, d = cf.d;
     k.add(at(box(w, 7.0, d, '#e9c98f'), 0, 3.65, 0));
-    for (const s2 of [-1, 1]) k.add(at(box(w + 0.6, 0.25, d / 2 + 0.7, '#b5532f'), 0, 7.45, s2 * d / 4, s2 * 0.34, 0, 0));
+    gableRoof(k, { cx: 0, cz: 0, y: 7.15, len: w + 0.9, depth: d, rise: 2.0, over: 0.45, color: '#b5532f', wall: '#e9c98f' });
     for (const fz of [-1, 1]) {                                                               // as duas frentes (dos dois lados)
       k.add(at(box(w - 1.2, 0.18, 2.2, '#3c8f52'), 0, 3.3, fz * (d / 2 + 0.95), fz * -0.3, 0, 0));
       for (let x = -w / 2 + 1.5; x < w / 2 - 1; x += 2.4) {
@@ -261,7 +261,7 @@ function buildVenice(g) {
     const y = yAt(z);
     rg.add(at(box(2.2, 2.4, 4.4, '#f2ead8'), sx * 3.1, y + 1.2, z));
     rg.add(at(box(0.08, 1.5, 2.6, '#5b3a22'), sx * 1.98, y + 1.0, z));
-    rg.add(at(box(2.6, 0.3, 4.8, '#b5532f'), sx * 3.1, y + 2.55, z, 0, 0, sx * 0.25));
+    gableRoof(rg, { cx: sx * 3.1, cz: z, y: y + 2.4, len: 4.4 + 0.3, depth: 2.2, rise: 0.8, over: 0.2, t: 0.16, color: '#b5532f', wall: '#f2ead8', ridge: 'z' });
   }
   const yTop = 0.15 + R.rise;
   rg.add(at(box(R.w, 0.7, 3.0, '#f2ead8'), 0, yTop + 3.6, 0));                                   // pórtico central
