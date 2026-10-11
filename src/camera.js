@@ -4,7 +4,7 @@
 //     Parada, a câmera sobe para olhar por cima dos telhados; entregando, vira um pouco para a casa visitada.
 //   'overview' (tecla C): visão fixa do SUL, com o bairro inteiro enquadrado na tela.
 import * as THREE from 'three';
-import { MAP, HEDGE, HOUSE_SLOTS, GAS_LIST, GAS_PARTS, BUILD_H, slotOrigin, LOT_ANCHORS, ENTRANCE, FAVELA } from './layout.js';
+import { MAP, HEDGE, HOUSE_SLOTS, GAS_LIST, GAS_PARTS, BUILD_H, slotOrigin, LOT_ANCHORS, ENTRANCE, FAVELA, FARMLAND } from './layout.js';
 import { FAV } from './favelaPlan.js';
 
 const PITCH = THREE.MathUtils.degToRad(57);   // inclinação para baixo
@@ -111,7 +111,11 @@ function buildCamBoxes() {
     for (const sp of FAVELA.spots) CAM_BOXES.push([sp.box.x0 - 0.6, sp.box.z0 - 0.6, sp.box.x1 + 0.6, sp.box.z1 + 0.6, sp.y + 3 * 2.8 + 1.8]);
     const m = FAVELA.market; CAM_BOXES.push([m.x0 - 0.6, m.z0 - 0.6, m.x1 + 0.6, m.z1 + 0.6, 7]);
   }
-  for (const s of FAVELA ? [] : HOUSE_SLOTS) {
+  if (FARMLAND) {                                              // Colheita: construções e grupos de árvores
+    for (const sp of FARMLAND.spots) CAM_BOXES.push([sp.box.x0 - 0.6, sp.box.z0 - 0.6, sp.box.x1 + 0.6, sp.box.z1 + 0.6, 10]);
+    for (const d of FARMLAND.decor) if (d.type === 'trees' || d.type === 'orchard') CAM_BOXES.push([d.x0, d.z0, d.x1, d.z1, d.type === 'trees' ? 8 : 5]);
+  }
+  for (const s of FAVELA || FARMLAND ? [] : HOUSE_SLOTS) {
     const o = slotOrigin(s), H = LOT_ANCHORS.house;
     CAM_BOXES.push([o.x + H.x0 - 0.7 - CAM_PAD, o.z + H.z0 - 0.7 - CAM_PAD, o.x + H.x1 + 0.7 + CAM_PAD, o.z + H.z1 + 1.1 + CAM_PAD, BUILD_H + CAM_PAD]);
   }

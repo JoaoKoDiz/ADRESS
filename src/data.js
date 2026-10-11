@@ -193,6 +193,33 @@ export const FAVS = [...Array(64).keys()].map(k => 170 + k);
 /** Índices dos prédios contemporâneos em HOUSES. */
 export const MODS = [...Array(12).keys()].map(k => 234 + k);
 
+// ---- Colheita (Nível 15, índices 246–285): propriedades rurais. O destino é a construção (casa, celeiro ou galpão);
+// porteira, plantação e extras fazem parte da pista. Nenhuma "contém" outra: cada uma tem pista única.
+export const FARM_COL = { white: '#f1ece0', yellow: '#efcf6a', blue: '#7fa7d1', pink: '#e8a7a0', red: '#b8382e', brown: '#8a5a36', green: '#5f9a5a', gray: '#9a9fa6' };
+export const FARM_ROOF = { red: '#b5402f', blue: '#3f6fb0', green: '#3f8a4a', gray: '#6e737a' };
+export const FARM_GATE = { blue: '#2f6fd0', red: '#d0352a', yellow: '#f0c22a', white: '#f4f1ea', green: '#2f9a4a' };
+{
+  const names = ['Seu Zeca', 'Dona Benta', 'Seu Juca', 'Dona Filó', 'Seu Tonico', 'Dona Lourdes', 'Seu Bastião', 'Dona Zica',
+    'Seu Quim', 'Dona Nair', 'Seu Lico', 'Dona Cotinha', 'Seu Mané', 'Dona Rita', 'Seu Dito', 'Dona Antônia'];
+  const TYPES = { house: { wall: ['white', 'yellow', 'blue', 'pink'], roof: ['red', 'blue', 'green'] },
+    barn: { wall: ['red', 'brown'], roof: ['gray', 'red'] }, shed: { wall: ['gray', 'green'], roof: ['gray', 'blue'] } };
+  const T = ['house', 'house', 'barn', 'shed'], GATES = Object.keys(FARM_GATE), CROPS = ['corn', 'garden', 'orchard', 'pasture'];
+  let seed = 77; const rnd = n => { seed = (seed * 16807) % 2147483647; return seed % n; };
+  const seen = [];
+  while (HOUSES.length < 286) {
+    const type = T[rnd(4)], ty = TYPES[type];
+    const v = { type, wall: ty.wall[rnd(ty.wall.length)], roofc: ty.roof[rnd(ty.roof.length)], gate: GATES[rnd(5)], crop: CROPS[rnd(4)],
+      porch: type === 'house' && rnd(2) === 0, extra: ['tank', 'hay', null][rnd(3)] };
+    const t = ['rgate:' + v.gate, 'rwall:' + v.wall, 'rroof:' + v.roofc, 'rcrop:' + v.crop].concat(v.porch ? ['rporch'] : [], v.extra ? ['rx:' + v.extra] : []);
+    const sub = (x, y) => x.every(k => y.includes(k));
+    if (seen.some(o => sub(o, t) || sub(t, o))) continue;
+    seen.push(t);
+    HOUSES.push({ name: names[(HOUSES.length - 246) % names.length], kind: 'farm', ...v, ftags: t });
+  }
+}
+/** Índices das propriedades da Colheita em HOUSES. */
+export const FARMS = [...Array(40).keys()].map(k => 246 + k);
+
 export const ROOF_ITEMS = ['chimney', 'dish', 'solar', 'tank', 'rooster', 'kite', 'patch'];
 export const YARD_ITEMS = ['fruit', 'bare', 'cactus', 'sunflowers', 'ballbush', 'doghouse', 'pool', 'trampoline',
   'swing', 'bike', 'flamingo', 'gnome', 'clothesline', 'tires', 'fountain'];
@@ -214,6 +241,11 @@ HOUSES.forEach((h, i) => {
   if (h.kind === 'ven') {
     h.f = [];
     h.tags = ['vfac:' + h.fac, 'vsh:' + h.sh, 'vfl:' + h.floors].concat(h.arch ? ['varch'] : [], h.awning ? ['vaw:' + h.awning] : [], h.items.map(k => 'v:' + k));
+    h.roofItems = []; h.yardItems = [];
+    return;
+  }
+  if (h.kind === 'farm') {
+    h.f = []; h.tags = h.ftags.slice();
     h.roofItems = []; h.yardItems = [];
     return;
   }
@@ -287,6 +319,13 @@ export const PHRASE = {
   'loc:rialto': 'perto da Ponte de Rialto', 'loc:cafe': 'perto do café',
   'loc:stopN': 'perto da parada do bonde da entrada', 'loc:stopS': 'perto da parada do bonde dos galpões', 'loc:stopW': 'perto da parada oeste do bonde', 'loc:stopE': 'perto da parada leste do bonde',
   'loc:stopSul': 'perto da parada sul do bonde', 'loc:stopC': 'perto da parada central do bonde',
+  // Colheita (Nível 15)
+  'rgate:blue': 'porteira azul', 'rgate:red': 'porteira vermelha', 'rgate:yellow': 'porteira amarela', 'rgate:white': 'porteira branca', 'rgate:green': 'porteira verde',
+  'rwall:white': 'paredes brancas', 'rwall:yellow': 'paredes amarelas', 'rwall:blue': 'paredes azuis', 'rwall:pink': 'paredes cor-de-rosa',
+  'rwall:red': 'paredes vermelhas', 'rwall:brown': 'paredes de madeira escura', 'rwall:gray': 'paredes cinza', 'rwall:green': 'paredes verdes',
+  'rroof:red': 'telhado vermelho', 'rroof:blue': 'telhado azul', 'rroof:green': 'telhado verde', 'rroof:gray': 'telhado cinza',
+  'rcrop:corn': 'um milharal no terreno', 'rcrop:garden': 'uma horta no terreno', 'rcrop:orchard': 'árvores frutíferas no terreno', 'rcrop:pasture': 'um pasto com vacas no terreno',
+  'rporch': 'uma varanda', 'rx:tank': 'uma caixa-d’água', 'rx:hay': 'fardos de feno na entrada',
   // prédios contemporâneos (Nível 14)
   'mfac:white': 'volumes brancos', 'mfac:gray': 'volumes cinza-escuros', 'mglass:blue': 'vidros azuis', 'mglass:aqua': 'vidros verde-água',
   'mcan:wood': 'marquise de madeira', 'mcan:white': 'marquise branca', 'mtop:trees': 'árvores na cobertura',
@@ -307,6 +346,7 @@ export const REF = {
   house: { a: 'a casa', da: 'da casa', na: 'na casa', n: 'casa' },
   shop: { a: 'o prédio', da: 'do prédio', na: 'no prédio', n: 'prédio' },
   ware: { a: 'o galpão', da: 'do galpão', na: 'no galpão', n: 'galpão' },
+  barn: { a: 'o celeiro', da: 'do celeiro', na: 'no celeiro', n: 'celeiro' },
 };
 
 export const COMPLAINTS = [

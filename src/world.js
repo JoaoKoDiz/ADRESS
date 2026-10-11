@@ -3,7 +3,7 @@
 // e os moradores (criados sob demanda na primeira visita).
 import * as THREE from 'three';
 import {
-  HEDGE, ROAD, LOT, WALK, MAP, GRID, PLAZA, lotX, lotZ, slotOrigin, slotY, roadCenter, ENTRANCE, LOT_ANCHORS, SOLIDS, TERRAIN, CANAL, RAIL, VENICE, FAVELA, FLUX,
+  HEDGE, ROAD, LOT, WALK, MAP, GRID, PLAZA, lotX, lotZ, slotOrigin, slotY, roadCenter, ENTRANCE, LOT_ANCHORS, SOLIDS, TERRAIN, CANAL, RAIL, VENICE, FAVELA, FLUX, FARMLAND, SPOTS,
 } from './layout.js';
 import { HOUSES } from './data.js';
 import { buildTerrain } from './terrain.js';
@@ -71,7 +71,7 @@ function buildGround(venice = false) {
 
   // asfalto dentro da sebe (os lotes com suas calçadas ficam por cima)
   // (vai um pouco por baixo da sebe para não aparecer grama entre a sebe e a rua)
-  g.add(at(plane(MAP - 0.6, MAP - 0.6, FAVELA ? '#b3a993' : ASPHALT), MAP / 2, 0, MAP / 2));   // Morro: chão de cimento (as ruas são desenhadas à parte)
+  g.add(at(plane(MAP - 0.6, MAP - 0.6, FAVELA ? '#b3a993' : FARMLAND ? '#86b85c' : ASPHALT), MAP / 2, 0, MAP / 2));   // Colheita: grama (estradas de terra à parte)   // Morro: chão de cimento (as ruas são desenhadas à parte)
   // estrada de acesso: continua para fora pela abertura na sebe norte
   if (venice) return g;                        // Veneza: só água (sem estrada de acesso, faixas, faixa de pedestres nem bueiros)
   const OUT = 420;
@@ -85,7 +85,7 @@ function buildGround(venice = false) {
     const start = a + (len - (n * DASH + (n - 1) * GAP)) / 2;
     for (let k = 0; k < n; k++) along(start + k * (DASH + GAP) + DASH / 2);
   };
-  for (let i = 0; i <= (FAVELA ? -1 : GRID); i++) {   // (o Morro não tem grade de ruas)
+  for (let i = 0; i <= (SPOTS ? -1 : GRID); i++) {   // (o Morro não tem grade de ruas)
     const c = roadCenter(i);
     for (let j = 0; j < GRID; j++) {
       const a = lotX(j) - WALK + 1, b = lotX(j) + LOT + WALK - 1;
@@ -108,7 +108,7 @@ function buildGround(venice = false) {
     [roadCenter(0) + 1.9, lotZ(1) + 6], [lotX(1) + 5, roadCenter(2) - 1.9], [roadCenter(3) - 1.9, lotZ(2) + 11],
     [lotX(3) + 12, roadCenter(4) + 1.9], [roadCenter(4) + 1.9, lotZ(0) + 9], [lotX(0) + 13, roadCenter(1) + 1.9],
   ];
-  for (const [x, z] of FAVELA ? [] : holes) {
+  for (const [x, z] of SPOTS ? [] : holes) {
     g.add(at(cyl(0.62, 0.62, 0.03, MANHOLE_RIM, 10), x, 0.012, z));
     g.add(at(cyl(0.5, 0.5, 0.03, MANHOLE, 10), x, 0.022, z));
   }
@@ -401,7 +401,7 @@ export function createWorld({ renderer, buildLot, buildResident, yardBuilders, p
   ground.traverse(o => { if (o.isMesh && outside.has(o.material)) o.receiveShadow = false; });
   if (!venice) { scene.add(baked(buildHedge(), true, true)); scene.add(baked(outskirts, false, false)); }   // Veneza: só laguna em volta
   if (PLAZA) scene.add(baked(buildPlaza(), true, true));
-  if (TERRAIN.kind !== 'flat' || CANAL || RAIL || VENICE || FLUX) scene.add(baked(buildTerrain(), true, true));   // Bairros 9, 10 e 11
+  if (TERRAIN.kind !== 'flat' || CANAL || RAIL || VENICE || FLUX || FARMLAND) scene.add(baked(buildTerrain(), true, true));   // Bairros 9, 10 e 11
 
   // os 16 lotes, construídos uma única vez (cada casa mantém sua identidade; só muda de lugar)
   // (só as casas deste bairro: `pool`; o array é indexado pelo índice da casa)
@@ -476,10 +476,10 @@ export function createWorld({ renderer, buildLot, buildResident, yardBuilders, p
     for (let s = 0; s < layout.length; s++) {
       if (layout[s] < 0) continue;                // lote sem casa (praça, posto)
       const o = slotOrigin(s), lot = lots[layout[s]];
-      if (FAVELA) {                                 // Morro: casa centrada no ponto, virada para a rua ou o beco
-        const sp = FAVELA.spots[s], ry = Math.atan2(sp.fx, sp.fz);
-        lot.position.set(sp.cx, sp.y, sp.cz); lot.rotation.y = ry;
-        lot.userData.res = { x: sp.cx + sp.fx * 4.4, z: sp.cz + sp.fz * 4.4, ry };
+      if (SPOTS) {                                  // Morro/Colheita: construção no ponto, virada para a rua, o beco ou a estrada
+        const sp = SPOTS.spots[s], ry = Math.atan2(sp.fx, sp.fz);
+        lot.position.set(sp.px ?? sp.cx, sp.y, sp.pz ?? sp.cz); lot.rotation.y = ry;
+        lot.userData.res = sp.res || { x: sp.cx + sp.fx * 4.4, z: sp.cz + sp.fz * 4.4, ry };
         continue;
       }
       lot.position.set(o.x, slotY(s), o.z);   // Bairro 9: lotes no alto

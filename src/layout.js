@@ -26,9 +26,13 @@ export let CANAL = null;        // Bairro 10: { x0, x1, bridges: [linhas de rua]
 export let VENICE = null;        // Nível 12 (Veneza): canais no lugar das ruas, canal principal sinuoso, vielas, pracinha e pontes
 export let RAIL = null;          // Bairro 11: percurso do bondinho pelas ruas (trilhos no asfalto) e as 2 paradas
 export let FLUX = null;          // Nível 14 (Fluxo): avenida central (ruas 5 e 6, mão única) com canteiro na fileira 5, cruzamentos e retornos
-export let FAVELA = null;        // Nível 13 (Morro): plano fixo sem grade (favelaPlan.js); os "lotes" são as casas de entrega
+export let FAVELA = null;
+export let FARMLAND = null;      // Nível 15 (Colheita): plano fixo rural (farmPlan.js); os "lotes" são as propriedades
+/** Plano de pontos (Morro ou Colheita): os lotes são pontos com posição, frente e porta próprias. */
+export let SPOTS = null;        // Nível 13 (Morro): plano fixo sem grade (favelaPlan.js); os "lotes" são as casas de entrega
 export const TERRAIN = { kind: 'flat', H1: 3, H2: 6, ramps: [], stairs: [], h: () => 0 };
 import { planFavela, FAV } from './favelaPlan.js';
+import { planFarm } from './farmPlan.js';
 // Posto de gasolina, em coordenadas locais do modelo (origem no canto noroeste do lote da esquerda, frente +Z).
 // A van entra nele: só a loja, as ilhas das bombas, os pilares da cobertura, o totem, o calibrador e a lixeira barram.
 export const GAS_W = LOT * 2 + ROAD;
@@ -48,10 +52,10 @@ export const GAS_PARTS = [
 
 export const lotX = c => HEDGE + ROAD + c * STEP;          // canto noroeste do lote da coluna c
 export const lotZ = r => HEDGE + ROAD + r * STEP;          // canto noroeste do lote da linha r
-export const slotOrigin = s => FAVELA ? { x: FAVELA.spots[s].cx - 8.6, z: FAVELA.spots[s].cz - 5 }   // Morro: a casa fica no centro (8.6, 5) do "lote"
+export const slotOrigin = s => SPOTS ? { x: SPOTS.spots[s].cx - 8.6, z: SPOTS.spots[s].cz - 5 }   // Morro: a casa fica no centro (8.6, 5) do "lote"
   : { x: lotX(s % GRID), z: lotZ(Math.floor(s / GRID)) };
 /** Altura do chão do lote (Bairro 9: no alto; Morro: a faixa da casa). */
-export const slotY = s => FAVELA ? FAVELA.spots[s].y : TERRAIN.h(slotOrigin(s).x + LOT / 2, slotOrigin(s).z + LOT / 2);
+export const slotY = s => SPOTS ? SPOTS.spots[s].y : TERRAIN.h(slotOrigin(s).x + LOT / 2, slotOrigin(s).z + LOT / 2);
 export const roadCenter = i => HEDGE + ROAD / 2 + i * STEP; // eixo da rua i (0..GRID), vale para X e Z
 
 // Entrada: abertura no centro da sebe norte, alinhada com a rua do meio (GRID/2). Atualizada por configureGrid.
@@ -67,8 +71,8 @@ export const SOLIDS = [];
 
 /** Troca a grade do bairro e refaz os obstáculos-base (lotes, praça e sebe). */
 export function configureGrid(kind) {
-  GRID = kind === 'plaza6' || kind === 'grid6s' || kind === 'city6' || kind === 'city7' ? 6 : kind === 'city8' || kind === 'hill8' || kind === 'canal8' || kind === 'rail8' || kind === 'venice8' || kind === 'favela8' ? 8 : kind === 'flux10' ? 10 : kind === 'grid5' ? 5 : 4;
-  BUILD_H = kind === 'city8' || kind === 'canal8' || kind === 'rail8' ? 31 : kind === 'hill8' ? 23 : kind === 'favela8' ? 20 : kind === 'flux10' ? 16.5 : kind === 'city6' || kind === 'city7' ? 16.5 : 9.2;
+  GRID = kind === 'plaza6' || kind === 'grid6s' || kind === 'city6' || kind === 'city7' ? 6 : kind === 'city8' || kind === 'hill8' || kind === 'canal8' || kind === 'rail8' || kind === 'venice8' || kind === 'favela8' ? 8 : kind === 'flux10' || kind === 'farm10' ? 10 : kind === 'grid5' ? 5 : 4;
+  BUILD_H = kind === 'city8' || kind === 'canal8' || kind === 'rail8' ? 31 : kind === 'hill8' ? 23 : kind === 'favela8' ? 20 : kind === 'flux10' ? 16.5 : kind === 'farm10' ? 10 : kind === 'city6' || kind === 'city7' ? 16.5 : 9.2;
   // praça: bloco 2×2 central (linhas e colunas 2–3 do 6×6)
   const plazaSlots = kind === 'plaza6' ? [2 * GRID + 2, 2 * GRID + 3, 3 * GRID + 2, 3 * GRID + 3] : [];
   ENTRANCE.road = kind === 'canal8' ? 2 : Math.floor(GRID / 2);   // rua do meio (no 5×5, a 3ª rua); no Bairro 10 o meio é o canal
@@ -83,6 +87,8 @@ export function configureGrid(kind) {
     ? { x0: roadCenter(3) + ROAD / 2, x1: roadCenter(5) - ROAD / 2, cols: [3, 4], bridges: [1, 4, 7], foot: [lotZ(2) + LOT / 2, lotZ(5) + LOT / 2] }
     : null;
   FAVELA = kind === 'favela8' ? planFavela(HEDGE * 2 + ROAD * 9 + LOT * 8, HEDGE) : null;
+  FARMLAND = kind === 'farm10' ? planFarm(HEDGE * 2 + ROAD * 11 + LOT * 10, HEDGE) : null;
+  SPOTS = FAVELA || FARMLAND;
   setupFlux(kind);
   setupTerrain(kind);
   setupRail(kind);
@@ -96,7 +102,7 @@ export function configureGrid(kind) {
 
 /** Lotes que podem ter construção (sem praça e sem o canal). */
 function baseSlots() {
-  if (FAVELA) return [...FAVELA.spots.keys()];
+  if (SPOTS) return [...SPOTS.spots.keys()];
   if (FLUX) return [...Array(GRID * GRID).keys()].filter(s => Math.floor(s / GRID) !== FLUX.row && !FLUX.parks.includes(s));
   return [...Array(GRID * GRID).keys()].filter(s => !(PLAZA && PLAZA.slots.includes(s)) && !(CANAL && CANAL.cols.includes(s % GRID)) && !(RAIL && RAIL.reserved.includes(s)) && !(VENICE && VENICE.nonHouse.includes(s)));
 }
@@ -257,7 +263,7 @@ function setupVenice(kind) {
 /** Etiquetas de lugar de um lote (Bairro 9): parte mais alta, depois da subida, ao lado da escadaria. */
 const RAIL_TAGS = { 1: 'loc:stopN', 2: 'loc:stopN', 36: 'loc:stopS', 52: 'loc:stopS', 16: 'loc:stopW', 17: 'loc:stopW', 46: 'loc:stopE', 47: 'loc:stopE', 59: 'loc:stopSul', 60: 'loc:stopSul', 34: 'loc:stopC', 35: 'loc:stopC' };
 export function slotPlaceTags(s) {
-  if (FAVELA) return FAVELA.spots[s] ? FAVELA.spots[s].tags.slice() : [];
+  if (SPOTS) return SPOTS.spots[s] ? SPOTS.spots[s].tags.slice() : [];
   if (VENICE) return VENICE.tags[s] ? [VENICE.tags[s]] : [];
   if (RAIL) return RAIL_TAGS[s] ? [RAIL_TAGS[s]] : [];
   if (TERRAIN.kind !== 'hill') return [];
@@ -293,7 +299,7 @@ export function roadTopology() {
 function rebuildBaseSolids() {
   SOLIDS.length = 0;
   for (const s of HOUSE_SLOTS) {
-    if (FAVELA) { const b = FAVELA.spots[s].box; SOLIDS.push({ x0: b.x0 - 0.2, z0: b.z0 - 0.2, x1: b.x1 + 0.2, z1: b.z1 + 0.2 }); continue; }   // Morro: só a casa
+    if (SPOTS) { const b = SPOTS.spots[s].box; SOLIDS.push({ x0: b.x0 - 0.2, z0: b.z0 - 0.2, x1: b.x1 + 0.2, z1: b.z1 + 0.2 }); continue; }   // Morro: só a casa
     const o = slotOrigin(s), ware = WARE_LIST.some(w => w.slots[0] === s);
     SOLIDS.push({ x0: o.x - WALK, z0: o.z - WALK, x1: o.x + (ware ? LOT * 2 + ROAD : LOT) + WALK, z1: o.z + LOT + WALK });   // o galpão cobre os 2 lotes
   }
@@ -329,6 +335,7 @@ function rebuildBaseSolids() {
   }
   if (FAVELA) favelaSolids();
   if (FLUX) fluxSolids();
+  if (FARMLAND) farmSolids();
   if (TERRAIN.kind === 'hill') {                   // muros das encostas (nas ladeiras não há muro; nas escadarias, só para a van)
     const isRamp = (j, i) => TERRAIN.ramps.some(r => r.j === j && r.i === i), isStair = (j, i) => TERRAIN.stairs.some(r => r.j === j && r.i === i);
     const wall = (j, i, top) => { const z = top ? rc(i + 1) - hr : rc(i) + hr; SOLIDS.push({ x0: rc(j) - hr, x1: rc(j) + hr, z0: z - 0.3, z1: z + 0.3, vanOnly: isStair(j, i) }); };
@@ -346,6 +353,15 @@ function setupFlux(kind) {
   FLUX = { north: 5, south: 6, row: 5, widen: W, gaps: [0, 2, 5, 8, 10], lights: [2, 5, 8],
     parks: [3, 8, 11, 16, 24, 29, 32, 37, 61, 67, 73, 78, 84, 86, 92, 97],     // pracinhas e estacionamentos (fixos)
     median: { z0: roadCenter(5) + hr + W, z1: roadCenter(6) - hr - W } };
+}
+/** Colheita: cercas (a porteira fechada é um sólido à parte, que some ao abrir), plantações, extras e a decoração. */
+function farmSolids() {
+  for (const sp of FARMLAND.spots) {
+    for (const f of sp.fences) SOLIDS.push({ ...f });
+    SOLIDS.push({ ...sp.crop }, { ...sp.extra });
+    sp.gateSolid = { ...sp.gate.box, gate: true }; SOLIDS.push(sp.gateSolid);
+  }
+  for (const d of FARMLAND.decor) SOLIDS.push({ x0: d.x0, x1: d.x1, z0: d.z0, z1: d.z1 });
 }
 function fluxSolids() {
   const hr = ROAD / 2, m = FLUX.median, g = FLUX.gaps;
@@ -397,4 +413,4 @@ export const LOT_ANCHORS = {
 export const DOOR_POINT_LOCAL = { x: LOT_ANCHORS.doorX, z: LOT + 2.6 };
 export const DELIVERY_RADIUS = 6.0;    // distância máx. do centro da van ao ponto de entrega
 export const DELIVERY_MAX_SPEED = 3.5; // "quase parado"
-export const doorPoint = slot => { if (FAVELA) return { x: FAVELA.spots[slot].door.x, z: FAVELA.spots[slot].door.z }; const o = slotOrigin(slot); return { x: o.x + DOOR_POINT_LOCAL.x, z: o.z + DOOR_POINT_LOCAL.z }; };
+export const doorPoint = slot => { if (SPOTS) return { x: SPOTS.spots[slot].door.x, z: SPOTS.spots[slot].door.z }; const o = slotOrigin(slot); return { x: o.x + DOOR_POINT_LOCAL.x, z: o.z + DOOR_POINT_LOCAL.z }; };

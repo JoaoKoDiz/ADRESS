@@ -2,7 +2,7 @@
 // Este arquivo define como cada módulo é usado (o "contrato" entre eles).
 import * as THREE from 'three';
 import { Game, ROUTE_LEN } from './logic.js';
-import { MAP, doorPoint, slotOrigin, DELIVERY_RADIUS, DELIVERY_MAX_SPEED, VAN, VAN_START, LOT_ANCHORS, SOLIDS, ENTRANCE, HEDGE, GRID, PLAZA, HOUSE_SLOTS, configureGrid, roadCenter, setGasStations, GAS_LIST, GAS_CANOPY, GAS_ISLANDS, GAS_PARTS, TERRAIN, CANAL, VENICE, RAIL, FAVELA, FLUX, slotPlaceTags, roadTopology } from './layout.js';
+import { MAP, doorPoint, slotOrigin, DELIVERY_RADIUS, DELIVERY_MAX_SPEED, VAN, VAN_START, LOT_ANCHORS, SOLIDS, ENTRANCE, HEDGE, GRID, PLAZA, HOUSE_SLOTS, configureGrid, roadCenter, setGasStations, GAS_LIST, GAS_CANOPY, GAS_ISLANDS, GAS_PARTS, TERRAIN, CANAL, VENICE, RAIL, FAVELA, FLUX, FARMLAND, SPOTS, slotPlaceTags, roadTopology } from './layout.js';
 import { createInput } from './input.js';
 import { createWorld } from './world.js';
 import { createVan } from './van.js';
@@ -13,10 +13,12 @@ import { buildLot } from './models/house.js';
 import { buildResident } from './models/resident.js';
 import { YARD_BUILDERS } from './models/yard.js';
 import { buildShopLot } from './models/shop.js';
-import { SHOPS, HOUSES, FUTS, L1_FIXED, L6_FIXED, WARES, TWINS, VENS, FAVS, MODS } from './data.js';
+import { SHOPS, HOUSES, FUTS, L1_FIXED, L6_FIXED, WARES, TWINS, VENS, FAVS, MODS, FARMS } from './data.js';
 import { buildFavelaLot } from './models/favela.js';
 import { buildModLot, MOD_H } from './models/mod.js';
 import { createTraffic } from './traffic.js';
+import { buildFarmLot } from './models/farm.js';
+import { createTractors } from './tractors.js';
 import { buildWareLot } from './models/ware.js';
 import { createTrain } from './train.js';
 import { createTrolley } from './trolley.js';
@@ -85,9 +87,10 @@ const POOLS = { grid4: [...Array(16).keys(), ...Object.values(L1_FIXED)],   // g
   canal8: [...Array(32).keys()].concat([...Array(28).keys()].map(k => 38 + k), SHOPS, WARES, TWINS.map(t => t[1])),   // Bairro 10 (Travessia): + galpões e casas gêmeas
   rail8: [...Array(32).keys()].concat([...Array(28).keys()].map(k => 38 + k), SHOPS, WARES),
   venice8: VENS, favela8: FAVS,
+  farm10: FARMS,   // Nível 15 (Colheita): propriedades rurais
   flux10: [...Array(32).keys()].concat([...Array(28).keys()].map(k => 38 + k), SHOPS, WARES, MODS) };   // Nível 14 (Fluxo): + prédios contemporâneos   // Nível 13 (Morro): casas de laje   // Nível 12 (Veneza): casas venezianas   // Bairro 11 (Trilhos): ferrovia, estações e galpões   // Bairro 10 (Travessia): + galpões e casas gêmeas   // city8 (Bairro 8): o mesmo, em 8×8, com prédios mais altos (e os futuristas, se USE_FUTS)
 // lote de casa ou de prédio comercial
-const buildAnyLot = (h, opts) => h.kind === 'mod' ? buildModLot(h) : h.kind === 'fav' ? buildFavelaLot(h) : h.kind === 'ven' ? buildVeniceLot(h) : h.kind === 'ware' ? buildWareLot(h) : h.kind === 'shop' ? buildShopLot(h) : h.kind === 'apt' ? buildAptLot(h) : h.kind === 'fut' ? buildFutLot(h) : buildLot(h, opts);
+const buildAnyLot = (h, opts) => h.kind === 'farm' ? buildFarmLot(h) : h.kind === 'mod' ? buildModLot(h) : h.kind === 'fav' ? buildFavelaLot(h) : h.kind === 'ven' ? buildVeniceLot(h) : h.kind === 'ware' ? buildWareLot(h) : h.kind === 'shop' ? buildShopLot(h) : h.kind === 'apt' ? buildAptLot(h) : h.kind === 'fut' ? buildFutLot(h) : buildLot(h, opts);
 const USE_FUTS = false;                        // prédios futuristas (models/fut.js): guardados, desligados — troque para true para voltarem ao Bairro 8
 const TALL_FLOORS = 9;                         // Bairro 8: prédios residenciais mais altos (os outros bairros têm 5 andares)
 let world = createWorld({ renderer, buildLot: buildAnyLot, buildResident, yardBuilders: YARD_BUILDERS, pool: POOLS.grid4 });
@@ -351,13 +354,42 @@ function walkSolids() {
   for (const s of HOUSE_SLOTS) {
     const h = game.layout[s];
     if (h < 0 || boom.isDestroyed(h)) continue;
+    if (SPOTS) { out.push(SPOTS.spots[s].box); continue; }                   // Morro/Colheita: a construção (já girada)
     const o = slotOrigin(s), f = FOOT[HOUSES[h].kind] || FOOT.house;
     out.push({ x0: o.x + f[0], x1: o.x + f[1], z0: o.z + f[2], z1: o.z + f[3] });
   }
   return out;
 }
 const train = createTrain();
-const traffic = createTraffic(audio);   // Nível 14 (Fluxo): carros circulando e semáforos
+const traffic = createTraffic(audio);
+const tractors = createTractors(audio);   // Nível 15 (Colheita): tratores devagar pelas estradas de terra
+// ---------- Nível 15 (Colheita): porteiras ----------
+// Cada propriedade tem uma porteira fechada (sólido próprio em SOLIDS). Perto dela (van devagar ou a pé), E abre: a folha
+// gira para dentro e o sólido some. Toda partida nova fecha de novo.
+const gateOpen = new Set(), gateAnim = new Map();
+let nearGate = -1;
+function resetGates() {
+  gateOpen.clear(); gateAnim.clear(); nearGate = -1;
+  if (!FARMLAND) return;
+  for (const sp of FARMLAND.spots) if (sp.gateSolid) Object.assign(sp.gateSolid, sp.gate.box);
+  for (const h of world.pool) { const g = world.lotGroup(h) && world.lotGroup(h).userData.gate; if (g) g.rotation.y = 0; }
+}
+function findNearGate(x, z, r) {
+  if (!FARMLAND) return -1;
+  let best = r, found = -1;
+  FARMLAND.spots.forEach((sp, s) => { if (gateOpen.has(s)) return; const d = Math.hypot(x - sp.gate.x, z - sp.gate.z); if (d < best) { best = d; found = s; } });
+  return found;
+}
+function openGate(s) {
+  const sp = FARMLAND.spots[s]; gateOpen.add(s);
+  Object.assign(sp.gateSolid, { x0: -9999, x1: -9998, z0: -9999, z1: -9998 });
+  const h = game.layout[s], g = h >= 0 && world.lotGroup(h).userData.gate;
+  if (g) gateAnim.set(g, 0);
+  audio.bell && audio.bell();
+}
+function updateGates(dt) {
+  for (const [g, t] of gateAnim) { const k = Math.min(1, t + dt / 0.9); g.rotation.y = 1.45 * (1 - Math.pow(1 - k, 3)); if (k >= 1) gateAnim.delete(g); else gateAnim.set(g, k); }
+}   // Nível 14 (Fluxo): carros circulando e semáforos
 // ---------- Nível 12 (Trilhos): o dilema do bonde ----------
 // A van parada na frente de um bonde por 10 s seguidos → buzina, o bonde avança, corte para preto (~2 s, som de dirigir) e a
 // cena separada (trolley.js). Depois, preto de novo e volta à partida com a van num lugar seguro, perto, fora dos trilhos.
@@ -467,6 +499,7 @@ function useNeighborhood(kind) {
   hint.attach(world.scene); boom.attach(world.scene);
   if (kind === 'rail8') { world.scene.add(train.object); train.reset(); }
   if (kind === 'flux10') world.scene.add(traffic.object); else { traffic.detach(); traffic.silence(); }
+  if (kind === 'farm10') { world.scene.add(tractors.object); tractors.reset(); } else { tractors.detach(); if (kind !== 'flux10') tractors.silence(); }
   if (kind === 'venice8') { world.scene.add(npcBoats.object); npcBoats.reset(); world.scene.add(rope); } else npcBoats.detach();   // Bairro 11: trem e cancelas
   if (COMPOSED.includes(kind)) composeRound();   // Bairros 4 a 7: composição sorteada a cada partida
   else setupGrid4();
@@ -575,9 +608,10 @@ function goBack() {
 function startFree(mode = 'free') {
   // Bairro 2: 6×6 com praça; Bairro 4: 5×5 com bloqueios; o resto: 4×4
   const lv = mode === 'career' ? careerLevel : freeLevel;
-  useNeighborhood(lv === 1 ? 'plaza6' : lv === 3 ? 'grid5' : lv === 4 ? 'grid6s' : lv === 5 ? 'city6' : lv === 6 ? 'city7' : lv === 7 ? 'city8' : lv === 8 ? 'hill8' : lv === 9 ? 'venice8' : lv === 10 ? 'canal8' : lv === 11 ? 'rail8' : lv === 12 ? 'favela8' : lv === 13 ? 'flux10' : 'grid4');   // 10 = Veneza, 11 = Travessia, 12 = Trilhos
+  useNeighborhood(lv === 1 ? 'plaza6' : lv === 3 ? 'grid5' : lv === 4 ? 'grid6s' : lv === 5 ? 'city6' : lv === 6 ? 'city7' : lv === 7 ? 'city8' : lv === 8 ? 'hill8' : lv === 9 ? 'venice8' : lv === 10 ? 'canal8' : lv === 11 ? 'rail8' : lv === 12 ? 'favela8' : lv === 13 ? 'flux10' : lv === 14 ? 'farm10' : 'grid4');   // 10 = Veneza, 11 = Travessia, 12 = Trilhos
   gameMode = mode;
   if (!COMPOSED.includes(neighborhood)) setupGrid4();   // Bairro 1 tem a casa fixa; o 3 (mesma grade) não
+  resetGates();
   setupChurch();
   if (mode === 'career') career.startMatch(careerLevel); else career.stop();
   ENTRANCE_WALL.x0 = ENTRANCE.x0; ENTRANCE_WALL.x1 = ENTRANCE.x1;   // a entrada depende do bairro
@@ -1143,6 +1177,7 @@ function startNewRound() {
   monster.reset();
   boom.reset(); restartMsg = null;
   world.setLayout(game.layout);
+  resetGates();                                  // Colheita: porteiras fechadas de novo
   world.hideResident();
   van.reset();
   rig.snap({ x: van.x, z: van.z, heading: van.heading, speed: 0 });
@@ -1215,6 +1250,8 @@ function update(dt, t) {
       }
       if (free && menu.unstoppable && !heli.flying) wreck(dt);
       nearHouse = heli.flying ? -1 : findNearHouse();
+      nearGate = heli.flying || Math.abs(van.speed) > DELIVERY_MAX_SPEED ? -1 : findNearGate(van.x + Math.cos(van.heading) * 2, van.z + Math.sin(van.heading) * 2, 6.5);   // Colheita: porteira fechada à frente
+      if (nearGate >= 0) nearHouse = -1;
       if (gameMode === 'career') career.tick(van.x, van.z, van.heading);   // ruas, entradas e esquinas (missões)
       if (input.hint()) requestHint();
       if (free && input.fire()) { van.stop(); nearHouse = -1; boom.fire(van, game.slotOf); setState('missile'); break; }
@@ -1227,6 +1264,7 @@ function update(dt, t) {
         setState('fuel');
         break;
       }
+      if (nearGate >= 0 && actionLock <= 0 && input.action()) { openGate(nearGate); nearGate = -1; actionLock = 0.4; break; }
       if (nearHouse >= 0 && actionLock <= 0 && input.action()) {
         pending = nearHouse; nearHouse = -1;
         van.stop();
@@ -1293,8 +1331,11 @@ function update(dt, t) {
         parcel.position.set(walker.x + hc * 0.62, 0.62, walker.z + hs * 0.62); parcel.rotation.set(0, -walker.heading, 0);
       }
       actionLock = Math.max(0, actionLock - dt);
-      nearHouse = VENICE || FAVELA ? findNearHouseFoot() : -1;   // Veneza: dá para entregar a pé (vielas)
+      nearHouse = VENICE || SPOTS ? findNearHouseFoot() : -1;   // Veneza/Morro/Colheita: dá para entregar a pé
+      nearGate = findNearGate(walker.x, walker.z, 2.8);
+      if (nearGate >= 0) nearHouse = -1;
       if (actionLock > 0 || !input.action()) break;
+      if (nearGate >= 0) { openGate(nearGate); nearGate = -1; actionLock = 0.4; break; }
       if (nearHouse >= 0) { pending = nearHouse; nearHouse = -1; footDelivery = true; audio.bell(); setState('ring'); }
       else if (nearLounger()) startRoofTalk();             // no terraço a van fica perto: falar com ele tem prioridade
       else if (nearChurchK()) startChurchTalk();       // na igreja também (a van pode ter entrado pela porta)
@@ -1354,6 +1395,15 @@ function update(dt, t) {
     const playing = IN_GAME.includes(state) || state === 'walk';
     traffic.update(dt, obs, playing ? (walker.visible ? walker : van) : null);
     if (!playing) traffic.silence();
+  }
+  if (neighborhood === 'farm10') {                // Colheita: tratores e porteiras
+    const c = Math.cos(van.heading), s2 = Math.sin(van.heading), obs = [];
+    if (!heli.flying) obs.push({ circles: [-1.5, 0, 1.5].map(k => [van.x + c * k, van.z + s2 * k, 1.25]) });
+    if (walker.visible) obs.push({ circles: [[walker.x, walker.z, 0.6]] });
+    const playing = IN_GAME.includes(state) || state === 'walk';
+    tractors.update(dt, obs, playing ? (walker.visible ? walker : van) : null);
+    if (!playing) tractors.silence();
+    updateGates(dt);
   }
   updateTrolleySeq(dt);   // Bairro 11: o bonde espera se a van estiver nos trilhos
   if (neighborhood === 'venice8') { npcBoats.update(dt); updateBoat(dt); }
@@ -1437,7 +1487,7 @@ function updateHUD() {
     else if (state === 'fuel') hud.setMain('⛽ Abastecendo… glub, glub, glub…', 'ring');
     else if (state === 'talk' || state === 'cine' || state === 'trolley' || state === 'trolleyBlack') hud.setMain('', 'clue');
     else if (state === 'walk' && carrying) hud.setMain(walker.nearVan(van) ? 'Entrar na van devolve a caixa ao lugar dela.' : 'Carregando uma caixa… de quem será?', 'clue');
-    else if (state === 'walk') hud.setMain(walker.nearVan(van) && !nearLounger() ? 'Perto da van — aperte E para entrar.' : FAVELA ? game.mainText() : 'Passeando a pé… (não dá para entregar andando)', 'clue');   // Morro: a pé continua valendo a pista
+    else if (state === 'walk') hud.setMain(walker.nearVan(van) && !nearLounger() ? 'Perto da van — aperte E para entrar.' : SPOTS ? game.mainText() : 'Passeando a pé… (não dá para entregar andando)', 'clue');   // Morro: a pé continua valendo a pista
     else if (state === 'drive' && fuelMsgT > 0) hud.setMain(fuelMsg, 'dialog');
     else if (state === 'fadeOut') hud.setMain(restartMsg || 'Entrega concluída! Preparando a próxima…', restartMsg ? 'dialog' : 'success');
     else hud.setMain(game.mainText(), 'clue');
@@ -1445,7 +1495,7 @@ function updateHUD() {
 
   const walkNear = state === 'walk' && walker.nearVan(van) && !nearLounger() && !nearChurchK() && !missions.isOpen;
   // a pé no Bairro 1: pegar a caixa / entregar ao K / conversar (balão em cima do personagem)
-  const walkAct = state === 'walk' && nearHouse >= 0 && !missions.isOpen ? 'Entregar' : state === 'walk' && !walkNear && !missions.isOpen ? (nearParcel() ? 'Pegar a caixa' : nearK() ? (carrying ? 'Entregar a caixa' : 'Conversar') : nearLounger() || nearChurchK() ? 'Conversar' : '') : '';
+  const walkAct = state === 'walk' && nearGate >= 0 && !missions.isOpen ? 'Abrir porteira' : state === 'walk' && nearHouse >= 0 && !missions.isOpen ? 'Entregar' : state === 'walk' && !walkNear && !missions.isOpen ? (nearParcel() ? 'Pegar a caixa' : nearK() ? (carrying ? 'Entregar a caixa' : 'Conversar') : nearLounger() || nearChurchK() ? 'Conversar' : '') : '';
   if (walkAct) {
     rig.camera.updateMatrixWorld();
     promptPos.set(walker.x, walker.floor + 2.7, walker.z).project(rig.camera);
@@ -1453,8 +1503,8 @@ function updateHUD() {
     hud.setFade(fade);
     return;
   }
-  const promptLabel = walkNear ? (VENICE ? 'Entrar na lancha' : 'Entrar na van') : nearHouse >= 0 ? 'Entregar' : 'Abastecer';
-  if ((state === 'drive' && (nearHouse >= 0 || nearPump)) || walkNear) {
+  const promptLabel = walkNear ? (VENICE ? 'Entrar na lancha' : 'Entrar na van') : state === 'drive' && nearGate >= 0 ? 'Abrir porteira' : nearHouse >= 0 ? 'Entregar' : 'Abastecer';
+  if ((state === 'drive' && (nearHouse >= 0 || nearPump || nearGate >= 0)) || walkNear) {
     // Balão AO LADO da van, sobre a rua: acima dela ele cobriria o quintal da frente da casa (onde estão as pistas).
     const w = stage.clientWidth, h = stage.clientHeight;
     const c = Math.abs(Math.cos(van.heading)), s = Math.abs(Math.sin(van.heading));
@@ -1573,7 +1623,7 @@ window.ADRESS = {
   get careerLevel() { return careerLevel; },
   setCareerLevel(l) { careerLevel = l; },
   setFreeLevel(l) { freeLevel = l; },
-  walker, jamSound, train, walkSolids, trolley, get tseq() { return tseq; }, get FAVELA() { return FAVELA; }, traffic,
+  walker, jamSound, train, walkSolids, trolley, get tseq() { return tseq; }, get FAVELA() { return FAVELA; }, traffic, tractors, get FARMLAND() { return FARMLAND; }, gateOpen, openGate,
   get levelSelect() { return levelSelect; },
   shop,
   startGame: m => startFree(m), newRound: () => startNewRound(),
