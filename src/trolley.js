@@ -33,9 +33,9 @@ export function createTrolley(stageEl) {
   scene.background = new THREE.Color('#bfe3f2');
   scene.add(new THREE.HemisphereLight('#fff6e0', '#7aa35a', 1.4));
   const sun = new THREE.DirectionalLight('#ffffff', 1.9); sun.position.set(-30, 60, 40); scene.add(sun);
-  const ground = new THREE.Mesh(new THREE.PlaneGeometry(600, 600), mat('#7fb158')); ground.rotation.x = -Math.PI / 2; scene.add(ground);
-  const camera = new THREE.PerspectiveCamera(44, 16 / 9, 0.5, 900);   // fixa, do alto em 3/4 (como a ilustração clássica):
-  camera.position.set(11, 35, 31.5); camera.lookAt(-2, 0, 1.5);        // bonde à esquerda, trilho descendo até a bifurcação, K em cima à direita, os 5 embaixo
+  const ground = new THREE.Mesh(new THREE.PlaneGeometry(3000, 3000), mat('#7fb158')); ground.rotation.x = -Math.PI / 2; scene.add(ground);
+  const camera = new THREE.PerspectiveCamera(48, 16 / 9, 0.5, 2000);   // fixa, em 3/4 mais perto do chão (mesma diagonal):
+  camera.position.set(19.5, 19, 39.5); camera.lookAt(3, 0, 2.5);        // bonde à esquerda, trilho descendo até a bifurcação, K em cima à direita, os 5 embaixo
 
   // trilhos: tronco e os dois ramos (dormentes + 2 trilhos que acompanham a curva)
   const track = new THREE.Group(); scene.add(track);
@@ -46,7 +46,7 @@ export function createTrolley(stageEl) {
       for (const o of [-0.72, 0.72]) track.add(at(box(0.95, 0.14, 0.12, '#9aa1a8'), x, 0.24, z + o / Math.cos(ry), 0, ry, 0));
     }
   };
-  lay(1, START - 10, FORK); lay(-1, FORK, END + 20); lay(1, FORK, END + 20);
+  lay(1, START - 220, FORK); lay(-1, FORK, END + 150); lay(1, FORK, END + 150);   // contínuos além do limite visível
   // agulha (pedaço de trilho que muda de lado) e a alavanca com o jogador
   const needle = new THREE.Group(); needle.position.set(FORK + 0.6, 0.3, 0); scene.add(needle);
   needle.add(at(box(5, 0.14, 0.14, '#d8a43a'), 2.5, 0, 0));
