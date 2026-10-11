@@ -34,8 +34,8 @@ export function createTrolley(stageEl) {
   scene.add(new THREE.HemisphereLight('#fff6e0', '#7aa35a', 1.4));
   const sun = new THREE.DirectionalLight('#ffffff', 1.9); sun.position.set(-30, 60, 40); scene.add(sun);
   const ground = new THREE.Mesh(new THREE.PlaneGeometry(600, 600), mat('#7fb158')); ground.rotation.x = -Math.PI / 2; scene.add(ground);
-  const camera = new THREE.PerspectiveCamera(50, 16 / 9, 0.5, 900);
-  camera.position.set(-3, 17, 40); camera.lookAt(-3, 0, -3);   // de lado: bonde, bifurcação, pessoas e alavanca no quadro
+  const camera = new THREE.PerspectiveCamera(44, 16 / 9, 0.5, 900);   // fixa, do alto em 3/4 (como a ilustração clássica):
+  camera.position.set(11, 35, 31.5); camera.lookAt(-2, 0, 1.5);        // bonde à esquerda, trilho descendo até a bifurcação, K em cima à direita, os 5 embaixo
 
   // trilhos: tronco e os dois ramos (dormentes + 2 trilhos que acompanham a curva)
   const track = new THREE.Group(); scene.add(track);
