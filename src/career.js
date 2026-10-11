@@ -54,6 +54,13 @@ export function createCareer() {
   try {
     if (!localStorage.getItem(KEY + '.l4v2')) { progress[3][1] = 0; progress[3][3] = 0; save(); localStorage.setItem(KEY + '.l4v2', '1'); }
   } catch (e) { /* ignora */ }
+  // níveis reordenados (Veneza 12 → 10, Travessia 10 → 11, Trilhos 11 → 12): o progresso salvo acompanha o cenário, uma vez
+  try {
+    if (!localStorage.getItem(KEY + '.reorder10') && progress[11]) {
+      const [tra, tri, ven] = [progress[9], progress[10], progress[11]].map(r => r.slice());
+      progress[9] = ven; progress[10] = tra; progress[11] = tri; save(); localStorage.setItem(KEY + '.reorder10', '1');
+    }
+  } catch (e) { /* ignora */ }
   // a 5ª missão do Nível 3 mudou ("Uma Última Volta" → "Manobras Enjoativas"): zera o progresso antigo dela uma vez
   try {
     if (!localStorage.getItem(KEY + '.dizzy')) { progress[2][4] = 0; save(); localStorage.setItem(KEY + '.dizzy', '1'); }

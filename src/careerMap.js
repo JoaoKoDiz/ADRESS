@@ -49,7 +49,7 @@ function roadGeometry(curve, samples) {
 //   canal    — canal no meio, pontes e um galpão (Bairro 10, Travessia)
 //   rail     — trilhos em L com curva, trem e estação (Bairro 11, Trilhos)
 //   venice   — canais, fachadas venezianas coloridas e a Ponte de Rialto (Nível 12, Veneza)
-const MINI_KINDS = ['houses', 'plaza', 'barriers', 'trucks', 'gas', 'city', 'jam', 'jam8', 'hill', 'canal', 'rail', 'venice'];
+const MINI_KINDS = ['houses', 'plaza', 'barriers', 'trucks', 'gas', 'city', 'jam', 'jam8', 'hill', 'venice', 'canal', 'rail'];   // 10 = Veneza, 11 = Travessia, 12 = Trilhos
 
 /** Bairro em miniatura do tipo `kind`: base de grama, sebe, ruas e o que caracteriza o bairro. gray = fase bloqueada. */
 function miniNeighborhood(kind, colors, gray = false) {
@@ -280,7 +280,7 @@ function boardTexture(gray = false) {
 }
 
 const PALETTES = [['red', 'blue', 'yellow', 'green'], ['purple', 'red', 'gray', 'yellow', 'blue', 'green', 'red', 'yellow'], ['blue', 'green', 'red', 'purple'],
-  ['yellow', 'gray', 'blue', 'red'], ['green', 'purple', 'yellow', 'blue'], ['red'], ['blue'], ['green'], ['red', 'blue', 'yellow', 'purple'], ['blue', 'green', 'red'], ['green', 'yellow', 'purple'], ['red']];
+  ['yellow', 'gray', 'blue', 'red'], ['green', 'purple', 'yellow', 'blue'], ['red'], ['blue'], ['green'], ['red', 'blue', 'yellow', 'purple'], ['red'], ['blue', 'green', 'red'], ['green', 'yellow', 'purple']];
 
 /** Miniaturas (data URL) dos 8 bairros, desenhadas uma vez num renderizador próprio. Usadas na seleção do modo Livre. */
 export function renderMiniThumbnails(w = 480, h = 360) {
@@ -363,8 +363,8 @@ export function createCareerMap(stageEl, audio) {
     }
     // placa com o número da fase (sprite: sempre de frente para a câmera)
     const signFont = 'bold 92px "Trebuchet MS", sans-serif';
-    const signTex = textTexture(`${i === 11 ? 'NÍVEL' : 'BAIRRO'} ${i + 1}`, { width: 512, height: 160, bg: '#e8661a', fg: '#ffffff', font: signFont });
-    const signTexGray = textTexture(`${i === 11 ? 'NÍVEL' : 'BAIRRO'} ${i + 1}`, { width: 512, height: 160, bg: '#8a8a8a', fg: '#e6e6e6', font: signFont });
+    const signTex = textTexture(`${i === 9 ? 'NÍVEL' : 'BAIRRO'} ${i + 1}`, { width: 512, height: 160, bg: '#e8661a', fg: '#ffffff', font: signFont });
+    const signTexGray = textTexture(`${i === 9 ? 'NÍVEL' : 'BAIRRO'} ${i + 1}`, { width: 512, height: 160, bg: '#8a8a8a', fg: '#e6e6e6', font: signFont });
     const sign = new THREE.Sprite(new THREE.SpriteMaterial({ map: signTex }));
     sign.scale.set(9, 2.8, 1);
     sign.position.set(p.x + nx * 14, kind === 'jam8' ? 19.5 : city ? 12.5 : 9, p.z + nz * 14);   // na cidade, acima dos prédios da maquete

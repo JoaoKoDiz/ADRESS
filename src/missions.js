@@ -5,7 +5,7 @@
 // Missões por fase (nível). id liga a missão à regra em career.js; goal = quanto precisa para concluir.
 // Fases sem missões definidas usam o modelo (sem id: não avançam ainda).
 const PLACEHOLDER = () => Array.from({ length: 5 }, () => ({ id: null, name: 'MISSÃO', desc: 'Descrição breve da missão.', goal: 5 }));
-export const LEVEL_NAMES = ['Primeiros Dias', 'Olhos Abertos', 'Entregador Teimoso', 'Péssimo Senso de Direção', '', '', '', '', '', '', '', 'Veneza'];
+export const LEVEL_NAMES = ['Primeiros Dias', 'Olhos Abertos', 'Entregador Teimoso', 'Péssimo Senso de Direção', '', '', '', '', 'Veneza', '', ''];
 export const MISSIONS = [
   [
     { id: 'firstShift', name: 'Primeiro Turno', desc: 'Complete uma partida inteira, realizando as 4 entregas erradas e a 5ª entrega correta.', goal: 1 },
@@ -40,9 +40,9 @@ export const MISSIONS = [
   PLACEHOLDER(),   // Bairro 7 (a cidade com caminhões e engarrafamentos)
   PLACEHOLDER(),   // Bairro 8 (como o 7, em 8×8)
   PLACEHOLDER(),   // Bairro 9 (Encostas)
-  PLACEHOLDER(),   // Bairro 10 (Travessia)
-  PLACEHOLDER(),   // Bairro 11 (Trilhos)
-  PLACEHOLDER(),   // Nível 12 (Veneza)
+  PLACEHOLDER(),   // Nível 10 (Veneza)
+  PLACEHOLDER(),   // Bairro 11 (Travessia)
+  PLACEHOLDER(),   // Bairro 12 (Trilhos)
 ];
 
 const CSS = `
@@ -120,7 +120,7 @@ export function createMissions(store) {
   let open = false;
   function render(i) {
     const ms = MISSIONS[i], prog = store.progress[i];
-    title.textContent = `MISSÕES · ${i === 11 ? 'NÍVEL' : 'BAIRRO'} ${i + 1}${LEVEL_NAMES[i] ? ' — ' + LEVEL_NAMES[i].toUpperCase() : ''}`;
+    title.textContent = `MISSÕES · ${i === 9 ? 'NÍVEL' : 'BAIRRO'} ${i + 1}${LEVEL_NAMES[i] ? ' — ' + LEVEL_NAMES[i].toUpperCase() : ''}`;
     count.textContent = `${ms.filter((m, k) => prog[k] >= m.goal).length}/${ms.length}`;
     list.innerHTML = ms.map((m, k) => {
       const p = prog[k] || 0;

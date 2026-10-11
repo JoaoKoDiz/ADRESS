@@ -200,8 +200,8 @@ function refreshBarriers() {
   if (lv === 2) barriers.randomize(world.scene, { min: 3, max: 5, types: ['barrier'], topo });
   else if (lv === 3) barriers.randomize(world.scene, { min: 4, max: 6, types: ['barrier', 'truck', 'hole'], topo });
   else if (lv === 6 || lv === 7) barriers.randomize(world.scene, { min: 4, max: 6, types: ['truck'], jams: { min: 3, max: 4 }, topo });
-  else if (lv === 10) barriers.randomize(world.scene, { min: 1, max: 2, types: ['truck'], topo });   // Bairro 11: só caminhões (fora dos trilhos)
-  else if (lv === 8 || lv === 9) barriers.randomize(world.scene, { min: 1, max: 2, types: ['truck'], jams: { min: 1, max: 2 }, topo });   // Bairros 9 e 10: poucos   // Bairro 7: caminhões + engarrafamentos
+  else if (lv === 11) barriers.randomize(world.scene, { min: 1, max: 2, types: ['truck'], topo });   // Nível 12 (Trilhos): só caminhões (fora dos trilhos)
+  else if (lv === 8 || lv === 10) barriers.randomize(world.scene, { min: 1, max: 2, types: ['truck'], jams: { min: 1, max: 2 }, topo });   // Bairros 9 (Encostas) e 11 (Travessia): poucos   // Bairro 7: caminhões + engarrafamentos
   else barriers.clear();
 }
 /** Casa/prédio sem acesso por causa de um engarrafamento (Bairro 7): nunca entra nas entregas. */
@@ -474,7 +474,7 @@ function goBack() {
 function startFree(mode = 'free') {
   // Bairro 2: 6×6 com praça; Bairro 4: 5×5 com bloqueios; o resto: 4×4
   const lv = mode === 'career' ? careerLevel : freeLevel;
-  useNeighborhood(lv === 1 ? 'plaza6' : lv === 3 ? 'grid5' : lv === 4 ? 'grid6s' : lv === 5 ? 'city6' : lv === 6 ? 'city7' : lv === 7 ? 'city8' : lv === 8 ? 'hill8' : lv === 9 ? 'canal8' : lv === 10 ? 'rail8' : lv === 11 ? 'venice8' : 'grid4');
+  useNeighborhood(lv === 1 ? 'plaza6' : lv === 3 ? 'grid5' : lv === 4 ? 'grid6s' : lv === 5 ? 'city6' : lv === 6 ? 'city7' : lv === 7 ? 'city8' : lv === 8 ? 'hill8' : lv === 9 ? 'venice8' : lv === 10 ? 'canal8' : lv === 11 ? 'rail8' : 'grid4');   // 10 = Veneza, 11 = Travessia, 12 = Trilhos
   gameMode = mode;
   if (!COMPOSED.includes(neighborhood)) setupGrid4();   // Bairro 1 tem a casa fixa; o 3 (mesma grade) não
   setupChurch();
@@ -1254,7 +1254,7 @@ function update(dt, t) {
   heli.update(dt, state === 'drive' && heli.on ? input.lift() : 0);
   boom.update(dt);
   { const foot = state === 'walk';              // quem está perto: a van ou, a pé, o personagem
-    jamSound.update(dt, IN_GAME.includes(state) && [6, 7, 9].includes(gameMode === 'career' ? careerLevel : freeLevel) && !missions.isOpen,   // Bairros 7, 8 e 10
+    jamSound.update(dt, IN_GAME.includes(state) && [6, 7, 10].includes(gameMode === 'career' ? careerLevel : freeLevel) && !missions.isOpen,   // Bairros 7, 8 e 11 (Travessia)
       barriers.jamRects, foot ? walker.x : van.x, foot ? walker.z : van.z); }
   // entregando (campainha/diálogo) ou com o balão "E — Entregar" à vista: a câmera se volta para a casa
   const focusH = (state === 'ring' || state === 'dialog') ? pending : state === 'drive' ? nearHouse : -1;
