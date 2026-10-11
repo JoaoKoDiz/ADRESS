@@ -225,15 +225,20 @@ function setupVenice(kind) {
   };
   // onde dá para andar: ilhas das casas, praças, pontes (o resto é água)
   const walkable = (x, z) => {
-    if (onRialto(x, z) >= 0) return true;
+    if (onRialto(x, z) >= 0 || piers.some(p => inR(p, x, z))) return true;
     for (const b of bridges) if (Math.abs(z - b.z) < b.w / 2 && x > b.x0 && x < b.x1) return true;
     if (plazaNE.concat(plazaSW).some(r => inR(r, x, z, 0.3))) return !cafes.some(cf => { const dx = x - cf.cx, dz = z - cf.cz, ca = Math.cos(cf.ang), sa = Math.sin(cf.ang);
       return Math.abs(dx * ca - dz * sa) < cf.w / 2 + 0.3 && Math.abs(dx * sa + dz * ca) < cf.d / 2 + 0.3; });
     return houses.some(s => inR({ x0: X(s % 8), z0: Z(Math.floor(s / 8)), x1: X(s % 8) + L, z1: Z(Math.floor(s / 8)) + L }, x, z, 0.3));
   };
+  // píeres de atracação (nas placas "ATRACAR AQUI"): deck de madeira entrando na água, poste na ponta e a pose da lancha atracada
+  const piers = [
+    { x0: X(4) + 5, x1: X(4) + 8, z0: Z(2) + L - 0.2, z1: Z(2) + L + 7, post: { x: X(4) + 8.25, z: Z(2) + L + 6.7 }, dock: { x: X(4) + 8 + 1.5, z: Z(2) + L + 3.6, heading: Math.PI / 2 } },
+    { x0: X(3) + L - 8, x1: X(3) + L - 5, z0: Z(5) - 7, z1: Z(5) + 0.2, post: { x: X(3) + L - 8.25, z: Z(5) - 6.7 }, dock: { x: X(3) + L - 8 - 1.5, z: Z(5) - 3.6, heading: -Math.PI / 2 } },
+  ];
   const tag = {}; [12, 30].forEach(s => { tag[s] = 'loc:rialto'; }); [33, 51].forEach(s => { tag[s] = 'loc:rialto'; });
   [6, 15, 57, 48].forEach(s => { tag[s] = 'loc:cafe'; });
-  VENICE = { houses, nonHouse: [...Array(64).keys()].filter(s => !houses.includes(s)), plazaNE, plazaSW, zones, cafes, rialto, bridges,
+  VENICE = { piers, houses, nonHouse: [...Array(64).keys()].filter(s => !houses.includes(s)), plazaNE, plazaSW, zones, cafes, rialto, bridges,
     walkH, walkable, LAND, tags: tag, footOnly: [], start: { x: X(7) + L / 2, z: Z(7) + L / 2, heading: -3 * Math.PI / 4 } };
 }
 
@@ -305,6 +310,7 @@ function rebuildBaseSolids() {
   }
   if (VENICE) {                                    // Veneza: as praças são só a pé (a lancha não sobe)
     SOLIDS.push({ x0: ENTRANCE.x0, x1: ENTRANCE.x1, z0: -0.5, z1: HEDGE });   // sem a abertura do norte (a entrada é no sudeste)
+    for (const p of VENICE.piers) SOLIDS.push({ x0: p.x0, x1: p.x1, z0: p.z0, z1: p.z1, vanOnly: true });   // a lancha não atravessa o píer
     for (const r of VENICE.plazaNE.concat(VENICE.plazaSW)) SOLIDS.push({ x0: r.x0 - WALK, z0: r.z0 - WALK, x1: r.x1 + WALK, z1: r.z1 + WALK, vanOnly: true });
   }
   if (TERRAIN.kind === 'hill') {                   // muros das encostas (nas ladeiras não há muro; nas escadarias, só para a van)

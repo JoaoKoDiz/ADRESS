@@ -195,12 +195,49 @@ const van = createVan(world.scene);
 const VAN_PARTS = van.object.children.slice();
 const boat = buildBoat(); boat.visible = false; van.object.add(boat);
 let boatOn = false, boatT = 0;
-function setBoatMode(on) { boatOn = on; boat.visible = on; for (const c of VAN_PARTS) c.visible = !on; }
+function setBoatMode(on) { unmoor(); leftPier = null; boatOn = on; boat.visible = on; for (const c of VAN_PARTS) c.visible = !on; }
+// Atracar (Veneza): parada devagar perto de um píer, a lancha encosta sozinha ao lado dele, a corda liga o poste a um
+// cunho na lancha e o balanço fica maior; W/S (acelerar ou ré) solta a corda e devolve o controle.
+let moored = null, moorK = 0;
+const rope = new THREE.Mesh(new THREE.BufferGeometry(), new THREE.MeshLambertMaterial({ color: '#d9c49a' }));
+rope.visible = false; rope.frustumCulled = false;
+const _c0 = new THREE.Vector3(), _c1 = new THREE.Vector3(), _cm = new THREE.Vector3();
+let leftPier = null;                           // píer de onde acabou de sair: só atraca nele de novo depois de se afastar
+function unmoor() { leftPier = moored; moored = null; rope.visible = false; }
+function mooringStep(dt) {                     // true: a lancha está presa (o volante/acelerador não a movem)
+  if (!boatOn || !VENICE) return false;
+  if (moored) {
+    if (input.axis().z !== 0 && moorK > 0.9) { unmoor(); return false; }
+    moorK = Math.min(1, moorK + dt * 1.2);
+    const d = moored.dock, a = Math.min(1, dt * 2.5);
+    let dh = d.heading - van.heading; while (dh > Math.PI) dh -= 2 * Math.PI; while (dh < -Math.PI) dh += 2 * Math.PI;
+    van.teleport(van.x + (d.x - van.x) * a, van.z + (d.z - van.z) * a, van.heading + dh * a); van.stop();
+    return true;
+  }
+  if (leftPier && Math.hypot(van.x - leftPier.dock.x, van.z - leftPier.dock.z) > 9) leftPier = null;
+  if (Math.abs(van.speed) < 1.2) for (const p of VENICE.piers) {
+    if (p !== leftPier && Math.hypot(van.x - p.dock.x, van.z - p.dock.z) < 5.5) { moored = p; moorK = 0; rope.visible = true; van.stop(); return true; }
+  }
+  return false;
+}
 function updateBoat(dt) {
   if (!boatOn) return;
   boatT += dt;
-  boat.position.y = Math.sin(boatT * 1.7) * 0.06;                   // leve oscilação
-  boat.rotation.x = Math.sin(boatT * 1.3) * 0.025; boat.rotation.z = Math.sin(boatT * 0.9) * 0.02 + van.speed * 0.004;
+  if (moored) {                                // presa no píer: balanço lento (vertical e lateral) que a corda segura
+    boat.position.y = Math.sin(boatT * 1.1) * 0.09;
+    boat.position.z = Math.sin(boatT * 0.7) * 0.12;
+    boat.rotation.x = Math.sin(boatT * 0.9) * 0.05; boat.rotation.z = Math.sin(boatT * 0.6) * 0.025; boat.rotation.y = Math.sin(boatT * 0.5) * 0.03;
+    van.object.updateMatrixWorld(true);
+    _c1.set(1.3, 0.75, 1.15); boat.localToWorld(_c1);                // cunho na lateral virada para o píer
+    _c0.set(moored.post.x, 2.05, moored.post.z);                    // topo do poste (fixo)
+    _cm.addVectors(_c0, _c1).multiplyScalar(0.5); _cm.y -= 0.35 + Math.max(0, 1.6 - _c0.distanceTo(_c1)) * 0.3;   // leve curvatura
+    rope.geometry.dispose();
+    rope.geometry = new THREE.TubeGeometry(new THREE.QuadraticBezierCurve3(_c0.clone(), _cm.clone(), _c1.clone()), 14, 0.05, 5, false);
+  } else {
+    boat.position.z = 0; boat.rotation.y = 0;
+    boat.position.y = Math.sin(boatT * 1.7) * 0.06;                   // leve oscilação
+    boat.rotation.x = Math.sin(boatT * 1.3) * 0.025; boat.rotation.z = Math.sin(boatT * 0.9) * 0.02 + van.speed * 0.004;
+  }
   const w = boat.userData.wake; w.material.opacity = Math.min(0.35, Math.abs(van.speed) * 0.025); w.scale.x = 0.6 + Math.min(1.4, Math.abs(van.speed) * 0.08);
 }
 // barcos que circulam devagar (obstáculos móveis; vão e voltam por canais longos, nunca param no caminho)
@@ -311,7 +348,7 @@ function useNeighborhood(kind) {
   world.scene.add(walker.object); walker.show(false);
   hint.attach(world.scene);
   if (kind === 'rail8') { world.scene.add(train.object); train.reset(); }
-  if (kind === 'venice8') { world.scene.add(npcBoats.object); npcBoats.reset(); } else npcBoats.detach();   // Bairro 11: trem e cancelas
+  if (kind === 'venice8') { world.scene.add(npcBoats.object); npcBoats.reset(); world.scene.add(rope); } else npcBoats.detach();   // Bairro 11: trem e cancelas
   if (COMPOSED.includes(kind)) composeRound();   // Bairros 4 a 7: composição sorteada a cada partida
   else setupGrid4();
   van.reset();
@@ -974,7 +1011,7 @@ const BELL_TILT0 = 1.6, BELL_TILT = 2.4, BELL_FALL0 = BELL_TILT0 + BELL_TILT + 1
 function fadeBlackOff() { talkBox.fadeBlack(0, 300); }
 
 function startNewRound() {
-  footDelivery = false;
+  footDelivery = false; unmoor();
   if (cine || unwhite) { restoreLook(); cine = null; }
   walker.show(false); talkBox.hide(); walker.setFloor(0); roofWalk = null; van.object.visible = true;
   if (COMPOSED.includes(neighborhood)) composeRound(); else game.newRound();
@@ -1051,7 +1088,7 @@ function update(dt, t) {
       if (free && input.heli()) heli.toggle();
       van.setGhost(free && (menu.unstoppable || heli.high));
       if (heli.landed) van.stop();                // pousado no teto: parado até decolar (H)
-      van.update(dt, heli.landed ? { x: 0, z: 0 } : approachLock() ? approachAxis() : input.axis(), approachLock() ? 'car' : rig.mode === 'chase' ? 'car' : 'screen');
+      if (!mooringStep(dt)) van.update(dt, heli.landed ? { x: 0, z: 0 } : approachLock() ? approachAxis() : input.axis(), approachLock() ? 'car' : rig.mode === 'chase' ? 'car' : 'screen');
       if (heli.on && rig.mode === 'chase') {      // no ar, A/D giram mesmo parado
         const ax = input.axis().x;
         if (ax) van.turn(ax * 2.2 * dt * (1 - Math.min(1, Math.abs(van.speed) / 5)));

@@ -250,6 +250,14 @@ function buildVenice(g) {
   for (const b of V.bridges) deckSteps(g, 'x', b.x0, b.x1, b.z, b.w, b.rise, 10, '#e2dacb');     // pontes menores
   // entregas a pé: placa na porta (praça) e "ATRACAR AQUI" na borda das praças
   for (const s of V.footOnly) { const d = doorPoint(s); signPost(g, '▼ ENTREGA A PÉ', d.x + 3.0, d.z + 1.2, 0, '#c8402f'); }
+  for (const p of V.piers) {                                                                  // píeres de madeira com poste na ponta
+    const w = p.x1 - p.x0, d = p.z1 - p.z0, cx = (p.x0 + p.x1) / 2, cz = (p.z0 + p.z1) / 2;
+    g.add(at(box(w, 0.16, d, '#8a6440'), cx, 0.28, cz));
+    for (let z = p.z0 + 0.35; z < p.z1; z += 0.7) g.add(at(box(w + 0.1, 0.04, 0.08, '#6b4a2c'), cx, 0.37, z));
+    for (const x of [p.x0 + 0.25, p.x1 - 0.25]) for (const z of [p.z0 + 1.5, cz, p.z1 - 0.3]) g.add(at(box(0.3, 1.2, 0.3, '#5a3c22'), x, -0.2, z));
+    g.add(at(box(0.36, 2.4, 0.36, '#6b4a2c'), p.post.x, 0.9, p.post.z));                       // poste de amarrar
+    g.add(at(box(0.5, 0.12, 0.5, '#4a3020'), p.post.x, 2.12, p.post.z));
+  }
   signPost(g, '⚓ ATRACAR AQUI', lotX(4) + 2, lotZ(2) + LOT - 0.4, 0, '#c8402f');
   signPost(g, '⚓ ATRACAR AQUI', lotX(3) + LOT - 2, lotZ(5) + 0.4, Math.PI, '#c8402f');
 }
