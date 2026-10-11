@@ -79,13 +79,19 @@ export function createWalker(scene) {
     pose(x, z, heading) { st.x = x; st.z = z; st.heading = heading; apply(); },
     show(on) { root.visible = on; if (!on) st.speed = 0; },
     /** Põe o personagem ao lado da porta do motorista (tenta os dois lados da van; sem espaço, afasta mais). */
-    placeBesideVan(van, boxes) {
+    /** strict (Veneza): sem lugar livre ao lado (só água), não desce e retorna false. */
+    placeBesideVan(van, boxes, strict = false) {
       const fx = Math.cos(van.heading), fz = Math.sin(van.heading);
       for (const d of [3.4, 4.2, 5.0]) for (const side of [1, -1]) {
         const x = van.x + side * fz * d, z = van.z - side * fx * d;
-        if (!hits(x, z, boxes)) { st.x = x; st.z = z; st.heading = van.heading; st.speed = 0; apply(); return; }
+        if (!hits(x, z, boxes)) { st.x = x; st.z = z; st.heading = van.heading; st.speed = 0; apply(); return true; }
+      }
+      if (strict) {                                   // também tenta na frente e atrás (proa/popa encostada no cais)
+        for (const d of [3.6, 4.6]) for (const sg of [1, -1]) { const x = van.x + sg * fx * d, z = van.z + sg * fz * d; if (!hits(x, z, boxes)) { st.x = x; st.z = z; st.heading = van.heading; st.speed = 0; apply(); return true; } }
+        return false;
       }
       st.x = van.x + fz * 3.4; st.z = van.z - fx * 3.4; st.heading = van.heading; st.speed = 0; apply();
+      return true;
     },
     nearVan(van) { return Math.hypot(st.x - van.x, st.z - van.z) < 5.6; },
     /**

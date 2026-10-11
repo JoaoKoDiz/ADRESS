@@ -3,7 +3,7 @@
 import * as THREE from 'three';
 import { box, at, mesh, textTexture } from './models/kit.js';
 import { buildRail } from './train.js';
-import { RAIL as RAIL_PATH, TERRAIN, CANAL, GRID, MAP, HEDGE, ROAD, LOT, roadCenter } from './layout.js';
+import { RAIL as RAIL_PATH, VENICE, TERRAIN, CANAL, slotOrigin, doorPoint, GRID, MAP, HEDGE, ROAD, LOT, roadCenter } from './layout.js';
 
 const ASPHALT = '#5d6470', WALLC = '#b9ad98', CAP = '#d8cfbe', RAIL = '#e8e2d4', STEPC = '#cfc6b4';
 const WATER = '#3d8fc4', WATER_DEEP = '#2f78ad', STONE = '#a99f8f', WOOD = '#8a6a44';
@@ -14,6 +14,7 @@ export function buildTerrain() {
   if (TERRAIN.kind === 'hill') buildHill(g);
   if (CANAL) buildCanal(g);
   if (RAIL_PATH) buildRail(g);
+  if (VENICE) buildVenice(g);
   return g;
 }
 
@@ -137,4 +138,71 @@ function buildCanal(g) {
     // frade de concreto nas pontas: a van não passa
     for (const x of [C.x0 + 0.3, C.x1 - 0.3]) g.add(at(box(0.5, 0.9, 0.5, '#e0b43a'), x, 0.45, fz));
   }
+}
+
+// ---------- Nível 12 (Veneza): água, vielas, pracinha, Ponte de Rialto, pontes menores e placas de atracar ----------
+function deckSteps(g, along, from, to, cross, width, rise, n, color, side = true) {   // ponte em degraus (perfil em arco)
+  const L = to - from, d = L / n;
+  for (let k = 0; k < n; k++) {
+    const t = (k + 0.5) / n, y = 0.15 + rise * 4 * t * (1 - t), a = from + d * (k + 0.5);
+    const p = along === 'z' ? [cross, y, a] : [a, y, cross], sz = along === 'z' ? [width, 0.5, d + 0.02] : [d + 0.02, 0.5, width];
+    g.add(at(box(sz[0], sz[1], sz[2], color), p[0], p[1] - 0.25, p[2]));
+    const und = along === 'z' ? [width - 0.6, 0.9, d + 0.02] : [d + 0.02, 0.9, width - 0.6];   // arco (espessura por baixo)
+    g.add(at(box(und[0], und[1], und[2], '#cfc6b4'), p[0], p[1] - 0.95, p[2]));
+    if (side) for (const s of [-1, 1]) {                                                       // parapeito
+      const q = along === 'z' ? [cross + s * (width / 2 - 0.15), y + 0.45, a] : [a, y + 0.45, cross + s * (width / 2 - 0.15)];
+      const qs = along === 'z' ? [0.3, 0.9, d + 0.02] : [d + 0.02, 0.9, 0.3];
+      g.add(at(box(qs[0], qs[1], qs[2], '#e2dacb'), q[0], q[1], q[2]));
+    }
+  }
+}
+function signPost(g, text, x, z, ry = 0, bg = '#1f4f8a') {
+  const tex = textTexture(text, { width: 640, height: 128, bg, fg: '#ffffff', font: 'bold 54px "Trebuchet MS", sans-serif' });
+  const m = new THREE.Mesh(new THREE.PlaneGeometry(3.6, 0.72), new THREE.MeshLambertMaterial({ map: tex, side: THREE.DoubleSide }));
+  const p = new THREE.Group(); p.position.set(x, 0.15, z); p.rotation.y = ry;
+  p.add(at(box(0.14, 2.6, 0.14, '#5a3c22'), 0, 1.3, 0)); m.position.set(0, 2.5, 0.09); p.add(m);
+  g.add(p);
+}
+function buildVenice(g) {
+  const V = VENICE, W = MAP - 2 * HEDGE;
+  g.add(at(box(W, 0.06, W, '#3f8fb0'), MAP / 2, 0.02, MAP / 2));                                // água dos canais (as ilhas ficam por cima)
+  for (let k = 0; k < 120; k++) {                                                              // reflexos
+    const x = HEDGE + ((k * 37) % 97) / 97 * W, z = HEDGE + ((k * 53) % 89) / 89 * W;
+    g.add(at(box(1.8, 0.07, 0.18, '#8cc6ea'), x, 0.03, z));
+  }
+  for (const w of V.walkways) {                                                                // vielas de pedra (só a pé)
+    g.add(at(box(w.x1 - w.x0 + 0.6, 0.6, w.z1 - w.z0, '#d6cdbb'), (w.x0 + w.x1) / 2, -0.15, (w.z0 + w.z1) / 2));
+    for (let x = w.x0 + 0.8; x < w.x1; x += 1.6) g.add(at(box(0.05, 0.02, w.z1 - w.z0 - 0.4, '#bfb5a2'), x, 0.16, (w.z0 + w.z1) / 2));
+  }
+  for (const s of V.campo) {                                                                   // pracinha: piso, poço e bancos
+    const o = slotOrigin(s);
+    g.add(at(box(LOT + 0.6, 0.9, LOT + 0.6, '#bfb5a2'), o.x + LOT / 2, -0.3, o.z + LOT / 2));
+    g.add(at(box(LOT, 0.04, LOT, '#e2dacb'), o.x + LOT / 2, 0.15, o.z + LOT / 2));
+    g.add(at(box(2.4, 1.0, 2.4, '#cfc6b4'), o.x + LOT / 2, 0.65, o.z + LOT / 2));
+    g.add(at(box(1.6, 0.1, 1.6, '#2e3a46'), o.x + LOT / 2, 1.16, o.z + LOT / 2));
+    for (const [dx, dz] of [[-5, 0], [5, 0], [0, -5], [0, 5]]) g.add(at(box(dz ? 2.2 : 0.6, 0.45, dz ? 0.6 : 2.2, '#8a5a36'), o.x + LOT / 2 + dx, 0.4, o.z + LOT / 2 + dz));
+    for (const [dx, dz] of [[-6.5, -6.5], [6.5, 6.5]]) { g.add(at(box(0.4, 1.6, 0.4, '#5a3c22'), o.x + LOT / 2 + dx, 0.9, o.z + LOT / 2 + dz)); }
+  }
+  // Ponte de Rialto: pedra clara, grande arco, escadarias nas pontas e duas fileiras de lojinhas cobertas
+  const R = V.rialto;
+  deckSteps(g, 'z', R.z0 - 1.2, R.z1 + 1.2, R.x, R.w, R.rise, 28, '#ece4d2');
+  const lojas = (sx) => {
+    for (const z of [R.z0 + 4.6, R.z0 + 8.0, R.z0 + 11.4, R.z1 - 11.4, R.z1 - 8.0, R.z1 - 4.6]) {
+      const t = (z - R.z0 + 1.2) / (R.z1 - R.z0 + 2.4), y = 0.15 + R.rise * 4 * t * (1 - t);
+      g.add(at(box(2.0, 2.4, 3.0, '#f2ead8'), R.x + sx * 2.9, y + 1.2, z));
+      g.add(at(box(0.08, 1.5, 1.8, '#5b3a22'), R.x + sx * 1.88, y + 1.0, z));
+      g.add(at(box(2.4, 0.3, 3.4, '#b5532f'), R.x + sx * 2.9, y + 2.55, z, 0, 0, sx * 0.25));
+    }
+  };
+  lojas(-1); lojas(1);
+  const mid = (R.z0 + R.z1) / 2, yTop = 0.15 + R.rise;
+  g.add(at(box(R.w, 0.6, 2.4, '#f2ead8'), R.x, yTop + 3.4, mid));                               // pórtico central
+  for (const sx of [-1, 1]) g.add(at(box(0.8, 3.2, 2.4, '#f2ead8'), R.x + sx * (R.w / 2 - 0.4), yTop + 1.6, mid));
+  g.add(at(box(R.w + 0.4, 0.8, 3.0, '#b5532f'), R.x, yTop + 4.0, mid));
+  for (const z of [R.z0 - 0.4, R.z1 + 0.4]) for (const sx of [-1, 1]) g.add(at(box(1.6, 1.4, 1.6, '#cfc6b4'), R.x + sx * (R.w / 2 + 0.3), 0.6, z));   // pegões
+  signPost(g, 'PONTE DE RIALTO', R.x + R.w / 2 + 1.4, R.z0 - 2.2, 0, '#7a2f2a');
+  for (const b of V.bridges) deckSteps(g, 'x', b.x0, b.x1, b.z, b.w, b.rise, 10, '#e2dacb');     // pontes menores
+  // entregas a pé: placa no ponto de entrega (viela) e "ATRACAR" nos cais de onde se chega a pé
+  for (const s of [41, 42, 5]) { const d = doorPoint(s); signPost(g, '▼ ENTREGA A PÉ', d.x + 2.8, d.z - 1.4, 0, '#c8402f'); }
+  for (const s of [49, 50, 13]) { const o = slotOrigin(s); signPost(g, '⚓ ATRACAR AQUI', o.x + 3.4, o.z + LOT - 0.6, 0, '#c8402f'); }
 }

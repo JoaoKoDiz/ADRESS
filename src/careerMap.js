@@ -48,7 +48,8 @@ function roadGeometry(curve, samples) {
 //   hill     — dois patamares elevados com ladeira e escadaria (Bairro 9, Encostas)
 //   canal    — canal no meio, pontes e um galpão (Bairro 10, Travessia)
 //   rail     — trilhos em L com curva, trem e estação (Bairro 11, Trilhos)
-const MINI_KINDS = ['houses', 'plaza', 'barriers', 'trucks', 'gas', 'city', 'jam', 'jam8', 'hill', 'canal', 'rail'];
+//   venice   — canais, fachadas venezianas coloridas e a Ponte de Rialto (Nível 12, Veneza)
+const MINI_KINDS = ['houses', 'plaza', 'barriers', 'trucks', 'gas', 'city', 'jam', 'jam8', 'hill', 'canal', 'rail', 'venice'];
 
 /** Bairro em miniatura do tipo `kind`: base de grama, sebe, ruas e o que caracteriza o bairro. gray = fase bloqueada. */
 function miniNeighborhood(kind, colors, gray = false) {
@@ -145,6 +146,27 @@ function miniNeighborhood(kind, colors, gray = false) {
     house(-4.2, -3.8, roof(0), 0.8); house(-0.6, -3.8, roof(1), 0.8); house(3.6, 3.6, roof(2), 0.9); house(-3.2, 4.2, roof(3), 0.9);
     add(box(2.6, 5.2, 2.4, G('#9ea2a9', '#9a9a9a')), 3.6, 3.7 + 2.6, -5.0);                 // prédio no alto
     for (let f = 1; f < 4; f++) add(box(2.2, 0.4, 0.06, G('#4a6a8a', '#7a7a7a')), 3.6, 3.7 + f * 1.3, -3.78);
+    return bakeStatic(g);
+  }
+  if (kind === 'venice') {                       // Nível 12: água por todo lado, canal principal em S, fachadas e Rialto
+    add(box(13.6, 0.12, 13.6, G('#3f8fb0', '#8f8f8f')), 0, 0.46, 0);
+    const FAC = ['#efe0bd', '#d9a441', '#c8693f', '#d99a94', '#a8432e', '#d9a441'];
+    const block = (x, z, k) => {                                // conjunto de 3 casas estreitas sobre uma ilha de pedra
+      add(box(4.0, 0.3, 3.0, G('#d6cdbb', '#b5b5b5')), x, 0.6, z);
+      for (let i = 0; i < 3; i++) {
+        const hgt = 1.4 + ((k + i) % 3) * 0.5;
+        add(box(1.2, hgt, 1.8, G(FAC[(k + i) % FAC.length], '#c4c4c4')), x - 1.3 + i * 1.3, 0.75 + hgt / 2, z - 0.2);
+        add(box(1.3, 0.2, 2.0, G('#b5532f', '#8c8c8c')), x - 1.3 + i * 1.3, 0.85 + hgt, z - 0.2);
+      }
+    };
+    block(-4.4, -4.6, 0); block(0.6, -4.6, 1); block(4.6, -1.2, 2); block(-4.4, 1.0, 3); block(-0.2, 4.6, 4); block(4.6, 4.6, 5);
+    for (let k = 0; k < 9; k++) {                              // Rialto: arco de pedra clara com lojinhas em cima
+      const t = k / 8, y = 0.6 + Math.sin(t * Math.PI) * 1.4;
+      add(box(1.4, 0.3, 0.6, G('#ece4d2', '#c8c8c8')), 1.8, y, -2.4 + t * 4.8);
+    }
+    add(box(1.6, 0.7, 2.2, G('#f2ead8', '#c8c8c8')), 1.8, 2.25, 0); add(box(1.8, 0.2, 2.4, G('#b5532f', '#8c8c8c')), 1.8, 2.7, 0);
+    add(box(2.6, 0.3, 1.1, G('#f07a1d', '#9a9a9a')), -1.6, 0.6, 0.0, 0, 0.3, 0);       // lancha laranja
+    add(box(0.8, 0.4, 0.8, G('#fff3d6', '#c8c8c8')), -1.4, 0.95, 0.0);
     return bakeStatic(g);
   }
   if (kind === 'rail') {                         // Bairro 11: trilhos descendo pela lateral, curva e indo para leste; trem e estação
@@ -261,7 +283,7 @@ function boardTexture(gray = false) {
 }
 
 const PALETTES = [['red', 'blue', 'yellow', 'green'], ['purple', 'red', 'gray', 'yellow', 'blue', 'green', 'red', 'yellow'], ['blue', 'green', 'red', 'purple'],
-  ['yellow', 'gray', 'blue', 'red'], ['green', 'purple', 'yellow', 'blue'], ['red'], ['blue'], ['green'], ['red', 'blue', 'yellow', 'purple'], ['blue', 'green', 'red'], ['green', 'yellow', 'purple']];
+  ['yellow', 'gray', 'blue', 'red'], ['green', 'purple', 'yellow', 'blue'], ['red'], ['blue'], ['green'], ['red', 'blue', 'yellow', 'purple'], ['blue', 'green', 'red'], ['green', 'yellow', 'purple'], ['red']];
 
 /** Miniaturas (data URL) dos 8 bairros, desenhadas uma vez num renderizador próprio. Usadas na seleção do modo Livre. */
 export function renderMiniThumbnails(w = 480, h = 360) {
@@ -313,7 +335,7 @@ export function createCareerMap(stageEl, audio) {
   scene.add(ground);
 
   // estrada com curvas suaves
-  const pts = [[0, 0], [30, -14], [62, 6], [94, -10], [126, 10], [158, -6], [190, 8], [222, -4], [254, 10], [286, -6], [318, 8]]
+  const pts = [[0, 0], [30, -14], [62, 6], [94, -10], [126, 10], [158, -6], [190, 8], [222, -4], [254, 10], [286, -6], [318, 8], [350, -6]]
     .map(([x, z]) => new THREE.Vector3(x, 0, z));
   const curve = new THREE.CatmullRomCurve3(pts, false, 'centripetal');
   const length = curve.getLength();
@@ -330,7 +352,7 @@ export function createCareerMap(stageEl, audio) {
   // fases: bairros em miniatura alternando os lados da estrada, com placa numerada
   const stops = [], boards = [];
   let clock = 0;
-  [0.04, 0.132, 0.224, 0.316, 0.408, 0.5, 0.592, 0.684, 0.776, 0.868, 0.96].forEach((u, i) => {
+  [0.04, 0.124, 0.207, 0.291, 0.375, 0.458, 0.542, 0.625, 0.709, 0.793, 0.876, 0.96].forEach((u, i) => {
     curve.getPointAt(u, p); curve.getTangentAt(u, tg);
     const side = i % 2 ? 1 : -1;
     const nx = -tg.z * side, nz = tg.x * side;
@@ -344,8 +366,8 @@ export function createCareerMap(stageEl, audio) {
     }
     // placa com o número da fase (sprite: sempre de frente para a câmera)
     const signFont = 'bold 92px "Trebuchet MS", sans-serif';
-    const signTex = textTexture(`BAIRRO ${i + 1}`, { width: 512, height: 160, bg: '#e8661a', fg: '#ffffff', font: signFont });
-    const signTexGray = textTexture(`BAIRRO ${i + 1}`, { width: 512, height: 160, bg: '#8a8a8a', fg: '#e6e6e6', font: signFont });
+    const signTex = textTexture(`${i === 11 ? 'NÍVEL' : 'BAIRRO'} ${i + 1}`, { width: 512, height: 160, bg: '#e8661a', fg: '#ffffff', font: signFont });
+    const signTexGray = textTexture(`${i === 11 ? 'NÍVEL' : 'BAIRRO'} ${i + 1}`, { width: 512, height: 160, bg: '#8a8a8a', fg: '#e6e6e6', font: signFont });
     const sign = new THREE.Sprite(new THREE.SpriteMaterial({ map: signTex }));
     sign.scale.set(9, 2.8, 1);
     sign.position.set(p.x + nx * 14, kind === 'jam8' ? 19.5 : city ? 12.5 : 9, p.z + nz * 14);   // na cidade, acima dos prédios da maquete
@@ -367,7 +389,7 @@ export function createCareerMap(stageEl, audio) {
   const trees = new THREE.Group();
   const samples = curve.getSpacedPoints(120);
   for (let k = 0; k < 170; k++) {
-    const x = -40 + rnd() * 400, z = -70 + rnd() * 140;
+    const x = -40 + rnd() * 430, z = -70 + rnd() * 140;
     if (samples.some(s => Math.hypot(s.x - x, s.z - z) < 24)) continue;
     trees.add(tree(x, z, 0.8 + rnd() * 0.7));
   }

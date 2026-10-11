@@ -3,7 +3,7 @@
 // e os moradores (criados sob demanda na primeira visita).
 import * as THREE from 'three';
 import {
-  HEDGE, ROAD, LOT, WALK, MAP, GRID, PLAZA, lotX, lotZ, slotOrigin, roadCenter, ENTRANCE, LOT_ANCHORS, SOLIDS, TERRAIN, CANAL, RAIL,
+  HEDGE, ROAD, LOT, WALK, MAP, GRID, PLAZA, lotX, lotZ, slotOrigin, roadCenter, ENTRANCE, LOT_ANCHORS, SOLIDS, TERRAIN, CANAL, RAIL, VENICE,
 } from './layout.js';
 import { HOUSES } from './data.js';
 import { buildTerrain } from './terrain.js';
@@ -15,6 +15,7 @@ import { mat, mesh, box, cyl, cone, sphere, at, bakeStatic, dynamic, textTexture
 const SKY = '#bfe3f2';
 // grama de fora do bairro (a cidade usa uma versão amarelada e seca)
 const GREEN_GRASS = { grass: '#7fb158', patches: ['#79ab53', '#86b85e'], shadow: '#669347' };
+const LAGOON = { grass: '#3f8fb0', patches: ['#468fb0', '#3a88a8'], shadow: '#367f9e' };   // Veneza: laguna em volta
 const DRY_GRASS = { grass: '#a9ab5e', patches: ['#b3a95c', '#9fa457'], shadow: '#8d8f4c' };
 let GRASS = GREEN_GRASS.grass, GRASS_PATCHES = GREEN_GRASS.patches, GRASS_SHADOW = GREEN_GRASS.shadow;
 const ASPHALT = '#5d6470', CENTER_LINE = '#f2d45c', ZEBRA = '#ece8dc', MANHOLE = '#4b525c', MANHOLE_RIM = '#6b727d';
@@ -371,8 +372,8 @@ function buildPlaza() {
 }
 
 // ---------- API ----------
-export function createWorld({ renderer, buildLot, buildResident, yardBuilders, pool = [...Array(16).keys()], dry = false }) {
-  const pal = dry ? DRY_GRASS : GREEN_GRASS;
+export function createWorld({ renderer, buildLot, buildResident, yardBuilders, pool = [...Array(16).keys()], dry = false, venice = false }) {
+  const pal = venice ? LAGOON : dry ? DRY_GRASS : GREEN_GRASS;
   GRASS = pal.grass; GRASS_PATCHES = pal.patches; GRASS_SHADOW = pal.shadow;
   if (renderer) {
     renderer.toneMapping = THREE.NeutralToneMapping;
@@ -390,16 +391,16 @@ export function createWorld({ renderer, buildLot, buildResident, yardBuilders, p
   const solidsStart = SOLIDS.length;          // os troncos das árvores de fora entram em SOLIDS aqui
   const ground = buildGround();
   const outskirts = buildOutskirts(ground);
+  if (venice) SOLIDS.length = solidsStart;              // Veneza: sem árvores de fora (laguna)
   const extraSolids = SOLIDS.slice(solidsStart);
   scene.add(baked(ground, false, true));
   // A grama de fora do bairro não recebe sombras (nada relevante projeta nela; as árvores de fora usam sombras
   // falsas): economiza o filtro de sombra em boa parte da tela — ~15% do tempo de GPU na UHD integrada.
   const outside = new Set([GRASS, ...GRASS_PATCHES, GRASS_SHADOW].map(c => mat(c)));
   ground.traverse(o => { if (o.isMesh && outside.has(o.material)) o.receiveShadow = false; });
-  scene.add(baked(buildHedge(), true, true));
-  scene.add(baked(outskirts, false, false));
+  if (!venice) { scene.add(baked(buildHedge(), true, true)); scene.add(baked(outskirts, false, false)); }   // Veneza: só laguna em volta
   if (PLAZA) scene.add(baked(buildPlaza(), true, true));
-  if (TERRAIN.kind !== 'flat' || CANAL || RAIL) scene.add(baked(buildTerrain(), true, true));   // Bairros 9, 10 e 11
+  if (TERRAIN.kind !== 'flat' || CANAL || RAIL || VENICE) scene.add(baked(buildTerrain(), true, true));   // Bairros 9, 10 e 11
 
   // os 16 lotes, construídos uma única vez (cada casa mantém sua identidade; só muda de lugar)
   // (só as casas deste bairro: `pool`; o array é indexado pelo índice da casa)

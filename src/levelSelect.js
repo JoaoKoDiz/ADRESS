@@ -34,7 +34,9 @@ body.lsel-on .title-play, body.lsel-on .title-driver { visibility: hidden; }   /
 .lsel-hint b { display: inline-block; min-width: 1.3em; text-align: center; color: #fff; background: #ff7a1a; border-radius: 5px; padding: .05em .3em; margin: 0 .12em; }
 `;
 // nomes dos bairros (só nesta tela do Modo Livre)
-const NAMES = ['Bairro Raízes', 'Bairro Horizontes', 'Bairro Constância', 'Bairro Veredas', 'Bairro Ofício', 'Bairro Mirante', 'Bairro Altitude', 'Bairro Ápice', 'Bairro Encostas', 'Bairro Travessia', 'Bairro Trilhos'];
+const NAMES = ['Bairro Raízes', 'Bairro Horizontes', 'Bairro Constância', 'Bairro Veredas', 'Bairro Ofício', 'Bairro Mirante', 'Bairro Altitude', 'Bairro Ápice', 'Bairro Encostas', 'Bairro Travessia', 'Bairro Trilhos', 'Veneza'];
+// título do cartão (o Nível 12 é especial: "NÍVEL 12" em vez de "BAIRRO 12")
+const TITLE = i => (i === 11 ? 'NÍVEL ' : 'BAIRRO ') + (i + 1);
 const COLS = 4, PER = 8;                    // 8 por página (4×2); as páginas seguem sozinhas conforme entram bairros
 
 export function createLevelSelect(onPick) {
@@ -60,7 +62,7 @@ export function createLevelSelect(onPick) {
 
   function paint() {
     if (Math.floor(sel / PER) !== page) showPage(Math.floor(sel / PER));
-    cards.forEach((c, i) => c.classList.toggle('sel', i === sel)); playBtn.textContent = `Jogar no Bairro ${sel + 1}`;
+    cards.forEach((c, i) => c.classList.toggle('sel', i === sel)); playBtn.textContent = sel === 11 ? 'Jogar em Veneza' : `Jogar no Bairro ${sel + 1}`;
   }
   /** Mostra os 8 espaços da página p: bairros disponíveis e, no resto, cartões "Em breve" (não selecionáveis). */
   function showPage(p) {
@@ -88,7 +90,7 @@ export function createLevelSelect(onPick) {
     cards = urls.map((u, i) => {
       const c = document.createElement('div');
       c.className = 'lsel-card';
-      c.innerHTML = `<img src="${u}" alt=""><div class="lbl">BAIRRO ${i + 1}<small>${NAMES[i] || ''}</small></div>`;
+      c.innerHTML = `<img src="${u}" alt=""><div class="lbl">${TITLE(i)}<small>${NAMES[i] || ''}</small></div>`;
       c.addEventListener('click', () => { sel = i; paint(); });            // clique seleciona; o botão (ou E) joga
       c.addEventListener('dblclick', () => { sel = i; paint(); onPick(i); });
       return c;

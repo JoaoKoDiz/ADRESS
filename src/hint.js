@@ -152,7 +152,7 @@ export function createHintArrow(scene, audio) {
       cx = o.x + HX; cz = o.z + HZ;
       roofColor = ROOF_COL[HOUSES[h].roof] || '#8f8a82';      // prédios: laje cinza
       const kind = HOUSES[h].kind;
-      surf = kind === 'apt' ? GROUND_Y + aptHeight(HOUSES[h]) + 0.1 : kind === 'fut' ? GROUND_Y + futTopY(HOUSES[h]) + 0.1 : kind === 'shop' ? GROUND_Y + 6.7 : kind === 'ware' ? GROUND_Y + 8.4 : ROOF_SURF;
+      surf = kind === 'apt' ? GROUND_Y + aptHeight(HOUSES[h]) + 0.1 : kind === 'fut' ? GROUND_Y + futTopY(HOUSES[h]) + 0.1 : kind === 'shop' ? GROUND_Y + 6.7 : kind === 'ware' ? GROUND_Y + 8.4 : kind === 'ven' ? 0.15 + 3 * HOUSES[h].floors + 0.9 : ROOF_SURF;
       surf += TERRAIN.h(cx, cz);                              // Bairro 9: lotes no alto da encosta
       tan = kind === 'house' ? TAN : 0; slope = kind === 'house' ? THETA : 0;
       arrow.position.set(cx, START_Y, cz);

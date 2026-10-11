@@ -129,6 +129,33 @@ TWIN_OF.forEach((o, i) => { const c = HOUSES[o]; HOUSES.push({ name: TWIN_NAMES[
 /** Pares [original, gêmea]. */
 export const TWINS = TWIN_OF.map((o, i) => [o, 104 + i]);
 
+// ---- Veneza (Nível 12, índices 110–169): casas estreitas de 2 a 4 andares, viradas para os canais ----
+// fachada (creme, ocre, terracota, rosa envelhecido, vermelho queimado), persianas, andares e itens visíveis da água.
+export const VEN_FACADE = { cream: '#efe0bd', ochre: '#d9a441', terracotta: '#c8693f', rose: '#d99a94', red: '#a8432e' };
+export const VEN_SHUTTER = { green: '#3f7a4a', blue: '#3a6688', brown: '#6b4428' };
+export const VEN_AWNING = { red: '#c8402f', green: '#3c8f52', blue: '#2f6fb0' };
+{
+  const names = ['Signora Lucia', 'Signor Marco', 'Signora Bianca', 'Signor Paolo', 'Signora Giulia', 'Signor Enzo', 'Signora Rosa',
+    'Signor Bruno', 'Signora Elena', 'Signor Carlo', 'Signora Marta', 'Signor Piero', 'Signora Teresa', 'Signor Gino', 'Signora Ada',
+    'Signor Luigi', 'Signora Nina', 'Signor Franco', 'Signora Vera', 'Signor Aldo'];
+  const FAC = Object.keys(VEN_FACADE), SH = Object.keys(VEN_SHUTTER), AW = Object.keys(VEN_AWNING);
+  const ITEMS = ['pots', 'flowers', 'laundry', 'poles', 'lamp'];
+  let seed = 12;
+  const rnd = n => { seed = (seed * 16807) % 2147483647; return seed % n; };
+  const seen = new Set();
+  for (let i = 0; HOUSES.length < 170; i++) {
+    const v = { fac: FAC[rnd(5)], sh: SH[rnd(3)], floors: 2 + rnd(3), arch: rnd(2) === 1, awning: rnd(3) === 0 ? AW[rnd(3)] : null,
+      items: ITEMS.filter(() => rnd(3) === 0).slice(0, 2) };
+    const t = [v.fac, v.sh, 'f' + v.floors].concat(v.arch ? ['arch'] : [], v.awning ? ['aw' + v.awning] : [], v.items);
+    const sub = (x, y) => x.every(k => y.includes(k));          // nenhuma casa pode "conter" outra: cada uma tem pista única
+    if ([...seen].some(o => sub(o, t) || sub(t, o))) continue;
+    seen.add(t);
+    HOUSES.push({ name: names[(HOUSES.length - 110) % names.length], kind: 'ven', ...v });
+  }
+}
+/** Índices das casas de Veneza em HOUSES. */
+export const VENS = [...Array(60).keys()].map(k => 110 + k);
+
 export const ROOF_ITEMS = ['chimney', 'dish', 'solar', 'tank', 'rooster', 'kite', 'patch'];
 export const YARD_ITEMS = ['fruit', 'bare', 'cactus', 'sunflowers', 'ballbush', 'doghouse', 'pool', 'trampoline',
   'swing', 'bike', 'flamingo', 'gnome', 'clothesline', 'tires', 'fountain'];
@@ -144,6 +171,12 @@ HOUSES.forEach((h, i) => {
   if (h.kind === 'fut') {
     h.f = [];
     h.tags = ['glow:' + h.glow, 'crown:' + h.crown];
+    h.roofItems = []; h.yardItems = [];
+    return;
+  }
+  if (h.kind === 'ven') {
+    h.f = [];
+    h.tags = ['vfac:' + h.fac, 'vsh:' + h.sh, 'vfl:' + h.floors].concat(h.arch ? ['varch'] : [], h.awning ? ['vaw:' + h.awning] : [], h.items.map(k => 'v:' + k));
     h.roofItems = []; h.yardItems = [];
     return;
   }
@@ -197,6 +230,14 @@ export const PHRASE = {
   // lugar (Bairros 9 e 10): vão no fim da pista
   'loc:top': 'na parte mais alta do bairro', 'loc:ramp': 'logo depois da subida', 'loc:stairs': 'ao lado da escadaria',
   'side:east': 'no Lado Leste', 'side:west': 'no Lado Oeste',
+  // Veneza
+  'vfac:cream': 'fachada creme', 'vfac:ochre': 'fachada ocre', 'vfac:terracotta': 'fachada terracota', 'vfac:rose': 'fachada rosa envelhecido',
+  'vfac:red': 'fachada vermelho queimado', 'vsh:green': 'persianas verdes', 'vsh:blue': 'persianas azuis', 'vsh:brown': 'persianas marrons',
+  'vfl:2': 'dois andares', 'vfl:3': 'três andares', 'vfl:4': 'quatro andares', varch: 'janelas em arco',
+  'vaw:red': 'toldo vermelho', 'vaw:green': 'toldo verde', 'vaw:blue': 'toldo azul',
+  'v:pots': 'dois vasos na sacada', 'v:flowers': 'flores nas janelas', 'v:laundry': 'roupas no varal', 'v:poles': 'postes listrados na entrada',
+  'v:lamp': 'uma lanterna na porta',
+  'loc:rialto': 'perto da Ponte de Rialto', 'loc:campo': 'perto da pracinha',
   'loc:stationN': 'perto da estação da entrada', 'loc:stationS': 'perto da estação dos galpões', 'loc:crossing': 'ao lado da passagem de trem',
   'gnd:dumpster': 'uma caçamba na frente', 'gnd:moto': 'uma moto estacionada na frente', 'gnd:guard': 'uma guarita na entrada', 'gnd:bikes': 'um bicicletário na frente',
 };

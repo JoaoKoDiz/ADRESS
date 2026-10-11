@@ -23,6 +23,7 @@ export let GAS_LIST = [];       // postos da partida: { slots, x0, z0, x1, z1 } 
 export let WARE_LIST = [];      // galpões (Bairro 10): { slots: [s, s+1] } — ocupam 2 lotes vizinhos + a rua entre eles (fechada)
 export let CANAL = null;        // Bairro 10: { x0, x1, bridges: [linhas de rua], foot: [z das passarelas], cols: [3, 4] }
 // Terreno (Bairro 9): altura do chão em (x, z). Fora do Bairro 9 é sempre 0.
+export let VENICE = null;        // Nível 12 (Veneza): canais no lugar das ruas, canal principal sinuoso, vielas, pracinha e pontes
 export let RAIL = null;          // Bairro 11: ferrovia em L (rua lateral oeste → curva → linha 6), 2 estações e 2 passagens de nível
 export const TERRAIN = { kind: 'flat', H1: 3, H2: 6, ramps: [], stairs: [], h: () => 0 };
 // Posto de gasolina, em coordenadas locais do modelo (origem no canto noroeste do lote da esquerda, frente +Z).
@@ -60,7 +61,7 @@ export const SOLIDS = [];
 
 /** Troca a grade do bairro e refaz os obstáculos-base (lotes, praça e sebe). */
 export function configureGrid(kind) {
-  GRID = kind === 'plaza6' || kind === 'grid6s' || kind === 'city6' || kind === 'city7' ? 6 : kind === 'city8' || kind === 'hill8' || kind === 'canal8' || kind === 'rail8' ? 8 : kind === 'grid5' ? 5 : 4;
+  GRID = kind === 'plaza6' || kind === 'grid6s' || kind === 'city6' || kind === 'city7' ? 6 : kind === 'city8' || kind === 'hill8' || kind === 'canal8' || kind === 'rail8' || kind === 'venice8' ? 8 : kind === 'grid5' ? 5 : 4;
   BUILD_H = kind === 'city8' || kind === 'canal8' || kind === 'rail8' ? 31 : kind === 'hill8' ? 23 : kind === 'city6' || kind === 'city7' ? 16.5 : 9.2;
   // praça: bloco 2×2 central (linhas e colunas 2–3 do 6×6)
   const plazaSlots = kind === 'plaza6' ? [2 * GRID + 2, 2 * GRID + 3, 3 * GRID + 2, 3 * GRID + 3] : [];
@@ -77,6 +78,7 @@ export function configureGrid(kind) {
     : null;
   setupTerrain(kind);
   setupRail(kind);
+  setupVenice(kind);
   GAS_LIST = []; WARE_LIST = [];
   HOUSE_SLOTS = baseSlots();
   rebuildBaseSolids();
@@ -84,7 +86,7 @@ export function configureGrid(kind) {
 
 /** Lotes que podem ter construção (sem praça e sem o canal). */
 function baseSlots() {
-  return [...Array(GRID * GRID).keys()].filter(s => !(PLAZA && PLAZA.slots.includes(s)) && !(CANAL && CANAL.cols.includes(s % GRID)) && !(RAIL && RAIL.reserved.includes(s)));
+  return [...Array(GRID * GRID).keys()].filter(s => !(PLAZA && PLAZA.slots.includes(s)) && !(CANAL && CANAL.cols.includes(s % GRID)) && !(RAIL && RAIL.reserved.includes(s)) && !(VENICE && VENICE.water.concat(VENICE.campo).includes(s)));
 }
 /** Postos (e galpões, Bairro 10) em pares de lotes vizinhos ([s, s+1], mesma linha). O galpão fica no lote da esquerda
  *  (é um destino de entrega); o da direita e a rua entre os dois ficam por baixo dele. Refaz os obstáculos-base. */
@@ -134,10 +136,48 @@ function setupRail(kind) {
     crossings: [1, 2].map(j => ({ j, x: rc(j), s: a + arc + rc(j) - (x0 + R) })) };
 }
 
+// ---- Nível 12 (Veneza): todas as ruas são canais; o canal principal (mais largo) serpenteia por 10 quadras em S, de oeste a
+// leste; a Ponte de Rialto o cruza na quadra 27 (linha 3, coluna 3). Alguns trechos de rua são vielas de pedra (só a pé) e
+// a quadra 54 é uma pracinha. Pontes menores ligam os cais da frente das ilhas. A lancha passa por baixo de todas as pontes.
+function setupVenice(kind) {
+  if (kind !== 'venice8') { VENICE = null; return; }
+  const rc = roadCenter, hr = ROAD / 2;
+  const water = [[4, 0], [4, 1], [4, 2], [3, 2], [3, 3], [3, 4], [3, 5], [4, 5], [4, 6], [4, 7]].map(([r, c]) => r * 8 + c);
+  const walkways = [[1, 6], [2, 6], [5, 1]].map(([j, i]) => ({ x0: rc(j) + hr, x1: rc(j + 1) - hr, z0: rc(i) - hr, z1: rc(i) + hr }));
+  const rialto = { x: lotX(3) + LOT / 2, w: 8.4, z0: lotZ(2) + LOT, z1: lotZ(4), rise: 5.4 };
+  const bridges = [[1, 3], [6, 4], [5, 6], [0, 2], [7, 2]].map(([i, j]) => ({ x0: rc(j) - hr - 0.3, x1: rc(j) + hr + 0.3, z: lotZ(i) + 14.6, w: 2.6, rise: 2.5 }));
+  const LAND = 0.15;
+  const walkH = (x, z) => {
+    const R = rialto;
+    if (Math.abs(x - R.x) < R.w / 2 && z > R.z0 - 1.2 && z < R.z1 + 1.2) { const t = Math.min(1, Math.max(0, (z - R.z0 + 1.2) / (R.z1 - R.z0 + 2.4))); return LAND + R.rise * 4 * t * (1 - t); }
+    for (const b of bridges) if (Math.abs(z - b.z) < b.w / 2 && x > b.x0 && x < b.x1) { const t = (x - b.x0) / (b.x1 - b.x0); return LAND + b.rise * 4 * t * (1 - t); }
+    return LAND;
+  };
+  // água (para quem anda a pé): ruas-canal e quadras do canal principal, menos vielas, pontes e a Rialto
+  const holesX = (z0, z1) => walkways.filter(w => w.z0 < z1 && w.z1 > z0).map(w => [w.x0, w.x1])
+    .concat(rialto.z0 - 0.1 < z1 && rialto.z1 + 0.1 > z0 ? [[rialto.x - rialto.w / 2, rialto.x + rialto.w / 2]] : []);
+  const holesZ = (x0, x1) => bridges.filter(b => b.x0 < x1 && b.x1 > x0).map(b => [b.z - b.w / 2, b.z + b.w / 2]);
+  const cut = (a0, a1, holes) => { const out = []; let a = a0; for (const [h0, h1] of holes.sort((p, q) => p[0] - q[0])) { if (h0 > a) out.push([a, h0]); a = Math.max(a, h1); } if (a < a1) out.push([a, a1]); return out; };
+  const waterBoxes = [];
+  for (let i = 0; i <= GRID; i++) {
+    const z0 = rc(i) - hr, z1 = rc(i) + hr;
+    for (const [x0, x1] of cut(HEDGE, MAP - HEDGE, holesX(z0, z1))) waterBoxes.push({ x0, x1, z0, z1 });
+    const X0 = rc(i) - hr, X1 = rc(i) + hr;
+    for (const [a, b] of cut(HEDGE, MAP - HEDGE, holesZ(X0, X1))) waterBoxes.push({ x0: X0, x1: X1, z0: a, z1: b });
+  }
+  for (const s of water) {
+    const o = slotOrigin(s), z0 = o.z - 0.5, z1 = o.z + LOT + 0.5;
+    for (const [x0, x1] of cut(o.x - 0.5, o.x + LOT + 0.5, holesX(z0, z1))) waterBoxes.push({ x0, x1, z0, z1 });
+  }
+  VENICE = { water, campo: [54], walkways, rialto, bridges, walkH, waterBoxes, LAND,
+    tags: { 19: 'loc:rialto', 20: 'loc:rialto', 35: 'loc:rialto', 36: 'loc:rialto', 46: 'loc:campo', 53: 'loc:campo', 55: 'loc:campo', 62: 'loc:campo' } };
+}
+
 /** Etiquetas de lugar de um lote (Bairro 9): parte mais alta, depois da subida, ao lado da escadaria. */
 const RAIL_TAGS = { 1: 'loc:stationN', 8: 'loc:stationN', 42: 'loc:stationS', 51: 'loc:stationS', 58: 'loc:stationS',
   40: 'loc:crossing', 41: 'loc:crossing', 56: 'loc:crossing', 57: 'loc:crossing' };
 export function slotPlaceTags(s) {
+  if (VENICE) return VENICE.tags[s] ? [VENICE.tags[s]] : [];
   if (RAIL) return RAIL_TAGS[s] ? [RAIL_TAGS[s]] : [];
   if (TERRAIN.kind !== 'hill') return [];
   const r = Math.floor(s / GRID), c = s % GRID, out = [];
@@ -205,6 +245,10 @@ function rebuildBaseSolids() {
       z = m.b;
     }
     SOLIDS.push({ x0: CANAL.x0, x1: CANAL.x1, z0: z, z1: MAP - HEDGE });
+  }
+  if (VENICE) {                                    // Veneza: vielas e pracinha são só a pé (a lancha não sobe)
+    for (const w of VENICE.walkways) SOLIDS.push({ ...w, vanOnly: true });
+    for (const s of VENICE.campo) { const o = slotOrigin(s); SOLIDS.push({ x0: o.x - WALK, z0: o.z - WALK, x1: o.x + LOT + WALK, z1: o.z + LOT + WALK, vanOnly: true }); }
   }
   if (RAIL) {                                      // ferrovia: faixa da rua 0 (até depois da curva) e os lotes dos trilhos/estações
     SOLIDS.push({ x0: HEDGE - 0.2, x1: rc(0) + hr + 0.2, z0: HEDGE, z1: RAIL.zc - 1.6 });

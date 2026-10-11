@@ -2,7 +2,7 @@
 // Este arquivo define como cada módulo é usado (o "contrato" entre eles).
 import * as THREE from 'three';
 import { Game, ROUTE_LEN } from './logic.js';
-import { MAP, doorPoint, slotOrigin, DELIVERY_RADIUS, DELIVERY_MAX_SPEED, VAN, LOT_ANCHORS, SOLIDS, ENTRANCE, HEDGE, GRID, PLAZA, HOUSE_SLOTS, configureGrid, roadCenter, setGasStations, GAS_LIST, GAS_CANOPY, GAS_ISLANDS, GAS_PARTS, TERRAIN, CANAL, slotPlaceTags, roadTopology } from './layout.js';
+import { MAP, doorPoint, slotOrigin, DELIVERY_RADIUS, DELIVERY_MAX_SPEED, VAN, LOT_ANCHORS, SOLIDS, ENTRANCE, HEDGE, GRID, PLAZA, HOUSE_SLOTS, configureGrid, roadCenter, setGasStations, GAS_LIST, GAS_CANOPY, GAS_ISLANDS, GAS_PARTS, TERRAIN, CANAL, VENICE, slotPlaceTags, roadTopology } from './layout.js';
 import { createInput } from './input.js';
 import { createWorld } from './world.js';
 import { createVan } from './van.js';
@@ -13,9 +13,10 @@ import { buildLot } from './models/house.js';
 import { buildResident } from './models/resident.js';
 import { YARD_BUILDERS } from './models/yard.js';
 import { buildShopLot } from './models/shop.js';
-import { SHOPS, HOUSES, FUTS, L1_FIXED, L6_FIXED, WARES, TWINS } from './data.js';
+import { SHOPS, HOUSES, FUTS, L1_FIXED, L6_FIXED, WARES, TWINS, VENS } from './data.js';
 import { buildWareLot } from './models/ware.js';
 import { createTrain } from './train.js';
+import { buildVeniceLot, buildBoat, buildBoatNpc, VEN_X0, VEN_X1, VEN_Z0, VEN_Z1 } from './models/venice.js';
 import { buildAptLot, APT_ROOF, aptRoofHeight, aptRoofY, APT_BUILD } from './models/apt.js';
 import { buildFutLot, futRoofHeight } from './models/fut.js';
 import { createHintArrow } from './hint.js';
@@ -75,9 +76,10 @@ const POOLS = { grid4: [...Array(16).keys(), ...Object.values(L1_FIXED)],   // g
   city8: [...Array(32).keys()].concat([...Array(28).keys()].map(k => 38 + k), SHOPS, USE_FUTS ? FUTS : []),
   hill8: [...Array(32).keys()].concat([...Array(28).keys()].map(k => 38 + k), SHOPS),   // Bairro 9 (Encostas): casas, prédios, comércio
   canal8: [...Array(32).keys()].concat([...Array(28).keys()].map(k => 38 + k), SHOPS, WARES, TWINS.map(t => t[1])),   // Bairro 10 (Travessia): + galpões e casas gêmeas
-  rail8: [...Array(32).keys()].concat([...Array(28).keys()].map(k => 38 + k), SHOPS, WARES) };   // Bairro 11 (Trilhos): ferrovia, estações e galpões   // Bairro 10 (Travessia): + galpões e casas gêmeas   // city8 (Bairro 8): o mesmo, em 8×8, com prédios mais altos (e os futuristas, se USE_FUTS)
+  rail8: [...Array(32).keys()].concat([...Array(28).keys()].map(k => 38 + k), SHOPS, WARES),
+  venice8: VENS };   // Nível 12 (Veneza): casas venezianas   // Bairro 11 (Trilhos): ferrovia, estações e galpões   // Bairro 10 (Travessia): + galpões e casas gêmeas   // city8 (Bairro 8): o mesmo, em 8×8, com prédios mais altos (e os futuristas, se USE_FUTS)
 // lote de casa ou de prédio comercial
-const buildAnyLot = (h, opts) => h.kind === 'ware' ? buildWareLot(h) : h.kind === 'shop' ? buildShopLot(h) : h.kind === 'apt' ? buildAptLot(h) : h.kind === 'fut' ? buildFutLot(h) : buildLot(h, opts);
+const buildAnyLot = (h, opts) => h.kind === 'ven' ? buildVeniceLot(h) : h.kind === 'ware' ? buildWareLot(h) : h.kind === 'shop' ? buildShopLot(h) : h.kind === 'apt' ? buildAptLot(h) : h.kind === 'fut' ? buildFutLot(h) : buildLot(h, opts);
 const USE_FUTS = false;                        // prédios futuristas (models/fut.js): guardados, desligados — troque para true para voltarem ao Bairro 8
 const TALL_FLOORS = 9;                         // Bairro 8: prédios residenciais mais altos (os outros bairros têm 5 andares)
 let world = createWorld({ renderer, buildLot: buildAnyLot, buildResident, yardBuilders: YARD_BUILDERS, pool: POOLS.grid4 });
@@ -189,6 +191,54 @@ function refreshBarriers() {
 const jamBlocked = h => barriers.jammedSlots.includes(game.slotOf[h]);
 function applyJams() { if (barriers.jammedSlots.length) game.newDelivery(game.pool.filter(h => !jamBlocked(h))); }
 const van = createVan(world.scene);
+// Nível 12 (Veneza): a van vira a lancha de entregas (aparência fixa; a van e suas peças ficam escondidas)
+const VAN_PARTS = van.object.children.slice();
+const boat = buildBoat(); boat.visible = false; van.object.add(boat);
+let boatOn = false, boatT = 0;
+function setBoatMode(on) { boatOn = on; boat.visible = on; for (const c of VAN_PARTS) c.visible = !on; }
+function updateBoat(dt) {
+  if (!boatOn) return;
+  boatT += dt;
+  boat.position.y = Math.sin(boatT * 1.7) * 0.06;                   // leve oscilação
+  boat.rotation.x = Math.sin(boatT * 1.3) * 0.025; boat.rotation.z = Math.sin(boatT * 0.9) * 0.02 + van.speed * 0.004;
+  const w = boat.userData.wake; w.material.opacity = Math.min(0.35, Math.abs(van.speed) * 0.025); w.scale.x = 0.6 + Math.min(1.4, Math.abs(van.speed) * 0.08);
+}
+// barcos que circulam devagar (obstáculos móveis; vão e voltam por canais longos, nunca param no caminho)
+const npcBoats = (() => {
+  const root = new THREE.Group(); root.name = 'npcBoats';
+  const list = [];
+  const ROUTES = () => [                                              // [x0, z0, x1, z1]: canais retos sem vielas no caminho
+    [roadCenter(0) + 4, roadCenter(2), roadCenter(8) - 4, roadCenter(2)],
+    [roadCenter(7), roadCenter(1) + 4, roadCenter(7), roadCenter(8) - 4],
+    [roadCenter(1), roadCenter(8), roadCenter(6), roadCenter(8)],
+    [roadCenter(5), roadCenter(5), roadCenter(5), roadCenter(8) - 4],
+  ];
+  let clock = 0;
+  return {
+    object: root,
+    reset() {
+      const R = ROUTES();
+      R.forEach((r, k) => {
+        if (!list[k]) { const m = buildBoatNpc(k); root.add(m); list[k] = { m, solid: { x0: 0, x1: 0, z0: 0, z1: 0 } }; }
+        Object.assign(list[k], { r, t: (k * 0.37) % 1, dir: 1 });
+      });
+    },
+    detach() { for (const b of list) { const i = SOLIDS.indexOf(b.solid); if (i >= 0) SOLIDS.splice(i, 1); } if (root.parent) root.parent.remove(root); },
+    update(dt) {
+      clock += dt;
+      for (const b of list) {
+        const [x0, z0, x1, z1] = b.r, L = Math.hypot(x1 - x0, z1 - z0);
+        b.t += b.dir * dt * 3.2 / L;
+        if (b.t > 1) { b.t = 1; b.dir = -1; } else if (b.t < 0) { b.t = 0; b.dir = 1; }
+        const x = x0 + (x1 - x0) * b.t, z = z0 + (z1 - z0) * b.t, hx = (x1 - x0) / L * b.dir, hz = (z1 - z0) / L * b.dir;
+        b.m.position.set(x, Math.sin(clock * 1.4 + x) * 0.05, z); b.m.rotation.y = -Math.atan2(hz, hx);
+        const ax = Math.abs(hx) > 0.5;
+        Object.assign(b.solid, { x0: x - (ax ? 3 : 1), x1: x + (ax ? 3 : 1), z0: z - (ax ? 1 : 3), z1: z + (ax ? 1 : 3) });
+        if (SOLIDS.indexOf(b.solid) < 0) SOLIDS.push(b.solid);
+      }
+    },
+  };
+})();
 const rig = createCameraRig();
 world.setLayout(game.layout);
 // Dica: seta que cai do céu sobre a casa indicada (uma vez por rodada)
@@ -212,10 +262,11 @@ heli.setGround((x, z) => {
 });
 heli.setTerrain((x, z) => TERRAIN.h(x, z));   // Bairro 9: o chão sobe nas encostas
 const walker = createWalker(world.scene);   // tecla L: o motorista desce e anda a pé
-const FOOT = { house: [4.1, 13.1, 1.5, 8.5], shop: [3.8, 13.4, 1.5, 8.5], apt: [3.4, 13.8, 1.2, 8.5], fut: [3.4, 13.8, 1.2, 8.5], ware: [1.5, 40.5, 0.8, 10.6] };   // paredes (locais do lote)
+const FOOT = { house: [4.1, 13.1, 1.5, 8.5], shop: [3.8, 13.4, 1.5, 8.5], apt: [3.4, 13.8, 1.2, 8.5], fut: [3.4, 13.8, 1.2, 8.5], ware: [1.5, 40.5, 0.8, 10.6], ven: [VEN_X0, VEN_X1, VEN_Z0, VEN_Z1] };   // paredes (locais do lote)
 /** Obstáculos de quem anda a pé: tudo menos os lotes inteiros e a praça (dá para entrar nos quintais); só as paredes das casas. */
 function walkSolids() {
-  const out = SOLIDS.slice(HOUSE_SLOTS.length + (PLAZA ? 1 : 0)).filter(b => !b.vanOnly);   // escadarias e passarelas: só a pé   // postos, sebe, troncos, parede da entrada, bloqueios
+  const out = SOLIDS.slice(HOUSE_SLOTS.length + (PLAZA ? 1 : 0)).filter(b => !b.vanOnly);   // escadarias e passarelas: só a pé
+  if (VENICE) out.push(...VENICE.waterBoxes);                       // Veneza: a pé não se entra nos canais (só pontes e vielas)   // postos, sebe, troncos, parede da entrada, bloqueios
   for (const s of HOUSE_SLOTS) {
     const h = game.layout[s];
     if (h < 0 || boom.isDestroyed(h)) continue;
@@ -244,11 +295,13 @@ function useNeighborhood(kind) {
   APT_BUILD.floors = kind === 'city8' ? TALL_FLOORS : 5;
   APT_BUILD.mixed = kind === 'canal8' || kind === 'rail8';  // Bairros 10 e 11: prédios das duas alturas
   train.detach();
-  game.placeTags = null; game.arrange = null;   // antes de construir a cena do bairro
+  game.placeTags = kind === 'venice8' ? layout => { const m = {}; layout.forEach((h, s) => { if (h >= 0) m[h] = slotPlaceTags(s); }); return m; } : null;
+  game.arrange = null;
+  setBoatMode(kind === 'venice8');   // antes de construir a cena do bairro
   configureGrid(kind);
   let w = worlds[kind];
   if (!w) {                                     // primeira vez: constrói (escondido pelo fade)
-    w = worlds[kind] = createWorld({ renderer, buildLot: buildAnyLot, buildResident, yardBuilders: YARD_BUILDERS, pool: POOLS[kind], dry: kind === 'city6' || kind === 'city7' || kind === 'city8' });
+    w = worlds[kind] = createWorld({ renderer, buildLot: buildAnyLot, buildResident, yardBuilders: YARD_BUILDERS, pool: POOLS[kind], dry: kind === 'city6' || kind === 'city7' || kind === 'city8', venice: kind === 'venice8' });
   } else SOLIDS.push(...w.extraSolids);        // troncos das árvores de fora deste bairro
   world.hideResident();
   world = w;
@@ -256,7 +309,8 @@ function useNeighborhood(kind) {
   world.scene.add(van.object);
   world.scene.add(walker.object); walker.show(false);
   hint.attach(world.scene);
-  if (kind === 'rail8') { world.scene.add(train.object); train.reset(); }   // Bairro 11: trem e cancelas
+  if (kind === 'rail8') { world.scene.add(train.object); train.reset(); }
+  if (kind === 'venice8') { world.scene.add(npcBoats.object); npcBoats.reset(); } else npcBoats.detach();   // Bairro 11: trem e cancelas
   if (COMPOSED.includes(kind)) composeRound();   // Bairros 4 a 7: composição sorteada a cada partida
   else setupGrid4();
   van.reset();
@@ -364,7 +418,7 @@ function goBack() {
 function startFree(mode = 'free') {
   // Bairro 2: 6×6 com praça; Bairro 4: 5×5 com bloqueios; o resto: 4×4
   const lv = mode === 'career' ? careerLevel : freeLevel;
-  useNeighborhood(lv === 1 ? 'plaza6' : lv === 3 ? 'grid5' : lv === 4 ? 'grid6s' : lv === 5 ? 'city6' : lv === 6 ? 'city7' : lv === 7 ? 'city8' : lv === 8 ? 'hill8' : lv === 9 ? 'canal8' : lv === 10 ? 'rail8' : 'grid4');
+  useNeighborhood(lv === 1 ? 'plaza6' : lv === 3 ? 'grid5' : lv === 4 ? 'grid6s' : lv === 5 ? 'city6' : lv === 6 ? 'city7' : lv === 7 ? 'city8' : lv === 8 ? 'hill8' : lv === 9 ? 'canal8' : lv === 10 ? 'rail8' : lv === 11 ? 'venice8' : 'grid4');
   gameMode = mode;
   if (!COMPOSED.includes(neighborhood)) setupGrid4();   // Bairro 1 tem a casa fixa; o 3 (mesma grade) não
   setupChurch();
@@ -426,6 +480,16 @@ function atPump() {
   return fuelArmed && Math.abs(van.speed) <= DELIVERY_MAX_SPEED;
 }
 
+let footDelivery = false;              // Veneza: entrega feita a pé (depois do diálogo volta a andar)
+function findNearHouseFoot() {
+  let best = 3.6, found = -1;
+  for (const h of game.pool) {
+    if (boom.isDestroyed(h)) continue;
+    const p = doorPoint(game.slotOf[h]), d = Math.hypot(walker.x - p.x, walker.z - p.z);
+    if (d < best) { best = d; found = h; }
+  }
+  return found;
+}
 function findNearHouse() {
   if (Math.abs(van.speed) > DELIVERY_MAX_SPEED) return -1;
   let best = DELIVERY_RADIUS, found = -1;
@@ -480,7 +544,7 @@ function nextDelivery() {
   game.newDelivery(available);
   hint.clear(); hintUsed = false; hintStep = -1;
   actionLock = 0.6;
-  setState('drive');
+  setState(footDelivery ? 'walk' : 'drive'); footDelivery = false;   // Veneza: entregou a pé, continua a pé
 }
 
 // ---------- Bairro 1: a caixa do K (casa fixa do canto) ----------
@@ -909,6 +973,7 @@ const BELL_TILT0 = 1.6, BELL_TILT = 2.4, BELL_FALL0 = BELL_TILT0 + BELL_TILT + 1
 function fadeBlackOff() { talkBox.fadeBlack(0, 300); }
 
 function startNewRound() {
+  footDelivery = false;
   if (cine || unwhite) { restoreLook(); cine = null; }
   walker.show(false); talkBox.hide(); walker.setFloor(0); roofWalk = null; van.object.visible = true;
   if (COMPOSED.includes(neighborhood)) composeRound(); else game.newRound();
@@ -973,10 +1038,13 @@ function update(dt, t) {
         if (heli.flying) { fuelMsg = 'Pouse o helicóptero antes de descer.'; fuelMsgT = 2.5; }
         else if (Math.abs(van.speed) > 3.5) { fuelMsg = 'Pare a van para descer (L).'; fuelMsgT = 2.5; }
         else {
-          van.stop(); nearHouse = -1; nearPump = false;
-          walker.placeBesideVan(van, walkSolids()); walker.show(true);
-          setState('walk');
-          break;
+          if (!walker.placeBesideVan(van, walkSolids(), !!VENICE)) { fuelMsg = 'Encoste a lancha no cais para descer (L).'; fuelMsgT = 2.5; }   // Veneza: só desce em terra
+          else {
+            van.stop(); nearHouse = -1; nearPump = false;
+            walker.show(true);
+            setState('walk');
+            break;
+          }
         }
       }
       if (free && input.heli()) heli.toggle();
@@ -1030,7 +1098,7 @@ function update(dt, t) {
         else if (dialog.success) setState('fadeOut');
         else {
           const visited = dialog.h;
-          dialog = null; world.hideResident(); setState('drive'); actionLock = 0.6;
+          dialog = null; world.hideResident(); setState(footDelivery ? 'walk' : 'drive'); footDelivery = false; actionLock = 0.6;
           // casa errada explode (se habilitado), menos as que ainda fazem parte da rota desta rodada
           const idx = game.route.indexOf(visited);
           if (gameMode === 'free' && menu.explodeWrong && (idx < 0 || idx < game.step)) boom.explode(visited, game.slotOf[visited]);
@@ -1060,14 +1128,17 @@ function update(dt, t) {
       if (gameMode === 'career' && input.missions()) { missions.open(careerLevel); break; }
       van.stop();
       if (!roofWalk && TERRAIN.kind !== 'flat') walker.setFloor(TERRAIN.h(walker.x, walker.z));   // Bairro 9: ladeiras e escadarias
+      if (VENICE) walker.setFloor(VENICE.walkH(walker.x, walker.z));   // Veneza: cais, vielas e pontes
       walker.update(dt, input.axis(), rig.mode === 'chase' ? 'car' : 'screen', roofWalk ? roofSolids() : walkSolids(), van);
       if (carrying) {                               // caixa nas mãos, na frente do peito
         const hc = Math.cos(walker.heading), hs = Math.sin(walker.heading);
         parcel.position.set(walker.x + hc * 0.62, 0.62, walker.z + hs * 0.62); parcel.rotation.set(0, -walker.heading, 0);
       }
       actionLock = Math.max(0, actionLock - dt);
+      nearHouse = VENICE ? findNearHouseFoot() : -1;   // Veneza: dá para entregar a pé (vielas)
       if (actionLock > 0 || !input.action()) break;
-      if (nearLounger()) startRoofTalk();             // no terraço a van fica perto: falar com ele tem prioridade
+      if (nearHouse >= 0) { pending = nearHouse; nearHouse = -1; footDelivery = true; audio.bell(); setState('ring'); }
+      else if (nearLounger()) startRoofTalk();             // no terraço a van fica perto: falar com ele tem prioridade
       else if (nearChurchK()) startChurchTalk();       // na igreja também (a van pode ter entrado pela porta)
       else if (walker.nearVan(van)) { if (carrying) resetParcel(); walker.show(false); walker.setFloor(0); roofWalk = null; actionLock = 0.5; setState('drive'); }   // a caixa volta ao lugar
       else if (nearParcel()) carrying = true;
@@ -1118,6 +1189,7 @@ function update(dt, t) {
   if (state !== 'drive') van.relax(dt);          // torre de caixas do bagageiro: para de balançar quando a van não está sendo dirigida
   world.update(t, dt);
   if (neighborhood === 'rail8') train.update(dt);
+  if (neighborhood === 'venice8') { npcBoats.update(dt); updateBoat(dt); }
   updateChurch(dt);
   world.updateGas(van.x, van.z, dt);
   fuelMsgT = Math.max(0, fuelMsgT - dt);
@@ -1130,7 +1202,7 @@ function update(dt, t) {
       barriers.jamRects, foot ? walker.x : van.x, foot ? walker.z : van.z); }
   // entregando (campainha/diálogo) ou com o balão "E — Entregar" à vista: a câmera se volta para a casa
   const focusH = (state === 'ring' || state === 'dialog') ? pending : state === 'drive' ? nearHouse : -1;
-  const onFoot = state === 'walk';              // a câmera segue o personagem a pé
+  const onFoot = state === 'walk' || (footDelivery && (state === 'ring' || state === 'dialog'));              // a câmera segue o personagem a pé
   rig.update(dt, onFoot ? { x: walker.x, z: walker.z, y: walker.floor, heading: walker.heading, speed: walker.speed, focus: null } : { x: van.x, z: van.z, y: heli.altitude, heading: van.heading, speed: van.speed, focus: null });   // sem câmera automática: quem controla é o jogador
   if (state === 'talk') { rig.camera.position.copy(talkCam.pos); rig.camera.lookAt(talkCam.look); }   // enquadramento fixo da conversa
   if (state === 'cine' && cine) { rig.camera.position.copy(cine.camPos); rig.camera.lookAt(cine.camLook); }
@@ -1206,7 +1278,7 @@ function updateHUD() {
 
   const walkNear = state === 'walk' && walker.nearVan(van) && !nearLounger() && !nearChurchK() && !missions.isOpen;
   // a pé no Bairro 1: pegar a caixa / entregar ao K / conversar (balão em cima do personagem)
-  const walkAct = state === 'walk' && !walkNear && !missions.isOpen ? (nearParcel() ? 'Pegar a caixa' : nearK() ? (carrying ? 'Entregar a caixa' : 'Conversar') : nearLounger() || nearChurchK() ? 'Conversar' : '') : '';
+  const walkAct = state === 'walk' && nearHouse >= 0 && !missions.isOpen ? 'Entregar' : state === 'walk' && !walkNear && !missions.isOpen ? (nearParcel() ? 'Pegar a caixa' : nearK() ? (carrying ? 'Entregar a caixa' : 'Conversar') : nearLounger() || nearChurchK() ? 'Conversar' : '') : '';
   if (walkAct) {
     rig.camera.updateMatrixWorld();
     promptPos.set(walker.x, walker.floor + 2.7, walker.z).project(rig.camera);
@@ -1214,7 +1286,7 @@ function updateHUD() {
     hud.setFade(fade);
     return;
   }
-  const promptLabel = walkNear ? 'Entrar na van' : nearHouse >= 0 ? 'Entregar' : 'Abastecer';
+  const promptLabel = walkNear ? (VENICE ? 'Entrar na lancha' : 'Entrar na van') : nearHouse >= 0 ? 'Entregar' : 'Abastecer';
   if ((state === 'drive' && (nearHouse >= 0 || nearPump)) || walkNear) {
     // Balão AO LADO da van, sobre a rua: acima dela ele cobriria o quintal da frente da casa (onde estão as pistas).
     const w = stage.clientWidth, h = stage.clientHeight;
@@ -1334,7 +1406,7 @@ window.ADRESS = {
   get careerLevel() { return careerLevel; },
   setCareerLevel(l) { careerLevel = l; },
   setFreeLevel(l) { freeLevel = l; },
-  walker, jamSound, train,
+  walker, jamSound, train, walkSolids,
   get levelSelect() { return levelSelect; },
   shop,
   startGame: m => startFree(m),
