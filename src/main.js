@@ -61,6 +61,7 @@ import { createChurchMusic } from './churchMusic.js';
 import talkTrackUrl from '../assets/church-talk.mp3';
 import secondSanctuaryUrl from '../assets/second-sanctuary.mp3';
 import innocentTimeUrl from '../assets/innocent-time.mp3';
+import sansUrl from '../assets/sans.mp3';
 import tarantellaUrl from '../assets/tarantella.mp3';
 import sunnyUrl from '../assets/sunnyside-farm.mp3';
 import snowyUrl from '../assets/snowy.mp3';
@@ -890,12 +891,14 @@ const TRACK_INFO = {
   church: { title: 'Dark Sanctuary', author: 'Toby Fox' },
   church2: { title: 'The Second Sanctuary', author: 'Woop' },
   bell2: { title: 'Once Upon An Innocent Time', author: 'Undertale Green' },
+  sans: { title: 'sans.', author: 'Toby Fox' },
   churchTalk: { title: 'Once Upon A Terrible Time', author: 'UTB Team' },
   train: { title: 'The Train Problem', author: 'MasterSwordRemix' },
 };
 /** O que está tocando agora (cenas especiais primeiro). */
 function nowPlaying() {
   if (state === 'title' || state === 'levelSelect' || state === 'shop') return null;   // telas de menu: sem créditos
+  if (grillMusic.audible) return TRACK_INFO.sans;               // Grillby's (Nevasca)
   if (sTrainProblem.audible) return TRACK_INFO.train;          // (audible: inclui o fade-out final)
   if (bellMusic.audible) return TRACK_INFO.bell2;
   if (talkMusic.audible) return TRACK_INFO.churchTalk;
@@ -1199,6 +1202,7 @@ const churchMusic1 = createChurchMusic(audio), churchMusic2 = createChurchMusic(
 let churchMusic = churchMusic1;
 // 2ª visita: música da cena do sino verde (assets/innocent-time.mp3), do início ao fim; depois a música de fundo volta
 const bellMusic = createChurchMusic(audio, innocentTimeUrl, 0.3, () => music.suspend(false));
+const grillMusic = createChurchMusic(audio, sansUrl, 0.5, null, true);   // Grillby's: "sans." em loop
 // Música da conversa com o K na igreja (assets/church-talk.mp3): começa 10 s depois da 1ª fala aparecer, fade-in de 8 s até
 // 50%, toca mesmo com o botão ♪ desligado (sem mudar a preferência) e vai até o fim sem fade-out nem loop, inclusive de
 // volta à vila. Enquanto toca, a música de fundo fica suspensa; ao terminar, volta como o jogador deixou.
@@ -1540,7 +1544,10 @@ function startVeniceTalk() {
 function fadeBlackOff() { talkBox.fadeBlack(0, 300); }
 
 // ---------- Nevasca: interior do Grillby's (cena separada; E na porta, a pé → fade 1 s, salão, fade 1 s) ----------
-let grillIn = null, insideOn = false, grill = null;          // grill: transição { dir: 'in' | 'out', t, swapped }
+let grillIn = null, insideOn = false, grill = null;
+// música do salão: "sans." em loop, só lá dentro; começa sozinha a cada entrada (mesmo com ♪ desligado), o botão pausa/continua
+// do mesmo ponto; ao sair ela acaba e a do bairro volta como estava (suspend não muda a preferência salva)
+const GRILL_OVERRIDE = { get on() { return grillMusic.playing; }, toggle() { if (grillMusic.playing) grillMusic.pause(); else grillMusic.resume(); } };          // grill: transição { dir: 'in' | 'out', t, swapped }
 const GRILL_FAR_VAN = { x: 1e6, z: 1e6 };
 /** Ponto da porta do Grillby's no bairro (local (3,3; 3,6) do lote, girado como o ponto). */
 function grillDoorWorld(out = 0) {
@@ -1549,7 +1556,7 @@ function grillDoorWorld(out = 0) {
 }
 const nearGrillDoor = () => state === 'walk' && SNOWV && !roofWalk && game.slotOf[GRILLBY] >= 0 && game.pool.includes(GRILLBY) && !boom.isDestroyed(GRILLBY) &&
   (() => { const d = grillDoorWorld(0.9); return Math.hypot(walker.x - d.x, walker.z - d.z) < 1.9; })();
-function startGrill(dir) { grill = { dir, t: 0, swapped: false }; walker.update(0, { x: 0, z: 0 }, 'screen', [], GRILL_FAR_VAN); setState('grill'); }
+function startGrill(dir) { if (dir === 'in') grillMusic.load().catch(() => {}); grill = { dir, t: 0, swapped: false }; walker.update(0, { x: 0, z: 0 }, 'screen', [], GRILL_FAR_VAN); setState('grill'); }
 function swapGrill() {
   if (grill.dir === 'in') {
     if (!grillIn) grillIn = createGrillbyInside();
@@ -1558,12 +1565,15 @@ function swapGrill() {
     grillIn.camera.aspect = rig.camera.aspect; grillIn.camera.updateProjectionMatrix();
     grillIn.update(0, walker.x, walker.z, true); insideOn = true;
     renderer.compile(grillIn.scene, grillIn.camera);
+    music.suspend(true); grillMusic.stop(); music.setOverride(GRILL_OVERRIDE);
+    grillMusic.load().then(() => { if (insideOn) { grillMusic.play(0.4); music.refresh(); } }).catch(() => {});
   } else leaveGrill();
 }
 /** Volta ao bairro, ao lado da entrada (a van fica onde estava). */
 function leaveGrill() {
   if (!insideOn) return;
   insideOn = false; world.scene.add(walker.object);
+  grillMusic.stop(); music.setOverride(null); music.suspend(false);   // a do bairro volta como estava antes de entrar
   const d = grillDoorWorld(2.2); walker.pose(d.x, d.z, d.heading);
 }
 function updateGrill(dt) {

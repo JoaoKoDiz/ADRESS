@@ -12,13 +12,13 @@ function decodeDataUrl(url) {
 }
 
 /** `url`: faixa embutida (padrão: a da aproximação); `VOLUME`: volume máximo; `onEnd`: chamada quando a faixa termina sozinha. */
-export function createChurchMusic(audio, url = trackUrl, VOLUME = 0.8, onEnd = null) {
+export function createChurchMusic(audio, url = trackUrl, VOLUME = 0.8, onEnd = null, loop = false) {
   let buffer = null, loading = null, src = null, gain = null, t0 = 0, offset = 0, paused = false, fadeEnd = 0;
   function startAt(off, fade) {                        // toca a partir de `off` segundos, subindo o volume em `fade`
     const ac = audio.ctx;
     if (ac.state === 'suspended') ac.resume();
     gain = ac.createGain(); gain.connect(audio.out);
-    src = ac.createBufferSource(); src.buffer = buffer; src.connect(gain);
+    src = ac.createBufferSource(); src.buffer = buffer; src.loop = loop; src.connect(gain);
     const at = ac.currentTime + 0.02;
     t0 = at - off;
     gain.gain.setValueAtTime(0, at); gain.gain.linearRampToValueAtTime(VOLUME, at + fade);
@@ -55,7 +55,7 @@ export function createChurchMusic(audio, url = trackUrl, VOLUME = 0.8, onEnd = n
     /** Tocando ou pausada (a faixa ainda está "em cena"). */
     get active() { return !!src || paused; },
     /** Posição real da reprodução (s); parada na pausa; −1 sem faixa. */
-    get time() { return src ? audio.ctx.currentTime - t0 : paused ? offset : -1; },
+    get time() { return src ? (audio.ctx.currentTime - t0) % (loop ? buffer.duration : Infinity) : paused ? offset : -1; },
     /** Começa do início com fade-in de `fade` segundos. */
     play(fade = 4) {
       const ac = audio.ctx; if (!ac || !buffer) return false;
@@ -66,7 +66,7 @@ export function createChurchMusic(audio, url = trackUrl, VOLUME = 0.8, onEnd = n
     /** Pausa guardando a posição. */
     pause() {
       if (!src) return;
-      offset = audio.ctx.currentTime - t0; paused = true;
+      offset = (audio.ctx.currentTime - t0) % buffer.duration; paused = true;
       const s = src, g = gain; src = gain = null; release(s, g, 0.12);
     },
     /** Continua do ponto em que parou (fade curto). */
