@@ -7,6 +7,7 @@ import { createLaser } from './laser.js';
 import { createUrsa } from './ursa.js';
 import { createSolar } from './solar.js';
 import { buildGrillbyLot } from './models/grillby.js';
+import { createGrillbyInside } from './grillbyInside.js';
 import { createReality } from './reality.js';
 import { createInput } from './input.js';
 import { createWorld } from './world.js';
@@ -1538,7 +1539,44 @@ function startVeniceTalk() {
 }
 function fadeBlackOff() { talkBox.fadeBlack(0, 300); }
 
+// ---------- Nevasca: interior do Grillby's (cena separada; E na porta, a pé → fade 1 s, salão, fade 1 s) ----------
+let grillIn = null, insideOn = false, grill = null;          // grill: transição { dir: 'in' | 'out', t, swapped }
+const GRILL_FAR_VAN = { x: 1e6, z: 1e6 };
+/** Ponto da porta do Grillby's no bairro (local (3,3; 3,6) do lote, girado como o ponto). */
+function grillDoorWorld(out = 0) {
+  const sp = SPOTS.spots[game.slotOf[GRILLBY]], ry = Math.atan2(sp.fx, sp.fz), c = Math.cos(ry), sn = Math.sin(ry), lx = 3.3, lz = 3.6 + out;
+  return { x: sp.px + lx * c + lz * sn, z: sp.pz - lx * sn + lz * c, heading: Math.atan2(c, sn) };
+}
+const nearGrillDoor = () => state === 'walk' && SNOWV && !roofWalk && game.slotOf[GRILLBY] >= 0 && game.pool.includes(GRILLBY) && !boom.isDestroyed(GRILLBY) &&
+  (() => { const d = grillDoorWorld(0.9); return Math.hypot(walker.x - d.x, walker.z - d.z) < 1.9; })();
+function startGrill(dir) { grill = { dir, t: 0, swapped: false }; walker.update(0, { x: 0, z: 0 }, 'screen', [], GRILL_FAR_VAN); setState('grill'); }
+function swapGrill() {
+  if (grill.dir === 'in') {
+    if (!grillIn) grillIn = createGrillbyInside();
+    grillIn.scene.add(walker.object); walker.setFloor(0);
+    walker.pose(grillIn.door.x, grillIn.door.z, -Math.PI / 2);      // junto à entrada, olhando para o salão
+    grillIn.camera.aspect = rig.camera.aspect; grillIn.camera.updateProjectionMatrix();
+    grillIn.update(0, walker.x, walker.z, true); insideOn = true;
+    renderer.compile(grillIn.scene, grillIn.camera);
+  } else leaveGrill();
+}
+/** Volta ao bairro, ao lado da entrada (a van fica onde estava). */
+function leaveGrill() {
+  if (!insideOn) return;
+  insideOn = false; world.scene.add(walker.object);
+  const d = grillDoorWorld(2.2); walker.pose(d.x, d.z, d.heading);
+}
+function updateGrill(dt) {
+  const g = grill; g.t += dt;
+  if (!g.swapped) { fade = Math.min(1, g.t / 1.0); if (g.t >= 1.0) { g.swapped = true; swapGrill(); } }
+  else fade = Math.max(0, 1 - (g.t - 1.15) / 1.0);
+  if (insideOn) { walker.update(dt, { x: 0, z: 0 }, 'screen', grillIn.solids, GRILL_FAR_VAN); grillIn.update(dt, walker.x, walker.z); }
+  if (g.swapped && g.t >= 2.15) { fade = 0; grill = null; actionLock = 0.4; setState(insideOn ? 'inside' : 'walk'); }
+}
+
 function startNewRound() {
+  if (insideOn) leaveGrill();
+  grill = null;
   footDelivery = false; unmoor();
   if (cine || unwhite) { restoreLook(); cine = null; }
   walker.show(false); talkBox.hide(); walker.setFloor(0); roofWalk = null; van.object.visible = true;
@@ -1709,17 +1747,30 @@ function update(dt, t) {
       }
       actionLock = Math.max(0, actionLock - dt);
       nearHouse = VENICE || SPOTS ? findNearHouseFoot() : -1;   // Veneza/Morro/Colheita: dá para entregar a pé
+      if (nearGrillDoor()) nearHouse = -1;                 // na porta do Grillby's, E entra (a entrega é no ponto da rua)
       nearGate = findNearGate(walker.x, walker.z, 2.8);
       if (nearGate >= 0) nearHouse = -1;
       if (actionLock > 0 || !input.action()) break;
       if (nearGate >= 0) { openGate(nearGate); nearGate = -1; actionLock = 0.4; break; }
       if (nearVenK()) { startVeniceTalk(); break; }   // Veneza: falar com o K tem prioridade
+      if (nearGrillDoor()) { startGrill('in'); break; }   // Nevasca: entrar no Grillby's
       if (nearHouse >= 0) { pending = nearHouse; nearHouse = -1; footDelivery = true; audio.bell(); setState('ring'); }
       else if (nearLounger()) startRoofTalk();             // no terraço a van fica perto: falar com ele tem prioridade
       else if (nearChurchK()) startChurchTalk();       // na igreja também (a van pode ter entrado pela porta)
       else if (walker.nearVan(van)) { if (carrying) resetParcel(); walker.show(false); walker.setFloor(0); roofWalk = null; actionLock = 0.5; setState('drive'); }   // a caixa volta ao lugar
       else if (nearParcel()) carrying = true;
       else if (nearK()) startTalk();
+      break;
+    }
+    case 'grill':                                    // Grillby's: fade, troca de cenário, fade
+      van.stop(); updateGrill(dt);
+      break;
+    case 'inside': {                                 // dentro do Grillby's: anda pelo salão; E na porta interna sai
+      van.stop();
+      walker.update(dt, input.axis(), 'screen', grillIn.solids, GRILL_FAR_VAN);
+      grillIn.update(dt, walker.x, walker.z);
+      actionLock = Math.max(0, actionLock - dt);
+      if (actionLock <= 0 && input.action() && grillIn.nearDoor(walker.x, walker.z)) startGrill('out');
       break;
     }
     case 'laser':                                    // laser orbital: sem controles nem entregas até o fim da sequência
@@ -1864,6 +1915,16 @@ function updateHUD() {
     return;
   }
   lock.set(false);
+  if (state === 'grill' || state === 'inside') {   // Grillby's: sem pista nem botões da partida
+    hud.setSub(insideOn ? "GRILLBY'S  ·  WASD / setas: andar  ·  E na porta: sair" : '', 'muted');
+    hud.setMain(insideOn ? "Grillby's" : '', 'clue');
+    hintBtn.set('hidden');
+    const near = state === 'inside' && grillIn.nearDoor(walker.x, walker.z);
+    if (near) { grillIn.camera.updateMatrixWorld(); promptPos.set(walker.x, 2.7, walker.z).project(grillIn.camera); hud.setPrompt(true, (promptPos.x + 1) / 2 * stage.clientWidth, (1 - promptPos.y) / 2 * stage.clientHeight, 'up', 'Sair'); }
+    else hud.setPrompt(false);
+    hud.setFade(fade);
+    return;
+  }
   hintBtn.set(hintUsed ? 'used' : state === 'drive' ? 'ready' : 'busy');
 
   if (state === 'dialog') {
@@ -1897,7 +1958,7 @@ function updateHUD() {
 
   const walkNear = state === 'walk' && walker.nearVan(van) && !nearLounger() && !nearChurchK() && !nearVenK() && !missions.isOpen;
   // a pé no Bairro 1: pegar a caixa / entregar ao K / conversar (balão em cima do personagem)
-  const walkAct = state === 'walk' && nearGate >= 0 && !missions.isOpen ? 'Abrir porteira' : state === 'walk' && nearVenK() && !missions.isOpen ? 'Conversar' : state === 'walk' && nearHouse >= 0 && !missions.isOpen ? 'Entregar' : state === 'walk' && !walkNear && !missions.isOpen ? (nearParcel() ? 'Pegar a caixa' : nearK() ? (carrying ? 'Entregar a caixa' : 'Conversar') : nearLounger() || nearChurchK() ? 'Conversar' : '') : '';
+  const walkAct = nearGrillDoor() && !missions.isOpen ? "Entrar no Grillby's" : state === 'walk' && nearGate >= 0 && !missions.isOpen ? 'Abrir porteira' : state === 'walk' && nearVenK() && !missions.isOpen ? 'Conversar' : state === 'walk' && nearHouse >= 0 && !missions.isOpen ? 'Entregar' : state === 'walk' && !walkNear && !missions.isOpen ? (nearParcel() ? 'Pegar a caixa' : nearK() ? (carrying ? 'Entregar a caixa' : 'Conversar') : nearLounger() || nearChurchK() ? 'Conversar' : '') : '';
   if (walkAct) {
     rig.camera.updateMatrixWorld();
     promptPos.set(walker.x, walker.floor + 2.7, walker.z).project(rig.camera);
@@ -1996,7 +2057,7 @@ renderer.setAnimationLoop(now => {
   elapsed += dt;
   update(dt, elapsed);
   updateHUD();
-  if (inMap()) renderer.render(careerMap.scene, careerMap.camera); else if (state === 'trolley') renderer.render(trolley.scene, trolley.camera); else if (state === 'laser' && fxCine.inSpace) renderer.render(fxCine.scene, fxCine.camera); else renderer.render(world.scene, rig.camera);
+  if (inMap()) renderer.render(careerMap.scene, careerMap.camera); else if (insideOn) renderer.render(grillIn.scene, grillIn.camera); else if (state === 'trolley') renderer.render(trolley.scene, trolley.camera); else if (state === 'laser' && fxCine.inSpace) renderer.render(fxCine.scene, fxCine.camera); else renderer.render(world.scene, rig.camera);
 });
 
 // ---------- Ganchos para testes automatizados ----------
@@ -2031,7 +2092,7 @@ window.ADRESS = {
   get careerLevel() { return careerLevel; },
   setCareerLevel(l) { careerLevel = l; },
   setFreeLevel(l) { freeLevel = l; },
-  walker, jamSound, train, walkSolids, trolley, get tseq() { return tseq; }, get FAVELA() { return FAVELA; }, traffic, tractors, chickens, plow, banks, get SNOWV() { return SNOWV; }, get FARMLAND() { return FARMLAND; }, gateOpen, openGate,
+  walker, jamSound, train, walkSolids, trolley, get tseq() { return tseq; }, get FAVELA() { return FAVELA; }, traffic, tractors, chickens, plow, banks, get SNOWV() { return SNOWV; }, get grillIn() { return grillIn; }, get insideOn() { return insideOn; }, get FARMLAND() { return FARMLAND; }, gateOpen, openGate,
   get levelSelect() { return levelSelect; },
   shop,
   startGame: m => startFree(m), newRound: () => startNewRound(),
@@ -2045,5 +2106,5 @@ window.ADRESS = {
   /** Coloca a van parada no ponto de entrega da casa h, virada para leste. */
   placeVanAtDoor(h) { const p = doorPoint(game.slotOf[h]); van.teleport(p.x, p.z, 0); },
   /** Executa n quadros de simulação com passo fixo (útil quando o requestAnimationFrame está parado). */
-  step(n = 1, dt = 1 / 60) { for (let i = 0; i < n; i++) { elapsed += dt; update(dt, elapsed); updateHUD(); } if (inMap()) renderer.render(careerMap.scene, careerMap.camera); else if (state === 'trolley') renderer.render(trolley.scene, trolley.camera); else if (state === 'laser' && fxCine.inSpace) renderer.render(fxCine.scene, fxCine.camera); else renderer.render(world.scene, rig.camera); },
+  step(n = 1, dt = 1 / 60) { for (let i = 0; i < n; i++) { elapsed += dt; update(dt, elapsed); updateHUD(); } if (inMap()) renderer.render(careerMap.scene, careerMap.camera); else if (insideOn) renderer.render(grillIn.scene, grillIn.camera); else if (state === 'trolley') renderer.render(trolley.scene, trolley.camera); else if (state === 'laser' && fxCine.inSpace) renderer.render(fxCine.scene, fxCine.camera); else renderer.render(world.scene, rig.camera); },
 };
