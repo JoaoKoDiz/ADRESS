@@ -65,6 +65,7 @@ import sansUrl from '../assets/sans.mp3';
 import tarantellaUrl from '../assets/tarantella.mp3';
 import sunnyUrl from '../assets/sunnyside-farm.mp3';
 import snowyUrl from '../assets/snowy.mp3';
+import waterfallUrl from '../assets/waterfall.mp3';
 import { buildChurch, setChurchOpacity, CHURCH_SOLIDS, CHURCH_CAM } from './models/church.js';
 import { buildBell, BELL_SPOT, BELL2_X } from './models/bell.js';
 import { buildPewReader } from './models/reader.js';
@@ -881,7 +882,7 @@ let dialog = null, pending = -1, nearHouse = -1;
 let actionLock = 0;                 // depois de fechar uma reclamação, E não toca a mesma campainha de novo na hora
 const setState = s => { state = s; stateT = 0; if (s === 'title' || s === 'mapIn' || s === 'map') music.setTrack(null); };   // fora da partida: a música padrão
 // Músicas próprias de alguns bairros (assets/): começam sozinhas ao entrar no bairro (Livre e Carreira)
-const LEVEL_TRACKS = { venice8: tarantellaUrl, farm10: sunnyUrl, snow8: snowyUrl };
+const LEVEL_TRACKS = { venice8: tarantellaUrl, farm10: sunnyUrl, snow8: snowyUrl, moon8: waterfallUrl };   // 20 (Lua): Waterfall
 // Créditos mostrados ao lado do botão de música. Só o que foi informado/confirmado; sem autor cadastrado, só o título;
 // faixa sem título cadastrado (null) não mostra nada.
 const TRACK_INFO = {
@@ -889,6 +890,7 @@ const TRACK_INFO = {
   [tarantellaUrl]: { title: 'Tarantella Napoletana', author: 'Luigi Ricci' },
   [sunnyUrl]: { title: 'Sunnyside Farm', author: 'MasterSwordRemix' },
   [snowyUrl]: { title: 'Snowy', author: 'Toby Fox' },
+  [waterfallUrl]: { title: 'Waterfall', author: 'Toby Fox' },
   church: { title: 'Dark Sanctuary', author: 'Toby Fox' },
   church2: { title: 'The Second Sanctuary', author: 'Woop' },
   bell2: { title: 'Once Upon An Innocent Time', author: 'Undertale Green' },
