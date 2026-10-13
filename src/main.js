@@ -9,6 +9,7 @@ import { createSolar } from './solar.js';
 import { buildGrillbyLot } from './models/grillby.js';
 import { createGrillbyInside } from './grillbyInside.js';
 import { createNight } from './night.js';
+import { createFarmOutside } from './farmOutside.js';
 import { createReality } from './reality.js';
 import { createInput } from './input.js';
 import { createWorld } from './world.js';
@@ -397,6 +398,7 @@ function walkSolids() {
 const train = createTrain();
 const traffic = createTraffic(audio);
 const night = createNight();               // Nível 19 (Penumbra)
+const farmOut = createFarmOutside();       // Nível 15 (Colheita): entorno
 const gardGate = { arm: null, world: null, solid: null, k: 0 };   // Nível 17 (Jardins): cancela
 const tractors = createTractors(audio);   // Nível 15 (Colheita): tratores devagar pelas estradas de terra
 const chickens = createChickens();        // Nível 15 (Colheita): galinhas atravessando as estradas
@@ -559,8 +561,9 @@ function useNeighborhood(kind) {
   configureGrid(kind);
   let w = worlds[kind];
   if (!w) {                                     // primeira vez: constrói (escondido pelo fade)
-    w = worlds[kind] = createWorld({ renderer, buildLot: buildAnyLot, buildResident: kind === 'snow8' ? h => buildResident(h, { winter: true }) : buildResident, yardBuilders: YARD_BUILDERS, pool: POOLS[kind], dry: kind === 'city6' || kind === 'city7' || kind === 'city8', venice: kind === 'venice8', snow: kind === 'snow8', moon: kind === 'moon8' });
+    w = worlds[kind] = createWorld({ renderer, buildLot: buildAnyLot, buildResident: kind === 'snow8' ? h => buildResident(h, { winter: true }) : buildResident, yardBuilders: YARD_BUILDERS, pool: POOLS[kind], dry: kind === 'city6' || kind === 'city7' || kind === 'city8', venice: kind === 'venice8', snow: kind === 'snow8', moon: kind === 'moon8', farm: kind === 'farm10' });
     if (kind === 'night10') night.setup(w);     // Penumbra: noite, asfalto molhado
+    if (kind === 'farm10') farmOut.build(w.scene, MAP, VAN_START.x);   // Colheita: hectares de plantação em volta, tratores e colheitadeiras
   } else SOLIDS.push(...w.extraSolids);        // troncos das árvores de fora deste bairro
   world.hideResident();
   world = w;
@@ -1860,6 +1863,7 @@ function update(dt, t) {
   world.update(t, dt);
   if (neighborhood === 'rail8') train.update(dt, van);
   if (neighborhood === 'night10') night.update(dt);
+  if (neighborhood === 'farm10') farmOut.update(dt);
   if (neighborhood === 'garden8' && gardGate.arm) {   // Jardins: a cancela sobe quando a van (ou o personagem) chega perto e desce depois
     const G = GARDV.GATE, px = state === 'walk' ? walker.x : van.x, pz = state === 'walk' ? walker.z : van.z, near = Math.hypot(px - G.x, pz - G.z) < 20;
     gardGate.k += ((near ? 1 : 0) - gardGate.k) * Math.min(1, dt * 3);

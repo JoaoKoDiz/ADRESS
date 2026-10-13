@@ -377,7 +377,7 @@ function buildPlaza() {
 }
 
 // ---------- API ----------
-export function createWorld({ renderer, buildLot, buildResident, yardBuilders, pool = [...Array(16).keys()], dry = false, venice = false, snow = false, moon = false }) {
+export function createWorld({ renderer, buildLot, buildResident, yardBuilders, pool = [...Array(16).keys()], dry = false, venice = false, snow = false, moon = false, farm = false }) {
   const pal = venice ? LAGOON : moon ? MOON_GROUND : snow ? SNOW_GROUND : dry ? DRY_GRASS : GREEN_GRASS;
   GRASS = pal.grass; GRASS_PATCHES = pal.patches; GRASS_SHADOW = pal.shadow;
   if (renderer) {
@@ -399,8 +399,8 @@ export function createWorld({ renderer, buildLot, buildResident, yardBuilders, p
 
   const solidsStart = SOLIDS.length;          // os troncos das árvores de fora entram em SOLIDS aqui
   const ground = moon ? new THREE.Group() : buildGround(venice);
-  const outskirts = moon ? new THREE.Group() : buildOutskirts(ground);
-  if (venice || moon) SOLIDS.length = solidsStart;              // Veneza: sem árvores de fora (laguna)
+  const outskirts = moon || farm ? new THREE.Group() : buildOutskirts(ground);   // Colheita: em volta são plantações (farmOutside.js)
+  if (venice || moon || farm) SOLIDS.length = solidsStart;              // Veneza: sem árvores de fora (laguna)
   const extraSolids = SOLIDS.slice(solidsStart);
   scene.add(baked(ground, false, true));
   // A grama de fora do bairro não recebe sombras (nada relevante projeta nela; as árvores de fora usam sombras
