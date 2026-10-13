@@ -69,7 +69,7 @@ import { buildChurch, setChurchOpacity, CHURCH_SOLIDS, CHURCH_CAM } from './mode
 import { buildBell, BELL_SPOT, BELL2_X } from './models/bell.js';
 import { buildPewReader } from './models/reader.js';
 import { createBackButton } from './backButton.js';
-import { createMissions, createMissionsButton, MISSIONS } from './missions.js';
+import { createMissions, createMissionsButton, MISSIONS, RESERVED } from './missions.js';
 import { createCareer } from './career.js';
 
 const hudEl = document.getElementById('hud');
@@ -347,7 +347,8 @@ const rig = createCameraRig();
 world.setLayout(game.layout);
 // Dica: seta que cai do céu sobre a casa indicada (uma vez por rodada)
 const hint = createHintArrow(world.scene, audio);
-let hintUsed = false, hintStep = -1;
+let hintUsed = false, hintStep = -1, hintCount = 0;
+const hintLimit = () => (MOONV ? 2 : 1);           // Lua (Bairro 20): até 2 dicas por partida (em entregas diferentes); os outros, 1
 const hintBtn = createHintButton(stage, () => requestHint());
 // Explosões (entrega errada, opcional no menu) e míssil da van (tecla F; a rodada reinicia)
 const boom = createBoom(world.scene, () => world, audio);
@@ -748,7 +749,7 @@ function openShop() { shop.open(); setState('shop'); }
 const levelSelect = createLevelSelect(l => confirmLevel(l));
 function openLevelSelect() { levelSelect.open(freeLevel); setState('levelSelect'); }
 function confirmLevel(l) {
-  if (state !== 'levelSelect') return;
+  if (state !== 'levelSelect' || RESERVED.includes(l)) return;   // 17–19: reservados
   freeLevel = l;
   levelSelect.close();
   setState('levelFly');
@@ -834,7 +835,7 @@ function goBack() {
 function startFree(mode = 'free') {
   // Bairro 2: 6×6 com praça; Bairro 4: 5×5 com bloqueios; o resto: 4×4
   const lv = mode === 'career' ? careerLevel : freeLevel;
-  useNeighborhood(lv === 1 ? 'plaza6' : lv === 3 ? 'grid5' : lv === 4 ? 'grid6s' : lv === 5 ? 'city6' : lv === 6 ? 'city7' : lv === 7 ? 'city8' : lv === 8 ? 'hill8' : lv === 9 ? 'venice8' : lv === 10 ? 'canal8' : lv === 11 ? 'rail8' : lv === 12 ? 'favela8' : lv === 13 ? 'flux10' : lv === 14 ? 'farm10' : lv === 15 ? 'snow8' : lv === 16 ? 'moon8' : 'grid4');   // 10 = Veneza, 11 = Travessia, 12 = Trilhos
+  useNeighborhood(lv === 1 ? 'plaza6' : lv === 3 ? 'grid5' : lv === 4 ? 'grid6s' : lv === 5 ? 'city6' : lv === 6 ? 'city7' : lv === 7 ? 'city8' : lv === 8 ? 'hill8' : lv === 9 ? 'venice8' : lv === 10 ? 'canal8' : lv === 11 ? 'rail8' : lv === 12 ? 'favela8' : lv === 13 ? 'flux10' : lv === 14 ? 'farm10' : lv === 15 ? 'snow8' : lv === 19 ? 'moon8' : 'grid4');   // 17–19 reservados; 20 = Lua   // 10 = Veneza, 11 = Travessia, 12 = Trilhos
   gameMode = mode;
   if (!COMPOSED.includes(neighborhood)) setupGrid4();   // Bairro 1 tem a casa fixa; o 3 (mesma grade) não
   resetGates();
@@ -949,8 +950,8 @@ function findNearHouse() {
 }
 
 function requestHint() {
-  if (state !== 'drive' || hintUsed) return;
-  hintUsed = true;
+  if (state !== 'drive' || hintUsed || hintStep === game.step) return;
+  hintCount++; hintUsed = hintCount >= hintLimit();
   if (gameMode === 'career') career.hint();
   hintStep = game.step;
   const h = game.route[game.step];
@@ -990,7 +991,7 @@ function nextDelivery() {
   const available = game.pool.filter(h => !boom.isDestroyed(h) && !jamBlocked(h));
   if (available.length < ROUTE_LEN) { setState('fadeOut'); return; }   // poucas casas de pé: recomeça o bairro
   game.newDelivery(available);
-  hint.clear(); hintUsed = false; hintStep = -1;
+  hint.clear(); hintUsed = false; hintStep = -1; hintCount = 0;
   actionLock = 0.6;
   setState(footDelivery ? 'walk' : 'drive'); footDelivery = false;   // Veneza: entregou a pé, continua a pé
 }
@@ -1594,7 +1595,7 @@ function startNewRound() {
   refreshBarriers();                             // Bairro 3: barreiras em lugares novos
   applyJams();                                   // Bairro 7: as entregas só entre os lotes que a van consegue alcançar
   if (gameMode === 'career') career.startMatch(careerLevel);   // nova partida da Carreira
-  hint.clear(); hintUsed = false; hintStep = -1;
+  hint.clear(); hintUsed = false; hintStep = -1; hintCount = 0;
   heli.reset();
   monster.reset();
   boom.reset(); clearLaserVoids(); restartMsg = null;
@@ -1935,7 +1936,7 @@ function updateHUD() {
     hud.setFade(fade);
     return;
   }
-  hintBtn.set(hintUsed ? 'used' : state === 'drive' ? 'ready' : 'busy');
+  hintBtn.set(hintUsed || hintStep === game.step ? 'used' : state === 'drive' ? 'ready' : 'busy');
 
   if (state === 'dialog') {
     hud.setSub(dialog.success ? '✔ Entrega concluída!  ·  [E] continuar' : '[E] ou Espaço: continuar',

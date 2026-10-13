@@ -34,7 +34,7 @@ body.lsel-on .title-play, body.lsel-on .title-driver { visibility: hidden; }   /
 .lsel-hint b { display: inline-block; min-width: 1.3em; text-align: center; color: #fff; background: #ff7a1a; border-radius: 5px; padding: .05em .3em; margin: 0 .12em; }
 `;
 // nomes dos bairros (só nesta tela do Modo Livre)
-const NAMES = ['Bairro Raízes', 'Bairro Horizontes', 'Bairro Constância', 'Bairro Veredas', 'Bairro Ofício', 'Bairro Mirante', 'Bairro Altitude', 'Bairro Ápice', 'Bairro Encostas', 'Veneza', 'Bairro Travessia', 'Bairro Trilhos', 'Bairro Morro', 'Bairro Fluxo', 'Bairro Colheita', 'Bairro Nevasca', 'Bairro Órbita'];
+const NAMES = ['Bairro Raízes', 'Bairro Horizontes', 'Bairro Constância', 'Bairro Veredas', 'Bairro Ofício', 'Bairro Mirante', 'Bairro Altitude', 'Bairro Ápice', 'Bairro Encostas', 'Veneza', 'Bairro Travessia', 'Bairro Trilhos', 'Bairro Morro', 'Bairro Fluxo', 'Bairro Colheita', 'Bairro Nevasca', '', '', '', 'Lua'];   // 17–19: reservados
 // título do cartão (o Nível 10, Veneza, é especial: "NÍVEL 10" em vez de "BAIRRO 10")
 const TITLE = i => (i === 9 ? 'NÍVEL ' : 'BAIRRO ') + (i + 1);
 const COLS = 4, PER = 8;                    // 8 por página (4×2); as páginas seguem sozinhas conforme entram bairros
@@ -62,14 +62,14 @@ export function createLevelSelect(onPick) {
 
   function paint() {
     if (Math.floor(sel / PER) !== page) showPage(Math.floor(sel / PER));
-    cards.forEach((c, i) => c.classList.toggle('sel', i === sel)); playBtn.textContent = sel === 9 ? 'Jogar em Veneza' : `Jogar no Bairro ${sel + 1}`;
+    cards.forEach((c, i) => c && c.classList.toggle('sel', i === sel)); playBtn.textContent = sel === 9 ? 'Jogar em Veneza' : `Jogar no Bairro ${sel + 1}`;
   }
   /** Mostra os 8 espaços da página p: bairros disponíveis e, no resto, cartões "Em breve" (não selecionáveis). */
   function showPage(p) {
     page = p; grid.textContent = '';
     for (let k = 0; k < PER; k++) {
       const i = p * PER + k;
-      if (i < COUNT) { grid.appendChild(cards[i]); continue; }
+      if (i < COUNT && cards[i]) { grid.appendChild(cards[i]); continue; }
       const c = document.createElement('div');
       c.className = 'lsel-card soon';
       c.innerHTML = '<div class="ph">Em breve</div><div class="lbl">&nbsp;<small>&nbsp;</small></div>';
@@ -82,12 +82,14 @@ export function createLevelSelect(onPick) {
     if (p < 0 || p >= pages()) return;
     sel = Math.min(COUNT - 1, p * PER + row * COLS);         // mesma fila, se houver bairro nela; senão o último disponível
     if (Math.floor(sel / PER) !== p) sel = p * PER;
+    if (!cards[sel]) { const ok = cards.map((c, i) => (c && Math.floor(i / PER) === p ? i : -1)).filter(i => i >= 0); if (!ok.length) return; sel = ok.reduce((a, b) => (Math.abs(b - sel) < Math.abs(a - sel) ? b : a)); }
     showPage(p); paint();
   }
   function build() {
     const urls = renderMiniThumbnails();
     COUNT = urls.length;
     cards = urls.map((u, i) => {
+      if (!u) return null;                                                 // espaço reservado: aparece como "Em breve"
       const c = document.createElement('div');
       c.className = 'lsel-card';
       c.innerHTML = `<img src="${u}" alt=""><div class="lbl">${TITLE(i)}<small>${NAMES[i] || ''}</small></div>`;
@@ -98,7 +100,7 @@ export function createLevelSelect(onPick) {
     showPage(0);
   }
   return {
-    open(level = 0) { if (!cards) build(); sel = Math.min(level, COUNT - 1); showPage(Math.floor(sel / PER)); paint(); el.classList.add('on'); document.body.classList.add('lsel-on'); },
+    open(level = 0) { if (!cards) build(); sel = Math.min(level, COUNT - 1); while (sel > 0 && !cards[sel]) sel--; showPage(Math.floor(sel / PER)); paint(); el.classList.add('on'); document.body.classList.add('lsel-on'); },
     close() { el.classList.remove('on'); document.body.classList.remove('lsel-on'); },
     get isOpen() { return el.classList.contains('on'); },
     get selected() { return sel; },
@@ -109,7 +111,7 @@ export function createLevelSelect(onPick) {
       if (c < 0) return goPage(page - 1, r);
       if (c >= COLS) return goPage(page + 1, r);
       const i = page * PER + r * COLS + c;
-      if (i >= COUNT) return;                                  // espaço "Em breve": não seleciona
+      if (i >= COUNT || !cards[i]) return;                     // espaço "Em breve": não seleciona
       sel = i; paint();
     },
   };

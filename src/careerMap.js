@@ -49,7 +49,7 @@ function roadGeometry(curve, samples) {
 //   canal    — canal no meio, pontes e um galpão (Bairro 10, Travessia)
 //   rail     — trilhos em L com curva, trem e estação (Bairro 11, Trilhos)
 //   venice   — canais, fachadas venezianas coloridas e a Ponte de Rialto (Nível 12, Veneza)
-const MINI_KINDS = ['houses', 'plaza', 'barriers', 'trucks', 'gas', 'city', 'jam', 'jam8', 'hill', 'venice', 'canal', 'rail', 'favela', 'flux', 'farm', 'snow', 'moon'];   // 13 = Morro, 14 = Fluxo, 15 = Colheita, 16 = Nevasca, 17 = Órbita   // 10 = Veneza, 11 = Travessia, 12 = Trilhos
+export const MINI_KINDS = ['houses', 'plaza', 'barriers', 'trucks', 'gas', 'city', 'jam', 'jam8', 'hill', 'venice', 'canal', 'rail', 'favela', 'flux', 'farm', 'snow', null, null, null, 'moon'];   // 17–19 reservados (null), 20 = Lua   // 13 = Morro, 14 = Fluxo, 15 = Colheita, 16 = Nevasca, 17 = Órbita   // 10 = Veneza, 11 = Travessia, 12 = Trilhos
 
 /** Bairro em miniatura do tipo `kind`: base de grama, sebe, ruas e o que caracteriza o bairro. gray = fase bloqueada. */
 function miniNeighborhood(kind, colors, gray = false) {
@@ -57,10 +57,12 @@ function miniNeighborhood(kind, colors, gray = false) {
   const roof = i => G(colors[i % colors.length], '#8c8c8c');
   const g = new THREE.Group();
   const add = (m, x, y, z, rx = 0, ry = 0, rz = 0) => g.add(at(m, x, y, z, rx, ry, rz));
-  add(box(15, 0.3, 15, G('#d4cdbb', '#b9b9b9')), 0, 0.15, 0);
-  add(box(14, 0.4, 14, G('#95cc68', '#a3a3a3')), 0, 0.2, 0);
-  for (const [x, z, w, d] of [[0, -7, 14.4, 0.6], [0, 7, 14.4, 0.6], [-7, 0, 0.6, 14.4], [7, 0, 0.6, 14.4]]) {
-    add(box(w, 0.9, d, G('#3f7d3a', '#7a7a7a')), x, 0.65, z);
+  if (kind !== 'moon') {                         // base com sebe (a Lua não tem: só a esfera)
+    add(box(15, 0.3, 15, G('#d4cdbb', '#b9b9b9')), 0, 0.15, 0);
+    add(box(14, 0.4, 14, G('#95cc68', '#a3a3a3')), 0, 0.2, 0);
+    for (const [x, z, w, d] of [[0, -7, 14.4, 0.6], [0, 7, 14.4, 0.6], [-7, 0, 0.6, 14.4], [7, 0, 0.6, 14.4]]) {
+      add(box(w, 0.9, d, G('#3f7d3a', '#7a7a7a')), x, 0.65, z);
+    }
   }
   const ROADC = G('#5d6470', '#6e6e6e');
   /** Casinha com telhado de 4 águas (s = escala). */
@@ -133,8 +135,7 @@ function miniNeighborhood(kind, colors, gray = false) {
   }
 
   if (kind === 'moon') {                         // Nível 17 (Órbita): pequena lua esférica com estradas em anel, módulos e foguete
-    add(box(13.6, 0.1, 13.6, G('#1b2133', '#8a8a8a')), 0, 0.42, 0);
-    for (const [x, z] of [[-5, -4], [4.6, -5.2], [-4.4, 5], [5.2, 3.6], [0.5, -6], [-6, 0.8]]) add(sphere(0.12, G('#ffffff', '#dddddd'), 4, 3), x, 0.55, z);
+    // (só a lua com as casinhas, sem base)
     const Rs = 4.2, cy = 4.4, moonG = new THREE.Group(); moonG.position.set(0, cy, 0); g.add(moonG);
     moonG.add(sphere(Rs, G('#b9bcc0', '#b0b0b0'), 24, 16));
     for (const [rx, rz] of [[0, 0], [Math.PI / 2, 0], [0, Math.PI / 2]]) moonG.add(at(torus(Rs + 0.02, 0.22, G('#7d8188', '#8a8a8a'), 4, 40), 0, 0, 0, rx + Math.PI / 2, 0, rz));
@@ -345,7 +346,18 @@ function boardTexture(gray = false) {
 }
 
 const PALETTES = [['red', 'blue', 'yellow', 'green'], ['purple', 'red', 'gray', 'yellow', 'blue', 'green', 'red', 'yellow'], ['blue', 'green', 'red', 'purple'],
-  ['yellow', 'gray', 'blue', 'red'], ['green', 'purple', 'yellow', 'blue'], ['red'], ['blue'], ['green'], ['red', 'blue', 'yellow', 'purple'], ['red'], ['blue', 'green', 'red'], ['green', 'yellow', 'purple'], ['red'], ['blue', 'red', 'yellow', 'green'], ['red', 'blue'], ['red', 'blue', 'green', 'yellow'], ['blue']];
+  ['yellow', 'gray', 'blue', 'red'], ['green', 'purple', 'yellow', 'blue'], ['red'], ['blue'], ['green'], ['red', 'blue', 'yellow', 'purple'], ['red'], ['blue', 'green', 'red'], ['green', 'yellow', 'purple'], ['red'], ['blue', 'red', 'yellow', 'green'], ['red', 'blue'], ['red', 'blue', 'green', 'yellow'], [], [], [], ['blue']];
+
+/** Miniatura da lua: fundo preto, poucas estrelas pequenas e a lua por cima. */
+function spaceShot(src, w, h) {
+  const c = document.createElement('canvas'); c.width = w; c.height = h; const g = c.getContext('2d');
+  g.fillStyle = '#000'; g.fillRect(0, 0, w, h);
+  let s = 11; const rnd = () => (s = (s * 16807) % 2147483647) / 2147483647;
+  g.fillStyle = '#fff';
+  for (let k = 0; k < 26; k++) { const r = 0.5 + rnd() * 0.7; g.globalAlpha = 0.5 + rnd() * 0.5; g.beginPath(); g.arc(rnd() * w, rnd() * h, r, 0, 7); g.fill(); }
+  g.globalAlpha = 1; g.drawImage(src, 0, 0, w, h);
+  return c.toDataURL('image/png');
+}
 
 /** Miniaturas (data URL) dos 8 bairros, desenhadas uma vez num renderizador próprio. Usadas na seleção do modo Livre. */
 export function renderMiniThumbnails(w = 480, h = 360) {
@@ -353,6 +365,7 @@ export function renderMiniThumbnails(w = 480, h = 360) {
   r.setSize(w, h, false);
   const cam = new THREE.PerspectiveCamera(30, w / h, 1, 200);
   const urls = MINI_KINDS.map((kind, i) => {
+    if (!kind) return null;                                // espaço reservado (sem bairro ainda)
     const scene = new THREE.Scene();
     scene.add(new THREE.HemisphereLight('#fff6e0', '#7aa35a', 1.5));
     const sun = new THREE.DirectionalLight('#ffffff', 2.0);
@@ -363,10 +376,11 @@ export function renderMiniThumbnails(w = 480, h = 360) {
     // enquadra a maquete inteira (prédios altos incluídos), sempre do mesmo ângulo
     const sph = new THREE.Box3().setFromObject(mini).getBoundingSphere(new THREE.Sphere());
     const dir = new THREE.Vector3(-6, 24, 27).normalize(), t = Math.tan(THREE.MathUtils.degToRad(cam.fov / 2));
-    const dist = sph.radius / Math.min(t, t * cam.aspect) * 0.92;
+    const dist = sph.radius / Math.min(t, t * cam.aspect) * (kind === 'moon' ? 0.7 : 0.92);   // a lua: maior, sem cortar as bordas
     cam.position.copy(sph.center).addScaledVector(dir, dist);
     cam.lookAt(sph.center);
     r.render(scene, cam);
+    if (kind === 'moon') return spaceShot(r.domElement, w, h);   // fundo preto com poucas estrelinhas
     return r.domElement.toDataURL('image/png');
   });
   r.dispose(); r.forceContextLoss();
@@ -414,7 +428,8 @@ export function createCareerMap(stageEl, audio) {
   // fases: bairros em miniatura alternando os lados da estrada, com placa numerada
   const stops = [], boards = [];
   let clock = 0;
-  MINI_KINDS.map((_, i) => 0.04 + i * 0.92 / (MINI_KINDS.length - 1)).forEach((u, i) => {
+  const ROAD = MINI_KINDS.map((k, i) => (k ? i : -1)).filter(i => i >= 0);   // só os bairros que existem (os reservados ficam fora da estrada)
+  ROAD.map((i, k) => [0.04 + k * 0.92 / (ROAD.length - 1), i]).forEach(([u, i]) => {
     curve.getPointAt(u, p); curve.getTangentAt(u, tg);
     const side = i % 2 ? 1 : -1;
     const nx = -tg.z * side, nz = tg.x * side;
@@ -442,7 +457,7 @@ export function createCareerMap(stageEl, audio) {
     board.userData.baseY = board.position.y;
     scene.add(board);
     boards.push(board);
-    stops.push({ u, d: u * length, hood, hoodGray, sign, board, tex: [signTex, signTexGray, boardTex, boardTexGray], locked: false });
+    stops.push({ level: i, u, d: u * length, hood, hoodGray, sign, board, tex: [signTex, signTexGray, boardTex, boardTexGray], locked: false });
   });
 
   // algumas árvores longe da estrada
@@ -484,7 +499,7 @@ export function createCareerMap(stageEl, audio) {
     scene, camera,
     /** startAt: índice da fase ao lado da qual a van começa (vindo do menu). Sem ele, a van fica onde estava. */
     enter(startAt) {
-      if (startAt !== undefined) dist = stops[Math.max(0, Math.min(stops.length - 1, startAt))].d;
+      if (startAt !== undefined) { const s = stops.filter(q => q.level <= startAt).pop() || stops[0]; dist = s.d; }
       else if (!entered) dist = stops[0].d - 10;
       entered = true;
       placeVan();
@@ -502,7 +517,7 @@ export function createCareerMap(stageEl, audio) {
       placeVan();
       updateCamera(dt);
       near = -1; nearLocked = -1;
-      for (let i = 0; i < stops.length; i++) if (Math.abs(stops[i].d - dist) < NEAR) { if (stops[i].locked) nearLocked = i; else near = i; }
+      for (let i = 0; i < stops.length; i++) if (Math.abs(stops[i].d - dist) < NEAR) { if (stops[i].locked) nearLocked = stops[i].level; else near = stops[i].level; }   // índice do nível (com os reservados)
       const shown = near >= 0 ? near : nearLocked;
       if (shown >= 0) {
         const lockedNow = near < 0;
@@ -510,7 +525,7 @@ export function createCareerMap(stageEl, audio) {
           promptLocked = lockedNow;
           prompt.classList.toggle('locked', lockedNow);
         }
-        if (lockedNow) prompt.textContent = `🔒 Bloqueado — conclua as 5 missões do Bairro ${shown}`;
+        if (lockedNow) { let pv = shown - 1; while (pv > 0 && !MINI_KINDS[pv]) pv--; prompt.textContent = `🔒 Bloqueado — conclua as 5 missões do Bairro ${pv + 1}`; }
         else if (prompt.innerHTML !== PROMPT_OPEN) prompt.innerHTML = PROMPT_OPEN;
         proj.copy(van.object.position); proj.y += 4;
         proj.project(camera);
@@ -525,7 +540,7 @@ export function createCareerMap(stageEl, audio) {
     /** Marca quais fases estão bloqueadas (cinza, sem interação). */
     setLocked(isLocked) {
       stops.forEach((s, i) => {
-        s.locked = isLocked(i);
+        s.locked = isLocked(s.level);
         s.hood.visible = !s.locked; s.hoodGray.visible = s.locked;
         s.sign.material.map = s.tex[s.locked ? 1 : 0];        // placa e quadro em cinza quando bloqueada
         s.board.material.map = s.tex[s.locked ? 3 : 2];

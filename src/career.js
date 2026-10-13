@@ -1,7 +1,7 @@
 // Carreira: progresso das missões (salvo no navegador), regras de cada missão e desbloqueio das fases.
 // Uma fase é liberada quando as 5 missões da fase anterior estão concluídas; a fase 1 começa liberada.
 import { HOUSES } from './data.js';
-import { MISSIONS } from './missions.js';
+import { MISSIONS, RESERVED } from './missions.js';
 import { MAP, GRID, HEDGE, ROAD, LOT, WALK, HOUSE_SLOTS, roadCenter, slotOrigin } from './layout.js';
 
 const KEY = 'adress.career.v1';
@@ -61,6 +61,12 @@ export function createCareer() {
       progress[9] = ven; progress[10] = tra; progress[11] = tri; save(); localStorage.setItem(KEY + '.reorder10', '1');
     }
   } catch (e) { /* ignora */ }
+  // a lua passou do Bairro 17 para o 20 (17–19 ficam reservados): o progresso salvo acompanha o cenário, uma vez
+  try {
+    if (!localStorage.getItem(KEY + '.lua20')) {
+      progress[19] = progress[16].slice(); progress[16] = progress[16].map(() => 0); save(); localStorage.setItem(KEY + '.lua20', '1');
+    }
+  } catch (e) { /* ignora */ }
   // a 5ª missão do Nível 3 mudou ("Uma Última Volta" → "Manobras Enjoativas"): zera o progresso antigo dela uma vez
   try {
     if (!localStorage.getItem(KEY + '.dizzy')) { progress[2][4] = 0; save(); localStorage.setItem(KEY + '.dizzy', '1'); }
@@ -71,7 +77,8 @@ export function createCareer() {
   // senha do cadeado no mapa: todos os bairros abertos, mesmo sem as missões (fica salvo)
   let allOpen = false;
   try { allOpen = localStorage.getItem(KEY + '.all') === '1'; } catch (e) { /* ignora */ }
-  const unlocked = l => allOpen || l === 0 || levelDone(l - 1);
+  const prevLevel = l => { let p = l - 1; while (p > 0 && RESERVED.includes(p)) p--; return p; };   // os reservados não contam
+  const unlocked = l => !RESERVED.includes(l) && (allOpen || l === 0 || levelDone(prevLevel(l)));
 
   /** Atualiza o progresso (só aumenta). Avisa quando a missão é concluída e quando a próxima fase abre. */
   function setProgress(l, i, value) {
@@ -84,7 +91,8 @@ export function createCareer() {
     save();
     if (v >= m.goal) {
       toast(`✔ Missão concluída: ${m.name}`);
-      if (!wasDone && levelDone(l) && l + 1 < LEVELS) setTimeout(() => toast(`🔓 Bairro ${l + 2} desbloqueado!`), 3400);
+      let nx = l + 1; while (RESERVED.includes(nx)) nx++;
+      if (!wasDone && levelDone(l) && nx < LEVELS) setTimeout(() => toast(`🔓 Bairro ${nx + 1} desbloqueado!`), 3400);
     }
   }
   const add = (l, i, n = 1) => setProgress(l, i, progress[l][i] + n);

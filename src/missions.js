@@ -5,7 +5,9 @@
 // Missões por fase (nível). id liga a missão à regra em career.js; goal = quanto precisa para concluir.
 // Fases sem missões definidas usam o modelo (sem id: não avançam ainda).
 const PLACEHOLDER = () => Array.from({ length: 5 }, () => ({ id: null, name: 'MISSÃO', desc: 'Descrição breve da missão.', goal: 5 }));
-export const LEVEL_NAMES = ['Primeiros Dias', 'Olhos Abertos', 'Entregador Teimoso', 'Péssimo Senso de Direção', '', '', '', '', 'Veneza', '', '', '', '', '', '', ''];
+export const LEVEL_NAMES = ['Primeiros Dias', 'Olhos Abertos', 'Entregador Teimoso', 'Péssimo Senso de Direção', '', '', '', '', 'Veneza', '', '', '', '', '', '', '', '', '', '', ''];
+/** Bairros 17, 18 e 19: espaços reservados para níveis futuros (não dá para jogar; não travam o desbloqueio do 20). */
+export const RESERVED = [16, 17, 18];
 export const MISSIONS = [
   [
     { id: 'firstShift', name: 'Primeiro Turno', desc: 'Complete uma partida inteira, realizando as 4 entregas erradas e a 5ª entrega correta.', goal: 1 },
@@ -47,7 +49,10 @@ export const MISSIONS = [
   PLACEHOLDER(),   // Bairro 14 (Fluxo)
   PLACEHOLDER(),   // Bairro 15 (Colheita)
   PLACEHOLDER(),   // Bairro 16 (Nevasca)
-  PLACEHOLDER(),   // Bairro 17 (Órbita; planejado como o especial 20)
+  PLACEHOLDER(),   // Bairro 17 (reservado)
+  PLACEHOLDER(),   // Bairro 18 (reservado)
+  PLACEHOLDER(),   // Bairro 19 (reservado)
+  PLACEHOLDER(),   // Bairro 20 (Lua)
 ];
 
 const CSS = `
