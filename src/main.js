@@ -1,7 +1,7 @@
 // ADRESS 3D — laço principal e máquina de estados da rodada.
 // Este arquivo define como cada módulo é usado (o "contrato" entre eles).
 import * as THREE from 'three';
-import { Game, ROUTE_LEN, setDroppedTags } from './logic.js';
+import { Game, ROUTE_LEN, setDroppedTags, setPhraseOverride } from './logic.js';
 import { MAP, doorPoint, slotOrigin, DELIVERY_RADIUS, DELIVERY_MAX_SPEED, VAN, VAN_START, LOT_ANCHORS, SOLIDS, ENTRANCE, HEDGE, GRID, PLAZA, HOUSE_SLOTS, configureGrid, roadCenter, setGasStations, GAS_LIST, GAS_CANOPY, GAS_ISLANDS, GAS_PARTS, TERRAIN, CANAL, VENICE, RAIL, FAVELA, FLUX, FARMLAND, SPOTS, SNOWV, MOONV, GARDV, slotPlaceTags, roadTopology, WARE_LIST, WALK as L_WALK, LOT as L_LOT, ROAD as L_ROAD, slotY as L_slotY } from './layout.js';
 import { createLaser } from './laser.js';
 import { createUrsa } from './ursa.js';
@@ -19,7 +19,7 @@ import { createHUD } from './hud.js';
 import { createAudio } from './audio.js';
 import { buildLot } from './models/house.js';
 import { buildResident } from './models/resident.js';
-import { YARD_BUILDERS } from './models/yard.js';
+import { YARD_BUILDERS, YARD_BUILDERS_SNOW } from './models/yard.js';
 import { buildShopLot } from './models/shop.js';
 import { SHOPS, HOUSES, FUTS, L1_FIXED, L6_FIXED, WARES, TWINS, VENS, FAVS, MODS, FARMS, MOONS, GRILLBY, SNOW_FIXED, SNOW_EXTRAS, SNOW_DROP, GARDS } from './data.js';
 import { buildFavelaLot } from './models/favela.js';
@@ -555,13 +555,14 @@ function useNeighborhood(kind) {
     : kind === 'snow8' ? layout => { const m = {}; layout.forEach(h => { if (h >= 0 && SNOW_EXTRAS[h]) m[h] = SNOW_EXTRAS[h].slice(); }); return m; }   // Nevasca: detalhes de inverno nas pistas
     : null;
   game.arrange = null;
-  setDroppedTags(kind === 'snow8' ? SNOW_DROP : null);   // Nevasca: sem cacto, piscina, fonte, flamingo, girassóis e frutas
+  setDroppedTags(kind === 'snow8' ? SNOW_DROP : null);
+  setPhraseOverride(kind === 'snow8' ? { clothesline: 'roupas congeladas no varal' } : null);   // Nevasca: o varal fica congelado   // Nevasca: sem cacto, piscina, fonte, flamingo, girassóis e frutas
   setBoatMode(kind === 'venice8');
   walker.setArea(kind === 'venice8' ? (x, z) => VENICE.walkable(x, z) : null);   // Veneza: a pé só em terra e nas pontes   // antes de construir a cena do bairro
   configureGrid(kind);
   let w = worlds[kind];
   if (!w) {                                     // primeira vez: constrói (escondido pelo fade)
-    w = worlds[kind] = createWorld({ renderer, buildLot: buildAnyLot, buildResident: kind === 'snow8' ? h => buildResident(h, { winter: true }) : buildResident, yardBuilders: YARD_BUILDERS, pool: POOLS[kind], dry: kind === 'city6' || kind === 'city7' || kind === 'city8', venice: kind === 'venice8', snow: kind === 'snow8', moon: kind === 'moon8', farm: kind === 'farm10' });
+    w = worlds[kind] = createWorld({ renderer, buildLot: buildAnyLot, buildResident: kind === 'snow8' ? h => buildResident(h, { winter: true }) : buildResident, yardBuilders: kind === 'snow8' ? YARD_BUILDERS_SNOW() : YARD_BUILDERS, pool: POOLS[kind], dry: kind === 'city6' || kind === 'city7' || kind === 'city8', venice: kind === 'venice8', snow: kind === 'snow8', moon: kind === 'moon8', farm: kind === 'farm10' });
     if (kind === 'night10') night.setup(w);     // Penumbra: noite, asfalto molhado
     if (kind === 'farm10') farmOut.build(w.scene, MAP, VAN_START.x);   // Colheita: hectares de plantação em volta, tratores e colheitadeiras
   } else SOLIDS.push(...w.extraSolids);        // troncos das árvores de fora deste bairro

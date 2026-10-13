@@ -26,6 +26,8 @@ let PLACE = {};
 export const setPlaceTags = m => { PLACE = m || {}; };
 const isPlace = t => t.startsWith('loc:') || t.startsWith('side:');
 let DROP = null;                                   // Nevasca: características que não valem neste bairro
+let PHR = null;                                    // Nevasca: frases trocadas (ex.: varal congelado)
+export const setPhraseOverride = m => { PHR = m || null; };
 export const setDroppedTags = list => { DROP = list && list.length ? new Set(list) : null; };
 const tagsOf = h => { const t = PLACE[h] ? HOUSES[h].tags.concat(PLACE[h]) : HOUSES[h].tags; return DROP ? t.filter(x => !DROP.has(x)) : t; };
 /** true se o conjunto de características `s` descreve apenas a casa `h` entre as casas `pool` do bairro. */
@@ -57,7 +59,7 @@ export const ref = h => { const H = HOUSES[h]; if (H.kind === 'farm') return REF
   return REF[H.kind === 'house' || H.kind === 'ven' || H.kind === 'fav' || H.kind === 'gard' ? 'house' : H.kind === 'ware' ? 'ware' : 'shop']; };   // prédios (comercial ou residencial): "o prédio"
 
 export function phrase(tags) {
-  const p = tags.filter(t => !isPlace(t)).map(t => PHRASE[t]);
+  const p = tags.filter(t => !isPlace(t)).map(t => (PHR && PHR[t]) || PHRASE[t]);
   const where = tags.filter(isPlace).map(t => ', ' + PHRASE[t]).join('');   // lugar no fim: "…, no Lado Leste"
   return (p.length === 1 ? p[0] : p.slice(0, -1).join(', ') + ' e ' + p[p.length - 1]) + where;
 }
