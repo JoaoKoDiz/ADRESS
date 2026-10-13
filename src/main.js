@@ -1862,7 +1862,7 @@ function update(dt, t) {
   if (state !== 'drive') van.relax(dt);          // torre de caixas do bagageiro: para de balançar quando a van não está sendo dirigida
   world.update(t, dt);
   if (neighborhood === 'rail8') train.update(dt, van);
-  if (neighborhood === 'night10') night.update(dt);
+  if (neighborhood === 'night10') night.update(dt, state === 'walk' ? walker.x : van.x, state === 'walk' ? walker.z : van.z);
   if (neighborhood === 'farm10') farmOut.update(dt);
   if (neighborhood === 'garden8' && gardGate.arm) {   // Jardins: a cancela sobe quando a van (ou o personagem) chega perto e desce depois
     const G = GARDV.GATE, px = state === 'walk' ? walker.x : van.x, pz = state === 'walk' ? walker.z : van.z, near = Math.hypot(px - G.x, pz - G.z) < 20;

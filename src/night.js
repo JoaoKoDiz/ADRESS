@@ -22,6 +22,10 @@ const ADS = [
   { t: 'CAFÉ LUA', s: 'Aberto até o sol nascer', bg: ['#4a2a1a', '#1a0a04'], fg: '#ffd9a0', sym: 'moon' },
   { t: 'TÁXI JÁ', s: 'Chama que a gente vem', bg: ['#f4d020', '#c8a000'], fg: '#1a1a1a', sym: 'circle' },
   { t: 'BANCO ARCO', s: 'Seu dinheiro em boas mãos', bg: ['#1a7a5a', '#0a3a2a'], fg: '#e8fff4', sym: 'arc' },
+  { t: 'ADRESS', s: 'Quase no endereço certo', bg: ['#ff7a1a', '#7a2a00'], fg: '#ffffff', sym: 'van' },
+  { t: 'MERCADO BOM PREÇO', s: 'Aberto 24 horas', bg: ['#2a8a3a', '#0a4a1a'], fg: '#fff8c0', sym: 'circle' },
+  { t: 'VANS VELOZ', s: 'Alugue a sua hoje', bg: ['#2a4ac8', '#0a1a6a'], fg: '#ffffff', sym: 'van' },
+  { t: 'LAVA-JATO BRILHO', s: 'Sua van brilhando', bg: ['#1ac8c8', '#0a6a7a'], fg: '#ffffff', sym: 'star' },
 ];
 const SIGNS = ['ABERTO', 'LOJA', 'FARMÁCIA', 'LANCHES', 'BAR', 'MODAS', 'ÓTICA', 'SORVETES'];
 const NEON = ['#ff4ad8', '#4ae8ff', '#ffd84a', '#7aff6a', '#ff6a4a'];
@@ -78,6 +82,7 @@ function glowTex() {
 }
 
 const REGIONS = 9;
+const WIN_GEO = new THREE.PlaneGeometry(1.0, 0.9);
 const regionOf = (x, z, M) => Math.min(2, Math.floor(x / M * 3)) * 3 + Math.min(2, Math.floor(z / M * 3));
 
 export function createNight() {
@@ -85,11 +90,15 @@ export function createNight() {
   const regions = [...Array(REGIONS)].map(() => ({ k: 1, mats: [], sprites: [] }));
   let blackout = null, nextBlackout = 14;
   const panels = [];                                 // { mats:[…], ads, cur, timer, mesh }
+  const lights = [];                                 // fontes de luz (postes, painéis, letreiros): as mais perto viram luz de verdade
+  const pool = [...Array(8)].map(() => new THREE.PointLight('#ffffff', 0, 24, 1.4));   // poucas luzes dinâmicas (sempre as mesmas 8)
   let ticker = null;
   // faróis da van e luz do personagem (criados uma vez; só ligados no Penumbra)
   const heads = [], walkLight = new THREE.PointLight('#ffe2b0', 6, 9, 1.6);
   walkLight.visible = false;
 
+  const winMats = {};                               // janelas acesas: 1 material por região e cor (apagam juntas)
+  const winMat = (r, c) => winMats[r + c] || (winMats[r + c] = reg(r, new THREE.MeshBasicMaterial({ color: c, toneMapped: false, transparent: true, opacity: 0.85 })));
   const reg = (r, m) => { regions[r].mats.push(m); m.userData.base = (m.color && m.color.clone()) || null; m.userData.op = m.opacity; return m; };
 
   function addLamp(x, z) {
@@ -98,8 +107,9 @@ export function createNight() {
     const bulb = new THREE.Mesh(new THREE.SphereGeometry(0.28, 8, 6), reg(r, new THREE.MeshBasicMaterial({ color: '#ffe0a0', toneMapped: false })));
     bulb.position.set(x, 5.25, z); root.add(bulb);
     const sp = new THREE.Sprite(reg(r, new THREE.SpriteMaterial({ map: glowTex(), color: '#ffc870', blending: THREE.AdditiveBlending, transparent: true, depthWrite: false, opacity: 0.8 })));
-    sp.scale.setScalar(2.6); sp.position.copy(bulb.position); root.add(sp);
-    groundGlow(x, z, '#ffb860', 6.5, 0.32, r);
+    sp.scale.setScalar(3.2); sp.position.copy(bulb.position); root.add(sp);
+    groundGlow(x, z, '#ffc070', 10, 0.42, r);
+    lights.push({ x, y: 5, z, c: '#ffcf8a', i: 16, r });
   }
   function groundGlow(x, z, col, size, op, r, sx = 1, sz = 1) {           // reflexo simples no asfalto molhado
     const m = new THREE.Mesh(new THREE.PlaneGeometry(size * sx, size * sz), reg(r, new THREE.MeshBasicMaterial({ map: glowTex(), color: col, transparent: true, opacity: op, blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false })));
@@ -112,9 +122,24 @@ export function createNight() {
     const frame = new THREE.Mesh(new THREE.BoxGeometry(w + 0.3, h + 0.3, 0.2), new THREE.MeshStandardMaterial({ color: '#1a1c22', roughness: 0.7 }));
     frame.position.set(x - nx * 0.12, y, z - nz * 0.12); frame.rotation.y = m.rotation.y; root.add(frame);
     if (ads.length > 1) panels.push({ mat, ads, vertical, r, cur: 0, timer: 5 + Math.random() * 4, fade: 0 });
-    const gx = x + nx * (h * 0.6 + 2), gz = z + nz * (h * 0.6 + 2);
-    groundGlow(gx, gz, ads[0].bg[0], Math.max(w, 5), 0.22, r, Math.abs(nz) > 0.5 ? 1.2 : 0.7, Math.abs(nz) > 0.5 ? 0.7 : 1.2);
+    const gx = x + nx * (h * 0.4 + 3), gz = z + nz * (h * 0.4 + 3);
+    groundGlow(gx, gz, ads[0].bg[0], Math.max(w, 6), 0.3, r, Math.abs(nz) > 0.5 ? 1.3 : 0.8, Math.abs(nz) > 0.5 ? 0.8 : 1.3);   // reflexo no asfalto
+    lights.push({ x: x + nx * 2.5, y, z: z + nz * 2.5, c: ads[0].bg[0], i: 10 + w * h * 0.5, r });
     return m;
+  }
+  /** Letreiro perpendicular à fachada (visível de quem passa pela rua), com braço de apoio. */
+  function addBlade(x, y, z, ad, r) {
+    const mat = reg(r, new THREE.MeshBasicMaterial({ map: adTexture(ad, true), toneMapped: false, side: THREE.DoubleSide }));
+    const m = new THREE.Mesh(new THREE.PlaneGeometry(1.3, 2.6), mat); m.position.set(x, y, z); m.rotation.y = Math.PI / 2; root.add(m);
+    const arm = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.08, 1.6), new THREE.MeshStandardMaterial({ color: '#2a2d34' })); arm.position.set(x, y + 1.35, z - 0.2); root.add(arm);
+    lights.push({ x, y, z: z + 1, c: ad.bg[0], i: 8, r });
+  }
+  /** Marquise iluminada sobre a entrada (luz quente por baixo e no chão). */
+  function addMarquee(x, z, w, r) {
+    const top = new THREE.Mesh(new THREE.BoxGeometry(w, 0.22, 1.5), new THREE.MeshStandardMaterial({ color: '#2a2d34', roughness: 0.6 })); top.position.set(x, 3.15, z + 0.75); root.add(top);
+    const lit = new THREE.Mesh(new THREE.PlaneGeometry(w - 0.3, 1.2), reg(r, new THREE.MeshBasicMaterial({ color: '#ffe2a8', toneMapped: false }))); lit.rotation.x = Math.PI / 2; lit.position.set(x, 3.03, z + 0.75); root.add(lit);
+    const edge = new THREE.Mesh(new THREE.BoxGeometry(w, 0.1, 0.06), reg(r, new THREE.MeshBasicMaterial({ color: '#ffd070', toneMapped: false }))); edge.position.set(x, 3.15, z + 1.52); root.add(edge);
+    groundGlow(x, z + 2.5, '#ffd090', 6, 0.38, r, 1.3, 0.8);
   }
   const pickAds = (n, rnd) => { const out = []; while (out.length < n) { const a = ADS[Math.floor(rnd() * ADS.length)]; if (!out.includes(a)) out.push(a); } return out; };
 
@@ -122,11 +147,11 @@ export function createNight() {
     /** Prepara um mundo do Penumbra (uma vez): luzes da noite e asfalto molhado. */
     setup(w) {
       world = w; const sc = w.scene;
-      sc.background = new THREE.Color('#070b18'); if (sc.fog) sc.fog.color.set('#070b18');
-      if (w.sunLight) { w.sunLight.intensity = 0.55; w.sunLight.color.set('#8fa8ff'); }
-      const hemi = sc.children.find(o => o.isHemisphereLight); if (hemi) { hemi.intensity = 0.75; hemi.color.set('#6a7aa8'); hemi.groundColor.set('#1a1a28'); }
+      sc.background = new THREE.Color('#0c1428'); if (sc.fog) sc.fog.color.set('#0c1428');
+      if (w.sunLight) { w.sunLight.intensity = 0.85; w.sunLight.color.set('#9fb4ff'); }
+      const hemi = sc.children.find(o => o.isHemisphereLight); if (hemi) { hemi.intensity = 1.15; hemi.color.set('#7a88b8'); hemi.groundColor.set('#2a2632'); }
       const sun = sc.getObjectByName('sun'); if (sun) sun.visible = false;
-      sc.traverse(o => { if (o.isMesh && o.material && o.material.color && o.material.color.getHexString() === '5d6470') { o.material = o.material.clone(); o.material.color.set('#2c3039'); o.material.roughness = 0.28; o.material.metalness = 0.3; } });
+      sc.traverse(o => { if (o.isMesh && o.material && o.material.color && o.material.color.getHexString() === '5d6470') { o.material = o.material.clone(); o.material.color.set('#30353f'); o.material.roughness = 0.2; o.material.metalness = 0.35; } });
       // estrelinhas
       const N = 500, p = new Float32Array(N * 3); let s = 9; const rnd = () => (s = (s * 16807) % 2147483647) / 2147483647;
       for (let i = 0; i < N; i++) { const v = new THREE.Vector3(rnd() - 0.5, rnd() * 0.6 + 0.15, rnd() - 0.5).normalize().multiplyScalar(1200); p.set([v.x + 100, v.y, v.z + 100], i * 3); }
@@ -138,7 +163,9 @@ export function createNight() {
       world = w; M = MAPW;
       if (root && root.parent) root.parent.remove(root);
       root = new THREE.Group(); root.name = 'night'; w.scene.add(root);
-      regions.forEach(r => { r.mats.length = 0; r.k = 1; }); panels.length = 0; blackout = null; nextBlackout = 12 + Math.random() * 8;
+      for (const k in winMats) delete winMats[k];
+      regions.forEach(r => { r.mats.length = 0; r.k = 1; }); panels.length = 0; lights.length = 0;
+      for (const l of pool) w.scene.add(l); blackout = null; nextBlackout = 12 + Math.random() * 8;
       let sd = 31; const rnd = () => (sd = (sd * 16807 + 7) % 2147483647) / 2147483647;
       const skip = new Set([...GAS_LIST.flatMap(g => g.slots), ...WARE_LIST.flatMap(g => g.slots)]);
       const mid = Math.floor(GRID / 2), ROW = FLUX ? FLUX.row : 5;
@@ -151,25 +178,33 @@ export function createNight() {
         if (FLUX && FLUX.parks.includes(s) && (r === ROW + 1 || r === ROW - 2 || r === ROW + 2)) {                    // outdoor grande na pracinha
           const dir = r < ROW ? 1 : -1, z = o.z + (dir > 0 ? LOT - 3 : 3), x = o.x + LOT / 2;
           for (const dx of [-3.4, 3.4]) { const pl = new THREE.Mesh(new THREE.CylinderGeometry(0.18, 0.2, 7, 6), new THREE.MeshStandardMaterial({ color: '#2a2d34' })); pl.position.set(x + dx, 3.5, z); root.add(pl); }
-          addPanel(x, 8.6, z, 9, 4.2, 0, dir, pickAds(r === ROW + 1 ? 3 : 2, rnd), false);
+          addPanel(x, 8.8, z, 11, 5.4, 0, dir, pickAds(r === ROW + 1 ? 3 : 2, rnd), false);
         }
         if (!H || skip.has(s)) continue;
         if (H.kind === 'shop') {                                                           // vitrine acesa + letreiro na fachada
           const rg = regionOf(o.x + 8.6, o.z + 9, M);
           const vit = new THREE.Mesh(new THREE.PlaneGeometry(9.2, 2.6), reg(rg, new THREE.MeshBasicMaterial({ color: '#ffd28a', transparent: true, opacity: 0.32, blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false })));
-          vit.position.set(o.x + 8.6, 1.5, o.z + 8.57); root.add(vit);
+          vit.position.set(o.x + 8.6, 1.5, o.z + 8.57); root.add(vit); vit.material.opacity = vit.material.userData.op = 0.45;
+          addBlade(o.x + 13.6, 4.4, o.z + 9.2, pickAds(1, rnd)[0], rg);
+          lights.push({ x: o.x + 8.6, y: 2, z: o.z + 11, c: '#ffc880', i: 10, r: rg });
           const col = NEON[Math.floor(rnd() * NEON.length)], sg = new THREE.Mesh(new THREE.PlaneGeometry(3.6, 0.9), reg(rg, new THREE.MeshBasicMaterial({ map: signTexture(SIGNS[Math.floor(rnd() * SIGNS.length)], col), toneMapped: false })));
           sg.position.set(o.x + 8.6, 5.25, o.z + 8.58); root.add(sg);
           groundGlow(o.x + 8.6, o.z + LOT + 2, '#ffc070', 7, 0.28, rg, 1.4, 0.8);
         } else if (H.kind === 'house' && rnd() < 0.5) {                                    // casas: janela/varanda com luz quente na calçada
           groundGlow(o.x + 8.6, o.z + LOT + 1.4, '#ffd090', 4.5, 0.18, regionOf(o.x + 8.6, o.z + LOT, M));
         } else if (H.kind === 'apt') {                                                     // prédios: painéis nas paredes de trás/laterais
-          const top = 2.8 * 5 + 0.12, cx = o.x + 8.6;
-          if (r === ROW + 1) addPanel(cx, top * 0.62, o.z + 1.2 - 0.06, 8.4, 4.2, 0, -1, pickAds(1 + Math.floor(rnd() * 3), rnd), false);   // parede de trás, virada para a avenida
+          const top = 2.8 * 5 + 0.12, cx = o.x + 8.6, rg = regionOf(cx, o.z + 9, M);
+          addMarquee(cx, o.z + 8.5, 4, rg);                                                // marquise da entrada
+          const WC = ['#ffd890', '#fff0c0', '#ffb870', '#cfe2ff'];
+          for (let f = 1; f < 5; f++) for (const wx of [3.4 + 1.9, 8.6, 13.8 - 1.9]) if (rnd() < (nearAve ? 0.4 : 0.25)) {   // janelas acesas (irregulares)
+            const wm = winMat(rg, WC[Math.floor(rnd() * 4)]), pl = new THREE.Mesh(WIN_GEO, wm); pl.position.set(o.x + wx, 0.12 + f * 2.8 + 1.45, o.z + 8.5 + 0.04); root.add(pl);
+          }
+          if (r === ROW + 1) addPanel(cx, top * 0.6, o.z + 1.2 - 0.06, 10, 5.6, 0, -1, pickAds(1 + Math.floor(rnd() * 3), rnd), false);   // parede de trás, virada para a avenida
+          if (nearAve && rnd() < 0.55) addPanel(o.x + (c < mid ? 13.0 : 4.2), 2.8 * 2.6, o.z + 8.5 + 0.35, 1.5, 6.2, 0, 1, pickAds(1, rnd), true);   // vertical na fachada (2 andares, na quina)
           if ((nearAve && rnd() < 0.7) || central || (!nearAve && rnd() < 0.18)) {
             const east = c < mid, x = o.x + (east ? 13.8 + 0.06 : 3.4 - 0.06);
-            addPanel(x, top * 0.55, o.z + 4.85, 3.2, central ? 8 : 6, east ? 1 : -1, 0, pickAds(central ? 2 : 1, rnd), true);
-            if (central) { const x2 = o.x + (east ? 3.4 - 0.06 : 13.8 + 0.06); addPanel(x2, top * 0.55, o.z + 4.85, 3.2, 8, east ? -1 : 1, 0, pickAds(1, rnd), true); }
+            addPanel(x, top * 0.55, o.z + 4.85, central ? 5.6 : 4, central ? 10 : 7, east ? 1 : -1, 0, pickAds(central ? 3 : 1, rnd), true);
+            if (central) { const x2 = o.x + (east ? 3.4 - 0.06 : 13.8 + 0.06); addPanel(x2, top * 0.55, o.z + 4.85, 5.6, 10, east ? -1 : 1, 0, pickAds(2, rnd), true); }
           }
         }
       }
@@ -191,9 +226,15 @@ export function createNight() {
       }
       heads.forEach(h => { h.visible = on; }); walkLight.visible = on;
     },
-    update(dt) {
+    update(dt, px = 0, pz = 0) {
       if (!root) return;
       t += dt;
+      if ((this._lt = (this._lt || 0) - dt) <= 0) {                   // a cada 0,25 s: as 8 fontes mais perto viram luzes de verdade
+        this._lt = 0.25;
+        const near = lights.map(l => ({ l, d: (l.x - px) ** 2 + (l.z - pz) ** 2 })).sort((a, b) => a.d - b.d).slice(0, pool.length);
+        pool.forEach((p, k) => { const n = near[k]; if (!n) { p.userData.src = null; return; } p.position.set(n.l.x, n.l.y, n.l.z); p.color.set(n.l.c); p.userData.src = n.l; });
+      }
+      for (const p of pool) { const s = p.userData.src; p.intensity = s ? s.i * regions[s.r].k : 0; }   // (apagão: some junto com a região)
       // apagões: uma região por vez, ~8 s apagada, volta aos poucos (2 s); intervalo de 18–30 s
       if (!blackout) { nextBlackout -= dt; if (nextBlackout <= 0) blackout = { r: Math.floor(Math.random() * REGIONS), t: 0 }; }
       else { blackout.t += dt; if (blackout.t > 11) { blackout = null; nextBlackout = 18 + Math.random() * 12; } }
