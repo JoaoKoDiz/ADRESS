@@ -223,6 +223,8 @@ export const FARM_GATE = { blue: '#2f6fd0', red: '#d0352a', yellow: '#f0c22a', w
 /** Nevasca (Nível 16): detalhes de inverno de cada casa comum (0–31), fixos por casa; só aparecem e só entram nas pistas no Nevasca. */
 export const SNOW_SCARF = { red: '#d8473a', blue: '#3a78d4', yellow: '#efbf2a', green: '#3c9d55' };
 export const SNOW_EXTRAS = [];
+/** Itens das casas que não aparecem nem entram nas pistas no Nevasca (cacto, piscina inflável, fonte, flamingo, girassóis, árvore com frutas). */
+export const SNOW_DROP = ['cactus', 'pool', 'fountain', 'flamingo', 'sunflowers', 'fruit'];
 {
   let seed = 404; const rnd = n => { seed = (seed * 16807) % 2147483647; return seed % n; };
   const ITEMS = ['snowman', 'sled', 'skis', 'shovel', 'wood', 'icicles', 'lights'], SC = Object.keys(SNOW_SCARF);
@@ -230,6 +232,12 @@ export const SNOW_EXTRAS = [];
     const n = 2 + (rnd(3) === 0 ? 1 : 0), list = [];
     while (list.length < n) { const it = ITEMS[rnd(ITEMS.length)]; if (!list.includes(it)) list.push(it); }
     SNOW_EXTRAS[h] = list.map(it => (it === 'snowman' ? 'ws:snowman:' + SC[rnd(SC.length)] : 'ws:' + it));
+    // itens que não combinam com o inverno saem (SNOW_DROP); cada um vira um detalhe de inverno que a casa ainda não tem
+    const drop = HOUSES[h].f.filter(k => SNOW_DROP.includes(k)), has = t => SNOW_EXTRAS[h].some(x => x.startsWith('ws:' + t));
+    for (let k = 0; k < drop.length; k++) {
+      const it = ['pine', 'snowman', 'sled', 'shovel', 'lights', 'skis', 'wood', 'icicles'].find(t => !has(t) && (t !== 'pine' || k === 0));
+      if (it) SNOW_EXTRAS[h].push(it === 'snowman' ? 'ws:snowman:' + SC[(h + k) % SC.length] : 'ws:' + it);
+    }
   }
 }
 /** Índices das propriedades da Colheita em HOUSES. */
@@ -385,7 +393,7 @@ export const PHRASE = {
   'rf:coop': 'um pequeno galinheiro no terreno', 'rf:veg': 'uma hortinha no quintal', 'rf:boots': 'botas junto à porta', 'rf:pots': 'vasos e um regador na entrada',
   'ws:snowman:red': 'um boneco de neve de cachecol vermelho', 'ws:snowman:blue': 'um boneco de neve de cachecol azul', 'ws:snowman:yellow': 'um boneco de neve de cachecol amarelo',
   'ws:snowman:green': 'um boneco de neve de cachecol verde', 'ws:sled': 'um trenó junto à parede', 'ws:skis': 'esquis apoiados na parede', 'ws:shovel': 'uma pá de neve na entrada',
-  'ws:wood': 'lenha empilhada sob uma coberturinha', 'ws:icicles': 'pingentes de gelo no beiral', 'ws:lights': 'luzes coloridas na fachada',
+  'ws:wood': 'lenha empilhada sob uma coberturinha', 'ws:pine': 'um pinheirinho nevado no quintal', 'ws:icicles': 'pingentes de gelo no beiral', 'ws:lights': 'luzes coloridas na fachada',
   'rporch': 'uma varanda', 'rx:tank': 'uma caixa-d’água', 'rx:hay': 'fardos de feno na entrada',
   // prédios contemporâneos (Nível 14)
   'mfac:white': 'volumes brancos', 'mfac:gray': 'volumes cinza-escuros', 'mglass:blue': 'vidros azuis', 'mglass:aqua': 'vidros verde-água',

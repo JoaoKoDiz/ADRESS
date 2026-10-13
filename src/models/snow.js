@@ -6,7 +6,7 @@ import { box, cyl, cone, sphere, torus, at, mat, bakeStatic } from './kit.js';
 import { buildLot } from './house.js';
 import { LOT, LOT_ANCHORS as A } from '../layout.js';
 import { SNOW } from '../snowPlan.js';
-import { SNOW_EXTRAS, SNOW_SCARF } from '../data.js';
+import { SNOW_EXTRAS, SNOW_SCARF, SNOW_DROP } from '../data.js';
 
 const SNOWC = '#eef3f7', SNOW2 = '#dfe7ee', STONE = '#8f8b85', STONE2 = '#a29d95', ASPH = '#5b616b', ICE = '#a9d8f2';
 const GRASS_TO_SNOW = { '95cc68': SNOWC, '74ab4b': SNOW2 };
@@ -14,7 +14,8 @@ const GRASS_TO_SNOW = { '95cc68': SNOWC, '74ab4b': SNOW2 };
 /** Casa do lote normal, centrada na origem (frente +Z), com neve no quintal e no alto do telhado. */
 export function buildSnowLot(h, opts) {
   const wrap = new THREE.Group();
-  const lot = buildLot(h, opts); lot.position.set(-LOT / 2, 0, -LOT / 2); wrap.add(lot);
+  const ok = k => !SNOW_DROP.includes(k), hw = { ...h, f: h.f.filter(ok), yardItems: h.yardItems.filter(ok), roofItems: h.roofItems.filter(ok) };   // sem os itens de verão
+  const lot = buildLot(hw, opts); lot.position.set(-LOT / 2, 0, -LOT / 2); wrap.add(lot);
   lot.traverse(o => { if (o.isMesh && o.material && o.material.color) { const k = GRASS_TO_SNOW[o.material.color.getHexString()]; if (k) o.material = mat(k); } });
   // neve no alto das duas águas (só a metade de cima: a cor do telhado continua aparecendo embaixo)
   const HS = A.house, HZ = (HS.z0 + HS.z1) / 2, HALF = (HS.z1 - HS.z0) / 2, th = Math.atan2(A.roofRise, HALF);
@@ -22,14 +23,14 @@ export function buildSnowLot(h, opts) {
   const snow = new THREE.Group(); snow.position.set(-LOT / 2, 0, -LOT / 2); wrap.add(snow);
   for (const sgn of [1, -1]) snow.add(at(box(W - 0.2, 0.16, l, SNOWC), (HS.x0 + HS.x1) / 2, ridgeY - Math.sin(th) * l / 2, HZ + sgn * Math.cos(th) * l / 2, sgn * th, 0, 0));
   snow.add(at(box(W - 0.2, 0.22, 0.5, SNOWC), (HS.x0 + HS.x1) / 2, ridgeY + 0.04, HZ));
-  winterExtras(snow, SNOW_EXTRAS[h.index] || [], HS);                // boneco de neve, trenó, esquis, pá, lenha, pingentes, luzes
+  winterExtras(snow, SNOW_EXTRAS[h.index] || [], HS, hw.yardItems.length);                // boneco de neve, trenó, esquis, pá, lenha, pingentes, luzes
   wrap.userData = lot.userData;                                      // animações do lote (fumaça da chaminé etc.)
   wrap.name = 'snowlot';
   return wrap;
 }
 
 /** Detalhes de inverno da casa (coordenadas do lote; frente da casa em z = HS.z1, quintal até a cerca). Ficam fora do caminho da porta. */
-function winterExtras(g, tags, HS) {
+function winterExtras(g, tags, HS, usedSlots = 2) {
   const add = (m, x, y, z, rx = 0, ry = 0, rz = 0) => g.add(at(m, x, y, z, rx, ry, rz));
   const FZ = HS.z1, EAVE = 0.12 + A.wallHeight;
   for (const t of tags) {
@@ -41,6 +42,10 @@ function winterExtras(g, tags, HS) {
       for (const s of [-1, 1]) add(sphere(0.05, '#1d1d1f', 6, 4), x + s * 0.11, 2.2, z + 0.28);
       add(cyl(0.24, 0.24, 0.32, '#2b2b2b', 10), x, 2.5, z); add(cyl(0.36, 0.36, 0.05, '#2b2b2b', 10), x, 2.36, z);
       for (const s of [-1, 1]) add(cyl(0.03, 0.03, 0.8, '#6b4526', 4), x + s * 0.65, 1.55, z, 0, 0, s * 1.0);
+    } else if (t === 'ws:pine') {                                     // pinheirinho nevado no espaço do quintal que ficou livre
+      const sl = A.yardSlots[Math.min(1, usedSlots)], x = sl.x, z = sl.z;
+      add(cyl(0.18, 0.24, 0.8, '#5b3b22', 6), x, 0.5, z);
+      for (const [r, y, hh] of [[1.4, 1.3, 1.7], [1.05, 2.3, 1.5], [0.7, 3.2, 1.3]]) { add(cone(r, hh, '#2f6b45', 8), x, y, z); add(cone(r * 0.55, hh * 0.35, SNOWC, 8), x, y + hh * 0.36, z); }
     } else if (t === 'ws:sled') {                                     // trenó vermelho encostado na parede da frente (à esquerda)
       const sg = new THREE.Group(); sg.position.set(HS.x0 + 1.1, 0.12, FZ + 0.35); sg.rotation.x = -1.1; g.add(sg);
       sg.add(at(box(0.9, 0.08, 1.8, '#c8402f'), 0, 0.25, 0)); for (const s of [-1, 1]) sg.add(at(box(0.06, 0.12, 2.0, '#3a3d44'), s * 0.4, 0.08, 0.05));

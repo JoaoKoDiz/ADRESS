@@ -25,7 +25,9 @@ const ALL = [...Array(16).keys()];   // casas do bairro padrão (4×4)
 let PLACE = {};
 export const setPlaceTags = m => { PLACE = m || {}; };
 const isPlace = t => t.startsWith('loc:') || t.startsWith('side:');
-const tagsOf = h => PLACE[h] ? HOUSES[h].tags.concat(PLACE[h]) : HOUSES[h].tags;
+let DROP = null;                                   // Nevasca: características que não valem neste bairro
+export const setDroppedTags = list => { DROP = list && list.length ? new Set(list) : null; };
+const tagsOf = h => { const t = PLACE[h] ? HOUSES[h].tags.concat(PLACE[h]) : HOUSES[h].tags; return DROP ? t.filter(x => !DROP.has(x)) : t; };
 /** true se o conjunto de características `s` descreve apenas a casa `h` entre as casas `pool` do bairro. */
 export const isUnique = (h, s, pool = ALL) => pool.every(o => o === h || !s.every(t => tagsOf(o).includes(t)));
 
@@ -145,7 +147,7 @@ export class Game {
   }
 
   complaintFor(h) {
-    const special = HOUSES[h].f.filter(k => FEATURE_COMPLAINTS[k] && !this.usedComplaints.has(FEATURE_COMPLAINTS[k]));
+    const special = HOUSES[h].f.filter(k => FEATURE_COMPLAINTS[k] && !(DROP && DROP.has(k)) && !this.usedComplaints.has(FEATURE_COMPLAINTS[k]));
     let c;
     const base = lines(h).complaints;
     if (special.length && Math.random() < 0.5) c = FEATURE_COMPLAINTS[pick(special)];
