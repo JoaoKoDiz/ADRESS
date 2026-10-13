@@ -91,7 +91,7 @@ export function createNight() {
   let blackout = null, nextBlackout = 14;
   const panels = [];                                 // { mats:[…], ads, cur, timer, mesh }
   const lights = [];                                 // fontes de luz (postes, painéis, letreiros): as mais perto viram luz de verdade
-  const pool = [...Array(8)].map(() => new THREE.PointLight('#ffffff', 0, 24, 1.4));   // poucas luzes dinâmicas (sempre as mesmas 8)
+  const pool = [...Array(12)].map(() => new THREE.PointLight('#ffffff', 0, 34, 1.3));   // poucas luzes dinâmicas (sempre as mesmas 12)
   let ticker = null;
   // faróis da van e luz do personagem (criados uma vez; só ligados no Penumbra)
   const heads = [], walkLight = new THREE.PointLight('#ffe2b0', 6, 9, 1.6);
@@ -102,14 +102,15 @@ export function createNight() {
   const reg = (r, m) => { regions[r].mats.push(m); m.userData.base = (m.color && m.color.clone()) || null; m.userData.op = m.opacity; return m; };
 
   function addLamp(x, z) {
-    const r = regionOf(x, z, M), pole = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.13, 5.2, 6), new THREE.MeshStandardMaterial({ color: '#2a2d34', roughness: 0.6 }));
-    pole.position.set(x, 2.6, z); root.add(pole);
-    const bulb = new THREE.Mesh(new THREE.SphereGeometry(0.28, 8, 6), reg(r, new THREE.MeshBasicMaterial({ color: '#ffe0a0', toneMapped: false })));
+    const r = regionOf(x, z, M), pole = new THREE.Mesh(new THREE.CylinderGeometry(0.11, 0.14, 5.6, 6), new THREE.MeshStandardMaterial({ color: '#3a3d46', roughness: 0.6 }));
+    pole.position.set(x, 2.8, z); root.add(pole);
+    const bulb = new THREE.Mesh(new THREE.SphereGeometry(0.36, 8, 6), reg(r, new THREE.MeshBasicMaterial({ color: '#ffe0a0', toneMapped: false })));
     bulb.position.set(x, 5.25, z); root.add(bulb);
     const sp = new THREE.Sprite(reg(r, new THREE.SpriteMaterial({ map: glowTex(), color: '#ffc870', blending: THREE.AdditiveBlending, transparent: true, depthWrite: false, opacity: 0.8 })));
-    sp.scale.setScalar(3.2); sp.position.copy(bulb.position); root.add(sp);
-    groundGlow(x, z, '#ffc070', 10, 0.42, r);
-    lights.push({ x, y: 5, z, c: '#ffcf8a', i: 16, r });
+    sp.scale.setScalar(4.2); sp.position.copy(bulb.position); root.add(sp);
+    groundGlow(x, z, '#ffc878', 17, 0.6, r);                          // poça de luz na rua e na calçada
+    groundGlow(x, z, '#fff0c8', 6, 0.5, r);
+    lights.push({ x, y: 5, z, c: '#ffd59a', i: 30, r });
   }
   function groundGlow(x, z, col, size, op, r, sx = 1, sz = 1) {           // reflexo simples no asfalto molhado
     const m = new THREE.Mesh(new THREE.PlaneGeometry(size * sx, size * sz), reg(r, new THREE.MeshBasicMaterial({ map: glowTex(), color: col, transparent: true, opacity: op, blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false })));
@@ -123,8 +124,8 @@ export function createNight() {
     frame.position.set(x - nx * 0.12, y, z - nz * 0.12); frame.rotation.y = m.rotation.y; root.add(frame);
     if (ads.length > 1) panels.push({ mat, ads, vertical, r, cur: 0, timer: 5 + Math.random() * 4, fade: 0 });
     const gx = x + nx * (h * 0.4 + 3), gz = z + nz * (h * 0.4 + 3);
-    groundGlow(gx, gz, ads[0].bg[0], Math.max(w, 6), 0.3, r, Math.abs(nz) > 0.5 ? 1.3 : 0.8, Math.abs(nz) > 0.5 ? 0.8 : 1.3);   // reflexo no asfalto
-    lights.push({ x: x + nx * 2.5, y, z: z + nz * 2.5, c: ads[0].bg[0], i: 10 + w * h * 0.5, r });
+    groundGlow(gx, gz, ads[0].bg[0], Math.max(w, 6) * 1.6, 0.45, r, Math.abs(nz) > 0.5 ? 1.3 : 0.8, Math.abs(nz) > 0.5 ? 0.8 : 1.3);   // reflexo no asfalto
+    lights.push({ x: x + nx * 3, y, z: z + nz * 3, c: ads[0].bg[0], i: 22 + w * h, r });
     return m;
   }
   /** Letreiro perpendicular à fachada (visível de quem passa pela rua), com braço de apoio. */
@@ -139,7 +140,8 @@ export function createNight() {
     const top = new THREE.Mesh(new THREE.BoxGeometry(w, 0.22, 1.5), new THREE.MeshStandardMaterial({ color: '#2a2d34', roughness: 0.6 })); top.position.set(x, 3.15, z + 0.75); root.add(top);
     const lit = new THREE.Mesh(new THREE.PlaneGeometry(w - 0.3, 1.2), reg(r, new THREE.MeshBasicMaterial({ color: '#ffe2a8', toneMapped: false }))); lit.rotation.x = Math.PI / 2; lit.position.set(x, 3.03, z + 0.75); root.add(lit);
     const edge = new THREE.Mesh(new THREE.BoxGeometry(w, 0.1, 0.06), reg(r, new THREE.MeshBasicMaterial({ color: '#ffd070', toneMapped: false }))); edge.position.set(x, 3.15, z + 1.52); root.add(edge);
-    groundGlow(x, z + 2.5, '#ffd090', 6, 0.38, r, 1.3, 0.8);
+    groundGlow(x, z + 2.5, '#ffd090', 9, 0.5, r, 1.3, 0.8);
+    lights.push({ x, y: 2.6, z: z + 2, c: '#ffd59a', i: 14, r });
   }
   const pickAds = (n, rnd) => { const out = []; while (out.length < n) { const a = ADS[Math.floor(rnd() * ADS.length)]; if (!out.includes(a)) out.push(a); } return out; };
 
@@ -148,10 +150,10 @@ export function createNight() {
     setup(w) {
       world = w; const sc = w.scene;
       sc.background = new THREE.Color('#0c1428'); if (sc.fog) sc.fog.color.set('#0c1428');
-      if (w.sunLight) { w.sunLight.intensity = 0.85; w.sunLight.color.set('#9fb4ff'); }
-      const hemi = sc.children.find(o => o.isHemisphereLight); if (hemi) { hemi.intensity = 1.15; hemi.color.set('#7a88b8'); hemi.groundColor.set('#2a2632'); }
+      if (w.sunLight) { w.sunLight.intensity = 1.25; w.sunLight.color.set('#a8bcff'); }
+      const hemi = sc.children.find(o => o.isHemisphereLight); if (hemi) { hemi.intensity = 1.9; hemi.color.set('#8a9ad0'); hemi.groundColor.set('#3a3644'); }   // ambiente azulado: fachadas, portas e pistas legíveis
       const sun = sc.getObjectByName('sun'); if (sun) sun.visible = false;
-      sc.traverse(o => { if (o.isMesh && o.material && o.material.color && o.material.color.getHexString() === '5d6470') { o.material = o.material.clone(); o.material.color.set('#30353f'); o.material.roughness = 0.2; o.material.metalness = 0.35; } });
+      sc.traverse(o => { if (o.isMesh && o.material && o.material.color && o.material.color.getHexString() === '5d6470') { o.material = o.material.clone(); o.material.color.set('#3a404c'); o.material.roughness = 0.2; o.material.metalness = 0.35; } });
       // estrelinhas
       const N = 500, p = new Float32Array(N * 3); let s = 9; const rnd = () => (s = (s * 16807) % 2147483647) / 2147483647;
       for (let i = 0; i < N; i++) { const v = new THREE.Vector3(rnd() - 0.5, rnd() * 0.6 + 0.15, rnd() - 0.5).normalize().multiplyScalar(1200); p.set([v.x + 100, v.y, v.z + 100], i * 3); }
@@ -172,7 +174,7 @@ export function createNight() {
       for (let s = 0; s < GRID * GRID; s++) {
         const r = Math.floor(s / GRID), c = s % GRID; if (r === ROW) continue;
         const o = slotOrigin(s);
-        if (!skip.has(s) && (c % 2 === 0 || r === ROW - 1 || r === ROW + 1)) addLamp(o.x - WALK * 0.5, o.z - WALK * 0.5);   // postes na calçada (esquina do lote)
+        if (!skip.has(s)) { addLamp(o.x - WALK * 0.5, o.z - WALK * 0.5); addLamp(o.x + LOT * 0.22, o.z + LOT + WALK * 0.5); }   // postes: esquina do lote e na calçada da frente (longe do portão)
         const h = game.layout[s], H = h >= 0 ? HOUSES[h] : null;
         const nearAve = r === ROW - 1 || r === ROW + 1, central = nearAve && (c === mid - 1 || c === mid);
         if (FLUX && FLUX.parks.includes(s) && (r === ROW + 1 || r === ROW - 2 || r === ROW + 2)) {                    // outdoor grande na pracinha
@@ -184,19 +186,23 @@ export function createNight() {
         if (H.kind === 'shop') {                                                           // vitrine acesa + letreiro na fachada
           const rg = regionOf(o.x + 8.6, o.z + 9, M);
           const vit = new THREE.Mesh(new THREE.PlaneGeometry(9.2, 2.6), reg(rg, new THREE.MeshBasicMaterial({ color: '#ffd28a', transparent: true, opacity: 0.32, blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false })));
-          vit.position.set(o.x + 8.6, 1.5, o.z + 8.57); root.add(vit); vit.material.opacity = vit.material.userData.op = 0.45;
+          vit.position.set(o.x + 8.6, 1.5, o.z + 8.57); root.add(vit); vit.material.opacity = vit.material.userData.op = 0.6;
           addBlade(o.x + 13.6, 4.4, o.z + 9.2, pickAds(1, rnd)[0], rg);
           lights.push({ x: o.x + 8.6, y: 2, z: o.z + 11, c: '#ffc880', i: 10, r: rg });
           const col = NEON[Math.floor(rnd() * NEON.length)], sg = new THREE.Mesh(new THREE.PlaneGeometry(3.6, 0.9), reg(rg, new THREE.MeshBasicMaterial({ map: signTexture(SIGNS[Math.floor(rnd() * SIGNS.length)], col), toneMapped: false })));
           sg.position.set(o.x + 8.6, 5.25, o.z + 8.58); root.add(sg);
-          groundGlow(o.x + 8.6, o.z + LOT + 2, '#ffc070', 7, 0.28, rg, 1.4, 0.8);
-        } else if (H.kind === 'house' && rnd() < 0.5) {                                    // casas: janela/varanda com luz quente na calçada
-          groundGlow(o.x + 8.6, o.z + LOT + 1.4, '#ffd090', 4.5, 0.18, regionOf(o.x + 8.6, o.z + LOT, M));
+          groundGlow(o.x + 8.6, o.z + LOT + 2, '#ffc070', 11, 0.45, rg, 1.4, 0.8);
+        } else if (H.kind === 'house') {                                                   // casas: luz da entrada, caminho iluminado e algumas janelas acesas
+          const rg = regionOf(o.x + 8.6, o.z + 10, M);
+          const lampM = new THREE.Sprite(reg(rg, new THREE.SpriteMaterial({ map: glowTex(), color: '#ffcf80', blending: THREE.AdditiveBlending, transparent: true, depthWrite: false, opacity: 0.9 })));
+          lampM.scale.setScalar(1.8); lampM.position.set(o.x + 9.6, 2.5, o.z + 8.7); root.add(lampM);
+          groundGlow(o.x + 8.6, o.z + 11, '#ffd090', 9, 0.42, rg, 0.9, 1.4);
+          for (const wx of [5.7, 11.5]) if (rnd() < 0.55) { const pl = new THREE.Mesh(WIN_GEO, winMat(rg, '#ffd890')); pl.position.set(o.x + wx, 1.75, o.z + 8.54); pl.scale.set(1.2, 1.1, 1); root.add(pl); }
         } else if (H.kind === 'apt') {                                                     // prédios: painéis nas paredes de trás/laterais
           const top = 2.8 * 5 + 0.12, cx = o.x + 8.6, rg = regionOf(cx, o.z + 9, M);
           addMarquee(cx, o.z + 8.5, 4, rg);                                                // marquise da entrada
           const WC = ['#ffd890', '#fff0c0', '#ffb870', '#cfe2ff'];
-          for (let f = 1; f < 5; f++) for (const wx of [3.4 + 1.9, 8.6, 13.8 - 1.9]) if (rnd() < (nearAve ? 0.4 : 0.25)) {   // janelas acesas (irregulares)
+          for (let f = 1; f < 5; f++) for (const wx of [3.4 + 1.9, 8.6, 13.8 - 1.9]) if (rnd() < (nearAve ? 0.55 : 0.35)) {   // janelas acesas (irregulares)
             const wm = winMat(rg, WC[Math.floor(rnd() * 4)]), pl = new THREE.Mesh(WIN_GEO, wm); pl.position.set(o.x + wx, 0.12 + f * 2.8 + 1.45, o.z + 8.5 + 0.04); root.add(pl);
           }
           if (r === ROW + 1) addPanel(cx, top * 0.6, o.z + 1.2 - 0.06, 10, 5.6, 0, -1, pickAds(1 + Math.floor(rnd() * 3), rnd), false);   // parede de trás, virada para a avenida
