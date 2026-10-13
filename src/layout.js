@@ -78,8 +78,8 @@ export const SOLIDS = [];
 
 /** Troca a grade do bairro e refaz os obstáculos-base (lotes, praça e sebe). */
 export function configureGrid(kind) {
-  GRID = kind === 'plaza6' || kind === 'grid6s' || kind === 'city6' || kind === 'city7' ? 6 : kind === 'city8' || kind === 'hill8' || kind === 'canal8' || kind === 'rail8' || kind === 'venice8' || kind === 'favela8' || kind === 'snow8' || kind === 'moon8' ? 8 : kind === 'flux10' || kind === 'farm10' ? 10 : kind === 'snow8' ? 14 : kind === 'moon8' ? 12 : kind === 'grid5' ? 5 : 4;
-  BUILD_H = kind === 'city8' || kind === 'canal8' || kind === 'rail8' ? 31 : kind === 'hill8' ? 23 : kind === 'favela8' ? 20 : kind === 'flux10' ? 16.5 : kind === 'farm10' ? 10 : kind === 'city6' || kind === 'city7' ? 16.5 : 9.2;
+  GRID = kind === 'plaza6' || kind === 'grid6s' || kind === 'city6' || kind === 'city7' ? 6 : kind === 'city8' || kind === 'hill8' || kind === 'canal8' || kind === 'rail8' || kind === 'venice8' || kind === 'favela8' || kind === 'snow8' || kind === 'moon8' ? 8 : kind === 'flux10' || kind === 'night10' || kind === 'farm10' ? 10 : kind === 'snow8' ? 14 : kind === 'moon8' ? 12 : kind === 'grid5' ? 5 : 4;
+  BUILD_H = kind === 'city8' || kind === 'canal8' || kind === 'rail8' ? 31 : kind === 'hill8' ? 23 : kind === 'favela8' ? 20 : kind === 'flux10' || kind === 'night10' ? 16.5 : kind === 'farm10' ? 10 : kind === 'city6' || kind === 'city7' ? 16.5 : 9.2;
   // praça: bloco 2×2 central (linhas e colunas 2–3 do 6×6)
   const plazaSlots = kind === 'plaza6' ? [2 * GRID + 2, 2 * GRID + 3, 3 * GRID + 2, 3 * GRID + 3] : [];
   ENTRANCE.road = kind === 'canal8' ? 2 : Math.floor(GRID / 2);   // rua do meio (no 5×5, a 3ª rua); no Bairro 10 o meio é o canal
@@ -362,7 +362,7 @@ function rebuildBaseSolids() {
 // ---- Nível 14 (Fluxo): 10×10; a avenida são as ruas 5 (mão única para oeste) e 6 (para leste), alargadas para dentro da
 // fileira de quadras 5, que vira o canteiro central. O canteiro só abre nos 3 cruzamentos com semáforo e nos 2 retornos (pontas).
 function setupFlux(kind) {
-  if (kind !== 'flux10') { FLUX = null; return; }
+  if (kind !== 'flux10' && kind !== 'night10') { FLUX = null; return; }   // (o Penumbra usa o mesmo mapa)
   const hr = ROAD / 2, W = 4;
   FLUX = { north: 5, south: 6, row: 5, widen: W, gaps: [0, 2, 5, 8, 10], lights: [2, 5, 8],
     parks: [3, 8, 11, 16, 24, 29, 32, 37, 61, 67, 73, 78, 84, 86, 92, 97],     // pracinhas e estacionamentos (fixos)

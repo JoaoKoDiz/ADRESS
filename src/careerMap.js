@@ -49,7 +49,7 @@ function roadGeometry(curve, samples) {
 //   canal    — canal no meio, pontes e um galpão (Bairro 10, Travessia)
 //   rail     — trilhos em L com curva, trem e estação (Bairro 11, Trilhos)
 //   venice   — canais, fachadas venezianas coloridas e a Ponte de Rialto (Nível 12, Veneza)
-export const MINI_KINDS = ['houses', 'plaza', 'barriers', 'trucks', 'gas', 'city', 'jam', 'jam8', 'hill', 'venice', 'canal', 'rail', 'favela', 'flux', 'farm', 'snow', null, null, null, 'moon'];   // 17–19 reservados (null), 20 = Lua   // 13 = Morro, 14 = Fluxo, 15 = Colheita, 16 = Nevasca, 17 = Órbita   // 10 = Veneza, 11 = Travessia, 12 = Trilhos
+export const MINI_KINDS = ['houses', 'plaza', 'barriers', 'trucks', 'gas', 'city', 'jam', 'jam8', 'hill', 'venice', 'canal', 'rail', 'favela', 'flux', 'farm', 'snow', null, null, 'night', 'moon'];   // 17–19 reservados (null), 20 = Lua   // 13 = Morro, 14 = Fluxo, 15 = Colheita, 16 = Nevasca, 17 = Órbita   // 10 = Veneza, 11 = Travessia, 12 = Trilhos
 
 /** Bairro em miniatura do tipo `kind`: base de grama, sebe, ruas e o que caracteriza o bairro. gray = fase bloqueada. */
 function miniNeighborhood(kind, colors, gray = false) {
@@ -156,6 +156,19 @@ function miniNeighborhood(kind, colors, gray = false) {
     add(box(3.4, 0.14, 1.5, G('#a9d8f2', '#b8b8b8')), -3.6, 0.5, 4.4, 0, 0.15, 0);
     house(-4.2, -3.8, roof(0), 0.75); house(0.8, -4.2, roof(1), 0.75); house(-4.4, 1.6, roof(2), 0.8); house(4.6, 4.6, roof(3), 0.8);
     for (const [x, z, y] of [[5.6, -5.2, 2.1], [-6, -1.4, 2.1], [1.2, 5.8, 0.45], [-1.6, 1.8, 0.45]]) { add(cone(0.75, 1.6, G('#2f6b45', '#8a8a8a'), 7), x, y + 0.9, z); add(cone(0.4, 0.5, SN, 7), x, y + 1.5, z); }
+    return bakeStatic(g);
+  }
+  if (kind === 'night') {                        // Nível 19 (Penumbra): ruas escuras, prédios, postes acesos e painéis luminosos
+    const Y = 0.4, ASF = G('#22262e', '#6e6e6e'), lum = (c) => G(c, '#9a9a9a'), EM = c => (gray ? mat('#9a9a9a') : new THREE.MeshBasicMaterial({ color: c, toneMapped: false }));
+    add(box(13.6, 0.08, 13.6, G('#2c3038', '#8a8a8a')), 0, Y + 0.02, 0);
+    add(box(13.6, 0.1, 3.2, ASF), 0, Y + 0.06, 0.6); add(box(3.0, 0.1, 13.6, ASF), 0.4, Y + 0.06, 0);   // avenida + rua (cruzamento)
+    for (let x = -6; x <= 6; x += 1.6) add(box(0.7, 0.11, 0.12, G('#f2d45c', '#bbbbbb')), x, Y + 0.08, 0.6);
+    const tower = (x, z, w, d, h, c) => add(box(w, h, d, G(c, '#9a9a9a')), x, Y + h / 2, z);
+    tower(-4.2, -4.0, 3.6, 3.4, 7.5, '#3a4258'); tower(4.6, -4.2, 3.4, 3.4, 9.5, '#2e3446'); tower(-4.4, 4.6, 3.6, 3.2, 6, '#40485e'); tower(4.4, 4.4, 3.6, 3.4, 5, '#4a4258');
+    const panel = (x, y, z, w, h, ry, c) => { const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, 0.12), EM(c)); m.position.set(x, y, z); m.rotation.y = ry; g.add(m); };
+    panel(-2.35, 4.6, -4.0, 2.4, 3.6, Math.PI / 2, '#ff4ad8'); panel(2.85, 6.2, -4.2, 2.4, 4.2, -Math.PI / 2, '#4ae8ff'); panel(-4.2, 6.0, -2.2, 3.0, 1.5, 0, '#ff7a1a');
+    panel(4.6, 7.4, -2.45, 3.0, 1.6, 0, '#ffd84a'); panel(-2.55, 3.4, 4.6, 2.0, 2.6, Math.PI / 2, '#7aff6a'); panel(2.55, 3.2, 4.4, 2.0, 2.4, -Math.PI / 2, '#ff6a4a');
+    for (const [x, z] of [[-1.6, -1.4], [2.4, -1.4], [-1.6, 2.6], [2.4, 2.6]]) { add(cyl(0.08, 0.1, 2.2, G('#1a1c22', '#7a7a7a'), 6), x, Y + 1.1, z); const b = new THREE.Mesh(new THREE.SphereGeometry(0.22, 8, 6), EM('#ffd890')); b.position.set(x, Y + 2.3, z); g.add(b); }
     return bakeStatic(g);
   }
   if (kind === 'farmThumb') {                    // Nível 15 (Colheita), só na miniatura da seleção: estrada de terra sinuosa com bifurcação,
@@ -428,7 +441,7 @@ function boardTexture(gray = false) {
 }
 
 const PALETTES = [['red', 'blue', 'yellow', 'green'], ['purple', 'red', 'gray', 'yellow', 'blue', 'green', 'red', 'yellow'], ['blue', 'green', 'red', 'purple'],
-  ['yellow', 'gray', 'blue', 'red'], ['green', 'purple', 'yellow', 'blue'], ['red'], ['blue'], ['green'], ['red', 'blue', 'yellow', 'purple'], ['red'], ['blue', 'green', 'red'], ['green', 'yellow', 'purple'], ['red'], ['blue', 'red', 'yellow', 'green'], ['red', 'blue'], ['red', 'blue', 'green', 'yellow'], [], [], [], ['blue']];
+  ['yellow', 'gray', 'blue', 'red'], ['green', 'purple', 'yellow', 'blue'], ['red'], ['blue'], ['green'], ['red', 'blue', 'yellow', 'purple'], ['red'], ['blue', 'green', 'red'], ['green', 'yellow', 'purple'], ['red'], ['blue', 'red', 'yellow', 'green'], ['red', 'blue'], ['red', 'blue', 'green', 'yellow'], [], [], ['red'], ['blue']];
 
 /** Miniatura da lua: fundo preto, poucas estrelas pequenas e a lua por cima. */
 function spaceShot(src, w, h) {

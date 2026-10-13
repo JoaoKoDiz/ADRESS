@@ -15,6 +15,13 @@ const DIRS = { E: [1, 0], W: [-1, 0], S: [0, 1], N: [0, -1] };
 const REV = { E: 'W', W: 'E', S: 'N', N: 'S' }, RIGHT = { E: 'S', S: 'W', W: 'N', N: 'E' };
 const PHASES = [['aG', 10], ['aY', 2.5], ['R', 1.2], ['cG', 7], ['cY', 2.5], ['R', 1.2]];
 const CYCLE = PHASES.reduce((t, p) => t + p[1], 0);
+let glowT = null;
+function carGlow() {
+  if (glowT) return glowT;
+  const c = document.createElement('canvas'); c.width = c.height = 64; const g = c.getContext('2d');
+  const gr = g.createRadialGradient(32, 32, 0, 32, 32, 32); gr.addColorStop(0, 'rgba(255,255,255,1)'); gr.addColorStop(0.35, 'rgba(255,255,255,0.4)'); gr.addColorStop(1, 'rgba(255,255,255,0)');
+  g.fillStyle = gr; g.fillRect(0, 0, 64, 64); glowT = new THREE.CanvasTexture(c); glowT.colorSpace = THREE.SRGBColorSpace; return glowT;
+}
 
 export function createTraffic(audio) {
   const root = new THREE.Group(); root.name = 'traffic';
@@ -171,7 +178,7 @@ export function createTraffic(audio) {
     get cars() { return cars; },
     phaseAt: j => phaseAt(j),
     /** Monta a rede (depois dos postos/galpões da partida) e espalha os carros: mais na avenida, menos nas ruas. */
-    reset(nAve = 16, nStreet = 18) {
+    reset(nAve = 16, nStreet = 18, night = false) {
       for (const c of cars) { root.remove(c.mesh); const k = SOLIDS.indexOf(c.solid); if (k >= 0) SOLIDS.splice(k, 1); }
       cars = []; build(); t = Math.random() * CYCLE;
       const all = [];
@@ -182,6 +189,10 @@ export function createTraffic(audio) {
           const L = pool[Math.floor(Math.random() * pool.length)], s = CAR / 2 + Math.random() * (L.len - CAR);
           if (L.cars.some(c => Math.abs(c.s - s) < CAR + 3) || (L.i <= 1 && Math.abs(L.a.x - rc(Math.floor(GRID / 2))) < 12)) continue;   // nada colado na entrada
           const mesh = buildCar(); mesh.userData.body.material = mat(CAR_COLORS[Math.floor(Math.random() * CAR_COLORS.length)]);
+          if (night) for (const zz of [0.7, -0.7]) {                 // Penumbra: faróis acesos (brilho + luz no chão)
+            const g = new THREE.Sprite(new THREE.SpriteMaterial({ map: carGlow(), color: '#fff2c8', blending: THREE.AdditiveBlending, transparent: true, depthWrite: false })); g.scale.setScalar(1.3); g.position.set(2.35, 0.95, zz); mesh.add(g);
+            const b = new THREE.Mesh(new THREE.PlaneGeometry(6, 2.6), new THREE.MeshBasicMaterial({ map: carGlow(), color: '#fff0c0', transparent: true, opacity: 0.35, blending: THREE.AdditiveBlending, depthWrite: false })); b.rotation.x = -Math.PI / 2; b.position.set(5.2, 0.08, zz * 0.6); mesh.add(b);
+          }
           root.add(mesh);
           const c = { mesh, lane: L, s, v: 0, vmax: L.ave ? 8.5 + Math.random() * 2 : 5.5 + Math.random() * 1.5, next: null, turn: null, wait: 0, solid: { x0: 0, x1: 0, z0: 0, z1: 0 }, horiz: false };
           L.cars.push(c); L.cars.sort((a, b) => a.s - b.s); cars.push(c); place(c); n--;

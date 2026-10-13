@@ -8,6 +8,7 @@ import { createUrsa } from './ursa.js';
 import { createSolar } from './solar.js';
 import { buildGrillbyLot } from './models/grillby.js';
 import { createGrillbyInside } from './grillbyInside.js';
+import { createNight } from './night.js';
 import { createReality } from './reality.js';
 import { createInput } from './input.js';
 import { createWorld } from './world.js';
@@ -94,7 +95,7 @@ const game = new Game();
 // Bairros (grade em layout.js): 'grid4' (4×4 — Bairros 1 e 3, e o modo Livre), 'plaza6' (6×6 com praça — Bairro 2),
 // 'grid5' (5×5 com posto — Bairro 4), 'grid6s' (6×6 com postos e comércio — Bairro 5), 'city6' (6×6 de prédios — Bairro 6),
 // 'city7' (a mesma cidade, com 1–2 postos e 4–5 prédios comerciais — Bairro 7), 'city8' (igual ao Bairro 7, porém 8×8 — Bairro 8).
-const COMPOSED = ['grid5', 'grid6s', 'city6', 'city7', 'city8', 'hill8', 'canal8', 'rail8', 'flux10'];   // bairros com composição sorteada a cada partida
+const COMPOSED = ['grid5', 'grid6s', 'city6', 'city7', 'city8', 'hill8', 'canal8', 'rail8', 'flux10', 'night10'];   // bairros com composição sorteada a cada partida
 // Cada um tem sua própria cena, construída só na primeira vez que for jogado.
 const POOLS = { grid4: [...Array(16).keys(), ...Object.values(L1_FIXED)],   // grid4: as 16 casas + a casa fixa do Bairro 1 (só aparece nele)
   plaza6: [...Array(32).keys()], grid5: [...Array(25).keys(), ...SHOPS],   // grid5: Bairro 4 (25 casas + prédios comerciais)
@@ -109,7 +110,8 @@ const POOLS = { grid4: [...Array(16).keys(), ...Object.values(L1_FIXED)],   // g
   farm10: FARMS,
   snow8: [...Array(32).keys(), GRILLBY],   // + o Grillby's (fixo no ponto 5)
   moon8: MOONS,   // Nível 17 (Órbita): módulos lunares   // Nível 16 (Nevasca): as casas de sempre, nevadas   // Nível 15 (Colheita): propriedades rurais
-  flux10: [...Array(32).keys()].concat([...Array(28).keys()].map(k => 38 + k), SHOPS, WARES, MODS) };   // Nível 14 (Fluxo): + prédios contemporâneos   // Nível 13 (Morro): casas de laje   // Nível 12 (Veneza): casas venezianas   // Bairro 11 (Trilhos): ferrovia, estações e galpões   // Bairro 10 (Travessia): + galpões e casas gêmeas   // city8 (Bairro 8): o mesmo, em 8×8, com prédios mais altos (e os futuristas, se USE_FUTS)
+  flux10: [...Array(32).keys()].concat([...Array(28).keys()].map(k => 38 + k), SHOPS, WARES, MODS),
+  night10: [...Array(32).keys()].concat([...Array(28).keys()].map(k => 38 + k), SHOPS, WARES, MODS) };   // Nível 19 (Penumbra): o mapa do Fluxo, à noite   // Nível 14 (Fluxo): + prédios contemporâneos   // Nível 13 (Morro): casas de laje   // Nível 12 (Veneza): casas venezianas   // Bairro 11 (Trilhos): ferrovia, estações e galpões   // Bairro 10 (Travessia): + galpões e casas gêmeas   // city8 (Bairro 8): o mesmo, em 8×8, com prédios mais altos (e os futuristas, se USE_FUTS)
 // lote de casa ou de prédio comercial
 const buildAnyLot = (h, opts) => h.grill ? buildGrillbyLot(h) : h.kind === 'moon' ? buildMoonLot(h) : SNOWV && h.kind === 'house' ? buildSnowLot(h, opts) : h.kind === 'farm' ? buildFarmLot(h) : h.kind === 'mod' ? buildModLot(h) : h.kind === 'fav' ? buildFavelaLot(h) : h.kind === 'ven' ? buildVeniceLot(h) : h.kind === 'ware' ? buildWareLot(h) : h.kind === 'shop' ? buildShopLot(h) : h.kind === 'apt' ? buildAptLot(h) : h.kind === 'fut' ? buildFutLot(h) : buildLot(h, opts);
 const USE_FUTS = false;                        // prédios futuristas (models/fut.js): guardados, desligados — troque para true para voltarem ao Bairro 8
@@ -136,7 +138,7 @@ function composeRound() {
   const city = neighborhood === 'city6', city7 = neighborhood === 'city7', city8 = neighborhood === 'city8';
   const shuffled = a => { a = a.slice(); for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; };
   // postos (2 lotes vizinhos da mesma linha): Bairro 4 tem 1; Bairro 5, 1 ou 2 (em linhas diferentes); a cidade, nenhum
-  const hill = neighborhood === 'hill8', canal = neighborhood === 'canal8', rail = neighborhood === 'rail8', flux = neighborhood === 'flux10';
+  const hill = neighborhood === 'hill8', canal = neighborhood === 'canal8', rail = neighborhood === 'rail8', flux = neighborhood === 'flux10' || neighborhood === 'night10';
   const nGas = city ? 0 : neighborhood === 'grid6s' || city7 || city8 || hill || canal || rail ? 1 + Math.floor(Math.random() * 2) : 1;
   // Bairro 9: postos só na parte baixa (linhas 0–3). Bairro 10: postos e galpões sempre de um lado só do canal, em linhas diferentes.
   const rows = shuffled([...Array(hill ? 4 : GRID).keys()]);
@@ -183,6 +185,12 @@ function composeRound() {
     const nMods = 4 + Math.max(0, HOUSE_SLOTS.length - wares.length - nShops - 4 - apts.length - 32), mods = shuffled(MODS).slice(0, nMods);   // (poucos)
     const rest = HOUSE_SLOTS.length - wares.length - nShops - mods.length - apts.length;
     pool = wares.concat(mods, shuffled(SHOPS).slice(0, nShops), apts, shuffled(allHouses).slice(0, rest));
+    if (neighborhood === 'night10') game.arrange = (layout, free) => {   // Penumbra: prédios altos concentrados na avenida
+      const tall = h => h >= 0 && (HOUSES[h].kind === 'apt' || HOUSES[h].kind === 'mod'), d = s => Math.abs(Math.floor(s / GRID) + 0.5 - (FLUX.row + 0.5));
+      const order = free.slice().sort((a, b) => d(a) - d(b)), hs = free.map(s => layout[s]);
+      const tl = hs.filter(tall), ot = hs.filter(h => !tall(h));
+      order.forEach((s, i) => { layout[s] = i < tl.length ? tl[i] : ot[i - tl.length]; });
+    };
   } else if (rail) {                            // Bairro 11: 2 galpões (fixos nos pares sorteados), 4–5 comerciais, 20 prédios, casas
     const wares = shuffled(WARES).slice(0, wareList.length);
     fixed = {}; wareList.forEach((p, i) => { fixed[p[0]] = wares[i]; });
@@ -238,7 +246,8 @@ function composeRound() {
   world.setLayout(game.layout);
   world.setGas(gasList);
   if (city) showLounger();
-  if (flux) traffic.reset();                    // Fluxo: a rede depende dos postos/galpões da partida
+  if (flux) traffic.reset(...(neighborhood === 'night10' ? [10, 10] : []), neighborhood === 'night10');   // Fluxo: a rede depende dos postos/galpões da partida (Penumbra: menos carros, faróis)
+  if (neighborhood === 'night10') night.layout(world, game, MAP);   // Penumbra: postes, letreiros e painéis para esta composição
   rig.refit();
 }
 
@@ -385,6 +394,7 @@ function walkSolids() {
 }
 const train = createTrain();
 const traffic = createTraffic(audio);
+const night = createNight();               // Nível 19 (Penumbra)
 const tractors = createTractors(audio);   // Nível 15 (Colheita): tratores devagar pelas estradas de terra
 const chickens = createChickens();        // Nível 15 (Colheita): galinhas atravessando as estradas
 // ---------- Nível 16 (Nevasca): gelo, limpa-neve e atalhos ----------
@@ -546,6 +556,7 @@ function useNeighborhood(kind) {
   let w = worlds[kind];
   if (!w) {                                     // primeira vez: constrói (escondido pelo fade)
     w = worlds[kind] = createWorld({ renderer, buildLot: buildAnyLot, buildResident: kind === 'snow8' ? h => buildResident(h, { winter: true }) : buildResident, yardBuilders: YARD_BUILDERS, pool: POOLS[kind], dry: kind === 'city6' || kind === 'city7' || kind === 'city8', venice: kind === 'venice8', snow: kind === 'snow8', moon: kind === 'moon8' });
+    if (kind === 'night10') night.setup(w);     // Penumbra: noite, asfalto molhado
   } else SOLIDS.push(...w.extraSolids);        // troncos das árvores de fora deste bairro
   world.hideResident();
   world = w;
@@ -554,9 +565,10 @@ function useNeighborhood(kind) {
   world.scene.add(walker.object); walker.show(false);
   hint.attach(world.scene); boom.attach(world.scene);
   if (kind === 'rail8') { world.scene.add(train.object); train.reset(); }
-  if (kind === 'flux10') world.scene.add(traffic.object); else { traffic.detach(); traffic.silence(); }
+  if (kind === 'flux10' || kind === 'night10') world.scene.add(traffic.object); else { traffic.detach(); traffic.silence(); }
+  night.attach(van, walker, kind === 'night10');   // faróis da van e luz do personagem só no Penumbra
   if (kind === 'farm10') { world.scene.add(chickens.object); chickens.reset(); } else chickens.detach();
-  if (kind === 'farm10') { world.scene.add(tractors.object); tractors.reset(); } else { tractors.detach(); if (kind !== 'flux10') tractors.silence(); }
+  if (kind === 'farm10') { world.scene.add(tractors.object); tractors.reset(); } else { tractors.detach(); if (kind !== 'flux10' && kind !== 'night10') tractors.silence(); }
   van.setIce(kind === 'snow8' ? SNOWV.iceAt : null);   // Nevasca: placas de gelo
   van.setLowGravity(kind === 'moon8'); walker.setLowGravity(kind === 'moon8'); playerSuit.visible = kind === 'moon8';   // Órbita: gravidade baixa e capacete (só neste bairro)
   if (kind === 'snow8') { world.scene.add(plow.object); plow.reset({ loops: [SNOWV.plowLoop], build: buildPlow, speed: 4.6 }); } else plow.detach();
@@ -838,7 +850,7 @@ function goBack() {
 function startFree(mode = 'free') {
   // Bairro 2: 6×6 com praça; Bairro 4: 5×5 com bloqueios; o resto: 4×4
   const lv = mode === 'career' ? careerLevel : freeLevel;
-  useNeighborhood(lv === 1 ? 'plaza6' : lv === 3 ? 'grid5' : lv === 4 ? 'grid6s' : lv === 5 ? 'city6' : lv === 6 ? 'city7' : lv === 7 ? 'city8' : lv === 8 ? 'hill8' : lv === 9 ? 'venice8' : lv === 10 ? 'canal8' : lv === 11 ? 'rail8' : lv === 12 ? 'favela8' : lv === 13 ? 'flux10' : lv === 14 ? 'farm10' : lv === 15 ? 'snow8' : lv === 19 ? 'moon8' : 'grid4');   // 17–19 reservados; 20 = Lua   // 10 = Veneza, 11 = Travessia, 12 = Trilhos
+  useNeighborhood(lv === 1 ? 'plaza6' : lv === 3 ? 'grid5' : lv === 4 ? 'grid6s' : lv === 5 ? 'city6' : lv === 6 ? 'city7' : lv === 7 ? 'city8' : lv === 8 ? 'hill8' : lv === 9 ? 'venice8' : lv === 10 ? 'canal8' : lv === 11 ? 'rail8' : lv === 12 ? 'favela8' : lv === 13 ? 'flux10' : lv === 14 ? 'farm10' : lv === 15 ? 'snow8' : lv === 18 ? 'night10' : lv === 19 ? 'moon8' : 'grid4');   // 17–19 reservados; 20 = Lua   // 10 = Veneza, 11 = Travessia, 12 = Trilhos
   gameMode = mode;
   if (!COMPOSED.includes(neighborhood)) setupGrid4();   // Bairro 1 tem a casa fixa; o 3 (mesma grade) não
   resetGates();
@@ -1839,7 +1851,8 @@ function update(dt, t) {
   if (state !== 'drive') van.relax(dt);          // torre de caixas do bagageiro: para de balançar quando a van não está sendo dirigida
   world.update(t, dt);
   if (neighborhood === 'rail8') train.update(dt, van);
-  if (neighborhood === 'flux10') {                // Fluxo: trânsito; param na frente da van e do motorista a pé
+  if (neighborhood === 'night10') night.update(dt);
+  if (neighborhood === 'flux10' || neighborhood === 'night10') {                // Fluxo: trânsito; param na frente da van e do motorista a pé
     const c = Math.cos(van.heading), s2 = Math.sin(van.heading), obs = [];
     if (!heli.flying) obs.push({ circles: [-1.5, 0, 1.5].map(k => [van.x + c * k, van.z + s2 * k, 1.25]) });
     if (walker.visible) obs.push({ circles: [[walker.x, walker.z, 0.6]] });
@@ -2108,7 +2121,7 @@ window.ADRESS = {
   get careerLevel() { return careerLevel; },
   setCareerLevel(l) { careerLevel = l; },
   setFreeLevel(l) { freeLevel = l; },
-  walker, jamSound, train, walkSolids, trolley, get tseq() { return tseq; }, get FAVELA() { return FAVELA; }, traffic, tractors, chickens, plow, banks, get SNOWV() { return SNOWV; }, get grillIn() { return grillIn; }, get insideOn() { return insideOn; }, get FARMLAND() { return FARMLAND; }, gateOpen, openGate,
+  walker, jamSound, train, walkSolids, trolley, get tseq() { return tseq; }, get FAVELA() { return FAVELA; }, traffic, tractors, chickens, plow, banks, get SNOWV() { return SNOWV; }, night, get grillIn() { return grillIn; }, get insideOn() { return insideOn; }, get FARMLAND() { return FARMLAND; }, gateOpen, openGate,
   get levelSelect() { return levelSelect; },
   shop,
   startGame: m => startFree(m), newRound: () => startNewRound(),
