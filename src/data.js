@@ -214,7 +214,22 @@ export const FARM_GATE = { blue: '#2f6fd0', red: '#d0352a', yellow: '#f0c22a', w
     const sub = (x, y) => x.every(k => y.includes(k));
     if (seen.some(o => sub(o, t) || sub(t, o))) continue;
     seen.push(t);
-    HOUSES.push({ name: names[(HOUSES.length - 246) % names.length], kind: 'farm', ...v, ftags: t });
+    // detalhes rurais (exclusivos da Colheita): 2 por propriedade; botas e vasos só nas casas (junto à porta)
+    const pool = ['scarecrow', 'barrow', 'wood', 'coop', 'veg'].concat(type === 'house' ? ['boots', 'pots'] : []), rural = [];
+    while (rural.length < 2) { const r = pool[rnd(pool.length)]; if (!rural.includes(r)) rural.push(r); }
+    HOUSES.push({ name: names[(HOUSES.length - 246) % names.length], kind: 'farm', ...v, rural, ftags: t.concat(rural.map(r => 'rf:' + r)) });
+  }
+}
+/** Nevasca (Nível 16): detalhes de inverno de cada casa comum (0–31), fixos por casa; só aparecem e só entram nas pistas no Nevasca. */
+export const SNOW_SCARF = { red: '#d8473a', blue: '#3a78d4', yellow: '#efbf2a', green: '#3c9d55' };
+export const SNOW_EXTRAS = [];
+{
+  let seed = 404; const rnd = n => { seed = (seed * 16807) % 2147483647; return seed % n; };
+  const ITEMS = ['snowman', 'sled', 'skis', 'shovel', 'wood', 'icicles', 'lights'], SC = Object.keys(SNOW_SCARF);
+  for (let h = 0; h < 32; h++) {
+    const n = 2 + (rnd(3) === 0 ? 1 : 0), list = [];
+    while (list.length < n) { const it = ITEMS[rnd(ITEMS.length)]; if (!list.includes(it)) list.push(it); }
+    SNOW_EXTRAS[h] = list.map(it => (it === 'snowman' ? 'ws:snowman:' + SC[rnd(SC.length)] : 'ws:' + it));
   }
 }
 /** Índices das propriedades da Colheita em HOUSES. */
@@ -366,6 +381,11 @@ export const PHRASE = {
   'rwall:red': 'paredes vermelhas', 'rwall:brown': 'paredes de madeira escura', 'rwall:gray': 'paredes cinza', 'rwall:green': 'paredes verdes',
   'rroof:red': 'telhado vermelho', 'rroof:blue': 'telhado azul', 'rroof:green': 'telhado verde', 'rroof:gray': 'telhado cinza',
   'rcrop:corn': 'um milharal no terreno', 'rcrop:garden': 'uma horta no terreno', 'rcrop:orchard': 'árvores frutíferas no terreno', 'rcrop:pasture': 'um pasto com vacas no terreno',
+  'rf:scarecrow': 'um espantalho perto da cerca', 'rf:barrow': 'um carrinho de mão na frente', 'rf:wood': 'uma pilha de lenha no quintal',
+  'rf:coop': 'um pequeno galinheiro no terreno', 'rf:veg': 'uma hortinha no quintal', 'rf:boots': 'botas junto à porta', 'rf:pots': 'vasos e um regador na entrada',
+  'ws:snowman:red': 'um boneco de neve de cachecol vermelho', 'ws:snowman:blue': 'um boneco de neve de cachecol azul', 'ws:snowman:yellow': 'um boneco de neve de cachecol amarelo',
+  'ws:snowman:green': 'um boneco de neve de cachecol verde', 'ws:sled': 'um trenó junto à parede', 'ws:skis': 'esquis apoiados na parede', 'ws:shovel': 'uma pá de neve na entrada',
+  'ws:wood': 'lenha empilhada sob uma coberturinha', 'ws:icicles': 'pingentes de gelo no beiral', 'ws:lights': 'luzes coloridas na fachada',
   'rporch': 'uma varanda', 'rx:tank': 'uma caixa-d’água', 'rx:hay': 'fardos de feno na entrada',
   // prédios contemporâneos (Nível 14)
   'mfac:white': 'volumes brancos', 'mfac:gray': 'volumes cinza-escuros', 'mglass:blue': 'vidros azuis', 'mglass:aqua': 'vidros verde-água',

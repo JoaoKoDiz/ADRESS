@@ -2,10 +2,11 @@
 // telhado, a porta e o quintal continuam visíveis), cenário fixo (patamares com muros de pedra, ruas, ladeiras, gelo,
 // pinheiros, postes acesos, montes de neve nas beiradas), o monte de neve dos atalhos e o limpa-neve.
 import * as THREE from 'three';
-import { box, cyl, cone, sphere, at, mat, bakeStatic } from './kit.js';
+import { box, cyl, cone, sphere, torus, at, mat, bakeStatic } from './kit.js';
 import { buildLot } from './house.js';
 import { LOT, LOT_ANCHORS as A } from '../layout.js';
 import { SNOW } from '../snowPlan.js';
+import { SNOW_EXTRAS, SNOW_SCARF } from '../data.js';
 
 const SNOWC = '#eef3f7', SNOW2 = '#dfe7ee', STONE = '#8f8b85', STONE2 = '#a29d95', ASPH = '#5b616b', ICE = '#a9d8f2';
 const GRASS_TO_SNOW = { '95cc68': SNOWC, '74ab4b': SNOW2 };
@@ -21,9 +22,46 @@ export function buildSnowLot(h, opts) {
   const snow = new THREE.Group(); snow.position.set(-LOT / 2, 0, -LOT / 2); wrap.add(snow);
   for (const sgn of [1, -1]) snow.add(at(box(W - 0.2, 0.16, l, SNOWC), (HS.x0 + HS.x1) / 2, ridgeY - Math.sin(th) * l / 2, HZ + sgn * Math.cos(th) * l / 2, sgn * th, 0, 0));
   snow.add(at(box(W - 0.2, 0.22, 0.5, SNOWC), (HS.x0 + HS.x1) / 2, ridgeY + 0.04, HZ));
+  winterExtras(snow, SNOW_EXTRAS[h.index] || [], HS);                // boneco de neve, trenó, esquis, pá, lenha, pingentes, luzes
   wrap.userData = lot.userData;                                      // animações do lote (fumaça da chaminé etc.)
   wrap.name = 'snowlot';
   return wrap;
+}
+
+/** Detalhes de inverno da casa (coordenadas do lote; frente da casa em z = HS.z1, quintal até a cerca). Ficam fora do caminho da porta. */
+function winterExtras(g, tags, HS) {
+  const add = (m, x, y, z, rx = 0, ry = 0, rz = 0) => g.add(at(m, x, y, z, rx, ry, rz));
+  const FZ = HS.z1, EAVE = 0.12 + A.wallHeight;
+  for (const t of tags) {
+    if (t.startsWith('ws:snowman')) {                                // boneco de neve no quintal (entre a casa e o canto esquerdo), cachecol colorido
+      const c = SNOW_SCARF[t.split(':')[2]], x = 6.3, z = FZ + 1.45;
+      add(sphere(0.62, '#f7fbff', 10, 8), x, 0.6, z); add(sphere(0.45, '#f7fbff', 10, 8), x, 1.45, z); add(sphere(0.32, '#f7fbff', 10, 8), x, 2.1, z);
+      add(torus(0.3, 0.09, c, 6, 14), x, 1.78, z, Math.PI / 2, 0, 0); add(box(0.16, 0.5, 0.08, c), x + 0.18, 1.55, z + 0.32, 0, 0, 0.15);
+      add(cone(0.07, 0.35, '#f08a1c', 6), x, 2.1, z + 0.45, Math.PI / 2, 0, 0);
+      for (const s of [-1, 1]) add(sphere(0.05, '#1d1d1f', 6, 4), x + s * 0.11, 2.2, z + 0.28);
+      add(cyl(0.24, 0.24, 0.32, '#2b2b2b', 10), x, 2.5, z); add(cyl(0.36, 0.36, 0.05, '#2b2b2b', 10), x, 2.36, z);
+      for (const s of [-1, 1]) add(cyl(0.03, 0.03, 0.8, '#6b4526', 4), x + s * 0.65, 1.55, z, 0, 0, s * 1.0);
+    } else if (t === 'ws:sled') {                                     // trenó vermelho encostado na parede da frente (à esquerda)
+      const sg = new THREE.Group(); sg.position.set(HS.x0 + 1.1, 0.12, FZ + 0.35); sg.rotation.x = -1.1; g.add(sg);
+      sg.add(at(box(0.9, 0.08, 1.8, '#c8402f'), 0, 0.25, 0)); for (const s of [-1, 1]) sg.add(at(box(0.06, 0.12, 2.0, '#3a3d44'), s * 0.4, 0.08, 0.05));
+    } else if (t === 'ws:skis') {                                     // par de esquis apoiados na parede (à direita da janela)
+      for (const [dx, c] of [[0, '#2f78d0'], [0.22, '#2f78d0']]) add(box(0.12, 2.2, 0.05, c), HS.x1 - 0.9 + dx, 1.2, FZ + 0.25, -0.12, 0, 0.05);
+      for (const dx of [-0.25, 0.47]) add(cyl(0.03, 0.03, 1.5, '#9aa3ab', 4), HS.x1 - 0.9 + dx, 0.85, FZ + 0.25, -0.1, 0, 0);
+    } else if (t === 'ws:shovel') {                                   // pá de neve junto à entrada (ao lado da porta)
+      add(cyl(0.035, 0.035, 1.5, '#8a5a36', 5), A.doorX + 1.15, 0.85, FZ + 0.3, -0.18, 0, 0); add(box(0.55, 0.45, 0.05, '#e0402a'), A.doorX + 1.15, 0.2, FZ + 0.42, -0.18, 0, 0);
+    } else if (t === 'ws:wood') {                                     // lenha empilhada sob uma coberturinha (lateral direita da casa)
+      const x = HS.x1 + 1.3, z = (HS.z0 + HS.z1) / 2 + 0.6;
+      for (let k = 0; k < 3; k++) for (let j = 0; j < 5 - k; j++) add(cyl(0.17, 0.17, 1.1, k % 2 ? '#8a5a34' : '#6b4526', 6), x, 0.28 + k * 0.3, z - 0.68 + j * 0.34 + k * 0.17, 0, 0, Math.PI / 2);   // toras deitadas
+      for (const dz of [-0.9, 0.9]) add(box(0.1, 1.6, 0.1, '#5a3a22'), x + 0.55, 0.9, z + dz);
+      add(box(1.4, 0.1, 2.3, '#5a3a22'), x, 1.7, z, 0, 0, 0.2); add(box(1.45, 0.16, 2.35, SNOWC), x, 1.8, z, 0, 0, 0.2);
+    } else if (t === 'ws:icicles') {                                  // pingentes de gelo pendurados no beiral da frente
+      for (let x = HS.x0 - 0.3, k = 0; x <= HS.x1 + 0.3; x += 0.42, k++) add(cone(0.08, 0.35 + (k * 7 % 5) * 0.09, '#cfeeff', 5, { transparent: true, opacity: 0.85 }), x, EAVE - 0.3, FZ + A.roofOverhang - 0.05, Math.PI, 0, 0);
+    } else if (t === 'ws:lights') {                                   // cordão de luzes coloridas ao longo da fachada
+      const LC = ['#ff4a4a', '#ffd23f', '#4ad04a', '#4aa8ff'];
+      add(box(HS.x1 - HS.x0 + 0.4, 0.03, 0.03, '#2b2b2b'), (HS.x0 + HS.x1) / 2, EAVE - 0.55, FZ + 0.12);
+      for (let x = HS.x0, k = 0; x <= HS.x1; x += 0.55, k++) add(sphere(0.09, LC[k % 4], 6, 4, { emissive: LC[k % 4], emissiveIntensity: 1.2 }), x, EAVE - 0.62 - 0.06 * Math.sin(k * 1.7), FZ + 0.14);
+    }
+  }
 }
 
 /** Cenário fixo do Nevasca. */

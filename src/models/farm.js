@@ -120,6 +120,43 @@ export function buildFarmLot(h) {
     P(box(1.2, 0.5, 0.8, '#3f8a4a'), ex + 2.5, 0.6, ez); P(cyl(0.3, 0.3, 0.12, '#2b2b2b', 8), ex + 3.2, 0.3, ez, Math.PI / 2, 0, 0);
   }
   for (const k of [0, 1]) P(box(0.08, 1.8, 0.08, '#7a5434'), E.x1 - 0.6 - k * 0.5, 0.9, E.z0 + 0.3, 0.2, 0, 0);   // ferramentas encostadas
+  // detalhes rurais (2 por propriedade, nas pistas): faixa da esquerda do pátio (galinheiro, lenha, espantalho), direita (carrinho, hortinha),
+  // junto à porta (botas, vasos e regador) — sempre fora do caminho da porteira até a porta (x −9…−3)
+  const FZ = h.type === 'house' ? -0.5 : h.type === 'barn' ? 0.2 : -0.5, FY = h.type === 'house' && h.porch ? 0.26 : 0;
+  for (const r of h.rural || []) {
+    if (r === 'scarecrow') {
+      const x = -12.2, z = 10.4;
+      P(box(0.16, 2.6, 0.16, WOOD), x, 1.3, z); P(box(2.0, 0.14, 0.14, WOOD), x, 2.0, z);
+      P(box(0.9, 1.0, 0.45, '#c8402f'), x, 1.75, z); for (const s2 of [-1, 1]) P(box(0.5, 0.3, 0.32, '#c8402f'), x + s2 * 0.7, 2.0, z);
+      P(box(0.6, 0.7, 0.4, '#3a5f8f'), x, 1.0, z);
+      P(sphere(0.38, '#d9c08a', 8, 6), x, 2.6, z); P(cyl(0.75, 0.75, 0.06, '#e6c35a', 12), x, 2.85, z); P(cone(0.4, 0.45, '#e6c35a', 10), x, 3.08, z);
+      for (const s2 of [-1, 1]) P(box(0.08, 0.08, 0.04, '#2b2b2b'), x + s2 * 0.13, 2.65, z + 0.36);
+    } else if (r === 'coop') {
+      const x = -11.9, z = 4.2;
+      P(box(2.4, 1.3, 1.7, '#9a4a2a'), x, 0.95, z); P(box(2.7, 0.12, 1.2, '#5a3a22'), x, 1.78, z - 0.45, 0.45, 0, 0); P(box(2.7, 0.12, 1.2, '#5a3a22'), x, 1.78, z + 0.45, -0.45, 0, 0);
+      for (const [dx, dz] of [[-1.1, -0.75], [1.1, -0.75], [-1.1, 0.75], [1.1, 0.75]]) P(box(0.12, 0.3, 0.12, WOOD), x + dx, 0.15, z + dz);
+      P(box(0.5, 0.6, 0.06, '#3a2a20'), x + 0.5, 0.95, z + 0.86); P(box(0.5, 0.08, 1.1, WOOD), x + 0.5, 0.35, z + 1.35, -0.5, 0, 0);
+      for (const [dx, dz] of [[-0.6, 1.5], [0.9, 1.9]]) { P(sphere(0.25, '#ffffff', 7, 5), x + dx, 0.28, z + dz); P(sphere(0.14, '#ffffff', 6, 4), x + dx + 0.18, 0.5, z + dz); P(box(0.06, 0.12, 0.1, '#e0402a'), x + dx + 0.2, 0.66, z + dz); }
+    } else if (r === 'wood') {
+      const x = -12.0, z = 7.4;
+      for (let k = 0; k < 3; k++) for (let j = 0; j < 5 - k; j++) P(cyl(0.2, 0.2, 1.5, k % 2 ? '#8a5a34' : '#6b4526', 6), x - 0.8 + j * 0.42 + k * 0.21, 0.22 + k * 0.36, z, Math.PI / 2, 0, 0);
+      P(box(0.6, 0.5, 0.6, '#7a5434'), x + 1.6, 0.25, z + 0.2); P(box(0.06, 0.7, 0.06, '#5a3a22'), x + 1.6, 0.85, z + 0.2, 0, 0, 0.5);   // toco com machado
+    } else if (r === 'barrow') {
+      const x = -0.9, z = FZ + 2.4;
+      P(box(1.1, 0.4, 0.8, '#3f8a4a'), x, 0.7, z); P(cyl(0.3, 0.3, 0.12, '#2b2b2b', 10), x + 0.75, 0.3, z, Math.PI / 2, 0, 0);
+      for (const s2 of [-1, 1]) { P(box(1.2, 0.08, 0.08, '#8a5a36'), x - 0.8, 0.55, z + s2 * 0.32, 0, 0, -0.25); P(box(0.08, 0.5, 0.08, '#3a3a3a'), x - 0.3, 0.25, z + s2 * 0.32); }
+      P(box(0.9, 0.2, 0.6, '#c98a4a'), x, 0.92, z);
+    } else if (r === 'veg') {
+      const x = -0.9, z = 6.3;
+      P(box(2.4, 0.35, 3.0, '#6b4526'), x, 0.18, z); P(box(2.2, 0.06, 2.8, '#5a3a22'), x, 0.37, z);
+      for (let i = 0; i < 3; i++) for (let j = 0; j < 4; j++) P(cone(0.2, 0.42, i === 1 ? '#e8742a' : '#4f9a3a', 5), x - 0.7 + i * 0.7, 0.6, z - 1.05 + j * 0.7);
+    } else if (r === 'boots') {
+      for (const [dx, c] of [[-0.18, '#3f6a3a'], [0.18, '#3f6a3a']]) { P(box(0.24, 0.5, 0.26, c), -7.4 + dx, FY + 0.25, FZ + 0.45); P(box(0.24, 0.14, 0.42, c), -7.4 + dx, FY + 0.07, FZ + 0.55); }
+    } else if (r === 'pots') {
+      for (const dx of [0, 0.7]) { P(cyl(0.28, 0.2, 0.45, '#b85c38', 8), -4.4 + dx, FY + 0.23, FZ + 0.5); P(sphere(0.3, dx ? '#e04a6a' : '#4f9a3a', 7, 5), -4.4 + dx, FY + 0.6, FZ + 0.5); }
+      P(cyl(0.2, 0.22, 0.4, '#3f8a8a', 8), -3.4, FY + 0.2, FZ + 0.65); P(cyl(0.04, 0.05, 0.5, '#3f8a8a', 5), -3.15, FY + 0.35, FZ + 0.65, 0, 0, -0.9);   // regador
+    }
+  }
   return bakeStatic(root);
 }
 

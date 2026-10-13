@@ -19,7 +19,7 @@ import { buildLot } from './models/house.js';
 import { buildResident } from './models/resident.js';
 import { YARD_BUILDERS } from './models/yard.js';
 import { buildShopLot } from './models/shop.js';
-import { SHOPS, HOUSES, FUTS, L1_FIXED, L6_FIXED, WARES, TWINS, VENS, FAVS, MODS, FARMS, MOONS, GRILLBY, SNOW_FIXED } from './data.js';
+import { SHOPS, HOUSES, FUTS, L1_FIXED, L6_FIXED, WARES, TWINS, VENS, FAVS, MODS, FARMS, MOONS, GRILLBY, SNOW_FIXED, SNOW_EXTRAS } from './data.js';
 import { buildFavelaLot } from './models/favela.js';
 import { buildModLot, MOD_H } from './models/mod.js';
 import { createTraffic } from './traffic.js';
@@ -536,7 +536,9 @@ function useNeighborhood(kind) {
   APT_BUILD.floors = kind === 'city8' ? TALL_FLOORS : 5;
   APT_BUILD.mixed = kind === 'canal8' || kind === 'rail8';  // Bairros 10 e 11: prédios das duas alturas
   train.detach();
-  game.placeTags = kind === 'venice8' || kind === 'favela8' || kind === 'moon8' ? layout => { const m = {}; layout.forEach((h, s) => { if (h >= 0) m[h] = slotPlaceTags(s); }); return m; } : null;
+  game.placeTags = kind === 'venice8' || kind === 'favela8' || kind === 'moon8' ? layout => { const m = {}; layout.forEach((h, s) => { if (h >= 0) m[h] = slotPlaceTags(s); }); return m; }
+    : kind === 'snow8' ? layout => { const m = {}; layout.forEach(h => { if (h >= 0 && SNOW_EXTRAS[h]) m[h] = SNOW_EXTRAS[h].slice(); }); return m; }   // Nevasca: detalhes de inverno nas pistas
+    : null;
   game.arrange = null;
   setBoatMode(kind === 'venice8');
   walker.setArea(kind === 'venice8' ? (x, z) => VENICE.walkable(x, z) : null);   // Veneza: a pé só em terra e nas pontes   // antes de construir a cena do bairro
