@@ -58,11 +58,8 @@ export function buildSnowScene(g, V, MAP, HEDGE) {
     const [ax, az] = s.a, [bx, bz] = s.b, len = Math.hypot(bx - ax, bz - az), ry = Math.atan2(bx - ax, bz - az), y = V.h((ax + bx) / 2, (az + bz) / 2);
     add(box(RW, 0.06, len, s.type === 'cut' ? '#c9d3dc' : ASPH), (ax + bx) / 2, y + 0.035, (az + bz) / 2, 0, ry, 0);
     const nx = Math.cos(ry), nz = -Math.sin(ry);
-    for (let t = 4; t < len - 3; t += 7) for (const sd of [-1, 1]) {
-      const px = ax + (bx - ax) * t / len + nx * sd * (RW / 2 + 0.9), pz = az + (bz - az) * t / len + nz * sd * (RW / 2 + 0.9);
-      const m = sphere(1.0, SNOW2, 7, 4); m.scale.set(1.3, 0.45, 1.0); add(m, px, V.h(px, pz) + 0.05, pz, 0, ry, 0);
-    }
   }
+  for (const q of V.mounds) { const m = sphere(1.0, SNOW2, 7, 4); m.scale.set(0.8, 0.45, 1.3); add(m, q.x, q.y + 0.05, q.z, 0, q.ry, 0); }   // montes na margem (snowPlan: fora das pistas e acessos)
   for (const [x, z] of Object.values(V.N)) add(cyl(RW / 2, RW / 2, 0.06, ASPH, 18), x, V.h(x, z) + 0.034, z);
   // ladeiras: rampa de asfalto e laterais de pedra
   for (const r of V.ramps) {
@@ -85,8 +82,8 @@ export function buildSnowScene(g, V, MAP, HEDGE) {
     for (let t = p.t0 * len; t < p.t1 * len - 0.5; t += 2) {
       const u = Math.min(2, p.t1 * len - t), px = ax + (bx - ax) * (t + u / 2) / len, pz = az + (bz - az) * (t + u / 2) / len;
       const y0 = V.h(ax + (bx - ax) * t / len, az + (bz - az) * t / len), y1 = V.h(ax + (bx - ax) * (t + u) / len, az + (bz - az) * (t + u) / len);
-      const m = at(new THREE.Mesh(new THREE.BoxGeometry(RW - 0.6, 0.06, u + 0.05), iceMat), px, (y0 + y1) / 2 + 0.09, pz, 0, ry, 0); m.rotateX(-Math.atan2(y1 - y0, u)); m.receiveShadow = true; g.add(m);
-      if (Math.floor(t / 2) % 2) add(box(0.12, 0.07, u * 0.8, '#f4fbff'), px + Math.cos(ry) * 1.2, (y0 + y1) / 2 + 0.11, pz - Math.sin(ry) * 1.2, 0, ry + 0.25, 0);
+      const m = at(new THREE.Mesh(new THREE.BoxGeometry(V.ICE_HALF * 2, 0.04, u + 0.05), iceMat), px, (y0 + y1) / 2 + 0.1, pz, 0, ry, 0); m.rotateX(-Math.atan2(y1 - y0, u)); m.receiveShadow = true; g.add(m);   // logo acima do asfalto (topo em +0,065)
+      if (Math.floor(t / 2) % 2) add(box(0.12, 0.03, u * 0.8, '#f4fbff'), px + Math.cos(ry) * 1.2, (y0 + y1) / 2 + 0.125, pz - Math.sin(ry) * 1.2, 0, ry + 0.25, 0);
     }
   }
   // pinheiros com neve
@@ -96,7 +93,7 @@ export function buildSnowScene(g, V, MAP, HEDGE) {
   }
   // postes de luz acesos nos cruzamentos
   const bulb = mat('#fff1b8', { emissive: '#ffd36b', emissiveIntensity: 1.3 });
-  for (const [x, z] of Object.values(V.N).slice(1)) { const px = x + 5.4, pz = z + 0.6, y = V.h(px, pz); add(cyl(0.12, 0.15, 5, '#3a3d44', 6), px, y + 2.5, pz); add(new THREE.Mesh(new THREE.SphereGeometry(0.35, 8, 6), bulb), px, y + 5.1, pz); }
+  for (const l of V.lamps) { add(cyl(0.12, 0.15, 5, '#3a3d44', 6), l.x, l.y + 2.5, l.z); add(new THREE.Mesh(new THREE.SphereGeometry(0.35, 8, 6), bulb), l.x, l.y + 5.1, l.z); }   // (snowPlan: na margem, com colisão)
   return g;
 }
 

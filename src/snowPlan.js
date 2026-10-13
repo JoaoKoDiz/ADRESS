@@ -87,7 +87,9 @@ export function planSnow(MAP, HEDGE) {
   const iceDefs = [['n2', 'n3', 0.2, 0.8], ['n4', 'n5', 0.3, 0.9], ['n5', 'n6', 0.0, 0.6], ['n21', 'n22', 0.05, 0.95], ['n16', 'n17', 0.1, 0.9],
     ['n29', 'n28', 0.1, 0.9], ['n9', 'n10', 0.4, 1.0], ['n15', 'n16', 0.55, 0.95], ['n25', 'n24', 0.4, 0.85]];
   const ice = iceDefs.map(([a, b, t0, t1]) => ({ seg: segs.find(s => (s.na === a && s.nb === b) || (s.na === b && s.nb === a)), t0, t1 }));
-  const iceAt = (x, z) => { for (const p of ice) { const q = segDist(x, z, p.seg); if (q.d < hw + 0.6 && q.t >= p.t0 && q.t <= p.t1) return 1; } return 0; };
+  for (const p of ice) { const L = Math.hypot(p.seg.b[0] - p.seg.a[0], p.seg.b[1] - p.seg.a[1]), m = (hw + 0.5) / L; p.t0 = Math.max(p.t0, m); p.t1 = Math.min(p.t1, 1 - m); }   // fora dos cruzamentos
+  const ICE_HALF = hw - 0.3;                                              // metade da largura visível da placa (a área de efeito é a mesma)
+  const iceAt = (x, z) => { for (const p of ice) { const q = segDist(x, z, p.seg); if (q.d < ICE_HALF && q.t >= p.t0 && q.t <= p.t1) return 1; } return 0; };
   // ---- atalhos (montes de neve no meio) e a rota do limpa-neve (passa pelos dois atalhos) ----
   const cuts = segs.filter(s => s.type === 'cut').map(s => {
     const mx = (s.a[0] + s.b[0]) / 2, mz = (s.a[1] + s.b[1]) / 2;
@@ -95,6 +97,11 @@ export function planSnow(MAP, HEDGE) {
   });
   const P = k => N[k];
   const plowLoop = ['n1', 'n2', 'n3', 'n14', 'n13', 'n12', 'n11', 'n10', 'n9', 'n20', 'n19', 'n11', 'n12', 'n13', 'n14'].map(P);
+  // portas e caminhos de entrega (da frente do lote até o ponto da porta na rua) + o caminho do Grillby's (ponto 5) ficam livres
+  const accessLines = spots.map(sp => [toW(sp, 0, 7.5), sp.door]);
+  if (spots[5]) accessLines.push([toW(spots[5], 3.3, 3.6), toW(spots[5], 3.3, 15.5)]);
+  const lineDist = (x, z, a, b) => { const dx = b.x - a.x, dz = b.z - a.z, L2 = dx * dx + dz * dz || 1, t = Math.max(0, Math.min(1, ((x - a.x) * dx + (z - a.z) * dz) / L2)); return Math.hypot(x - a.x - dx * t, z - a.z - dz * t); };
+  const blocksAccess = (x, z, r) => accessLines.some(([a, b]) => lineDist(x, z, a, b) < r + 1.0) || spots.some(sp => Math.hypot(sp.door.x - x, sp.door.z - z) < r + 2.2);
   // ---- decoração: grupos de pinheiros fora das ruas e das casas ----
   let seed = 161; const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
   const pines = [];
@@ -102,7 +109,30 @@ export function planSnow(MAP, HEDGE) {
     const px = x + (rnd() - 0.5) * 5, pz = z + (rnd() - 0.5) * 5, b = { x0: px - 1.6, x1: px + 1.6, z0: pz - 1.6, z1: pz + 1.6 };
     if (rnd() < 0.35 || oneLevel(b) < 0 || !clearOfRoads(b, 2.5) || spots.some(o => hit(b, o.box, 1.5)) || rampBoxes.some(r => hit(b, r, 2))) continue;
     if (Math.abs(px - 104.6) < 14 && pz < 30) continue;
+    if (blocksAccess(px, pz, 2.4)) continue;
     pines.push({ x: px, z: pz, y: h(px, pz), s: 0.9 + rnd() * 0.6, box: b });
   }
-  return { N, segs, ramps, MID, HIGH, h, level, spots, ice, iceAt, cuts, plowLoop, pines, roadDist };
+  // ---- postes (um por cruzamento) e montes de neve nas beiradas: sempre na margem, fora de qualquer pista, rampa, lote,
+  //      porta ou caminho de entrega, no mesmo patamar da rua (nunca em cima do muro) ----
+  const free = (x, z, r, ref) => x > HEDGE + r + 1 && z > HEDGE + r + 1 && x < MAP - HEDGE - r - 1 && z < MAP - HEDGE - r - 1 &&
+    roadDist(x, z) >= hw + r + 0.3 && Math.abs(h(x, z) - ref) < 0.01 && level(x, z) === level(x + r, z) && level(x, z) === level(x - r, z) && level(x, z) === level(x, z + r) && level(x, z) === level(x, z - r) &&
+    !rampBoxes.some(q => inR(q, x, z, r + 1)) && !spots.some(o => inR(o.box, x, z, r + 0.4)) && !blocksAccess(x, z, r + 1.2) && !cuts.some(c => inR(c.box, x, z, r + 1));
+  const lamps = [];
+  for (const [x, z] of Object.values(N).slice(1)) {
+    const ref = h(x, z);
+    for (let k = 0; k < 16; k++) {
+      const a = 0.4 + k * Math.PI / 8, px = x + Math.cos(a) * (hw + 1.4), pz = z + Math.sin(a) * (hw + 1.4);
+      if (free(px, pz, 0.35, ref) && !pines.some(p => Math.hypot(p.x - px, p.z - pz) < 2.4) && !lamps.some(l => Math.hypot(l.x - px, l.z - pz) < 4)) { lamps.push({ x: px, z: pz, y: ref, box: { x0: px - 0.3, x1: px + 0.3, z0: pz - 0.3, z1: pz + 0.3 } }); break; }
+    }
+  }
+  const mounds = [];
+  for (const s of segs) {
+    if (s.type === 'ramp') continue;
+    const [ax, az] = s.a, [bx, bz] = s.b, len = Math.hypot(bx - ax, bz - az), ry = Math.atan2(bx - ax, bz - az), nx = Math.cos(ry), nz = -Math.sin(ry);
+    for (let t = 4; t < len - 3; t += 7) for (const sd of [-1, 1]) {
+      const cx = ax + (bx - ax) * t / len, cz = az + (bz - az) * t / len, px = cx + nx * sd * (hw + 1.35), pz = cz + nz * sd * (hw + 1.35);
+      if (free(px, pz, 1.0, h(cx, cz)) && !lamps.some(l => Math.hypot(l.x - px, l.z - pz) < 2) && !pines.some(p => Math.hypot(p.x - px, p.z - pz) < 2.2)) mounds.push({ x: px, z: pz, y: h(px, pz), ry });
+    }
+  }
+  return { N, segs, ramps, MID, HIGH, h, level, spots, ice, iceAt, ICE_HALF, cuts, plowLoop, pines, lamps, mounds, roadDist };
 }

@@ -392,6 +392,7 @@ function snowSolids() {
   }
   for (const c of V.cuts) { c.solid = { ...c.box }; SOLIDS.push(c.solid); }
   for (const p of V.pines) SOLIDS.push({ x0: p.x - 0.5, x1: p.x + 0.5, z0: p.z - 0.5, z1: p.z + 0.5 });
+  for (const l of V.lamps) SOLIDS.push({ ...l.box });                // postes
 }
 /** Colheita: cercas (a porteira fechada é um sólido à parte, que some ao abrir), plantações, extras e a decoração. */
 function farmSolids() {
