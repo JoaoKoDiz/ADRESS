@@ -79,6 +79,10 @@ export function planSnow(MAP, HEDGE) {
     }
   }
   while (spots.length > 32) spots.splice(Math.floor(spots.length / 2), 1);   // (32 casas no total)
+  if (spots[5]) {                                                         // ponto 5 = Grillby's (fixo): paredes, placa e beiral (a porta fica livre na frente)
+    const sp = spots[5], a = toW(sp, -6.7, -5.5), b = toW(sp, 6.7, 3.25);
+    sp.walkBox = { x0: Math.min(a.x, b.x), x1: Math.max(a.x, b.x), z0: Math.min(a.z, b.z), z1: Math.max(a.z, b.z) };
+  }
   // ---- gelo: trechos (segmento, t0..t1) em secundárias, curvas e na ladeira C; a principal fica limpa ----
   const iceDefs = [['n2', 'n3', 0.2, 0.8], ['n4', 'n5', 0.3, 0.9], ['n5', 'n6', 0.0, 0.6], ['n21', 'n22', 0.05, 0.95], ['n16', 'n17', 0.1, 0.9],
     ['n29', 'n28', 0.1, 0.9], ['n9', 'n10', 0.4, 1.0], ['n15', 'n16', 0.55, 0.95], ['n25', 'n24', 0.4, 0.85]];

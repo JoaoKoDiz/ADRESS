@@ -1557,7 +1557,7 @@ function grillDoorWorld(out = 0) {
   const sp = SPOTS.spots[game.slotOf[GRILLBY]], ry = Math.atan2(sp.fx, sp.fz), c = Math.cos(ry), sn = Math.sin(ry), lx = 3.3, lz = 3.6 + out;
   return { x: sp.px + lx * c + lz * sn, z: sp.pz - lx * sn + lz * c, heading: Math.atan2(c, sn) };
 }
-const nearGrillDoor = () => state === 'walk' && SNOWV && !roofWalk && game.slotOf[GRILLBY] >= 0 && game.pool.includes(GRILLBY) && !boom.isDestroyed(GRILLBY) &&
+const nearGrillDoor = () => state === 'walk' && SNOWV && !roofWalk && game.layout.includes(GRILLBY) && !boom.isDestroyed(GRILLBY) &&
   (() => { const d = grillDoorWorld(0.9); return Math.hypot(walker.x - d.x, walker.z - d.z) < 1.9; })();
 function startGrill(dir) { if (dir === 'in') grillMusic.load().catch(() => {}); grill = { dir, t: 0, swapped: false }; walker.update(0, { x: 0, z: 0 }, 'screen', [], GRILL_FAR_VAN); setState('grill'); }
 function swapGrill() {
@@ -1578,6 +1578,7 @@ function leaveGrill() {
   insideOn = false; world.scene.add(walker.object);
   grillMusic.stop(); music.setOverride(null); music.suspend(false);   // a do bairro volta como estava antes de entrar
   const d = grillDoorWorld(2.2); walker.pose(d.x, d.z, d.heading);
+  rig.snap({ x: walker.x, z: walker.z, y: walker.floor, heading: walker.heading });   // tela preta: a câmera já começa no personagem, junto à porta
 }
 function updateGrill(dt) {
   const g = grill; g.t += dt;
@@ -1881,9 +1882,9 @@ function update(dt, t) {
       barriers.jamRects, foot ? walker.x : van.x, foot ? walker.z : van.z); }
   // entregando (campainha/diálogo) ou com o balão "E — Entregar" à vista: a câmera se volta para a casa
   const focusH = (state === 'ring' || state === 'dialog') ? pending : state === 'drive' ? nearHouse : -1;
-  const onFoot = state === 'walk' || (footDelivery && (state === 'ring' || state === 'dialog'));              // a câmera segue o personagem a pé
+  const onFoot = state === 'walk' || state === 'grill' || (footDelivery && (state === 'ring' || state === 'dialog'));   // (Grillby's: na transição a câmera fica no personagem)              // a câmera segue o personagem a pé
   moonUpdate(dt);                                 // Órbita: a lua gira por baixo de quem o jogador controla
-  rig.update(dt, onFoot ? { x: walker.x, z: walker.z, y: walker.floor, heading: walker.heading, speed: walker.speed, focus: null } : { x: van.x, z: van.z, y: heli.altitude, heading: van.heading, speed: van.speed, focus: null });   // sem câmera automática: quem controla é o jogador
+  if (!insideOn) rig.update(dt, onFoot ? { x: walker.x, z: walker.z, y: walker.floor, heading: walker.heading, speed: walker.speed, focus: null } : { x: van.x, z: van.z, y: heli.altitude, heading: van.heading, speed: van.speed, focus: null });   // sem câmera automática: quem controla é o jogador
   if (state === 'talk') { rig.camera.position.copy(talkCam.pos); rig.camera.lookAt(talkCam.look); }   // enquadramento fixo da conversa
   if (state === 'laser') fxCine.applyCamera(rig.camera);
   if (state === 'cine' && cine) { rig.camera.position.copy(cine.camPos); rig.camera.lookAt(cine.camLook); }

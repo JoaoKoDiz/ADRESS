@@ -240,7 +240,7 @@ export const MOON_COL = { blue: '#2f78d0', orange: '#ff7a1a', green: '#3fae5a', 
 export const MOONS = [...Array(32).keys()].map(k => 286 + k);
 /** Nevasca (Nível 16): o Grillby's, bar de madeira fixo num ponto do bairro (comercial; interação na porta da frente). */
 export const GRILLBY = HOUSES.length;
-HOUSES.push({ name: 'Grillby', kind: 'shop', grill: true });
+HOUSES.push({ name: "Grillby's", kind: 'shop', grill: true, noDelivery: true });   // só o bar (entrar/sair); nunca é destino de entrega
 export const SNOW_FIXED = { 5: GRILLBY };            // ponto 5 do plano: parte baixa, perto da entrada, de frente para a rua
 
 export const ROOF_ITEMS = ['chimney', 'dish', 'solar', 'tank', 'rooster', 'kite', 'patch'];

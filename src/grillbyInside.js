@@ -193,8 +193,8 @@ export function createGrillbyInside() {
   // ---- moradores ----
   const npcs = [];
   const P = (o, x, z, ry, anim) => { const n = buildNPC(o); n.root.position.set(x, 0, z); n.root.rotation.y = ry; g.add(n.root); npcs.push({ ...n, anim, ry }); return n; };
-  const W = WINTER, col = i => ({ shirt: W.coats[(i * 3) % W.coats.length], hair: HAIRS[(i * 3 + 1) % HAIRS.length], pants: PANTS[i % PANTS.length], k: i,   // clientes de inverno
-    winter: { hat: W.hats[(i * 5) % W.hats.length], scarf: W.scarves[(i * 7 + 1) % W.scarves.length], glove: W.gloves[(i * 3) % W.gloves.length], boots: W.boots[i % W.boots.length], hatOn: i % 2 === 1 } });
+  const WN = WINTER, col = i => ({ shirt: WN.coats[(i * 3) % WN.coats.length], hair: HAIRS[(i * 3 + 1) % HAIRS.length], pants: PANTS[i % PANTS.length], k: i,   // clientes de inverno
+    winter: { hat: WN.hats[(i * 5) % WN.hats.length], scarf: WN.scarves[(i * 7 + 1) % WN.scarves.length], glove: WN.gloves[(i * 3) % WN.gloves.length], boots: WN.boots[i % WN.boots.length], hatOn: i % 2 === 1 } });
   P({ ...col(0), winter: null, apron: true, shirt: '#2b2b2b' }, -0.8, CZ - 1.2, 0, 'wipe');                      // atendente atrás do balcão
   P({ ...col(1), seatY: 1.12 }, STOOLS[0], CZ + 1.35, Math.PI, 'talkL');                            // no balcão (de costas para a sala)
   P({ ...col(2), seatY: 1.12 }, STOOLS[1], CZ + 1.35, Math.PI, 'listen');

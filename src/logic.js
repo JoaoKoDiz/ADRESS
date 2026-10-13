@@ -94,7 +94,7 @@ export class Game {
     if (this.arrange) this.arrange(this.layout, free);   // ex.: Bairro 10 põe as casas gêmeas em lados opostos do canal
     this.layout.forEach((h, s) => { if (h >= 0) this.slotOf[h] = s; });
     setPlaceTags(this.placeTags ? this.placeTags(this.layout) : null);
-    this.pool = this.layout.filter(h => h >= 0);    // casas presentes nesta partida (as fixas também entram nas entregas)
+    this.pool = this.layout.filter(h => h >= 0 && !HOUSES[h].noDelivery);   // destinos desta partida (as fixas também entram; o Grillby's não é destino)
 
     const len = ROUTE_LEN;
     let route;
