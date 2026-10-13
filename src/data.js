@@ -238,6 +238,10 @@ export const MOON_COL = { blue: '#2f78d0', orange: '#ff7a1a', green: '#3fae5a', 
 }
 /** Índices dos módulos da Órbita em HOUSES. */
 export const MOONS = [...Array(32).keys()].map(k => 286 + k);
+/** Nevasca (Nível 16): o Grillby's, bar de madeira fixo num ponto do bairro (comercial; interação na porta da frente). */
+export const GRILLBY = HOUSES.length;
+HOUSES.push({ name: 'Grillby', kind: 'shop', grill: true });
+export const SNOW_FIXED = { 5: GRILLBY };            // ponto 5 do plano: parte baixa, perto da entrada, de frente para a rua
 
 export const ROOF_ITEMS = ['chimney', 'dish', 'solar', 'tank', 'rooster', 'kite', 'patch'];
 export const YARD_ITEMS = ['fruit', 'bare', 'cactus', 'sunflowers', 'ballbush', 'doghouse', 'pool', 'trampoline',
@@ -289,6 +293,11 @@ HOUSES.forEach((h, i) => {
     h.roofItems = []; h.yardItems = [];
     return;
   }
+  if (h.grill) {
+    h.f = []; h.tags = ['g:sign', 'g:windows', 'g:wood'];
+    h.roofItems = []; h.yardItems = [];
+    return;
+  }
   if (h.kind === 'shop') {
     h.f = [];
     h.tags = ['awning:' + h.awning, 'facade:' + h.facade, 'top:' + h.top];
@@ -316,6 +325,7 @@ export const PHRASE = {
   // prédios comerciais
   'awning:red': 'toldo vermelho', 'awning:blue': 'toldo azul', 'awning:green': 'toldo verde', 'awning:yellow': 'toldo amarelo',
   'facade:brick': 'fachada de tijolinhos', 'facade:white': 'fachada branca', 'facade:mint': 'fachada verde-clara',
+  'g:sign': 'uma placa “GRILLBY’S” no alto', 'g:windows': 'janelas acesas com luz quente', 'g:wood': 'fachada de madeira',
   'top:ac': 'aparelhos de ar-condicionado no topo', 'top:billboard': 'um outdoor no topo', 'top:antenna': 'uma antena de rádio no topo',
   // prédios futuristas
   'glow:cyan': 'luzes de neon ciano', 'glow:magenta': 'luzes de neon rosa', 'glow:lime': 'luzes de neon verde-limão', 'glow:amber': 'luzes de neon âmbar',
@@ -379,6 +389,7 @@ export const REF = {
   ware: { a: 'o galpão', da: 'do galpão', na: 'no galpão', n: 'galpão' },
   module: { a: 'o módulo', da: 'do módulo', na: 'no módulo', n: 'módulo' },
   barn: { a: 'o celeiro', da: 'do celeiro', na: 'no celeiro', n: 'celeiro' },
+  bar: { a: 'o bar', da: 'do bar', na: 'no bar', n: 'bar' },
 };
 
 export const COMPLAINTS = [

@@ -6,6 +6,7 @@ import { MAP, doorPoint, slotOrigin, DELIVERY_RADIUS, DELIVERY_MAX_SPEED, VAN, V
 import { createLaser } from './laser.js';
 import { createUrsa } from './ursa.js';
 import { createSolar } from './solar.js';
+import { buildGrillbyLot } from './models/grillby.js';
 import { createReality } from './reality.js';
 import { createInput } from './input.js';
 import { createWorld } from './world.js';
@@ -17,7 +18,7 @@ import { buildLot } from './models/house.js';
 import { buildResident } from './models/resident.js';
 import { YARD_BUILDERS } from './models/yard.js';
 import { buildShopLot } from './models/shop.js';
-import { SHOPS, HOUSES, FUTS, L1_FIXED, L6_FIXED, WARES, TWINS, VENS, FAVS, MODS, FARMS, MOONS } from './data.js';
+import { SHOPS, HOUSES, FUTS, L1_FIXED, L6_FIXED, WARES, TWINS, VENS, FAVS, MODS, FARMS, MOONS, GRILLBY, SNOW_FIXED } from './data.js';
 import { buildFavelaLot } from './models/favela.js';
 import { buildModLot, MOD_H } from './models/mod.js';
 import { createTraffic } from './traffic.js';
@@ -103,11 +104,11 @@ const POOLS = { grid4: [...Array(16).keys(), ...Object.values(L1_FIXED)],   // g
   rail8: [...Array(32).keys()].concat([...Array(28).keys()].map(k => 38 + k), SHOPS, WARES),
   venice8: VENS, favela8: FAVS,
   farm10: FARMS,
-  snow8: [...Array(32).keys()],
+  snow8: [...Array(32).keys(), GRILLBY],   // + o Grillby's (fixo no ponto 5)
   moon8: MOONS,   // Nível 17 (Órbita): módulos lunares   // Nível 16 (Nevasca): as casas de sempre, nevadas   // Nível 15 (Colheita): propriedades rurais
   flux10: [...Array(32).keys()].concat([...Array(28).keys()].map(k => 38 + k), SHOPS, WARES, MODS) };   // Nível 14 (Fluxo): + prédios contemporâneos   // Nível 13 (Morro): casas de laje   // Nível 12 (Veneza): casas venezianas   // Bairro 11 (Trilhos): ferrovia, estações e galpões   // Bairro 10 (Travessia): + galpões e casas gêmeas   // city8 (Bairro 8): o mesmo, em 8×8, com prédios mais altos (e os futuristas, se USE_FUTS)
 // lote de casa ou de prédio comercial
-const buildAnyLot = (h, opts) => h.kind === 'moon' ? buildMoonLot(h) : SNOWV && h.kind === 'house' ? buildSnowLot(h, opts) : h.kind === 'farm' ? buildFarmLot(h) : h.kind === 'mod' ? buildModLot(h) : h.kind === 'fav' ? buildFavelaLot(h) : h.kind === 'ven' ? buildVeniceLot(h) : h.kind === 'ware' ? buildWareLot(h) : h.kind === 'shop' ? buildShopLot(h) : h.kind === 'apt' ? buildAptLot(h) : h.kind === 'fut' ? buildFutLot(h) : buildLot(h, opts);
+const buildAnyLot = (h, opts) => h.grill ? buildGrillbyLot(h) : h.kind === 'moon' ? buildMoonLot(h) : SNOWV && h.kind === 'house' ? buildSnowLot(h, opts) : h.kind === 'farm' ? buildFarmLot(h) : h.kind === 'mod' ? buildModLot(h) : h.kind === 'fav' ? buildFavelaLot(h) : h.kind === 'ven' ? buildVeniceLot(h) : h.kind === 'ware' ? buildWareLot(h) : h.kind === 'shop' ? buildShopLot(h) : h.kind === 'apt' ? buildAptLot(h) : h.kind === 'fut' ? buildFutLot(h) : buildLot(h, opts);
 const USE_FUTS = false;                        // prédios futuristas (models/fut.js): guardados, desligados — troque para true para voltarem ao Bairro 8
 const TALL_FLOORS = 9;                         // Bairro 8: prédios residenciais mais altos (os outros bairros têm 5 andares)
 let world = createWorld({ renderer, buildLot: buildAnyLot, buildResident, yardBuilders: YARD_BUILDERS, pool: POOLS.grid4 });
@@ -522,7 +523,7 @@ function setupGrid4() {
   const lv = gameMode === 'career' ? careerLevel : freeLevel;
   const l1 = neighborhood === 'grid4' && lv === 0;
   const pool = POOLS[neighborhood].filter(h => l1 || !Object.values(L1_FIXED).includes(h));
-  game.setNeighborhood(pool, HOUSE_SLOTS, GRID * GRID, l1 ? L1_FIXED : null);
+  game.setNeighborhood(pool, HOUSE_SLOTS, GRID * GRID, l1 ? L1_FIXED : neighborhood === 'snow8' ? SNOW_FIXED : null);
   world.setLayout(game.layout);
 }
 function useNeighborhood(kind) {
