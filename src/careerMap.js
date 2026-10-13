@@ -158,6 +158,88 @@ function miniNeighborhood(kind, colors, gray = false) {
     for (const [x, z, y] of [[5.6, -5.2, 2.1], [-6, -1.4, 2.1], [1.2, 5.8, 0.45], [-1.6, 1.8, 0.45]]) { add(cone(0.75, 1.6, G('#2f6b45', '#8a8a8a'), 7), x, y + 0.9, z); add(cone(0.4, 0.5, SN, 7), x, y + 1.5, z); }
     return bakeStatic(g);
   }
+  if (kind === 'farmThumb') {                    // Nível 15 (Colheita), só na miniatura da seleção: estrada de terra sinuosa com bifurcação,
+    // casa com varanda, celeiro vermelho, casinha, cercas com porteira, milharal, pomar, trator, galinhas, feno e caixa-d'água
+    const Y = 0.4, DIRT = '#c19a68', WOODC = '#8a5a34', WOODL = '#b98a56';
+    const road = (pts, w = 1.25) => {                     // trechos retos + juntas redondas = curva suave
+      for (let k = 0; k < pts.length - 1; k++) {
+        const [ax, az] = pts[k], [bx, bz] = pts[k + 1], len = Math.hypot(bx - ax, bz - az);
+        add(box(w, 0.06, len, DIRT), (ax + bx) / 2, Y + 0.03, (az + bz) / 2, 0, Math.atan2(bx - ax, bz - az), 0);
+      }
+      for (const [x, z] of pts) add(cyl(w / 2, w / 2, 0.06, DIRT, 14), x, Y + 0.031, z);
+    };
+    const fork = [0.5, 0.9];
+    road([[-0.4, 6.9], [0.5, 5.0], [-0.1, 2.8], fork]);                          // principal (vem da beira de baixo)
+    road([fork, [-1.4, -0.5], [-3.2, -1.0], [-5.2, -0.8], [-6.9, -1.3]]);       // ramo da esquerda
+    road([fork, [2.1, -0.6], [2.7, -2.8], [2.3, -5.0], [2.7, -6.9]]);           // ramo da direita
+    road([[-3.4, -1.1], [-3.6, -2.8]], 0.8);                                      // acessos às propriedades
+    road([[2.65, -3.3], [3.7, -3.6]], 0.8);
+    road([[0.3, 3.4], [2.4, 2.6]], 0.8);
+    // cercas de madeira (postes + 2 travessas) e porteira
+    const fence = (ax, az, bx, bz) => {
+      const len = Math.hypot(bx - ax, bz - az), ry = Math.atan2(bx - ax, bz - az), n = Math.max(1, Math.round(len / 0.9));
+      for (let k = 0; k <= n; k++) add(box(0.14, 0.62, 0.14, G(WOODC, '#7a7a7a')), ax + (bx - ax) * k / n, Y + 0.31, az + (bz - az) * k / n);
+      for (const y of [0.24, 0.48]) add(box(0.07, 0.08, len, G(WOODC, '#7a7a7a')), (ax + bx) / 2, Y + y, (az + bz) / 2, 0, ry, 0);
+    };
+    const gate = (x, z, ry, w = 1.1) => {                 // porteira (madeira clara com travessa diagonal)
+      const gg = new THREE.Group(); gg.position.set(x, Y, z); gg.rotation.y = ry; g.add(gg);
+      for (const y of [0.18, 0.36, 0.54]) gg.add(at(box(w, 0.08, 0.08, G(WOODL, '#9a9a9a')), 0, y, 0));
+      gg.add(at(box(Math.hypot(w, 0.4), 0.08, 0.08, G(WOODL, '#9a9a9a')), 0, 0.36, 0, 0, 0, Math.atan2(0.4, w)));
+      for (const sx of [-1, 1]) gg.add(at(box(0.18, 0.78, 0.18, G(WOODC, '#7a7a7a')), sx * (w / 2 + 0.09), 0.39, 0));
+    };
+    // casa rural com varanda (canto de cima, à esquerda)
+    const HX = -3.8, HZ = -4.3, wallC = G('#f3e6c8', '#cfcfcf');
+    add(box(3.0, 1.7, 2.2, wallC), HX, Y + 0.85, HZ);
+    const prism = (w, h, d, c, x, y, z) => {             // telhado de duas águas (cumeeira ao longo de x)
+      const sh = new THREE.Shape(); sh.moveTo(-d / 2, 0); sh.lineTo(d / 2, 0); sh.lineTo(0, h); sh.closePath();
+      const geo = new THREE.ExtrudeGeometry(sh, { depth: w, bevelEnabled: false }); geo.translate(0, 0, -w / 2);
+      const m = new THREE.Mesh(geo, mat(c)); m.rotation.y = Math.PI / 2; m.castShadow = m.receiveShadow = true; m.position.set(x, y, z); g.add(m);
+    };
+    prism(3.4, 1.1, 2.7, G('#3f6fb0', '#8c8c8c'), HX, Y + 1.7, HZ);
+    add(box(3.0, 0.1, 1.0, G(WOODL, '#a0a0a0')), HX, Y + 0.12, HZ + 1.6);                                  // varanda: piso, colunas e cobertura
+    for (const dx of [-1.35, 0, 1.35]) add(box(0.12, 1.1, 0.12, G('#ffffff', '#dddddd')), HX + dx, Y + 0.65, HZ + 2.0);
+    add(box(3.2, 0.1, 1.2, G('#3f6fb0', '#8c8c8c')), HX, Y + 1.25, HZ + 1.6, -0.12, 0, 0);
+    add(box(0.55, 0.95, 0.06, G('#6b4428', '#5c5c5c')), HX + 0.5, Y + 0.48, HZ + 1.12);
+    for (const dx of [-0.8, 1.15]) add(box(0.5, 0.45, 0.06, G('#9fd3f0', '#bdbdbd')), HX + dx - 0.2, Y + 0.95, HZ + 1.12);
+    fence(-6.4, -6.4, -6.4, -2.0); fence(-6.4, -2.0, -4.3, -2.0); fence(-2.9, -2.0, -1.4, -2.0); fence(-1.4, -2.0, -1.4, -6.4);
+    gate(-3.6, -2.0, 0, 1.3);
+    // caixa-d'água (atrás da casa)
+    for (const [dx, dz] of [[-0.35, -0.35], [0.35, -0.35], [-0.35, 0.35], [0.35, 0.35]]) add(box(0.1, 1.5, 0.1, G('#7a5a3a', '#7a7a7a')), -5.6 + dx, Y + 0.75, -5.7 + dz);
+    add(cyl(0.6, 0.6, 0.8, G('#5a8fc0', '#8a8a8a'), 12), -5.6, Y + 1.9, -5.7); add(cone(0.66, 0.35, G('#4a6f96', '#7a7a7a'), 12), -5.6, Y + 2.47, -5.7);
+    // celeiro vermelho (canto de cima, à direita) + fardos de feno
+    const BX = 5.0, BZ = -3.9;
+    add(box(2.6, 2.0, 3.0, G('#b8382e', '#9a9a9a')), BX, Y + 1.0, BZ);
+    { const sh = new THREE.Shape(); sh.moveTo(-1.5, 0); sh.lineTo(1.5, 0); sh.lineTo(0, 1.3); sh.closePath();   // telhado (cumeeira ao longo de z)
+      const geo = new THREE.ExtrudeGeometry(sh, { depth: 3.3, bevelEnabled: false }); geo.translate(0, 0, -1.65);
+      const m = new THREE.Mesh(geo, mat(G('#6e737a', '#7a7a7a'))); m.position.set(BX, Y + 2.0, BZ); m.rotation.y = Math.PI / 2; m.castShadow = true; g.add(m); }
+    add(box(0.06, 1.4, 1.5, G('#f4efe6', '#dddddd')), BX - 1.31, Y + 0.72, BZ);                              // portão branco com X
+    for (const r of [0.75, -0.75]) add(box(0.07, 1.9, 0.12, G('#f4efe6', '#dddddd')), BX - 1.33, Y + 0.72, BZ, r, 0, 0);
+    for (const [x, z] of [[4.2, -1.6], [5.1, -1.7], [4.65, -1.2]]) add(cyl(0.38, 0.38, 0.62, G('#e6c35a', '#b0b0b0'), 10), x, Y + 0.38, z, 0, 0, Math.PI / 2);
+    fence(3.4, -2.2, 3.4, -3.1); fence(3.4, -4.3, 3.4, -6.4); gate(3.4, -3.7, Math.PI / 2, 1.0);
+    // milharal (embaixo, à esquerda; fileiras altas) com cerca e porteira
+    for (let x = -5.9; x <= -2.9; x += 0.6) for (let z = 1.3; z <= 4.3; z += 0.6) { add(box(0.2, 1.1, 0.2, G('#6aa03a', '#9c9c9c')), x, Y + 0.55, z); add(box(0.12, 0.22, 0.12, G('#f2cf4a', '#b8b8b8')), x + 0.08, Y + 0.95, z); }
+    fence(-6.4, 0.7, -2.3, 0.7); fence(-6.4, 0.7, -6.4, 4.9); fence(-6.4, 4.9, -2.3, 4.9); fence(-2.3, 0.7, -2.3, 2.2); fence(-2.3, 3.4, -2.3, 4.9);
+    gate(-2.3, 2.8, Math.PI / 2, 1.1);
+    // casinha menor + galinhas (embaixo, à direita, junto do acesso)
+    house(4.4, 1.9, G('#c8573a', '#8c8c8c'), 0.62);
+    for (const [x, z, r] of [[2.9, 1.5, 0.3], [3.3, 1.1, 2.1], [2.6, 1.0, 4.2], [3.5, 1.6, 1.0]]) {
+      add(sphere(0.2, G('#ffffff', '#dddddd'), 7, 5), x, Y + 0.24, z); add(sphere(0.12, G('#ffffff', '#dddddd'), 6, 4), x + Math.cos(r) * 0.18, Y + 0.42, z + Math.sin(r) * 0.18);
+      add(box(0.06, 0.1, 0.1, G('#e0402a', '#9a9a9a')), x + Math.cos(r) * 0.18, Y + 0.55, z + Math.sin(r) * 0.18);
+    }
+    // pomar (poucas árvores redondas com frutas) com cerca baixa
+    for (const [x, z] of [[3.2, 4.4], [4.9, 4.2], [3.6, 5.9], [5.4, 5.7]]) {
+      add(cyl(0.12, 0.15, 0.7, G('#6b4526', '#6a6a6a'), 6), x, Y + 0.35, z); add(sphere(0.62, G('#3f8f3a', '#8a8a8a'), 8, 6), x, Y + 1.1, z);
+      for (const [dx, dy, dz] of [[0.4, 0.15, 0.35], [-0.35, 0.05, 0.4], [0.05, 0.35, 0.5]]) add(sphere(0.1, G('#e0402a', '#9a9a9a'), 5, 4), x + dx, Y + 1.1 + dy, z + dz);
+    }
+    fence(2.3, 3.4, 6.4, 3.4); fence(6.4, 3.4, 6.4, 6.4);
+    // trator verde na estrada principal
+    const tr = new THREE.Group(); tr.position.set(0.2, Y, 4.1); tr.rotation.y = Math.atan2(0.6, -2.2); g.add(tr);
+    tr.add(at(box(0.8, 0.5, 1.5, G('#3f9a3a', '#8a8a8a')), 0, 0.55, 0.15)); tr.add(at(box(0.8, 0.8, 0.7, G('#3f9a3a', '#8a8a8a')), 0, 0.95, -0.35));
+    tr.add(at(box(0.7, 0.5, 0.06, G('#9fd3f0', '#bdbdbd')), 0, 1.0, 0.0)); tr.add(at(box(0.9, 0.08, 0.8, G('#f2cf4a', '#a0a0a0')), 0, 1.4, -0.35));
+    for (const sx of [-1, 1]) { tr.add(at(cyl(0.42, 0.42, 0.24, G('#222222', '#444444'), 12), sx * 0.52, 0.42, -0.4, 0, 0, Math.PI / 2)); tr.add(at(cyl(0.24, 0.24, 0.18, G('#222222', '#444444'), 10), sx * 0.45, 0.24, 0.65, 0, 0, Math.PI / 2)); }
+    tr.add(at(cyl(0.05, 0.05, 0.5, G('#333333', '#555555'), 6), 0.2, 1.05, 0.5));
+    return bakeStatic(g);
+  }
   if (kind === 'farm') {                         // Nível 15 (Colheita): estrada de terra, celeiro, casinha, milharal, pasto e cerca
     add(box(13.6, 0.1, 13.6, G('#86b85c', '#a3a3a3')), 0, 0.42, 0);
     add(box(2.0, 0.12, 14, G('#b8956a', '#9a9a9a')), -1.2, 0.47, 0, 0, 0.18, 0); add(box(7, 0.12, 2.0, G('#b8956a', '#9a9a9a')), 3, 0.47, 1.5, 0, -0.2, 0);
@@ -371,12 +453,13 @@ export function renderMiniThumbnails(w = 480, h = 360) {
     const sun = new THREE.DirectionalLight('#ffffff', 2.0);
     sun.position.set(-30, 60, 40);
     scene.add(sun);
-    const mini = miniNeighborhood(kind, PALETTES[i].map(c => ROOF_COL[c]));
+    const mini = miniNeighborhood(kind === 'farm' ? 'farmThumb' : kind, PALETTES[i].map(c => ROOF_COL[c]));   // Colheita: maquete própria da seleção
     scene.add(mini);
     // enquadra a maquete inteira (prédios altos incluídos), sempre do mesmo ângulo
     const sph = new THREE.Box3().setFromObject(mini).getBoundingSphere(new THREE.Sphere());
-    const dir = new THREE.Vector3(-6, 24, 27).normalize(), t = Math.tan(THREE.MathUtils.degToRad(cam.fov / 2));
-    const dist = sph.radius / Math.min(t, t * cam.aspect) * (kind === 'moon' ? 0.7 : 0.92);   // a lua: maior, sem cortar as bordas
+    const dir = (kind === 'farm' ? new THREE.Vector3(-11, 17, 21) : new THREE.Vector3(-6, 24, 27)).normalize(), t = Math.tan(THREE.MathUtils.degToRad(cam.fov / 2));   // Colheita: três quartos
+    const dist = sph.radius / Math.min(t, t * cam.aspect) * (kind === 'moon' ? 0.7 : kind === 'farm' ? 0.84 : 0.92);   // a lua: maior, sem cortar as bordas
+    if (kind === 'farm') sph.center.y -= 1.6;               // Colheita: centraliza a base (as construções puxam o centro para cima)
     cam.position.copy(sph.center).addScaledVector(dir, dist);
     cam.lookAt(sph.center);
     r.render(scene, cam);
