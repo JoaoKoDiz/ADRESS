@@ -1,7 +1,7 @@
 // Morador que aparece no portão durante o diálogo: bonequinho low-poly, cabeçudo, virado para +Z (câmera).
 // userData.setMood('angry' | 'happy') troca pose e balão; userData.update(t) anima.
 import * as THREE from 'three';
-import { box, cyl, sphere, cone, torus, at, dynamic, bakeStatic } from './kit.js';
+import { box, cyl, sphere, cone, torus, at, mat, dynamic, bakeStatic } from './kit.js';
 import { SHIRTS, HAIRS, HOUSES, MOON_COL } from '../data.js';
 
 const SKIN = '#f0c49a', PANTS = '#3d4a66', SHOES = '#2b2522', EYES = '#2a1d14', CHEEK = '#f29a8a';
@@ -57,7 +57,12 @@ export const VEN_STYLE = {
   linen: ['#efe6d2', '#dfe8ef', '#e9dcc6', '#f3efe6'], stripe: ['#1f3a68', '#b5302a', '#2b2b2b'], apron: ['#f4f1ea', '#e7d3a8', '#cfd8c4'],
   scarf: ['#c8402f', '#2f6fb0', '#d9a441', '#3f7a4a', '#a8432e'], straw: '#f3d98f', ribbon: ['#c8402f', '#1f3a68', '#2b2b2b'],
 };
-const VEN_LOOKS = ['linen', 'stripe', 'apron', 'scarf', 'straw', 'gondolier', 'linen-scarf', 'apron-straw'];
+const VEN_LOOKS = ['linen', 'stripe', 'apron', 'scarf', 'straw', 'linen-scarf', 'apron-straw', 'stripe-scarf', 'vest', 'linen-straw', 'gondolier', 'apron-scarf', 'vest-straw'];   // gondoleiro: 1 em 13
+// Nevasca (Nível 16): roupa de inverno — casaco grosso, gorro com pompom, cachecol, luvas e botas (cores combinadas pelo índice)
+export const WINTER = {
+  coats: ['#b5302a', '#2f5f9a', '#3f7a4a', '#7a4fa0', '#c9862a', '#4a4f5a', '#8a3a5a', '#2a7a7a'], hats: ['#e8e2d4', '#d8473a', '#3a78d4', '#efbf2a', '#3c9d55', '#2b2b2b'],
+  scarves: ['#efbf2a', '#e8e2d4', '#d8473a', '#5aa8e8', '#9b5de5', '#f28a5a'], gloves: ['#3a2a22', '#2b2b2b', '#8a5a36', '#c8402f'], boots: ['#4a3022', '#2b2522', '#6b4428'],
+};
 
 // Colheita: roupa de roça (xadrez ou lisa, mangas dobradas, jardineira, calça e botas; chapéu de palha ou boné)
 export const FARM_STYLE = {
@@ -79,7 +84,8 @@ export const ALIEN = {
 };
 const FARM_LOOKS = ['plaid-straw', 'plain-cap-rolled', 'overalls-straw', 'plaid-cap', 'overalls-cap-rolled', 'plain-straw-rolled', 'plaid-rolled', 'overalls-plain'];
 
-export function buildResident(houseIndex) {
+/** opts.winter: no Nevasca, os moradores vestem roupa de inverno. */
+export function buildResident(houseIndex, opts = {}) {
   const farm = HOUSES[houseIndex] && HOUSES[houseIndex].kind === 'farm';
   if (farm) return buildFarmResident(houseIndex);
   if (HOUSES[houseIndex] && HOUSES[houseIndex].kind === 'moon') {     // Órbita: ETs simpáticos de macacão espacial
@@ -90,14 +96,19 @@ export function buildResident(houseIndex) {
   }
   const ven = HOUSES[houseIndex] && HOUSES[houseIndex].kind === 'ven';
   const look = ven ? VEN_LOOKS[(houseIndex * 5) % VEN_LOOKS.length] : null, V = VEN_STYLE, pk = (a, k = 1) => a[(houseIndex * k) % a.length];
-  const striped = look === 'stripe' || look === 'gondolier';
-  const shirt = !ven ? SHIRTS[houseIndex % SHIRTS.length] : striped ? '#f6f4ee' : look.startsWith('linen') ? pk(V.linen) : SHIRTS[houseIndex % SHIRTS.length];
+  const striped = !!look && (look.startsWith('stripe') || look === 'gondolier');
+  const shirt = !ven ? SHIRTS[houseIndex % SHIRTS.length] : striped ? '#f6f4ee' : look.startsWith('linen') || look.startsWith('vest') ? pk(V.linen) : SHIRTS[houseIndex % SHIRTS.length];
   const hair = HAIRS[(houseIndex * 3) % HAIRS.length];
 
+  if (opts.winter) {
+    const W = WINTER, k = houseIndex;
+    return buildCore(houseIndex, { shirt: W.coats[k % W.coats.length], hair, winter: { hat: W.hats[(k * 5) % W.hats.length], scarf: W.scarves[(k * 7 + 1) % W.scarves.length],
+      glove: W.gloves[(k * 3) % W.gloves.length], boots: W.boots[(k * 11) % W.boots.length], trim: k % 3 === 0 } });
+  }
   return buildCore(houseIndex, { shirt, hair, ven, look, V, pk, striped });
 }
 
-function buildCore(houseIndex, { shirt, hair, ven = false, look = null, V = VEN_STYLE, pk = a => a[0], striped = false, farm = null, alien = null }) {
+function buildCore(houseIndex, { shirt, hair, ven = false, look = null, V = VEN_STYLE, pk = a => a[0], striped = false, farm = null, alien = null, winter = null }) {
   const SK = alien ? alien.skin : SKIN;
   const root = new THREE.Group();
   root.name = 'resident:' + houseIndex;
@@ -109,11 +120,20 @@ function buildCore(houseIndex, { shirt, hair, ven = false, look = null, V = VEN_
   // pernas e sapatos
   for (const s of [-1, 1]) {
     body.add(at(box(0.22, 0.5, 0.24, PANTS_), s * 0.14, 0.33, 0));
-    body.add(at(box(0.26, farm ? 0.26 : 0.12, 0.34, SHOES_), s * 0.14, farm ? 0.13 : 0.06, 0.04));   // Colheita: botas
+    if (winter) body.add(at(box(0.28, 0.3, 0.36, winter.boots), s * 0.14, 0.15, 0.04));   // Nevasca: botas
+    else body.add(at(box(0.26, farm ? 0.26 : 0.12, 0.34, SHOES_), s * 0.14, farm ? 0.13 : 0.06, 0.04));   // Colheita: botas
   }
   // tronco (camisa) + cinto
   body.add(at(cyl(0.34, 0.37, 0.62, shirt, 10), 0, 0.88, 0));
   body.add(at(cyl(0.375, 0.375, 0.08, PANTS_, 10), 0, 0.6, 0));
+  if (winter) {                                                        // Nevasca: casaco grosso (até o quadril), zíper, barra e cachecol
+    body.add(at(cyl(0.41, 0.46, 0.76, shirt, 12), 0, 0.84, 0));
+    body.add(at(box(0.05, 0.66, 0.04, '#2b2b2b'), 0, 0.86, 0.43));
+    for (const y of [0.98, 0.7]) for (const sd of [-1, 1]) body.add(at(box(0.14, 0.05, 0.04, '#2b2b2b'), sd * 0.2, y, 0.42, 0, sd * 0.45, 0));   // bolsos
+    if (winter.trim) body.add(at(cyl(0.465, 0.465, 0.08, '#f2efe8', 12), 0, 0.47, 0));
+    body.add(at(torus(0.3, 0.09, winter.scarf, 6, 16), 0, 1.19, 0, Math.PI / 2, 0, 0));
+    body.add(at(box(0.15, 0.36, 0.07, winter.scarf), 0.13, 0.98, 0.42, 0, 0, 0.12));
+  }
   if (farm) {                                                          // xadrez (faixas nos dois sentidos) e jardineira (peito + alças)
     if (farm.plaid) { for (let k = 0; k < 3; k++) body.add(at(cyl(0.377, 0.38, 0.05, '#2b2b2b', 10), 0, 0.72 + k * 0.17, 0)); for (const x of [-0.18, 0, 0.18]) body.add(at(box(0.05, 0.6, 0.05, '#2b2b2b'), x, 0.88, 0.355)); }
     if (farm.overalls) { body.add(at(box(0.44, 0.4, 0.06, PANTS_), 0, 0.82, 0.36)); body.add(at(box(0.14, 0.08, 0.07, '#d9b23a'), 0, 0.98, 0.39)); for (const sd of [-1, 1]) body.add(at(box(0.08, 0.5, 0.75, PANTS_), sd * 0.17, 1.02, 0, 0.0, 0, 0)); }
@@ -122,6 +142,8 @@ function buildCore(houseIndex, { shirt, hair, ven = false, look = null, V = VEN_
     if (striped) for (let k = 0; k < 4; k++) body.add(at(cyl(0.375 - k * 0.008, 0.38 - k * 0.008, 0.07, look === 'gondolier' ? '#1f3a68' : pk(V.stripe, 3), 10), 0, 0.7 + k * 0.12, 0));
     if (look.startsWith('apron')) { const c = pk(V.apron, 7); body.add(at(box(0.5, 0.62, 0.05, c), 0, 0.72, 0.37)); body.add(at(box(0.36, 0.22, 0.05, c), 0, 1.06, 0.35)); }
     if (look.startsWith('linen')) for (const sd of [-1, 1]) body.add(at(box(0.16, 0.05, 0.12, '#ffffff'), sd * 0.1, 1.17, 0.27, 0.3, 0, sd * 0.4));
+    if (look.startsWith('vest')) { const c = pk(['#3a2f28', '#5a4a3a', '#2f3b52'], 5); for (const sd of [-1, 1]) body.add(at(box(0.24, 0.6, 0.05, c), sd * 0.17, 0.86, 0.36, 0, sd * 0.35, 0)); body.add(at(box(0.6, 0.6, 0.05, c), 0, 0.87, -0.36)); }   // colete (frente aberta + costas)
+    if (look === 'gondolier') body.add(at(cyl(0.385, 0.385, 0.1, '#c8402f', 10), 0, 0.62, 0));                                  // faixa vermelha na cintura
     if (look.includes('scarf')) { const c = pk(V.scarf, 11); body.add(at(torus(0.27, 0.07, c, 6, 14), 0, 1.16, 0, Math.PI / 2, 0, 0)); body.add(at(box(0.12, 0.26, 0.05, c), 0.09, 1.0, 0.34, 0, 0, 0.2)); }
   }
   // cabeça grande, levemente inclinada para trás: o rosto aparece para a câmera, que olha de cima
@@ -148,6 +170,12 @@ function buildCore(houseIndex, { shirt, hair, ven = false, look = null, V = VEN_
     cap.scale.set(1, 0.72, 1);
     head.add(cap);
     head.add(at(box(0.72, 0.4, 0.22, hair), 0, hy - 0.02, -0.26));
+  }
+  if (winter) {                                                       // gorro de lã (meia esfera sobre o cabelo), barra dobrada e pompom
+    const beanie = new THREE.Mesh(new THREE.SphereGeometry(0.46, 14, 7, 0, Math.PI * 2, 0, Math.PI / 2), mat(winter.hat));
+    beanie.scale.set(1, 0.85, 1); head.add(at(beanie, 0, hy + 0.13, -0.03));
+    head.add(at(cyl(0.47, 0.47, 0.12, winter.hat, 14), 0, hy + 0.2, -0.03));
+    head.add(at(sphere(0.13, winter.scarf, 8, 6), 0, hy + 0.56, -0.05));
   }
   if (farm && farm.hat === 'straw') {                                 // chapéu de palha com fita marrom
     head.add(at(cyl(0.66, 0.66, 0.04, V.straw, 14), 0, hy + 0.38, -0.03)); head.add(at(cyl(0.36, 0.4, 0.26, V.straw, 12), 0, hy + 0.5, -0.03));
@@ -183,7 +211,8 @@ function buildCore(houseIndex, { shirt, hair, ven = false, look = null, V = VEN_
   head.add(brows, frown, smile);
 
   // braços
-  const armL = makeArm(shirt, -1, !!(farm && farm.rolled), SK), armR = makeArm(shirt, 1, !!(farm && farm.rolled), SK);
+  const HAND = winter ? winter.glove : SK;                            // Nevasca: luvas
+  const armL = makeArm(shirt, -1, !!(farm && farm.rolled), HAND), armR = makeArm(shirt, 1, !!(farm && farm.rolled), HAND);
   body.add(armL, armR);
 
   // pacote (só quando feliz)

@@ -542,7 +542,7 @@ function useNeighborhood(kind) {
   configureGrid(kind);
   let w = worlds[kind];
   if (!w) {                                     // primeira vez: constrói (escondido pelo fade)
-    w = worlds[kind] = createWorld({ renderer, buildLot: buildAnyLot, buildResident, yardBuilders: YARD_BUILDERS, pool: POOLS[kind], dry: kind === 'city6' || kind === 'city7' || kind === 'city8', venice: kind === 'venice8', snow: kind === 'snow8', moon: kind === 'moon8' });
+    w = worlds[kind] = createWorld({ renderer, buildLot: buildAnyLot, buildResident: kind === 'snow8' ? h => buildResident(h, { winter: true }) : buildResident, yardBuilders: YARD_BUILDERS, pool: POOLS[kind], dry: kind === 'city6' || kind === 'city7' || kind === 'city8', venice: kind === 'venice8', snow: kind === 'snow8', moon: kind === 'moon8' });
   } else SOLIDS.push(...w.extraSolids);        // troncos das árvores de fora deste bairro
   world.hideResident();
   world = w;

@@ -7,6 +7,7 @@
 import * as THREE from 'three';
 import { box, cyl, sphere, at, mat, torus } from './models/kit.js';
 import { SHIRTS, HAIRS } from './data.js';
+import { WINTER } from './models/resident.js';
 
 const W = 13, D = 10, WALL_H = 4.6;                       // sala: x −13…13, z −10…10
 const FLOOR = '#9a5a2c', FLOOR2 = '#87491f', WALL = '#6e3a1e', WALL2 = '#5a2d16', TRIM = '#d9782c', WOOD = '#8a4a22', WOOD_D = '#5e3017';
@@ -29,7 +30,8 @@ function glowTexture() {
 }
 
 /** Morador no estilo do jogo (cabeção, olhos, bochechas, camisa cilíndrica); sentado (seatY) ou em pé; avental opcional. */
-function buildNPC({ shirt, hair, pants, seatY = 0, apron = false, k = 0 }) {
+function buildNPC({ shirt, hair, pants, seatY = 0, apron = false, k = 0, winter = null }) {
+  const BOOT = winter ? winter.boots : '#2b2522', HAND = winter ? winter.glove : SKIN;
   const root = new THREE.Group(), body = new THREE.Group(); root.add(body);
   const hip = seatY ? seatY + 0.04 : 0.62;                    // altura do quadril
   body.position.y = hip - 0.6;
@@ -38,23 +40,32 @@ function buildNPC({ shirt, hair, pants, seatY = 0, apron = false, k = 0 }) {
     for (const s of [-1, 1]) {
       body.add(at(box(0.24, 0.22, 0.56, pants), s * 0.14, 0.62, 0.24));
       root.add(at(box(0.2, shin, 0.22, pants), s * 0.14, shin / 2 + 0.1, 0.5));
-      root.add(at(box(0.26, 0.12, 0.34, '#2b2522'), s * 0.14, 0.06, 0.56));
+      root.add(at(box(0.26, 0.12, 0.34, BOOT), s * 0.14, 0.06, 0.56));
     }
-  } else for (const s of [-1, 1]) { body.add(at(box(0.22, 0.5, 0.24, pants), s * 0.14, 0.33, 0)); body.add(at(box(0.26, 0.12, 0.34, '#2b2522'), s * 0.14, 0.06, 0.04)); }
+  } else for (const s of [-1, 1]) { body.add(at(box(0.22, 0.5, 0.24, pants), s * 0.14, 0.33, 0)); body.add(at(box(0.26, 0.12, 0.34, BOOT), s * 0.14, 0.06, 0.04)); }
   body.add(at(cyl(0.34, 0.37, 0.62, shirt, 10), 0, 0.88, 0));
   body.add(at(cyl(0.375, 0.375, 0.08, pants, 10), 0, 0.6, 0));
+  if (winter) {                                               // cliente de inverno: casaco grosso, cachecol (e gorro em alguns)
+    body.add(at(cyl(0.41, 0.46, seatY ? 0.62 : 0.76, shirt, 12), 0, seatY ? 0.91 : 0.84, 0));
+    body.add(at(box(0.05, 0.56, 0.04, '#2b2b2b'), 0, 0.9, 0.43));
+    body.add(at(torus(0.3, 0.09, winter.scarf, 6, 16), 0, 1.19, 0, Math.PI / 2, 0, 0)); body.add(at(box(0.15, 0.32, 0.07, winter.scarf), 0.13, 1.0, 0.42, 0, 0, 0.12));
+  }
   if (apron) { body.add(at(box(0.5, 0.66, 0.05, '#f4f1ea'), 0, 0.78, 0.37)); body.add(at(box(0.34, 0.22, 0.05, '#f4f1ea'), 0, 1.07, 0.35)); body.add(at(torus(0.27, 0.05, '#2b2b2b', 6, 14), 0, 1.16, 0, Math.PI / 2, 0, 0)); }
   const head = new THREE.Group(); head.position.set(0, 1.18, 0); body.add(head);
   const hy = 0.34;
   head.add(at(sphere(0.4, SKIN, 12, 9), 0, hy, 0));
   const cap = at(sphere(0.43, hair, 12, 8), 0, hy + 0.12, -0.06); cap.scale.set(1, 0.72, 1); head.add(cap);
   head.add(at(box(0.72, 0.4, 0.22, hair), 0, hy - 0.02, -0.26));
+  if (winter && winter.hatOn) {
+    const b = new THREE.Mesh(new THREE.SphereGeometry(0.46, 14, 7, 0, Math.PI * 2, 0, Math.PI / 2), mat(winter.hat)); b.scale.set(1, 0.85, 1); head.add(at(b, 0, hy + 0.13, -0.03));
+    head.add(at(cyl(0.47, 0.47, 0.12, winter.hat, 14), 0, hy + 0.2, -0.03)); head.add(at(sphere(0.13, winter.scarf, 8, 6), 0, hy + 0.56, -0.05));
+  }
   for (const s of [-1, 1]) { head.add(at(sphere(0.065, EYES, 6, 4), s * 0.15, hy + 0.05, 0.36)); head.add(at(sphere(0.065, CHEEK, 6, 4), s * 0.25, hy - 0.08, 0.31)); }
   head.add(at(sphere(0.06, SKIN, 6, 4), 0, hy - 0.04, 0.4));
   const mouth = at(box(0.16, 0.045, 0.05, EYES), 0, hy - 0.18, 0.36); head.add(mouth);
   const arm = side => {
     const p = new THREE.Group(); p.position.set(side * 0.4, 1.12, 0);
-    p.add(at(sphere(0.13, shirt, 8, 6), 0, 0, 0)); p.add(at(cyl(0.1, 0.09, 0.46, shirt, 8), 0, -0.25, 0)); p.add(at(sphere(0.1, SKIN, 8, 6), 0, -0.52, 0));
+    p.add(at(sphere(0.13, shirt, 8, 6), 0, 0, 0)); p.add(at(cyl(0.1, 0.09, 0.46, shirt, 8), 0, -0.25, 0)); p.add(at(sphere(0.1, HAND, 8, 6), 0, -0.52, 0));
     body.add(p); return p;
   };
   const armL = arm(-1), armR = arm(1);
@@ -182,8 +193,9 @@ export function createGrillbyInside() {
   // ---- moradores ----
   const npcs = [];
   const P = (o, x, z, ry, anim) => { const n = buildNPC(o); n.root.position.set(x, 0, z); n.root.rotation.y = ry; g.add(n.root); npcs.push({ ...n, anim, ry }); return n; };
-  const col = i => ({ shirt: SHIRTS[i % SHIRTS.length], hair: HAIRS[(i * 3 + 1) % HAIRS.length], pants: PANTS[i % PANTS.length], k: i });
-  P({ ...col(0), apron: true, shirt: '#2b2b2b' }, -0.8, CZ - 1.2, 0, 'wipe');                      // atendente atrás do balcão
+  const W = WINTER, col = i => ({ shirt: W.coats[(i * 3) % W.coats.length], hair: HAIRS[(i * 3 + 1) % HAIRS.length], pants: PANTS[i % PANTS.length], k: i,   // clientes de inverno
+    winter: { hat: W.hats[(i * 5) % W.hats.length], scarf: W.scarves[(i * 7 + 1) % W.scarves.length], glove: W.gloves[(i * 3) % W.gloves.length], boots: W.boots[i % W.boots.length], hatOn: i % 2 === 1 } });
+  P({ ...col(0), winter: null, apron: true, shirt: '#2b2b2b' }, -0.8, CZ - 1.2, 0, 'wipe');                      // atendente atrás do balcão
   P({ ...col(1), seatY: 1.12 }, STOOLS[0], CZ + 1.35, Math.PI, 'talkL');                            // no balcão (de costas para a sala)
   P({ ...col(2), seatY: 1.12 }, STOOLS[1], CZ + 1.35, Math.PI, 'listen');
   P({ ...col(3), seatY: 1.12 }, STOOLS[4], CZ + 1.35, Math.PI, 'drink');
