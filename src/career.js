@@ -2,6 +2,7 @@
 // Uma fase é liberada só quando as 5 missões da fase anterior estão concluídas e salvas; a 1 começa liberada.
 // Objetivo cumprido durante a partida = missão PENDENTE; só é salva quando a mesma partida termina com a entrega certa.
 import { MISSIONS, RESERVED } from './missions.js';
+import { HOUSES } from './data.js';
 import { GRID, ROAD, LOT, roadCenter, slotOrigin } from './layout.js';
 
 const KEY = 'adress.career.v1';
@@ -60,7 +61,7 @@ function perim(s, x, z) {
   return { d, t: t / (4 * LOT) };
 }
 /** Avança as voltas de todas as quadras perto de (x, z); devolve as quadras em que uma volta acabou de fechar. */
-function lapStep(map, x, z, inside, jump) {
+function lapStep(map, x, z, inside, jump) {   // (devolve [{ s, dir }]; dir = ±1, sentido da volta)
   const done = [];
   for (let s = 0; s < GRID * GRID; s++) {
     let st = map.get(s);
@@ -74,7 +75,7 @@ function lapStep(map, x, z, inside, jump) {
     st.sec = sec;
     if (Math.abs(d) > 2) { st.w = 0; continue; }                     // voltou por outro ponto: a volta recomeça daqui
     st.w += d;
-    if (Math.abs(st.w) >= LAP_N) { st.w = 0; st.laps++; done.push(s); }
+    if (Math.abs(st.w) >= LAP_N) { done.push({ s, dir: Math.sign(st.w) }); st.w = 0; st.laps++; }
   }
   return done;
 }
@@ -188,6 +189,8 @@ export function createCareer() {
   let deliveries = 0, fueled = false, fuelStops = 0, lastDelT = null, rev = null, look = null, stopAt = null, lookSet = new Set(), prevPos = null;
   // Bairro 5: manobra no cruzamento em andamento, voltas de van por quadra, voltas a pé (recomeça a cada vez que desce da van)
   let man = null, vanLaps = new Map(), footLaps = new Map(), prevFoot = null;
+  // Bairro 6: passagens por trecho de rua, voltas para o oito, retorno à entrada depois de uma entrega falsa
+  let lastNode = null, streets = new Map(), eightLaps = new Map(), lastLap = null, needEntrance = false;
 
   return {
     get progress() { return progress; },
@@ -229,6 +232,7 @@ export function createCareer() {
       legs = new Map(); barHits = new Map(); barHitN = 0; offRoute = new Set();
       deliveries = 0; fueled = false; fuelStops = 0; lastDelT = null; rev = null; look = null; stopAt = null; lookSet = new Set(); prevPos = null;
       man = null; vanLaps = new Map(); footLaps = new Map(); prevFoot = null;
+      lastNode = null; streets = new Map(); eightLaps = new Map(); lastLap = null; needEntrance = false;
       lapBins = { n: new Array(LAP_BINS).fill(false), s: new Array(LAP_BINS).fill(false), w: new Array(LAP_BINS).fill(false), e: new Array(LAP_BINS).fill(false) };
     },
     /** Fim do acompanhamento (saiu da partida): descarta o que estava pendente. */
@@ -319,7 +323,29 @@ export function createCareer() {
           else if (along > 0.002) man.last = 1;
         }
         // Cinco voltas: 5 circuitos da van em volta da MESMA quadra (em qualquer sentido, não precisam ser seguidos)
-        for (const q of lapStep(vanLaps, x, z, 0.5, jump)) if (vanLaps.get(q).laps >= 5) pending.add('fiveLaps');
+        for (const q of lapStep(vanLaps, x, z, 0.5, jump)) if (vanLaps.get(q.s).laps >= 5) pending.add('fiveLaps');
+      }
+      if (level === 5) {
+        // Turista do bairro: passagens completas por um trecho de rua (de um cruzamento ao vizinho), por trecho
+        const n = jump ? null : nodeAt(x, z);
+        if (jump) lastNode = null;
+        else if (n && n.k !== (lastNode && lastNode.k)) {
+          if (lastNode && Math.abs(lastNode.j - n.j) + Math.abs(lastNode.i - n.i) === 1) {
+            const key = [lastNode.k, n.k].sort().join('|'), c = (streets.get(key) || 0) + 1; streets.set(key, c);
+            if (c >= 5) pending.add('tourist');
+          }
+          lastNode = n;
+        }
+        // Oito no asfalto: volta numa quadra e, em seguida, volta na quadra vizinha na diagonal, no sentido oposto
+        for (const q of lapStep(eightLaps, x, z, 0.5, jump)) {
+          const p = lastLap, dq = p ? [Math.abs(p.s % GRID - q.s % GRID), Math.abs(Math.floor(p.s / GRID) - Math.floor(q.s / GRID))] : null;
+          if (p && dq[0] === 1 && dq[1] === 1 && p.dir === -q.dir) pending.add('eight');
+          lastLap = q;
+        }
+        if (jump) lastLap = null;
+        // Esqueci uma coisa: depois de uma entrega falsa, chegar à área da entrada antes da próxima entrega
+        const e = ctx.entrance;
+        if (needEntrance && e && Math.abs(x - e.x) <= ROAD && z <= roadCenter(0) + ROAD / 2 + 1.5) { pending.add('forgot'); needEntrance = false; }
       }
       prevPos = { x, z, h: heading };
       if (level === 0 && !pending.has('lap')) {                          // Volta no bairro: as 4 ruas externas
@@ -349,6 +375,13 @@ export function createCareer() {
       if (!active) return;
       if (level === 2 && !success && !indicated) {                        // Fora da rota: 2 casas diferentes fora da indicação
         offRoute.add(h); if (offRoute.size >= 2) pending.add('offRoute');
+      }
+      if (level === 5 && game) {
+        const H = HOUSES[h], clue = (game.clues && game.clues[stepBefore]) || [], target = game.route && game.route[stepBefore];
+        if (H.kind === 'house' && ((clue.includes('roof:red') && H.roof === 'blue') || (clue.includes('roof:blue') && H.roof === 'red'))) pending.add('colors');   // Confundi as cores
+        if (H.kind === 'house' && target != null && HOUSES[target].kind !== 'house') pending.add('houseOrBuilding');   // Casa ou prédio?
+        needEntrance = !success;                                         // Esqueci uma coisa: nova tentativa a cada entrega falsa
+        lastLap = null;                                                  // (o oito é contínuo)
       }
       if (fueled) { fuelStops++; fueled = false; }                         // abasteceu entre a entrega anterior e esta (1× por intervalo)
       deliveries++;

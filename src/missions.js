@@ -5,7 +5,7 @@
 // Missões por fase (nível). id liga a missão à regra em career.js; goal = quanto precisa para concluir.
 // Fases sem missões definidas usam o modelo (sem id: não avançam ainda).
 const PLACEHOLDER = () => Array.from({ length: 5 }, () => ({ id: null, name: 'MISSÃO', desc: 'Descrição breve da missão.', goal: 5 }));
-export const LEVEL_NAMES = ['Raízes', 'Horizontes', 'Constância', 'Veredas', 'Ofício', '', '', '', 'Veneza', '', '', '', '', '', '', '', '', '', '', '', '', '', '', ''];
+export const LEVEL_NAMES = ['Raízes', 'Horizontes', 'Constância', 'Veredas', 'Ofício', 'Mirante', '', '', 'Veneza', '', '', '', '', '', '', '', '', '', '', '', '', '', '', ''];
 /** Bairro 18: espaço reservado para níveis futuros (não dá para jogar; não travam o desbloqueio do 20). */
 export const RESERVED = [];   // (18 = Modernista, 21 = Operário, 22 = Bosque, 23 = Cachoeira; nenhum reservado agora)   // (o 17 é Jardins, o 19 é o Penumbra)
 export const MISSIONS = [
@@ -46,7 +46,13 @@ export const MISSIONS = [
     { id: 'walkLap', name: 'Uma volta a pé', desc: 'Saia da van e contorne uma quadra inteira a pé antes de concluir a partida.', goal: 1 },
     { id: 'fiveLaps', name: 'Cinco voltas', desc: 'Dê cinco voltas completas ao redor da mesma quadra, na mesma partida.', goal: 1 },
   ],
-  PLACEHOLDER(),   // Bairro 6 (a cidade)
+  [
+    { id: 'colors', name: 'Confundi as cores', desc: 'Ao receber uma dica que envolva um telhado vermelho, entregue em qualquer casa com um telhado azul, ou vice-versa.', goal: 1 },
+    { id: 'tourist', name: 'Turista do bairro', desc: 'Passe pela mesma rua 5 vezes antes de concluir a partida.', goal: 1 },
+    { id: 'houseOrBuilding', name: 'Casa ou prédio?', desc: 'Quando a dica indicar um prédio, entregue propositalmente em uma casa.', goal: 1 },
+    { id: 'eight', name: 'Oito no asfalto', desc: 'Contorne duas quadras diagonalmente vizinhas, formando um oito com a van.', goal: 1 },
+    { id: 'forgot', name: 'Esqueci uma coisa', desc: 'Após uma entrega falsa, volte à entrada do bairro antes de fazer outra entrega.', goal: 1 },
+  ],
   PLACEHOLDER(),   // Bairro 7 (a cidade com caminhões e engarrafamentos)
   PLACEHOLDER(),   // Bairro 8 (como o 7, em 8×8)
   PLACEHOLDER(),   // Bairro 9 (Encostas)

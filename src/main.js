@@ -1,7 +1,7 @@
 // ADRESS 3D — laço principal e máquina de estados da rodada.
 // Este arquivo define como cada módulo é usado (o "contrato" entre eles).
 import * as THREE from 'three';
-import { Game, ROUTE_LEN, setDroppedTags, setPhraseOverride, setForceSide } from './logic.js';
+import { Game, ROUTE_LEN, setDroppedTags, setPhraseOverride, setForceSide, makeClue, makeClueWith } from './logic.js';
 import { createCanyonFx } from './canyon.js';
 import { createForestFx } from './forestFx.js';
 import { forestLot } from './models/forest.js';
@@ -206,6 +206,21 @@ function pairFree() {
     return !pts.some(p => p.x > x0 && p.x < x1 && p.z > z0 && p.z < z1);
   };
 }
+// Bairro 6: a sequência de pistas sempre tem uma casa de telhado vermelho/azul cuja pista fala da cor e um endereço de prédio.
+// (Troca um destino da rota por outro do mesmo bairro; o resto das pistas continua igual e única.)
+function ensureL6(g, avail) {
+  const route = g.route, house = h => HOUSES[h].kind === 'house', colored = h => house(h) && (HOUSES[h].roof === 'red' || HOUSES[h].roof === 'blue');
+  const rnd = a => a[Math.floor(Math.random() * a.length)];
+  const swapIn = (cands, keep) => {
+    const c = cands.filter(h => !route.includes(h)), idx = route.map((_, i) => i).filter(i => !keep.includes(i));
+    if (!c.length || !idx.length) return -1;
+    const i = rnd(idx); route[i] = rnd(c); g.clues[i] = makeClue(route[i], g.pool); return i;
+  };
+  let ci = route.findIndex(colored);
+  if (ci < 0) ci = swapIn(avail.filter(colored), []);
+  if (ci >= 0) g.clues[ci] = makeClueWith(route[ci], g.pool, 'roof:' + HOUSES[route[ci]].roof);
+  if (!route.some(h => !house(h))) swapIn(avail.filter(h => !house(h)), [ci]);
+}
 function composeRound() {
   const city = neighborhood === 'city6', city7 = neighborhood === 'city7', city8 = neighborhood === 'city8';
   const shuffled = a => { a = a.slice(); for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; };
@@ -254,7 +269,7 @@ function composeRound() {
   const allHouses = [...Array(32).keys()];
   let pool;
   let fixed = city ? L6_FIXED : null;
-  game.arrange = null;
+  game.arrange = null; game.ensure = null;
   if (hill) {                                   // Bairro 9: os 28 residenciais, 4–5 comerciais e casas no resto
     const nShops = 4 + Math.floor(Math.random() * 2), apts = [...Array(28).keys()].map(k => 38 + k);
     pool = apts.concat(shuffled(SHOPS).slice(0, nShops), shuffled(allHouses).slice(0, HOUSE_SLOTS.length - nShops - apts.length));
@@ -308,7 +323,10 @@ function composeRound() {
   } else if (city) {
     const apts = [...Array(28).keys()].map(k => 38 + k);
     const fixed = Object.values(L6_FIXED);                 // Bairro 6: o prédio fixo da quadra C5 + 28 residenciais + casas no resto
-    pool = apts.concat(fixed, shuffled(allHouses).slice(0, HOUSE_SLOTS.length - apts.length - fixed.length));
+    // sempre ao menos uma casa de telhado vermelho e uma de telhado azul (missão "Confundi as cores")
+    const roofOf = c => shuffled(allHouses.filter(h => HOUSES[h].roof === c))[0], red = roofOf('red'), blue = roofOf('blue');
+    pool = apts.concat(fixed, [red, blue], shuffled(allHouses.filter(h => h !== red && h !== blue)).slice(0, HOUSE_SLOTS.length - apts.length - fixed.length - 2));
+    game.ensure = ensureL6;
   } else if (neighborhood === 'grid5') {
     // Bairro 4: as 25 casas de sempre menos algumas (nunca as com galo ou fonte), 2 prédios comerciais e o posto
     const keep = [4, 15, 19, 22, 11, 12, 24], base = [...Array(25).keys()], nShops = 2;
@@ -639,7 +657,7 @@ function setupGrid4() {
     const md = neighborhood === 'modern8', nS = md ? 3 : 4;
     pool = sh(md ? MDHS : [...Array(32).keys()]).slice(0, HOUSE_SLOTS.length - nS).concat(sh(md ? MDSS : SHOPS).slice(0, nS));
   }
-  game.arrange = null;
+  game.arrange = null; game.ensure = null;
   if (neighborhood === 'work8') {                 // Operário: unidades geminadas recebem casas; os pontos largos, oficinas/comércios
     const sh = a => { a = a.slice(); for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; };
     const wide = HOUSE_SLOTS.filter(s => FORESTV.spots[s].wide);
@@ -664,7 +682,7 @@ function useNeighborhood(kind) {
     : kind === 'forest8' ? layout => { const m = {}; layout.forEach(h => { if (h >= 0 && FOREST_EXTRAS[h]) m[h] = FOREST_EXTRAS[h].slice(); }); return m; }   // Bosque: detalhes de outono nas pistas
     : kind === 'snow8' ? layout => { const m = {}; layout.forEach(h => { if (h >= 0 && SNOW_EXTRAS[h]) m[h] = SNOW_EXTRAS[h].slice(); }); return m; }   // Nevasca: detalhes de inverno nas pistas
     : null;
-  game.arrange = null;
+  game.arrange = null; game.ensure = null;
   setDroppedTags(kind === 'snow8' ? SNOW_DROP : null);
   setForceSide(kind === 'canyon10');   // Cachoeira: toda pista diz o lado
   setPhraseOverride(kind === 'snow8' ? { clothesline: 'roupas congeladas no varal' } : null);   // Nevasca: o varal fica congelado   // Nevasca: sem cacto, piscina, fonte, flamingo, girassóis e frutas
@@ -1901,7 +1919,7 @@ function update(dt, t) {
       nearHouse = heli.flying ? -1 : findNearHouse();
       nearGate = heli.flying || Math.abs(van.speed) > DELIVERY_MAX_SPEED ? -1 : findNearGate(van.x + Math.cos(van.heading) * 2, van.z + Math.sin(van.heading) * 2, 6.5);   // Colheita: porteira fechada à frente
       if (nearGate >= 0) nearHouse = -1;
-      if (gameMode === 'career') career.tick(van.x, van.z, van.heading, { speed: van.speed, time: matchTimer.time, bars: barriers.list });   // ruas, barreiras, ré e cruzamentos (missões)
+      if (gameMode === 'career') career.tick(van.x, van.z, van.heading, { speed: van.speed, time: matchTimer.time, bars: barriers.list, entrance: { x: VAN_START.x, z: VAN_START.z } });   // ruas, barreiras, ré e cruzamentos (missões)
       if (input.hint()) requestHint();
       if (free && !MOONV && input.fire()) { van.stop(); nearHouse = -1; boom.fire(van, game.slotOf); setState('missile'); break; }
       actionLock = Math.max(0, actionLock - dt);

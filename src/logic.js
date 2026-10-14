@@ -55,6 +55,14 @@ export function makeClue(h, pool = ALL) {
   throw new Error('Casa sem pista única: ' + h);
 }
 
+/** Como makeClue, mas a pista sempre inclui a característica `tag` (ex.: 'roof:red'); continua única no bairro. */
+export function makeClueWith(h, pool, tag) {
+  const tags = tagsOf(h);
+  if (!tags.includes(tag)) return makeClue(h, pool);
+  for (let k = 1; k <= tags.length; k++) { const opts = subsets(tags, k).filter(s => s.includes(tag) && isUnique(h, s, pool)); if (opts.length) return pick(opts); }
+  return makeClue(h, pool);
+}
+
 /** Artigos e preposições para falar do destino h (casa ou prédio). */
 export const ref = h => { const H = HOUSES[h]; if (H.kind === 'farm') return REF[H.type === 'barn' ? 'barn' : H.type === 'shed' ? 'ware' : 'house'];
   if (H.kind === 'mvs') return REF[{ bakery: 'padaria', smithy: 'ferraria', tavern: 'taverna', textile: 'tecelagem' }[H.shopKey]];   // Medieval
@@ -113,6 +121,7 @@ export class Game {
     }
     this.route = route;                       // rota planejada; o último é o destinatário
     this.clues = route.map(h => makeClue(h, this.pool));   // clues[i] descreve route[i]
+    if (this.ensure) this.ensure(this, this.pool);           // garantias do bairro (ex.: Bairro 6)
     this.step = 0;                            // índice da casa indicada atualmente
     this.hintByNarrator = false;
     this.noHintVisited = new Set();
@@ -136,6 +145,7 @@ export class Game {
     }
     this.route = route;
     this.clues = route.map(h => makeClue(h, this.pool));
+    if (this.ensure) this.ensure(this, pool);
     this.step = 0;
     this.hintByNarrator = false;
     this.noHintVisited = new Set();
