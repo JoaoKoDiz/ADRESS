@@ -68,7 +68,7 @@ import { createCareerMap } from './careerMap.js';
 import { createJamSound } from './jamSound.js';
 import { createCityAmbience } from './cityAmbience.js';
 import { createShop } from './shop.js';
-import { createLevelSelect } from './levelSelect.js';
+import { createLevelSelect, NAMES as LEVEL_TITLES } from './levelSelect.js';
 import { createMatchTimer } from './matchTimer.js';
 import { createWalker } from './walker.js';
 import { createTalkBox, lineDuration } from './talkBox.js';
@@ -944,7 +944,18 @@ const STORY_CP = {
     parcelDone = n >= 1;                                   // (lido na hora pela caixa e pelo K do terraço)
   },
 };
-const lock = createLockButton(stage, () => { career.unlockAll(); careerMap.setLocked(l => !career.isUnlocked(l)); }, () => career.allUnlocked, STORY_CP);
+// Missões da Carreira no mesmo painel (seção separada): reiniciar todas e escolher os bairros com todas as missões completas.
+// Mexe só nas missões e na progressão (desbloqueios) da Carreira; a liberação de teste (todos os bairros) fica à parte.
+const refreshCareerMap = () => { if (careerMap) careerMap.setLocked(l => !career.isUnlocked(l)); };
+const DEV_MISSIONS = {
+  levels: () => MISSIONS.map((m, i) => ({ i, label: `${i + 1}. ${LEVEL_TITLES[i] || 'Bairro ' + (i + 1)}`, has: career.hasMissions(i) })),
+  completed: i => career.levelComplete(i),
+  resetAll() { career.resetAll(); refreshCareerMap(); },
+  apply(sel) { career.setCompleted(sel); refreshCareerMap(); },
+  devOpen: () => career.allUnlocked,
+  setDevOpen(on) { career.setAllOpen(on); refreshCareerMap(); },
+};
+const lock = createLockButton(stage, () => { career.unlockAll(false); refreshCareerMap(); }, () => career.allUnlocked, STORY_CP, DEV_MISSIONS);   // (o painel já avisa)
 // botão MISSÕES no canto superior direito durante a partida da Carreira (missões do bairro jogado)
 // Cronômetro da partida (canto superior esquerdo): começa em 00:00 no 1º quadro jogável, pausa com o MENU ou as missões
 // abertas, some nos menus e nas cenas (continua contando nelas), não zera na entrega certa do Livre; na Carreira congela na entrega certa.
@@ -2353,7 +2364,7 @@ window.ADRESS = {
   moonPlace(p, f) { van.teleport(0, 0, 0); FRAME.reset(new THREE.Vector3(...p).normalize(), new THREE.Vector3(...f), 0, 0); moonAnchor.x = moonAnchor.z = 0; FRAME.toSphere(0, 0, vanSph.p); moonUpdate(0, true); },
   get moonVan() { return { p: vanSph.p.toArray().map(v => +v.toFixed(3)), f: vanSph.f.toArray().map(v => +v.toFixed(3)), y: +van.simY.toFixed(2) }; },
   FRAME, MOONV: () => MOONV,
-  lockCP: n => STORY_CP.apply(n), get parcelVisible() { return !!parcel.parent; },
+  lockCP: n => STORY_CP.apply(n), devMissions: DEV_MISSIONS, get parcelVisible() { return !!parcel.parent; },
   laser, ursa, solar, reality, startLaser,
   get church() { return church; }, get venK() { return venK; }, startVeniceTalk, churchStage, get greenBell() { return greenBell; }, get churchBell() { return churchBell; },
   churchReveal() { if (churchOn && !churchShown) { approach.phase = 'revealed'; revealChurch(true); } },

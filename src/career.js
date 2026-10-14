@@ -113,12 +113,33 @@ export function createCareer() {
     isPending: (l, k) => active && l === level && !!MISSIONS[l][k] && pending.has(MISSIONS[l][k].id),
     get allUnlocked() { return allOpen; },
     /** Senha certa no cadeado: desbloqueia todos os bairros. */
-    unlockAll() {
+    unlockAll(notify = true) {
       allOpen = true;
       try { localStorage.setItem(KEY + '.all', '1'); } catch (e) { /* ignora */ }
-      toast('🔓 Todos os bairros desbloqueados!');
+      if (notify) toast('🔓 Todos os bairros desbloqueados!');
     },
     completedCount: l => MISSIONS[l].filter((m, i) => done(l, i)).length,
+    /** O bairro l tem missões cadastradas? (os modelos vazios não têm id) */
+    hasMissions: l => MISSIONS[l].some(m => m.id),
+    /** Bairro l com todas as missões concluídas (sem missões cadastradas = não). */
+    levelComplete: l => MISSIONS[l].some(m => m.id) && levelDone(l),
+
+    // ---- painel de desenvolvimento (cadeado): só missões e progressão da Carreira ----
+    /** Liberação de desenvolvimento (todos os bairros abertos), independente das missões. */
+    setAllOpen(on) {
+      allOpen = !!on;
+      try { if (allOpen) localStorage.setItem(KEY + '.all', '1'); else localStorage.removeItem(KEY + '.all'); } catch (e) { /* ignora */ }
+    },
+    /** Todas as missões de todos os bairros voltam a ficar incompletas (inclusive o que estava pendente nesta partida). */
+    resetAll() { this.setCompleted(new Set()); },
+    /** Os bairros em sel ficam com todas as missões concluídas; os outros (com missões), todas incompletas. Os desbloqueios
+     *  normais são refeitos pela regra de sempre (5 missões de um bairro liberam o próximo). */
+    setCompleted(sel) {
+      progress = MISSIONS.map((ms, l) => ms.map(m => (m.id && sel.has(l) ? m.goal : 0)));
+      pending = new Set();
+      unlocks = new Set(); for (let l = 1; l < LEVELS; l++) if (!RESERVED.includes(l) && levelDone(prevLevel(l))) unlocks.add(l);
+      save(); saveUnlocks();
+    },
 
     /** Nova partida da Carreira na fase l: tudo que foi cumprido na tentativa anterior (e não salvo) é descartado. */
     startMatch(l) {
