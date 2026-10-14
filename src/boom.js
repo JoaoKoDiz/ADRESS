@@ -35,22 +35,24 @@ export function createBoom(scene, getWorld, audio) {
     const g = new THREE.Group();
     g.position.set(o.x, 0, o.z);
     const roof = ROOF_COL[HOUSES[h].roof];
-    if (HOUSES[h].kind === 'moon') g.add(at(cyl(7.6, 7.8, 1.1, '#8f939a', 20), HX, -0.49, HZ));   // Órbita: base do módulo chamuscada (na curvatura)
+    const K = HOUSES[h].kind, small = K === 'row' ? 2.6 : K === 'wsh' ? 4.6 : 0;   // Operário: só a unidade (as vizinhas da fileira ficam inteiras)
+    if (small) g.add(at(box(small * 2, 0.2, small * 2.4, '#6f6a60'), HX, 0.1, HZ));
+    else if (HOUSES[h].kind === 'moon') g.add(at(cyl(7.6, 7.8, 1.1, '#8f939a', 20), HX, -0.49, HZ));   // Órbita: base do módulo chamuscada (na curvatura)
     else {
       g.add(at(box(LOT + 0.8, 0.17, LOT + 0.8, '#cfc8b6'), LOT / 2, 0.085, LOT / 2));          // calçada
       g.add(at(box(LOT, 0.2, LOT, '#6f9a4c'), LOT / 2, 0.1, LOT / 2));                       // grama chamuscada
     }
     const crater = new THREE.Mesh(CRATER_GEO, mat('#2b2119'));
-    crater.rotation.x = -Math.PI / 2; crater.position.set(HX, 0.21, HZ + 1);
+    crater.rotation.x = -Math.PI / 2; crater.position.set(HX, 0.21, HZ + (small ? 0 : 1)); if (small) crater.scale.setScalar(small / 5.5);
     g.add(crater);
     for (let i = 0; i < 70; i++) {                                                         // pilha de entulho
-      const a = Math.random() * Math.PI * 2, r = Math.sqrt(Math.random()) * 5.5;
+      const a = Math.random() * Math.PI * 2, R = small || 5.5, r = Math.sqrt(Math.random()) * R;
       const col = i % 3 === 0 ? roof : i % 3 === 1 ? WALL_COL : '#8a5a36';
       const s = rnd(0.5, 1.4);
       g.add(at(box(s, s * 0.5, s * 0.8, col), HX + Math.cos(a) * r, 0.3 + (5.5 - r) * 0.25 + Math.random() * 0.5, HZ + Math.sin(a) * r * 0.8,
         rnd(-0.6, 0.6), rnd(0, 3), rnd(-0.6, 0.6)));
     }
-    for (const [x, z, w, hgt, ry] of [[HS.x0 + 0.3, HZ, 0.35, 1.8, Math.PI / 2], [HS.x1 - 0.4, HZ - 1, 0.35, 1.2, Math.PI / 2], [HX - 2, HS.z0 + 0.2, 3.2, 1.5, 0], [HX + 2.5, HS.z1 - 0.3, 2.2, 0.9, 0]]) {
+    for (const [x, z, w, hgt, ry] of small ? [] : [[HS.x0 + 0.3, HZ, 0.35, 1.8, Math.PI / 2], [HS.x1 - 0.4, HZ - 1, 0.35, 1.2, Math.PI / 2], [HX - 2, HS.z0 + 0.2, 3.2, 1.5, 0], [HX + 2.5, HS.z1 - 0.3, 2.2, 0.9, 0]]) {
       g.add(at(box(w, hgt, 0.35, WALL_COL), x, 0.2 + hgt / 2, z, 0, ry, rnd(-0.15, 0.15)));  // restos de parede
     }
     g.add(at(box(0.3, 0.3, 4.5, '#5e3b20'), HX + 1, 1.3, HZ, 0.5, 0.6, 0.3));             // caibros

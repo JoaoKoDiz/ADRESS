@@ -12,6 +12,7 @@ import { buildGardenScene } from './models/garden.js';
 import { buildCanyonScene } from './canyon.js';
 import { buildForestScene } from './models/forest.js';
 import { buildModernScene } from './models/modern.js';
+import { buildWorkScene } from './models/work.js';
 import { FORESTV, MOONV, SNOWV, GARDV, FARMLAND, FLUX, WALK, FAVELA, RAIL as RAIL_PATH, VENICE, TERRAIN, CANAL, slotOrigin, doorPoint, lotX, lotZ, GRID, MAP, HEDGE, ROAD, LOT, roadCenter } from './layout.js';
 
 const ASPHALT = '#5d6470', WALLC = '#b9ad98', CAP = '#d8cfbe', RAIL = '#e8e2d4', STEPC = '#cfc6b4';
@@ -27,7 +28,7 @@ export function buildTerrain() {
   if (FAVELA) buildFavelaScene(g, FAVELA, MAP, HEDGE);
   if (FARMLAND) buildFarmScene(g, FARMLAND);
   if (SNOWV) buildSnowScene(g, SNOWV, MAP, HEDGE);
-  if (FORESTV) FORESTV.modern ? buildModernScene(g, FORESTV) : buildForestScene(g, FORESTV, MAP, HEDGE);   // Níveis 18 (Modernista) e 22 (Bosque)
+  if (FORESTV) FORESTV.work ? buildWorkScene(g, FORESTV) : FORESTV.modern ? buildModernScene(g, FORESTV) : buildForestScene(g, FORESTV, MAP, HEDGE);   // Níveis 18 (Modernista) e 22 (Bosque)
   if (GARDV) buildGardenScene(g, GARDV);
   if (FLUX) buildFluxScene(g, { FLUX, GRID, ROAD, LOT, WALK, roadCenter, slotOrigin });
   return g;

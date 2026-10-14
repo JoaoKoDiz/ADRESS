@@ -83,7 +83,7 @@ function buildGround(venice = false) {
   // asfalto dentro da sebe (os lotes com suas calçadas ficam por cima)
   // (vai um pouco por baixo da sebe para não aparecer grama entre a sebe e a rua)
   if (CY) g.add(at(plane(CY.X0 - 0.3, MAP - 0.6, ASPHALT), (0.3 + CY.X0) / 2, 0, MAP / 2), at(plane(MAP - 0.3 - CY.X1, MAP - 0.6, ASPHALT), (CY.X1 + MAP - 0.3) / 2, 0, MAP / 2));
-  else g.add(at(plane(MAP - 0.6, MAP - 0.6, FAVELA ? '#b3a993' : FARMLAND ? '#86b85c' : SNOWV ? '#eef3f7' : MOONV ? '#b9bcc0' : GARDV ? '#86c25e' : FORESTV ? (FORESTV.modern ? '#86c25e' : '#b3a458') : ASPHALT), MAP / 2, 0, MAP / 2));   // Colheita: grama (estradas de terra à parte)   // Morro: chão de cimento (as ruas são desenhadas à parte)
+  else g.add(at(plane(MAP - 0.6, MAP - 0.6, FAVELA ? '#b3a993' : FARMLAND ? '#86b85c' : SNOWV ? '#eef3f7' : MOONV ? '#b9bcc0' : GARDV ? '#86c25e' : FORESTV ? (FORESTV.work ? '#a9b27a' : FORESTV.modern ? '#86c25e' : '#b3a458') : ASPHALT), MAP / 2, 0, MAP / 2));   // Colheita: grama (estradas de terra à parte)   // Morro: chão de cimento (as ruas são desenhadas à parte)
   // estrada de acesso: continua para fora pela abertura na sebe norte
   if (venice) return g;                        // Veneza: só água (sem estrada de acesso, faixas, faixa de pedestres nem bueiros)
   const OUT = 420;

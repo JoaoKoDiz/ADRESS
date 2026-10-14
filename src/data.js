@@ -342,6 +342,53 @@ export const MDS_FIRST = HOUSES.length;
   HOUSES.push({ name: 'Loja ' + label, kind: 'mds', shopKey: k, label, accent, fac, ftags: ['mdsh:' + k, 'mdfac:' + fac] }));
 export const MDSS = [...Array(6).keys()].map(k => MDS_FIRST + k);
 
+// ---- Operário (Nível 21): casas geminadas (unidades de uma fileira; térreas ou sobrados) e oficinas/comércios.
+// Índices a partir de ROW_FIRST (120 casas) e WSH_FIRST (20 oficinas/lojas).
+export const ROW_COL = {
+  fac: { brick: '#a5553a', cream: '#efe2c4', blue: '#8fb3d1', green: '#9cc39a', ochre: '#e0b25a', pink: '#e8a8a0' },
+  door: { green: '#3f8a4a', red: '#c8402f', blue: '#2f6fb0', yellow: '#e8b02a', brown: '#6b4428', white: '#f4f1ea' },
+  roof: { red: '#b5502f', gray: '#5f646c', brown: '#7a4a2a' },
+  mail: { red: '#d8473a', blue: '#3a78d4', yellow: '#efbf2a', green: '#3c9d55' },
+  awn: { red: '#d0352a', green: '#2f9a4a', blue: '#2f78d0', yellow: '#efbf2a' },
+  gate: { blue: '#2f6fb0', red: '#c8402f', gray: '#8a9098', green: '#3f8a4a', yellow: '#e8b02a' },
+};
+export const ROW_FIRST = HOUSES.length;
+{
+  const names = ['Seu Zé', 'Dona Cida', 'Seu Tonho', 'Dona Neide', 'Seu Valdir', 'Dona Rosa', 'Seu Nelson', 'Dona Fátima', 'Seu Geraldo', 'Dona Lourdes', 'Seu Bené', 'Dona Zuleica', 'Seu Juca', 'Dona Irene'];
+  const C = ROW_COL, K = o => Object.keys(o);
+  let seed = 2121; const rnd = n => { seed = (seed * 16807) % 2147483647; return seed % n; };
+  const seen = [], sub = (x, y) => x.every(k => y.includes(k));
+  while (HOUSES.length < ROW_FIRST + 120) {
+    const v = { fac: rnd(5) < 2 ? 'brick' : K(C.fac)[rnd(6)], doorc: K(C.door)[rnd(6)], floors: 1 + rnd(2), roofc: K(C.roof)[rnd(3)], dstyle: ['visor', 'frame', null][rnd(3)],
+      mail: rnd(2) ? K(C.mail)[rnd(4)] : null, awn: rnd(3) === 0 ? K(C.awn)[rnd(4)] : null, flower: rnd(3) === 0, bike: rnd(4) === 0, bench: rnd(4) === 0 };
+    const t = ['rfac:' + v.fac, 'rdoor:' + v.doorc, 'rfl:' + v.floors, 'rroof:' + v.roofc].concat(v.dstyle ? ['rdst:' + v.dstyle] : [], v.mail ? ['rmail:' + v.mail] : [],
+      v.awn ? ['rawn:' + v.awn] : [], v.flower ? ['rflower'] : [], v.bike ? ['rbike'] : [], v.bench ? ['rbench'] : []);
+    if (seen.some(o => sub(o, t) || sub(t, o))) continue;
+    seen.push(t);
+    HOUSES.push({ name: names[(HOUSES.length - ROW_FIRST) % names.length], kind: 'row', ...v, ftags: t });
+  }
+}
+export const ROWS = [...Array(120).keys()].map(k => ROW_FIRST + k);
+export const WSH_FIRST = HOUSES.length;
+{
+  const SIGNS = { mech: ['AUTO MECÂNICA TONHO', 'MECÂNICA BOA VIAGEM', 'OFICINA DO ZÉ', 'MOTOR & CIA', 'MECÂNICA DOIS IRMÃOS'], tire: ['BORRACHARIA 24H', 'PNEU BOM', 'BORRACHARIA DO VAL', 'RODA VIVA', 'PNEUS & RODAS'],
+    tools: ['FERRAGENS SÃO JOSÉ', 'CASA DAS FERRAMENTAS', 'PARAFUSO DE OURO', 'FERRAGISTA ÚNICA', 'TUDO EM AÇO'], market: ['MERCADINHO BOM PREÇO', 'EMPÓRIO DA ESQUINA', 'MERCEARIA DONA ROSA', 'MINIMERCADO SOL', 'QUITANDA DO BAIRRO'] };
+  const C = ROW_COL, K = o => Object.keys(o);
+  let seed = 4242; const rnd = n => { seed = (seed * 16807) % 2147483647; return seed % n; };
+  const seen = [], sub = (x, y) => x.every(k => y.includes(k));
+  for (const wtype of ['mech', 'tire', 'tools', 'market']) for (let i = 0; i < 5; i++) {
+    let v, t;
+    do {
+      v = { wtype, sign: SIGNS[wtype][i], fac: rnd(2) ? 'brick' : K(C.fac)[rnd(6)], gate: K(C.gate)[rnd(5)], awn: rnd(2) ? K(C.awn)[rnd(4)] : null,
+        tires: wtype === 'tire' || (wtype === 'mech' && rnd(2) === 0), tools: wtype === 'tools' || (wtype === 'mech' && rnd(2) === 0), car: wtype !== 'tools' && wtype !== 'market' ? rnd(3) > 0 : rnd(3) === 0 };
+      t = ['wtype:' + wtype, 'rfac:' + v.fac, 'wgate:' + v.gate].concat(v.awn ? ['wawn:' + v.awn] : [], v.tires ? ['wtires'] : [], v.tools ? ['wtools'] : [], v.car ? ['wcar'] : []);
+    } while (seen.some(o => sub(o, t) || sub(t, o)));
+    seen.push(t);
+    HOUSES.push({ name: v.sign, kind: 'wsh', ...v, ftags: t });
+  }
+}
+export const WSHS = [...Array(20).keys()].map(k => WSH_FIRST + k);
+
 export const ROOF_ITEMS = ['chimney', 'dish', 'solar', 'tank', 'rooster', 'kite', 'patch'];
 export const YARD_ITEMS = ['fruit', 'bare', 'cactus', 'sunflowers', 'ballbush', 'doghouse', 'pool', 'trampoline',
   'swing', 'bike', 'flamingo', 'gnome', 'clothesline', 'tires', 'fountain'];
@@ -371,7 +418,7 @@ HOUSES.forEach((h, i) => {
     h.roofItems = []; h.yardItems = [];
     return;
   }
-  if (h.kind === 'gard' || h.kind === 'mdh' || h.kind === 'mds') {
+  if (h.kind === 'gard' || h.kind === 'mdh' || h.kind === 'mds' || h.kind === 'row' || h.kind === 'wsh') {
     h.f = []; h.tags = h.ftags.slice();
     h.roofItems = []; h.yardItems = [];
     return;
@@ -452,6 +499,18 @@ export const PHRASE = {
   'fo:wood': 'lenha sob uma pequena cobertura', 'fo:wreath': 'uma guirlanda de folhas na porta', 'fo:bench': 'um banco de madeira na frente',
   'fo:porch': 'uma varanda de madeira', 'fo:tree:red': 'uma árvore de folhas vermelhas na entrada', 'fo:tree:yellow': 'uma árvore de folhas amarelas na entrada',
   'fo:tree:orange': 'uma árvore de folhas laranja na entrada',
+  // Operário (Nível 21)
+  'rfac:brick': 'fachada de tijolo aparente', 'rfac:cream': 'fachada creme', 'rfac:blue': 'fachada azul-clara', 'rfac:green': 'fachada verde-clara', 'rfac:ochre': 'fachada amarelo-ocre', 'rfac:pink': 'fachada rosa',
+  'rdoor:green': 'porta verde', 'rdoor:red': 'porta vermelha', 'rdoor:blue': 'porta azul', 'rdoor:yellow': 'porta amarela', 'rdoor:brown': 'porta marrom', 'rdoor:white': 'porta branca',
+  'rfl:1': 'um andar', 'rfl:2': 'dois andares', 'rroof:red': 'telhado vermelho', 'rroof:gray': 'telhado cinza', 'rroof:brown': 'telhado marrom',
+  'rdst:visor': 'um visor na porta', 'rdst:frame': 'moldura branca em volta da porta',
+  'rmail:red': 'caixa de correio vermelha', 'rmail:blue': 'caixa de correio azul', 'rmail:yellow': 'caixa de correio amarela', 'rmail:green': 'caixa de correio verde',
+  'rawn:red': 'toldo vermelho na porta', 'rawn:green': 'toldo verde na porta', 'rawn:blue': 'toldo azul na porta', 'rawn:yellow': 'toldo amarelo na porta',
+  rflower: 'floreira na janela', rbike: 'uma bicicleta na entrada', rbench: 'um banquinho na frente',
+  'wtype:mech': 'placa de mecânica', 'wtype:tire': 'placa de borracharia', 'wtype:tools': 'placa de ferramentas', 'wtype:market': 'placa de mercadinho',
+  'wgate:blue': 'portão azul', 'wgate:red': 'portão vermelho', 'wgate:gray': 'portão cinza', 'wgate:green': 'portão verde', 'wgate:yellow': 'portão amarelo',
+  'wawn:red': 'toldo vermelho', 'wawn:green': 'toldo verde', 'wawn:blue': 'toldo azul', 'wawn:yellow': 'toldo amarelo',
+  wtires: 'pneus empilhados ao lado', wtools: 'ferramentas e peças expostas', wcar: 'um carro estacionado na frente',
   // Modernista (Nível 18)
   'mdfac:white': 'fachada branca', 'mdfac:gray': 'fachada cinza', 'mdfac:beige': 'fachada bege', 'mdfl:1': 'um andar', 'mdfl:2': 'dois andares',
   'mddoor:blue': 'porta azul', 'mddoor:red': 'porta vermelha', 'mddoor:yellow': 'porta amarela', 'mddoor:green': 'porta verde', 'mddoor:black': 'porta preta', 'mddoor:orange': 'porta laranja',
@@ -522,6 +581,8 @@ export const PHRASE = {
 export const REF = {
   house: { a: 'a casa', da: 'da casa', na: 'na casa', n: 'casa' },
   shop: { a: 'o prédio', da: 'do prédio', na: 'no prédio', n: 'prédio' },
+  oficina: { a: 'a oficina', da: 'da oficina', na: 'na oficina', n: 'oficina' }, borracharia: { a: 'a borracharia', da: 'da borracharia', na: 'na borracharia', n: 'borracharia' },
+  mercadinho: { a: 'o mercadinho', da: 'do mercadinho', na: 'no mercadinho', n: 'mercadinho' },
   store: { a: 'a loja', da: 'da loja', na: 'na loja', n: 'loja' },
   ware: { a: 'o galpão', da: 'do galpão', na: 'no galpão', n: 'galpão' },
   module: { a: 'o módulo', da: 'do módulo', na: 'no módulo', n: 'módulo' },

@@ -6,6 +6,7 @@ import { createCanyonFx } from './canyon.js';
 import { createForestFx } from './forestFx.js';
 import { forestLot } from './models/forest.js';
 import { buildModernLot } from './models/modern.js';
+import { buildRowLot } from './models/work.js';
 import { buildCar, CAR_COLORS } from './barriers.js';
 import { MAP, doorPoint, slotOrigin, DELIVERY_RADIUS, DELIVERY_MAX_SPEED, VAN, VAN_START, LOT_ANCHORS, SOLIDS, ENTRANCE, HEDGE, GRID, PLAZA, HOUSE_SLOTS, configureGrid, roadCenter, setGasStations, GAS_LIST, GAS_CANOPY, GAS_ISLANDS, GAS_PARTS, TERRAIN, CANAL, VENICE, RAIL, FAVELA, FLUX, FARMLAND, SPOTS, SNOWV, MOONV, GARDV, FORESTV, slotPlaceTags, roadTopology, WARE_LIST, WALK as L_WALK, LOT as L_LOT, ROAD as L_ROAD, slotY as L_slotY } from './layout.js';
 import { createLaser } from './laser.js';
@@ -23,11 +24,11 @@ import { createCameraRig } from './camera.js';
 import { createHUD } from './hud.js';
 import { createAudio } from './audio.js';
 import { buildLot } from './models/house.js';
-import { box as kbox, cyl as kcyl, sphere as ksphere, bakeStatic, mat } from './models/kit.js';
+import { box as kbox, cyl as kcyl, sphere as ksphere, bakeStatic, mat, at } from './models/kit.js';
 import { buildResident } from './models/resident.js';
 import { YARD_BUILDERS, YARD_BUILDERS_SNOW } from './models/yard.js';
 import { buildShopLot } from './models/shop.js';
-import { SHOPS, HOUSES, FUTS, L1_FIXED, L6_FIXED, WARES, TWINS, VENS, FAVS, MODS, FARMS, MOONS, GRILLBY, SNOW_FIXED, SNOW_EXTRAS, SNOW_DROP, GARDS, CANYON_EXTRAS, FOREST_EXTRAS, MDHS, MDSS } from './data.js';
+import { SHOPS, HOUSES, FUTS, L1_FIXED, L6_FIXED, WARES, TWINS, VENS, FAVS, MODS, FARMS, MOONS, GRILLBY, SNOW_FIXED, SNOW_EXTRAS, SNOW_DROP, GARDS, CANYON_EXTRAS, FOREST_EXTRAS, MDHS, MDSS, ROWS, WSHS } from './data.js';
 import { buildFavelaLot } from './models/favela.js';
 import { buildModLot, MOD_H } from './models/mod.js';
 import { createTraffic } from './traffic.js';
@@ -122,10 +123,11 @@ const POOLS = { grid4: [...Array(16).keys(), ...Object.values(L1_FIXED)],   // g
   flux10: [...Array(32).keys()].concat([...Array(28).keys()].map(k => 38 + k), SHOPS, WARES, MODS),
   night10: [...Array(32).keys()].concat([...Array(28).keys()].map(k => 38 + k), SHOPS, WARES, MODS),
   forest8: [...Array(32).keys(), ...SHOPS],
-  modern8: MDHS.concat(MDSS),   // Nível 18 (Modernista): casas geométricas e poucas lojas   // Nível 22 (Bosque): casas e alguns comércios
+  modern8: MDHS.concat(MDSS),
+  work8: ROWS.concat(WSHS),   // Nível 21 (Operário): casas geminadas e oficinas/comércios   // Nível 18 (Modernista): casas geométricas e poucas lojas   // Nível 22 (Bosque): casas e alguns comércios
   canyon10: [...Array(32).keys()].concat([...Array(28).keys()].map(k => 38 + k), SHOPS, WARES, MODS) };   // Nível 23 (Cachoeira): as duas margens   // Nível 19 (Penumbra): o mapa do Fluxo, à noite   // Nível 14 (Fluxo): + prédios contemporâneos   // Nível 13 (Morro): casas de laje   // Nível 12 (Veneza): casas venezianas   // Bairro 11 (Trilhos): ferrovia, estações e galpões   // Bairro 10 (Travessia): + galpões e casas gêmeas   // city8 (Bairro 8): o mesmo, em 8×8, com prédios mais altos (e os futuristas, se USE_FUTS)
 // lote de casa ou de prédio comercial
-const buildAnyLot = (h, opts) => h.kind === 'mdh' || h.kind === 'mds' ? buildModernLot(h) : FORESTV && !FORESTV.modern && (h.kind === 'house' || (h.kind === 'shop' && !h.grill)) ? forestLot(h.kind === 'house' ? buildLot(h, opts) : buildShopLot(h), h.kind === 'house' ? FOREST_EXTRAS[h.index] || [] : []) : CANAL && CANAL.canyon && h.kind === 'house' ? canyonLot(h, opts) : h.grill ? buildGrillbyLot(h) : h.kind === 'gard' ? buildGardLot(h) : h.kind === 'moon' ? buildMoonLot(h) : SNOWV && h.kind === 'house' ? buildSnowLot(h, opts) : h.kind === 'farm' ? buildFarmLot(h) : h.kind === 'mod' ? buildModLot(h) : h.kind === 'fav' ? buildFavelaLot(h) : h.kind === 'ven' ? buildVeniceLot(h) : h.kind === 'ware' ? buildWareLot(h) : h.kind === 'shop' ? buildShopLot(h) : h.kind === 'apt' ? buildAptLot(h) : h.kind === 'fut' ? buildFutLot(h) : buildLot(h, opts);
+const buildAnyLot = (h, opts) => h.kind === 'row' || h.kind === 'wsh' ? buildRowLot(h) : h.kind === 'mdh' || h.kind === 'mds' ? buildModernLot(h) : FORESTV && !FORESTV.modern && (h.kind === 'house' || (h.kind === 'shop' && !h.grill)) ? forestLot(h.kind === 'house' ? buildLot(h, opts) : buildShopLot(h), h.kind === 'house' ? FOREST_EXTRAS[h.index] || [] : []) : CANAL && CANAL.canyon && h.kind === 'house' ? canyonLot(h, opts) : h.grill ? buildGrillbyLot(h) : h.kind === 'gard' ? buildGardLot(h) : h.kind === 'moon' ? buildMoonLot(h) : SNOWV && h.kind === 'house' ? buildSnowLot(h, opts) : h.kind === 'farm' ? buildFarmLot(h) : h.kind === 'mod' ? buildModLot(h) : h.kind === 'fav' ? buildFavelaLot(h) : h.kind === 'ven' ? buildVeniceLot(h) : h.kind === 'ware' ? buildWareLot(h) : h.kind === 'shop' ? buildShopLot(h) : h.kind === 'apt' ? buildAptLot(h) : h.kind === 'fut' ? buildFutLot(h) : buildLot(h, opts);
 /** Nível 23 (Cachoeira): a casa de sempre + 2 detalhes (CANYON_EXTRAS): sacada de madeira (as duas laterais; só a virada para o
  *  desfiladeiro aparece — canyonBalconies), jardinzinho, vasos na porta, cobertura de madeira na porta. */
 function canyonLot(h, opts) {
@@ -475,6 +477,17 @@ const chickens = createChickens();        // Nível 15 (Colheita): galinhas atra
 const plow = createTractors(audio);
 const forestCars = createTractors(audio);   // Nível 22 (Bosque): poucos carros circulando devagar (mesma lógica dos tratores)
 const forestFx = createForestFx();          // Nível 22 (Bosque): luz de outono, folhas no chão e caindo
+let workN = 0;
+const buildWorkVehicle = () => {                // Operário: carros e pequenas vans de serviço (frente em +X, como buildCar)
+  if (workN++ % 2 === 0) return buildForestCar();
+  const g = new THREE.Group(), c = ['#f4f1ea', '#2f6fb0', '#e8b02a'][workN % 3], a = (m, x, y, z) => g.add(at(m, x, y, z));
+  a(kbox(3.6, 1.7, 1.9, c), -0.3, 1.25, 0); a(kbox(1.2, 1.2, 1.85, c), 1.9, 1.0, 0); a(kbox(0.9, 0.7, 1.7, '#2b4a6e'), 2.0, 1.45, 0);
+  a(kbox(2.4, 0.5, 0.04, '#c8402f'), -0.3, 1.4, 0.96); a(kbox(2.4, 0.5, 0.04, '#c8402f'), -0.3, 1.4, -0.96);
+  for (const x of [-1.4, 1.6]) for (const s of [-1, 1]) a(kcyl(0.42, 0.42, 0.3, '#1f2023', 10), x, 0.42, s * 0.95);
+  g.children.slice(-4).forEach(m => { m.rotation.x = Math.PI / 2; });
+  g.traverse(o => { if (o.isMesh) o.castShadow = true; });
+  return g;
+};
 const buildForestCar = () => { const m = buildCar(); m.userData.body.material = mat(CAR_COLORS[Math.floor(Math.random() * CAR_COLORS.length)]); return m; };
 const banks = [];                                // { cut, mesh, open, t, k }
 function resetBanks() {
@@ -616,7 +629,17 @@ function setupGrid4() {
     const md = neighborhood === 'modern8', nS = md ? 3 : 4;
     pool = sh(md ? MDHS : [...Array(32).keys()]).slice(0, HOUSE_SLOTS.length - nS).concat(sh(md ? MDSS : SHOPS).slice(0, nS));
   }
-  game.setNeighborhood(pool, HOUSE_SLOTS, GRID * GRID, l1 ? L1_FIXED : neighborhood === 'snow8' ? SNOW_FIXED : null);
+  game.arrange = null;
+  if (neighborhood === 'work8') {                 // Operário: unidades geminadas recebem casas; os pontos largos, oficinas/comércios
+    const sh = a => { a = a.slice(); for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; };
+    const wide = HOUSE_SLOTS.filter(s => FORESTV.spots[s].wide);
+    pool = sh(ROWS).slice(0, HOUSE_SLOTS.length - wide.length).concat(sh(WSHS).slice(0, wide.length));
+    game.arrange = (layout, free) => {
+      const hs = free.map(s => layout[s]), sh2 = sh(hs.filter(h => HOUSES[h].kind === 'wsh')), rw = sh(hs.filter(h => HOUSES[h].kind !== 'wsh'));
+      for (const s of free) layout[s] = FORESTV.spots[s].wide ? sh2.pop() : rw.pop();
+    };
+  }
+  game.setNeighborhood(pool, HOUSE_SLOTS, Math.max(GRID * GRID, SPOTS ? SPOTS.spots.length : 0), l1 ? L1_FIXED : neighborhood === 'snow8' ? SNOW_FIXED : null);
   world.setLayout(game.layout);
 }
 function useNeighborhood(kind) {
@@ -661,7 +684,7 @@ function useNeighborhood(kind) {
   if (kind === 'farm10') { world.scene.add(tractors.object); tractors.reset(); } else { tractors.detach(); if (kind !== 'flux10' && kind !== 'night10' && kind !== 'canyon10') tractors.silence(); }
   van.setIce(kind === 'snow8' ? SNOWV.iceAt : null);   // Nevasca: placas de gelo
   van.setLowGravity(kind === 'moon8'); walker.setLowGravity(kind === 'moon8'); playerSuit.visible = kind === 'moon8';   // Órbita: gravidade baixa e capacete (só neste bairro)
-  if (kind === 'forest8' || kind === 'modern8') { world.scene.add(forestCars.object); forestCars.reset({ loops: kind === 'modern8' ? FORESTV.carLoops : [...FORESTV.carLoops, FORESTV.carLoops[0].slice().reverse()], build: buildForestCar, speed: kind === 'modern8' ? 3.6 : 3.0 }); } else forestCars.detach();   // Bosque / Modernista: trânsito leve
+  if (kind === 'forest8' || kind === 'modern8' || kind === 'work8') { world.scene.add(forestCars.object); forestCars.reset({ loops: kind === 'forest8' ? [...FORESTV.carLoops, FORESTV.carLoops[0].slice().reverse()] : kind === 'work8' ? [...FORESTV.carLoops, FORESTV.carLoops[3].slice().reverse()] : FORESTV.carLoops, build: kind === 'work8' ? buildWorkVehicle : buildForestCar, speed: kind === 'forest8' ? 3.0 : kind === 'work8' ? 4.2 : 3.6 }); } else forestCars.detach();   // Bosque / Modernista: trânsito leve
   if (kind === 'snow8') { world.scene.add(plow.object); plow.reset({ loops: [SNOWV.plowLoop], build: buildPlow, speed: 4.6 }); } else plow.detach();
   resetBanks();
   if (kind === 'venice8') { world.scene.add(npcBoats.object); npcBoats.reset(); world.scene.add(rope); } else npcBoats.detach();   // Bairro 11: trem e cancelas
@@ -941,7 +964,7 @@ function goBack() {
 function startFree(mode = 'free') {
   // Bairro 2: 6×6 com praça; Bairro 4: 5×5 com bloqueios; o resto: 4×4
   const lv = mode === 'career' ? careerLevel : freeLevel;
-  useNeighborhood(lv === 1 ? 'plaza6' : lv === 3 ? 'grid5' : lv === 4 ? 'grid6s' : lv === 5 ? 'city6' : lv === 6 ? 'city7' : lv === 7 ? 'city8' : lv === 8 ? 'hill8' : lv === 9 ? 'venice8' : lv === 10 ? 'canal8' : lv === 11 ? 'rail8' : lv === 12 ? 'favela8' : lv === 13 ? 'flux10' : lv === 14 ? 'farm10' : lv === 15 ? 'snow8' : lv === 16 ? 'garden8' : lv === 18 ? 'night10' : lv === 19 ? 'moon8' : lv === 17 ? 'modern8' : lv === 21 ? 'forest8' : lv === 22 ? 'canyon10' : 'grid4');   // 17–19 reservados; 20 = Lua   // 10 = Veneza, 11 = Travessia, 12 = Trilhos
+  useNeighborhood(lv === 1 ? 'plaza6' : lv === 3 ? 'grid5' : lv === 4 ? 'grid6s' : lv === 5 ? 'city6' : lv === 6 ? 'city7' : lv === 7 ? 'city8' : lv === 8 ? 'hill8' : lv === 9 ? 'venice8' : lv === 10 ? 'canal8' : lv === 11 ? 'rail8' : lv === 12 ? 'favela8' : lv === 13 ? 'flux10' : lv === 14 ? 'farm10' : lv === 15 ? 'snow8' : lv === 16 ? 'garden8' : lv === 18 ? 'night10' : lv === 19 ? 'moon8' : lv === 17 ? 'modern8' : lv === 20 ? 'work8' : lv === 21 ? 'forest8' : lv === 22 ? 'canyon10' : 'grid4');   // 17–19 reservados; 20 = Lua   // 10 = Veneza, 11 = Travessia, 12 = Trilhos
   gameMode = mode;
   if (!COMPOSED.includes(neighborhood)) setupGrid4();   // Bairro 1 tem a casa fixa; o 3 (mesma grade) não
   resetGates();
@@ -1046,7 +1069,7 @@ function findNearHouseFoot() {
 }
 function findNearHouse() {
   if (Math.abs(van.speed) > DELIVERY_MAX_SPEED) return -1;
-  let best = DELIVERY_RADIUS, found = -1;
+  let best = FORESTV && FORESTV.work ? 3.3 : DELIVERY_RADIUS, found = -1;   // Operário: só a unidade bem em frente (as portas geminadas ficam a 6,4)
   for (const h of game.pool) {
     if (SPOTS && SPOTS.spots[game.slotOf[h]] && SPOTS.spots[game.slotOf[h]].foot) continue;   // Morro (becos/escadarias) e Jardins (entrada pelo parque): só a pé
     const p = doorPoint(game.slotOf[h]);
@@ -1970,7 +1993,7 @@ function update(dt, t) {
     chickens.update(dt, heli.flying ? null : { x: van.x, z: van.z, circles: [-1.5, 0, 1.5].map(k => [van.x + c * k, van.z + s2 * k]) });
     updateGates(dt);
   }
-  if (neighborhood === 'forest8' || neighborhood === 'modern8') {   // Bosque e Modernista: carros devagar (e, no Bosque, folhas caindo perto de quem joga)
+  if (neighborhood === 'forest8' || neighborhood === 'modern8' || neighborhood === 'work8') {   // Bosque, Modernista e Operário: carros devagar (e, no Bosque, folhas caindo perto de quem joga)
     const c = Math.cos(van.heading), s2 = Math.sin(van.heading), obs = [];
     if (!heli.flying) obs.push({ circles: [-1.5, 0, 1.5].map(k => [van.x + c * k, van.z + s2 * k, 1.25]) });
     if (walker.visible) obs.push({ circles: [[walker.x, walker.z, 0.6]] });

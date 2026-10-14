@@ -49,7 +49,7 @@ function roadGeometry(curve, samples) {
 //   canal    — canal no meio, pontes e um galpão (Bairro 10, Travessia)
 //   rail     — trilhos em L com curva, trem e estação (Bairro 11, Trilhos)
 //   venice   — canais, fachadas venezianas coloridas e a Ponte de Rialto (Nível 12, Veneza)
-export const MINI_KINDS = ['houses', 'plaza', 'barriers', 'trucks', 'gas', 'city', 'jam', 'jam8', 'hill', 'venice', 'canal', 'rail', 'favela', 'flux', 'farm', 'snow', 'garden', 'modern', 'night', 'moon', null, 'forest', 'canyon'];   // 21 reservado, 22 = Bosque, 23 = Cachoeira   // 17–19 reservados (null), 20 = Lua   // 13 = Morro, 14 = Fluxo, 15 = Colheita, 16 = Nevasca, 17 = Órbita   // 10 = Veneza, 11 = Travessia, 12 = Trilhos
+export const MINI_KINDS = ['houses', 'plaza', 'barriers', 'trucks', 'gas', 'city', 'jam', 'jam8', 'hill', 'venice', 'canal', 'rail', 'favela', 'flux', 'farm', 'snow', 'garden', 'modern', 'night', 'moon', 'work', 'forest', 'canyon'];   // 21 reservado, 22 = Bosque, 23 = Cachoeira   // 17–19 reservados (null), 20 = Lua   // 13 = Morro, 14 = Fluxo, 15 = Colheita, 16 = Nevasca, 17 = Órbita   // 10 = Veneza, 11 = Travessia, 12 = Trilhos
 
 /** Bairro em miniatura do tipo `kind`: base de grama, sebe, ruas e o que caracteriza o bairro. gray = fase bloqueada. */
 function miniNeighborhood(kind, colors, gray = false) {
@@ -192,6 +192,29 @@ function miniNeighborhood(kind, colors, gray = false) {
     const spots = [[-5.8, -6.0], [-1.6, -6.2], [3.2, -6.0], [6.2, -2.2], [-6.2, -0.4], [-0.4, -0.8], [-0.2, 1.6], [2.4, 1.6], [-5.8, 2.6], [-2.2, 6.2], [3.2, 6.4], [6.2, 0.8], [-4.2, -3.4], [6.4, 5.9], [-1.0, 4.6]];
     spots.forEach(([x, z], i) => tree(x, z, i % 7 === 6 ? 4 : i % 4, 0.5 + (i % 3) * 0.12));
     for (const [x, z, c] of [[-2, -1.5, '#e8822a'], [2.5, 2.6, '#c63a24'], [-4, 3.4, '#e8c23a'], [0.8, -3.6, '#d9701c'], [-5.4, -2.6, '#c63a24'], [5.6, -3.2, '#e8c23a']]) add(box(0.5, 0.03, 0.4, G(c, '#9a9a9a')), x, Y + 0.02, z, 0, x, 0);   // folhas no chão
+    return bakeStatic(g);
+  }
+  if (kind === 'work') {                         // Nível 21 (Operário): fileiras de casas geminadas de tijolo, oficina com portão e pneus
+    const Y = 0.4, BR = ['#a5553a', '#9a4c34', '#b05e40'], PAINT = ['#efe2c4', '#8fb3d1', '#9cc39a', '#e0b25a', '#e8a8a0'];
+    add(box(14, 0.06, 1.6, ROADC), 0, Y + 0.03, -1.2); add(box(1.6, 0.06, 14, ROADC), -0.8, Y + 0.03, 0); add(box(14, 0.06, 1.6, ROADC), 0, Y + 0.03, 4.4);
+    const row = (x0, z, n, ry, two) => {                  // fileira: unidades encostadas, molduras claras, portas, telhado contínuo
+      const gg = new THREE.Group(); gg.position.set(x0, Y, z); gg.rotation.y = ry; g.add(gg);
+      const a = (m, px, py, pz, rx = 0) => gg.add(at(m, px, py, pz, rx, 0, 0));
+      for (let k = 0; k < n; k++) {
+        const x = k * 1.15, hh = two && k % 2 ? 1.5 : 1.0, c = G((k % 3 === 1) ? PAINT[k % 5] : BR[k % 3], '#bdbdbd');
+        a(box(1.15, hh, 1.4, c), x, hh / 2, 0); a(box(0.08, hh, 0.06, G('#ece4d4', '#d6d6d6')), x - 0.57, hh / 2, 0.71);
+        a(box(0.3, 0.55, 0.04, G(['#3f8a4a', '#c8402f', '#2f6fb0', '#e8b02a'][k % 4], '#777777')), x - 0.2, 0.28, 0.71); a(box(0.35, 0.3, 0.04, G('#7fa6c4', '#9a9a9a')), x + 0.25, hh - 0.35, 0.71);
+        a(box(1.17, 0.08, 0.95, G('#b5502f', '#8c8c8c')), x, hh + 0.2, 0.32, 0.45); a(box(1.17, 0.08, 0.95, G('#b5502f', '#8c8c8c')), x, hh + 0.2, -0.32, -0.45);
+      }
+    };
+    row(-5.6, -3.4, 5, 0, true); row(0.6, -3.4, 5, 0, false); row(-5.6, 2.2, 4, 0, false);
+    row(-3.0, 5.6, 3, Math.PI, true);
+    const wx = 3.6, wz = 2.3;                             // oficina: portão largo, placa, pneus e carro
+    add(box(4.4, 1.6, 2.2, G('#a5553a', '#bdbdbd')), wx, Y + 0.8, wz); add(box(4.4, 0.18, 2.3, G('#7a7f86', '#9a9a9a')), wx, Y + 1.68, wz);
+    add(box(2.2, 1.1, 0.05, G('#2f6fb0', '#888888')), wx - 0.6, Y + 0.55, wz + 1.11); add(box(3.0, 0.35, 0.05, G('#f4f1ea', '#dddddd')), wx, Y + 1.4, wz + 1.12);
+    for (let k = 0; k < 4; k++) add(cyl(0.22, 0.22, 0.14, G('#1f2023', '#555555'), 10), wx + 1.6, Y + 0.08 + k * 0.15, wz + 1.6);
+    add(box(1.4, 0.45, 0.7, G('#d8473a', '#8a8a8a')), wx - 0.6, Y + 0.3, wz + 2.0);
+    tinyTree(-0.8 + 2.2, 6.6, 0.45); tinyTree(6.0, -6.0, 0.45);
     return bakeStatic(g);
   }
   if (kind === 'modern') {                       // Nível 18 (Modernista): ruas curvas largas, rotatória, casas geométricas de laje plana e jardins
@@ -534,7 +557,7 @@ function boardTexture(gray = false) {
 }
 
 const PALETTES = [['red', 'blue', 'yellow', 'green'], ['purple', 'red', 'gray', 'yellow', 'blue', 'green', 'red', 'yellow'], ['blue', 'green', 'red', 'purple'],
-  ['yellow', 'gray', 'blue', 'red'], ['green', 'purple', 'yellow', 'blue'], ['red'], ['blue'], ['green'], ['red', 'blue', 'yellow', 'purple'], ['red'], ['blue', 'green', 'red'], ['green', 'yellow', 'purple'], ['red'], ['blue', 'red', 'yellow', 'green'], ['red', 'blue'], ['red', 'blue', 'green', 'yellow'], ['red', 'blue', 'gray', 'green'], ['blue', 'red', 'yellow', 'green'], ['red'], ['blue'], [], ['red', 'blue', 'yellow', 'green', 'purple'], ['red', 'blue', 'yellow', 'green', 'purple']];
+  ['yellow', 'gray', 'blue', 'red'], ['green', 'purple', 'yellow', 'blue'], ['red'], ['blue'], ['green'], ['red', 'blue', 'yellow', 'purple'], ['red'], ['blue', 'green', 'red'], ['green', 'yellow', 'purple'], ['red'], ['blue', 'red', 'yellow', 'green'], ['red', 'blue'], ['red', 'blue', 'green', 'yellow'], ['red', 'blue', 'gray', 'green'], ['blue', 'red', 'yellow', 'green'], ['red'], ['blue'], ['red', 'gray', 'red', 'blue'], ['red', 'blue', 'yellow', 'green', 'purple'], ['red', 'blue', 'yellow', 'green', 'purple']];
 
 /** Miniatura da lua: fundo preto, poucas estrelas pequenas e a lua por cima. */
 function spaceShot(src, w, h) {
