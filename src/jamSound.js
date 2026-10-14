@@ -27,7 +27,7 @@ export function createJamSound(audio) {
   function start(ac) {
     gain = ac.createGain();
     gain.gain.value = 0;
-    gain.connect(audio.out);
+    gain.connect(audio.musicOut);
     src = ac.createBufferSource();
     src.buffer = buffer;
     src.loop = true;                                   // loop contínuo e sem emenda

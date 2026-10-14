@@ -12,12 +12,12 @@ function decodeDataUrl(url) {
 }
 
 /** `url`: faixa embutida (padrão: a da aproximação); `VOLUME`: volume máximo; `onEnd`: chamada quando a faixa termina sozinha. */
-export function createChurchMusic(audio, url = trackUrl, VOLUME = 0.8, onEnd = null, loop = false) {
+export function createChurchMusic(audio, url = trackUrl, VOLUME = 0.8, onEnd = null, loop = false, sfx = false) {   // sfx: é efeito, não música
   let buffer = null, loading = null, src = null, gain = null, t0 = 0, offset = 0, paused = false, fadeEnd = 0;
   function startAt(off, fade) {                        // toca a partir de `off` segundos, subindo o volume em `fade`
     const ac = audio.ctx;
     if (ac.state === 'suspended') ac.resume();
-    gain = ac.createGain(); gain.connect(audio.out);
+    gain = ac.createGain(); gain.connect(sfx ? audio.out : audio.musicOut);
     src = ac.createBufferSource(); src.buffer = buffer; src.loop = loop; src.connect(gain);
     const at = ac.currentTime + 0.02;
     t0 = at - off;

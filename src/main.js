@@ -61,6 +61,7 @@ import { createMenu } from './menu.js';
 import { createMusic } from './music.js';
 import { createHeli } from './heli.js';
 import { createMonster } from './monster.js';
+import { createSettings } from './settings.js';
 import { createTitle } from './title.js';
 import { createBarriers } from './barriers.js';
 import { createTitleDriver } from './titleDriver.js';
@@ -105,6 +106,8 @@ stage.appendChild(renderer.domElement);
 const audio = createAudio();
 const music = createMusic(stage);          // música de fundo (PAUSAR / CONTINUAR, tecla M)
 const input = createInput(() => { audio.unlock(); music.start(); });
+// Configurações (tela inicial): volume da música/efeitos salvos e aplicados já ao abrir o jogo
+const settings = createSettings({ onChange: p => { audio.setVolumes(p.music, p.sfx); music.setVolume(p.music); } });
 const hud = createHUD(hudEl, stage);
 const game = new Game();
 // Bairros (grade em layout.js): 'grid4' (4×4 — Bairros 1 e 3, e o modo Livre), 'plaza6' (6×6 com praça — Bairro 2),
@@ -572,7 +575,7 @@ function updateGates(dt) {
 // A van parada na frente de um bonde por 10 s seguidos → buzina, o bonde avança, corte para preto (~2 s, som de dirigir) e a
 // cena separada (trolley.js). Depois, preto de novo e volta à partida com a van num lugar seguro, perto, fora dos trilhos.
 const trolley = createTrolley(stage);
-const sHonk = createChurchMusic(audio, honkUrl, 0.9), sDrive = createChurchMusic(audio, driveUrl, 0.9);
+const sHonk = createChurchMusic(audio, honkUrl, 0.9, null, false, true), sDrive = createChurchMusic(audio, driveUrl, 0.9, null, false, true);   // (efeitos)
 const sTrainProblem = createChurchMusic(audio, trainProblemUrl, 0.7);
 let tseq = null, trolleyCool = 0;
 // História secundária: só com as 3 conversas salvas (casa do K, terraço do Bairro 6 e igreja) salvar o K leva à conversa
@@ -910,6 +913,7 @@ const title = createTitle({
   onShop: () => { if (state === 'title') openShop(); },       // Shop: layout inicial (cores grátis; itens em breve)
   onPlay: el => { titleDriver = titleDriver || createTitleDriver(el, audio); titleDriver.start(); },
   onBack: () => goBack(),                                      // Voltar do próprio painel (fica embaixo do logo)
+  onSettings: () => { if (state === 'title') settings.open(); },   // Configurações (volume, tela cheia, controles)
 });
 // Shop (painel Jogar): cores da van e do personagem; o resto ainda não está à venda
 const shop = createShop();

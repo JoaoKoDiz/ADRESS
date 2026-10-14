@@ -2,6 +2,7 @@
 // Tudo é um no-op seguro antes de unlock() ou se o navegador não tiver WebAudio — nada aqui lança exceção.
 
 const MASTER = 0.9;
+let musicVol = 1, sfxVol = 1, musicBus = null;
 const ENGINE_MIN = 0.012, ENGINE_RANGE = 0.022;   // volume do motor: parado → velocidade máxima
 const ENGINE_HZ = 42, ENGINE_HZ_RANGE = 63;       // tom do motor (a 2ª onda toca uma oitava abaixo)
 const ENGINE_LP = 250, ENGINE_LP_RANGE = 120;     // filtro passa-baixa abre um pouco com a velocidade
@@ -21,8 +22,11 @@ export function createAudio() {
   function build() {
     ac = new Ctor();
     master = ac.createGain();
-    master.gain.value = MASTER;
+    master.gain.value = MASTER * sfxVol;
     master.connect(ac.destination);
+    musicBus = ac.createGain();                 // músicas tocadas pelo WebAudio (cenas, Grillby's, engarrafamentos)
+    musicBus.gain.value = musicVol;
+    musicBus.connect(ac.destination);
 
     // Motor: dente-de-serra + quadrada (oitava abaixo) → passa-baixa → ganho (começa mudo).
     const o = ac.createOscillator(), o2 = ac.createOscillator();
@@ -248,6 +252,13 @@ export function createAudio() {
     /** Contexto e saída principal (para sons com arquivo, como a música dos engarrafamentos). null antes do unlock(). */
     get ctx() { return ac; },
     get out() { return master; },
+    /** Saída das músicas (volume da música nas Configurações). */
+    get musicOut() { return musicBus || master; },
+    /** Volumes das Configurações (0..1): efeitos (tudo que sai por `out`) e música (`musicOut`). */
+    setVolumes(music, sfx) {
+      musicVol = music; sfxVol = sfx;
+      try { if (master) master.gain.setTargetAtTime(MASTER * sfxVol, ac.currentTime, 0.02); if (musicBus) musicBus.gain.setTargetAtTime(musicVol, ac.currentTime, 0.02); } catch (e) { /* ignora */ }
+    },
     /** Cria/retoma o AudioContext. Idempotente; chamar no primeiro evento de teclado/ponteiro. */
     unlock() {
       if (broken) return;

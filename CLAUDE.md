@@ -32,7 +32,7 @@ ADRESS é um jogo 3D de entregas, aconchegante e meio cômico.
 - As pistas são sempre únicas dentro do bairro da partida (`makeClue`).
 
 **Telas:**
-- **Tela inicial:** bairro desfocado ao fundo (a barra e os botões da partida somem: `body.title-on`) + logo ADRESS reto (laranja, contorno escuro) e **Jogar / Configurações / Sair** centralizados, mesma largura/altura (creme #FFF3D6 com borda #FF7A1A; Sair marrom #302014 com texto/borda creme). Configurações ainda não faz nada.
+- **Tela inicial:** bairro desfocado ao fundo (a barra e os botões da partida somem: `body.title-on`) + logo ADRESS reto (laranja, contorno escuro) e **Jogar / Configurações / Sair** centralizados, mesma largura/altura (creme #FFF3D6 com borda #FF7A1A; Sair marrom #302014 com texto/borda creme). **Configurações** (`settings.js`, `createSettings`): painel creme/laranja com volume da Música e dos Efeitos (0–100%, na hora; `audio.setVolumes` → `master` dos efeitos e `musicOut` das músicas WebAudio — `createChurchMusic` usa `musicOut`, salvo `sfx = true` como buzina/motor do bonde; `jamSound` também; `music.setVolume` na faixa de fundo/níveis), tela cheia (segue `fullscreenchange`), "Ver controles" (lista curta) e "Restaurar configurações" (confirmação; só volumes). Salvo em `adress.settings.v1`. Voltar ou Esc fecha (com ele aberto nenhuma tecla chega ao jogo).
 - **Painel Jogar** (`title.js`): bairro desfocado ao fundo; à esquerda logo ADRESS, botão "← Voltar" próprio (`.tp-back`; o Voltar fixo não aparece aqui), "Escolha como jogar", botões largos creme com borda laranja **Carreira** (ícone de mapa, "Avance pelos bairros") e **Livre** (bússola, "Explore no seu ritmo") e um menor **Shop** (caixa, borda roxa). Ícones em SVG embutido. Tela em pé: botões em cima, van embaixo.
 - **Van à direita** (`titleDriver.js`): a van inteira (de frente e de lado, enquadrada pela caixa da van — cabe até a torre de caixas) com a customização salva (cores compartilhadas + `registerVan`), motorista na janela balançando a cabeça; `refit()` reenquadra ao voltar do Shop.
 - **Transições:** Carreira = a van sai dirigindo + fade. Livre = helicóptero decola + fade.
@@ -323,7 +323,7 @@ document.title = 'OK ' + A.dialog.text + ' errs=' + JSON.stringify(window.__errs
 ## 8. Pendências / próximos passos conhecidos
 
 - Missões dos Níveis 5 e 6: aguardando o dono mandar.
-- **Configurações** na tela inicial: ainda sem função. **Shop**: só o layout e as cores grátis; nenhum item à venda ainda (não há moeda).
+- **Shop**: só o layout e as cores grátis; nenhum item à venda ainda (não há moeda).
 - Se o GitHub Pages ainda não estiver ligado: Settings → Pages → `main` / `(root)`.
 - A senha do cadeado (`1225`) aparece no código público. O dono foi avisado; é só um "código de trapaça".
 

@@ -73,7 +73,7 @@ const ICON_BOX = `<svg class="ic" viewBox="0 0 100 90"><path d="M10 28 L50 12 L9
 <path d="M10 28 L50 44 L90 28" fill="none" stroke="#6a3b16" stroke-width="4"/><path d="M50 44 L50 86" stroke="#6a3b16" stroke-width="4"/>
 <path d="M30 20 L70 36 L70 50 L62 47 L62 38 L22 23 Z" fill="#e8c27a"/></svg>`;
 
-export function createTitle({ onFree, onCareer, onPlay, onShop, onBack }) {
+export function createTitle({ onFree, onCareer, onPlay, onShop, onBack, onSettings }) {
   const style = document.createElement('style');
   style.textContent = CSS;
   document.head.appendChild(style);
@@ -112,6 +112,7 @@ export function createTitle({ onFree, onCareer, onPlay, onShop, onBack }) {
   el.querySelector('.title-card.career').addEventListener('click', go(onCareer));
   el.querySelector('.title-card.shop').addEventListener('click', () => { if (!starting && onShop) onShop(); });   // abre o Shop (não inicia partida)
   el.querySelector('.tp-back').addEventListener('click', () => { if (!starting && onBack) onBack(); });
+  el.querySelector('[data-act="settings"]').addEventListener('click', () => { if (!starting && onSettings) onSettings(); });
   el.querySelector('[data-act="quit"]').addEventListener('click', () => {
     window.close();                                   // só funciona se a aba foi aberta por script
     el.innerHTML = '<div class="title-bye">Até a próxima!<br>Você já pode fechar esta aba.</div>';

@@ -30,7 +30,9 @@ export function createMusic(stageEl, src = 'assets/musica-fundo.mp3') {
 
   const audio = new Audio(src);
   audio.loop = true;
-  audio.volume = 0.35;
+  const BASE = 0.35;
+  let vol = 1;                           // volume da música nas Configurações (0..1)
+  audio.volume = BASE;
   audio.preload = 'auto';
 
   let wanted = true;                     // o jogador quer música tocando?
@@ -84,6 +86,8 @@ export function createMusic(stageEl, src = 'assets/musica-fundo.mp3') {
       paint();
     },
     toggle,
+    /** Volume da música (Configurações), 0..1. */
+    setVolume(v) { vol = v; audio.volume = BASE * vol; },
     /** Cena com música própria: pausa a de fundo SEM mudar a preferência salva; false volta como estava. */
     suspend(on) { suspended = on; if (on) audio.pause(); else if (isOn() && started) play(); },
     get playing() { return !audio.paused; },
