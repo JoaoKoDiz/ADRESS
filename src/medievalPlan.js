@@ -225,6 +225,24 @@ export function planMedieval(MAP, HEDGE) {
     if (reserved.some(r => hit(box, r, 1.5)) || spots.some(o => obbHit(f, o, 1.4)) || fillers.some(o => obbHit(f, o, 1.2 + (o.k + f.k) * 0.8))) continue;
     f.y = [0, MIDH, HIGHH][lv]; f.box = box; fillers.push(f);
   }
+  // ---- 2ª passada, junto das ruas (logo atrás da calçada, nos vãos entre as casas): só telheiros, depósitos de pedra e hortas
+  //      muradas (nada com cara de casa de entrega); nunca na frente de uma porta nem no caminho até ela ----
+  const fronts = spots.map(sp => sp.front), sKinds = ['shed', 'yard', 'stone', 'shed', 'yard'];
+  for (const [px, pz] of cand) {
+    if (fillers.length >= 175) break;
+    const rd = roadDist(px, pz); if (rd < hw + STRIP + 3.2 || rd > hw + STRIP + 9.5) continue;
+    const kind = sKinds[Math.floor(rnd() * sKinds.length)], w = kind === 'shed' ? 4 + rnd() * 2 : kind === 'yard' ? 5 + rnd() * 2.5 : 5.5 + rnd() * 2, d = kind === 'shed' ? 3 + rnd() : kind === 'yard' ? 4 + rnd() * 1.5 : 4.5 + rnd() * 1.5;
+    const sg = segOf(px, pz), ux = sg.b[0] - sg.a[0], uz = sg.b[1] - sg.a[1], ry0 = Math.atan2(uz, -ux);
+    const f = { px, pz, ry: Math.abs(Math.sin(ry0)) > 0.7 ? Math.PI / 2 * Math.sign(Math.sin(ry0)) : (Math.cos(ry0) > 0 ? 0 : Math.PI), w, d, kind, k: rnd(), street: true };
+    const cs = corners(f), box = { x0: Math.min(...cs.map(c => c.x)), x1: Math.max(...cs.map(c => c.x)), z0: Math.min(...cs.map(c => c.z)), z1: Math.max(...cs.map(c => c.z)) };
+    if (box.x0 < HEDGE + 1.5 || box.z0 < HEDGE + 1.5 || box.x1 > E0 - 1.5 || box.z1 > E0 - 1.5) continue;
+    if (cs.some(c => roadDist(c.x, c.z) < hw + STRIP + 0.9)) continue;
+    const lv = level(px, pz); if (cs.some(c => level(c.x, c.z) !== lv)) continue;
+    if ([MID, HIGH].some(P => (box.x0 < P.x0 + 1.8 && box.x1 > P.x0 - 1.8 && box.z1 > P.z0) || (box.z0 < P.z0 + 1.8 && box.z1 > P.z0 - 1.8 && box.x1 > P.x0))) continue;
+    if (fronts.some(q => q.x > box.x0 - 3 && q.x < box.x1 + 3 && q.z > box.z0 - 3 && q.z < box.z1 + 3)) continue;
+    if (reserved.some(r => hit(box, r, 1.0)) || spots.some(o => obbHit(f, o, 1.0)) || fillers.some(o => obbHit(f, o, 1.0))) continue;
+    f.y = [0, MIDH, HIGHH][lv]; f.box = box; fillers.push(f);
+  }
   // ---- detalhes de lugar: árvores pontuais (quintais, jardim, praça), bancos públicos, lanternas nas esquinas ----
   const lineDist = (x, z, a, b) => { const dx = b.x - a.x, dz = b.z - a.z, L2 = dx * dx + dz * dz || 1, t = Math.max(0, Math.min(1, ((x - a.x) * dx + (z - a.z) * dz) / L2)); return Math.hypot(x - a.x - dx * t, z - a.z - dz * t); };
   const access = spots.map(sp => [sp.front, sp.door]);

@@ -6,7 +6,7 @@
 // Folhas são só visuais (sem colisão). Troncos do bosque de fora perto do bairro entram em SOLIDS.
 import * as THREE from 'three';
 import { AUTUMN } from './models/forest.js';
-import { SOLIDS } from './layout.js';
+import { SOLIDS, HEDGE } from './layout.js';
 
 const LEAF_COLS = ['#ec7f22', '#de6c18', '#eaa82a', '#f2bb3a', '#c63a24', '#9a6232', '#d24a2c', '#f39236'];
 const OUT_COLS = ['orange', 'orange', 'orange', 'gold', 'gold', 'gold', 'red', 'brown', 'yellow', 'orange', 'gold', 'green'];
@@ -44,9 +44,9 @@ export function createForestFx() {
         if (d < 70) { const b = { x0: px - 0.5, x1: px + 0.5, z0: pz - 0.5, z1: pz + 0.5 }; SOLIDS.push(b); w.extraSolids.push(b); }   // troncos perto: a van bate
       }
       // ---- partes das árvores (tronco + 2–3 copas), como autumnTree em models/forest.js ----
-      const trunks = [], cr = [];
+      const trunks = [], cr = [], owner = [];
       for (const T of V.trees.concat(outTrees)) {
-        const { x, y, z, s } = T, C = AUTUMN[T.color] || AUTUMN.orange, c = i => C[(i + Math.floor(T.k * 3)) % 3];
+        const { x, y, z, s } = T, C = AUTUMN[T.color] || AUTUMN.orange, c = i => C[(i + Math.floor(T.k * 3)) % 3], n0 = cr.length;
         if (T.type === 'tall') {
           trunks.push([x, y + 1.7 * s, z, 0.2 * s, 3.4 * s, '#e6dfcf']);
           cr.push([x, y + 4.4 * s, z, 1.35 * s, 2.1 * s, 1.35 * s, c(0), T.out], [x + 0.5 * s, y + 3.6 * s, z + 0.3 * s, 0.85 * s, 0.85 * s, 0.85 * s, c(1), T.out]);
@@ -57,6 +57,7 @@ export function createForestFx() {
           trunks.push([x, y + 1.2 * s, z, 0.32 * s, 2.4 * s, '#6b4526']);
           cr.push([x, y + 3.2 * s, z, 1.9 * s, 1.9 * s, 1.9 * s, c(0), T.out], [x + 1.0 * s, y + 2.8 * s, z + 0.4 * s, 1.25 * s, 1.25 * s, 1.25 * s, c(1), T.out], [x - 0.8 * s, y + 4.0 * s, z - 0.3 * s, 1.15 * s, 1.15 * s, 1.15 * s, c(2), T.out]);
         }
+        const mine = []; for (let i = n0; i < cr.length; i++) { owner[i] = mine; mine.push(i); }   // copas da mesma árvore
       }
       const m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), e = new THREE.Euler(), v = new THREE.Vector3(), sv = new THREE.Vector3(), col = new THREE.Color();
       const tm = new THREE.InstancedMesh(new THREE.CylinderGeometry(0.75, 1, 1, 6), new THREE.MeshStandardMaterial({ roughness: 0.9, flatShading: true }), trunks.length);
@@ -72,13 +73,20 @@ export function createForestFx() {
         op.setMatrixAt(i, M); gh.setMatrixAt(i, zero); col.set(cc); op.setColorAt(i, col); gh.setColorAt(i, col);
       });
       op.castShadow = true; op.receiveShadow = true; gh.frustumCulled = false; root.add(op, gh);
-      crowns = { op, gh, mats, data: cr, ghost: new Set(), zero };
+      crowns = { op, gh, mats, data: cr, owner, ghost: new Set(), zero };
       // ---- tapetes de folhas sob as árvores (manchas laranja/terrosas no chão; nunca na pista nem nos lotes) ----
       const disc = new THREE.CircleGeometry(1, 9); disc.rotateX(-Math.PI / 2);
+      // raio até onde o chão continua no nível do tronco: não passa da borda do patamar, das ladeiras (e do recorte delas)
+      // nem da sebe (senão o disco fica no ar, sobrando para fora do alto)
+      const cuts = V.ramps.map(r => ({ x0: r.x0 - 0.8, x1: r.x1 + 0.8, z0: r.z0 - 0.8, z1: r.z1 + 0.8 }));
+      const solidR = (x, y, z, rMax) => { let m = rMax; for (let a = 0; a < 12; a++) { const c = Math.cos(a * Math.PI / 6), sn = Math.sin(a * Math.PI / 6);
+        for (let d = 0.4; d <= m; d += 0.4) { const px = x + c * d, pz = z + sn * d;
+          if (px < HEDGE || pz < HEDGE || px > MAP - HEDGE || pz > MAP - HEDGE || Math.abs(V.h(px, pz) - y) > 0.05 || cuts.some(q => px > q.x0 && px < q.x1 && pz > q.z0 && pz < q.z1)) { m = d - 0.4; break; } } }
+        return m; };
       const carp = [];
       for (const T of V.trees.concat(outTrees)) {
         let r = (T.type === 'wide' ? 3.0 : 2.4) * T.s;
-        if (!T.out) { r = Math.min(r, V.roadDist(T.x, T.z) - 4.3); if (r < 0.8 || inLot(T.x, T.z, r)) continue; }
+        if (!T.out) { r = Math.min(r, V.roadDist(T.x, T.z) - 4.3, solidR(T.x, T.y, T.z, r + 0.6) - 0.6); if (r < 0.8 || inLot(T.x, T.z, r)) continue; }
         carp.push([T.x + (rnd() - 0.5), T.y + 0.1 + rnd() * 0.01, T.z + (rnd() - 0.5), r, ['#c9762a', '#b8692a', '#a8743e', '#d08a34', '#9a6a3a'][Math.floor(rnd() * 5)]]);
       }
       const cm = new THREE.InstancedMesh(disc, new THREE.MeshLambertMaterial(), carp.length);
@@ -91,8 +99,8 @@ export function createForestFx() {
         let x, z; const r0 = rnd();
         if (r0 < 0.5) { const T = V.trees[Math.floor(rnd() * V.trees.length)], a = rnd() * 6.3, d = rnd() * 3.4 * T.s; x = T.x + Math.cos(a) * d; z = T.z + Math.sin(a) * d; }
         else { x = 2 + rnd() * (MAP - 4); z = 2 + rnd() * (MAP - 4); }
-        const d = V.roadDist(x, z);
-        if (d < 2.8 || inLot(x, z)) continue;
+        const d = V.roadDist(x, z), inQ = q => x > q.x0 && x < q.x1 && z > q.z0 && z < q.z1;
+        if (d < 2.8 || inLot(x, z) || (cuts.some(inQ) && !V.ramps.some(inQ))) continue;   // (nada no vão entre a ladeira e o patamar)
         if (r0 >= 0.5 && d > 6.5 && rnd() < 0.5) continue;                     // mais nas margens das ruas
         pts.push([x, z]);
       }
@@ -133,13 +141,15 @@ export function createForestFx() {
       const segs = [];
       if (p) segs.push([cam, { x: p.x, y: (p.y || 0) + 1.2, z: p.z }]);
       if (dest) segs.push([cam, dest]);
+      // (a árvore inteira: se só a copa do meio sumisse, as copinhas do lado ficariam soltas no ar)
       const now = new Set(), D = crowns.data;
       for (let i = 0; i < D.length; i++) {
+        if (now.has(i)) continue;
         const c = D[i], r = Math.max(c[3], c[4], c[5]) * 0.95;
         for (const [A, B] of segs) {
           const dx = B.x - A.x, dy = B.y - A.y, dz = B.z - A.z, L2 = dx * dx + dy * dy + dz * dz || 1;
           const u = Math.max(0, Math.min(1, ((c[0] - A.x) * dx + (c[1] - A.y) * dy + (c[2] - A.z) * dz) / L2));
-          if (Math.hypot(A.x + dx * u - c[0], A.y + dy * u - c[1], A.z + dz * u - c[2]) < r) { now.add(i); break; }
+          if (Math.hypot(A.x + dx * u - c[0], A.y + dy * u - c[1], A.z + dz * u - c[2]) < r) { for (const j of crowns.owner[i]) now.add(j); break; }
         }
       }
       let ch = false;

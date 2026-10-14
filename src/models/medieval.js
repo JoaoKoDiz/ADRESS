@@ -702,6 +702,19 @@ function buildFiller(f) {
     P(box(w - 0.4, 0.08, 0.1, WOOD_D), 0, 0.6, -d / 2 + 0.25);
     for (let k = 0; k < 3; k++) for (let j = 0; j < Math.floor(w / 0.38) - 2; j++) P(cyl(0.16, 0.16, d * 0.45, k % 2 ? '#8a5a34' : '#6b4526', 6), -w / 2 + 0.6 + j * 0.36 + (k % 2) * 0.18, 0.18 + k * 0.29, -d / 2 + d * 0.32, Math.PI / 2, 0, 0);
     if (R() < 0.6) barrel(g, w / 2 - 0.7, 0, d / 2 - 0.8, 0.9);
+  } else if (f.kind === 'yard') {                                             // horta murada: mureta de pedra (portãozinho nos fundos), canteiros, espantalho ou barril
+    const SM = stoneMat(), hh = 0.8, t = 0.35;
+    for (const sz of [1, -1]) { if (sz > 0) tex(P(box(w, hh, t, SM), 0, hh / 2, d / 2 - t / 2)); else for (const sx of [-1, 1]) tex(P(box(w / 2 - 0.6, hh, t, SM), sx * (w / 4 + 0.3), hh / 2, -d / 2 + t / 2)); }
+    for (const sx of [-1, 1]) tex(P(box(t, hh, d - 2 * t, SM), sx * (w / 2 - t / 2), hh / 2, 0));
+    P(box(w + 0.1, 0.08, t + 0.12, STONE_L), 0, hh + 0.04, d / 2 - t / 2); for (const sx of [-1, 1]) P(box(t + 0.12, 0.08, d, STONE_L), sx * (w / 2 - t / 2), hh + 0.04, 0);
+    P(box(1.1, 0.7, 0.06, WOOD), 0, 0.4, -d / 2 + 0.1);                                                                       // portãozinho
+    const rows = Math.max(2, Math.floor((d - 1.4) / 0.9));
+    for (let r = 0; r < rows; r++) {
+      const z = -d / 2 + 0.9 + r * 0.9; P(box(w - 1.4, 0.12, 0.5, '#6b4a30'), 0, 0.06, z);                                     // canteiro de terra
+      for (let x = -w / 2 + 1.0; x < w / 2 - 0.9; x += 0.55) { const m = blob(0.2 + R() * 0.06, LEAF[(((r + Math.floor(x * 3)) % 3) + 3) % 3]); m.scale.y *= 0.7; P(m, x, 0.22, z); }
+    }
+    if (R() < 0.5) { const sx = w / 2 - 1.0, sz2 = -d / 2 + 0.8; P(box(0.1, 1.8, 0.1, WOOD), sx, 0.9, sz2); P(box(1.1, 0.08, 0.08, WOOD), sx, 1.45, sz2); P(box(0.5, 0.6, 0.3, '#8a5a3a'), sx, 1.3, sz2); P(sphere(0.2, '#d8be6a'), sx, 1.8, sz2); P(cone(0.32, 0.25, '#c9a24a', 8), sx, 2.02, sz2); }   // espantalho
+    else barrel(g, w / 2 - 0.9, 0, -d / 2 + 0.9, 0.8);
   } else if (f.kind === 'barn') {                                             // celeiro: tábuas verticais, portão grande, feno na porta
     const H = 3.6 + R() * 0.6, M = mat(R() < 0.5 ? '#7a5434' : '#6e4a2e');
     P(box(w, H, d, M), 0, H / 2, 0);

@@ -88,11 +88,20 @@ export function planForest(MAP, HEDGE) {
   let seed = 2207; const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
   const trees = [];
   const COLS = ['orange', 'orange', 'orange', 'orange', 'gold', 'gold', 'gold', 'yellow', 'red', 'red', 'brown', 'brown', 'orange', 'gold', 'green'];
+  // alcance horizontal da copa por unidade de escala (como forestFx: copa principal + copinhas laterais)
+  const REACH = { round: 2.4, wide: 2.8, tall: 1.5 };
+  // árvore da parte baixa perto do patamar: a copa não pode avançar sobre o alto (ficaria "pousada" no gramado de cima,
+  // sem tronco à vista) → distância livre até o patamar/ladeira em 16 direções
+  const lowClear = (x, z, R) => { let m = R; for (let a = 0; a < 16; a++) { const c = Math.cos(a * Math.PI / 8), s = Math.sin(a * Math.PI / 8);
+    for (let d = 0.5; d <= m; d += 0.5) if (h(x + c * d, z + s * d) > 0.3) { m = d; break; } } return m; };
   for (let z = HEDGE + 4; z < MAP - 3; z += 5.4) for (let x = HEDGE + 4; x < MAP - 3; x += 5.4) {
     const px = x + (rnd() - 0.5) * 3.2, pz = z + (rnd() - 0.5) * 3.2;
     if (rnd() < 0.1 || !free(px, pz, 0.8, hw + 2.1) || trees.some(t => Math.hypot(t.x - px, t.z - pz) < 3.6)) continue;
-    const r = rnd(), type = r < 0.55 ? 'round' : r < 0.75 ? 'wide' : 'tall', big = rnd() < 0.3;
-    trees.push({ x: px, z: pz, y: h(px, pz), s: big ? 1.4 + rnd() * 0.5 : 0.85 + rnd() * 0.5, type, color: COLS[Math.floor(rnd() * COLS.length)], k: rnd() });
+    const r = rnd(), type = r < 0.55 ? 'round' : r < 0.75 ? 'wide' : 'tall', big = rnd() < 0.3, y = h(px, pz);
+    let s = big ? 1.4 + rnd() * 0.5 : 0.85 + rnd() * 0.5;
+    const color = COLS[Math.floor(rnd() * COLS.length)], k = rnd();
+    if (y < 0.3) { const R = REACH[type] * s, c = lowClear(px, pz, R + 0.6); if (c < R + 0.6) s = (c - 0.6) / REACH[type]; if (s < 0.8) continue; }   // encolhe (ou tira) a que encostaria no patamar
+    trees.push({ x: px, z: pz, y, s, type, color, k });
   }
   // ---- postes (um por cruzamento, na margem) e bancos públicos de madeira em alguns cantos ----
   const lamps = [];

@@ -128,7 +128,7 @@ function buildCamBoxes() {
     CAM_BOXES.push([V.MID.x0, V.MID.z0, MAP, MAP, V.MIDH + 0.5], [V.HIGH.x0, V.HIGH.z0, MAP, MAP, V.HIGHH + 0.5]);
     for (const sp of V.spots) CAM_BOXES.push([sp.walkBox.x0 - 0.6, sp.walkBox.z0 - 0.6, sp.walkBox.x1 + 0.6, sp.walkBox.z1 + 0.6, sp.y + (sp.shop ? 9.5 : 9)]);
     const C = V.castle; CAM_BOXES.push([C.x0 - 1, C.z0 - 1, C.x1 + 1, C.z1 + 1, V.HIGHH + 26]);
-    for (const f of V.fillers || []) CAM_BOXES.push([f.box.x0 - 0.5, f.box.z0 - 0.5, f.box.x1 + 0.5, f.box.z1 + 0.5, f.y + 6.5]);
+    for (const f of V.fillers || []) if (f.kind !== 'yard') CAM_BOXES.push([f.box.x0 - 0.5, f.box.z0 - 0.5, f.box.x1 + 0.5, f.box.z1 + 0.5, f.y + (f.kind === 'shed' ? 3.6 : 6.5)]);   // (a horta murada é baixa: não bloqueia a câmera)
     const D = V.depot; CAM_BOXES.push([D.x0 - 0.5, D.z0 - 0.5, D.x1 + 0.5, D.z1 + 0.5, V.MIDH + 5.5]);
     for (const st of V.stalls) CAM_BOXES.push([st.box.x0 - 0.4, st.box.z0 - 0.4, st.box.x1 + 0.4, st.box.z1 + 0.4, V.MIDH + 3.4]);
     CAM_BOXES.push([108, -12, 125.2, 4, 14], [133.6, -12, 151, 4, 14]);   // torres do portão (o vão do arco fica livre: a câmera acompanha a van por baixo)

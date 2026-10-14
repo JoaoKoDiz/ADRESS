@@ -4,7 +4,11 @@
 //  - semáforos nos 3 cruzamentos da avenida (avenida × rua), com amarelo e todos vermelhos; fases defasadas;
 //  - ruas menores: um carro por vez no cruzamento; na avenida sem semáforo, quem está na avenida tem a preferência;
 //  - só entram no cruzamento com espaço na saída (não travam o cruzamento) e trocam de saída se esperarem demais;
-//  - distância do carro da frente; param se a van (ou o motorista a pé) estiver na frente.
+//  - distância do carro da frente; param se a van (ou o motorista a pé) estiver na frente;
+//  - Fluxo (busy): os carros da avenida ficam nela (seguem reto ou fazem o retorno nos vãos do canteiro e nas pontas), então
+//    ela continua movimentada nos dois sentidos sem lotar as ruas; quem espera na rua para entrar/atravessar a avenida sem
+//    semáforo ganha a vez (brecha menor e, esperando mais, os carros da avenida param antes do cruzamento); quem entra à
+//    direita na avenida vai para a faixa de perto; nos retornos das pontas a fila anda junto (o vão só tem lugar para um).
 import * as THREE from 'three';
 import { GRID, ROAD, roadCenter, FLUX, CANAL, GAS_LIST, WARE_LIST, SOLIDS } from './layout.js';
 import { buildCar, CAR_COLORS } from './barriers.js';
@@ -26,6 +30,7 @@ function carGlow() {
 export function createTraffic(audio) {
   const root = new THREE.Group(); root.name = 'traffic';
   let cars = [], lanes = new Map(), nodes = [], blockedV = new Set(), lights = [], t = 0, built = false;
+  let busy = false;   // Fluxo: avenida movimentada (carros que ficam nela + regras de vez para quem vem da rua); o Penumbra e a Cachoeira não usam
   const W = () => (FLUX ? FLUX.widen : 0);   // (Nível 23 usa a mesma lógica sem avenida: ruas de mão dupla e o desfiladeiro só se cruza pela ponte)
   const isLight = (i, j) => !!FLUX && (i === FLUX.north || i === FLUX.south) && FLUX.lights.includes(j);
   const isAve = i => !!FLUX && (i === FLUX.north || i === FLUX.south);
@@ -72,18 +77,24 @@ export function createTraffic(audio) {
     if (!out.length && edgeOk(i, j, REV[d])) out = [REV[d]];
     return out;
   }
+  // saída que continua na avenida: a pista (no sentido dela) ou o vão do canteiro (retorno para a outra pista)
+  const gapLane = L => !!FLUX && ((L.d === 'S' && L.i === FLUX.north) || (L.d === 'N' && L.i === FLUX.south));   // vão do canteiro
+  const aveNet = (i, e) => (e === 'E' || e === 'W') ? isAve(i) : !!FLUX && ((i === FLUX.north && e === 'S') || (i === FLUX.south && e === 'N'));
   function pickExit(car, L) {
     const [i, j] = L.to; let opts = exits(i, j, L.d);
     if (!opts.length) return null;
-    if (L.ave) {                                                         // avenida: direita só da faixa da direita, esquerda só da esquerda
-      const f = opts.filter(e => e === L.d || (e === RIGHT[L.d] ? L.k === 0 : L.k === 1));
+    const stay = car.stay && opts.filter(e => aveNet(i, e));             // carro da avenida (Fluxo): não sai para as ruas
+    if (stay && stay.length) opts = stay;
+    if (L.ave && !(stay && stay.length && !stay.includes(L.d))) {        // avenida: direita só da faixa da direita, esquerda só da esquerda
+      const f = opts.filter(e => e === L.d || (e === RIGHT[L.d] ? L.k === 0 : L.k === 1));   // (nas pontas, o retorno vale das duas faixas)
       if (f.length) opts = f;
     }
-    const w = opts.map(e => (e === L.d ? (L.ave ? 3.2 : 1.6) : 1) * (car.avoid === e ? 0.05 : 1));
+    const w = opts.map(e => (e === L.d ? (L.ave ? (car.stay ? 7 : 3.2) : 1.6) : 1) * (car.avoid === e ? 0.05 : 1));
     let r = Math.random() * w.reduce((a, b) => a + b, 0), e = opts[0];
     for (let n = 0; n < opts.length; n++) { r -= w[n]; if (r <= 0) { e = opts[n]; break; } }
     const nl = laneCoords(i, j, e).map((_, k) => makeLane(i, j, e, k));
     if (L.ave && e === L.d && nl[L.k]) return nl[L.k];                  // reto na avenida: continua na mesma faixa
+    if (busy && !L.ave && nl[0].ave && e === RIGHT[L.d]) return nl[0];  // da rua para a avenida, à direita: faixa de perto
     // na avenida, a faixa com mais espaço no começo
     const lane = nl.reduce((best, x) => (room(x) > room(best) ? x : best), nl[Math.floor(Math.random() * nl.length)]);
     return lane;
@@ -93,7 +104,8 @@ export function createTraffic(audio) {
   const phaseAt = j => { let x = (t + j * 5.3) % CYCLE; for (const [p, d] of PHASES) { if (x < d) return p; x -= d; } return 'R'; };
   function canEnter(car, L, next) {
     const [i, j] = L.to, n = node(i, j), horiz = L.d === 'E' || L.d === 'W';
-    if (room(next) < CAR + GAP + 0.6) return false;                           // sem espaço na saída: não entra
+    const lead = next.cars[0], rolling = busy && gapLane(next) && !FLUX.lights.includes(next.j) && next.cars.length === 1 && lead.v > 2.5 && lead.s > CAR;
+    if (room(next) < CAR + GAP + 0.6 && !rolling) return false;               // sem espaço na saída: não entra (no retorno das pontas, a fila anda junto)
     if (isLight(i, j)) {
       const ph = phaseAt(j), rem = L.len - car.s;
       const go = horiz ? ph === 'aG' || (ph === 'aY' && rem < 2 && car.v > 4) : ph === 'cG' || (ph === 'cY' && rem < 2 && car.v > 4);
@@ -101,12 +113,16 @@ export function createTraffic(audio) {
       return horiz ? ![...n.occ].some(c => !c.horiz) : n.occ.size === 0;
     }
     if (isAve(i)) {                                                      // avenida sem semáforo: preferência de quem está nela
-      if (horiz) return ![...n.occ].some(c => !c.horiz);
+      if (horiz) return ![...n.occ].some(c => !c.horiz) && !(busy && n.vWait && n.vWait !== car && L.len - car.s > car.v * car.v / 16);   // (dá a vez a quem espera na rua, se ainda dá para frear)
       if (n.occ.size) return false;
-      for (const k of [0, 1]) {
+      // Fluxo: quem já espera na faixa de retenção entra numa brecha menor (o carro da avenida que vem ainda tem distância
+      // para frear; parado, ele espera) e, esperando mais, pede a vez: os carros da avenida param antes do cruzamento
+      const waited = busy && car.wait > 2.5, near = busy && next.ave && next.k === 0 && next.d === RIGHT[L.d];   // (à direita, para a faixa de perto: só ela conta)
+      if (busy && car.wait > 4) n.vWait = car;
+      for (const k of near ? [0] : [0, 1]) {
         const din = i === FLUX.north ? 'W' : 'E', from = [i, j + (din === 'W' ? 1 : -1)];
         const AL = lanes.get(laneKey(from[0], from[1], din, k));
-        if (AL && AL.cars.some(c => AL.len - c.s < 16)) return false;
+        if (AL && AL.cars.some(c => waited ? c.v > 0.5 && AL.len - c.s < 3 + c.v * c.v / 12 + c.v * 0.3 : AL.len - c.s < 16)) return false;
       }
       return true;
     }
@@ -179,14 +195,15 @@ export function createTraffic(audio) {
     object: root,
     get cars() { return cars; },
     phaseAt: j => phaseAt(j),
-    /** Monta a rede (depois dos postos/galpões da partida) e espalha os carros: mais na avenida, menos nas ruas. */
-    reset(nAve = 16, nStreet = 18, night = false) {
+    /** Monta a rede (depois dos postos/galpões da partida) e espalha os carros: mais na avenida, menos nas ruas.
+     *  stay: os carros da avenida ficam nela, metade em cada sentido (Fluxo). */
+    reset(nAve = 16, nStreet = 18, night = false, stay = false) {
       for (const c of cars) { root.remove(c.mesh); const k = SOLIDS.indexOf(c.solid); if (k >= 0) SOLIDS.splice(k, 1); }
-      cars = []; build(); t = Math.random() * CYCLE;
+      cars = []; busy = stay; build(); t = Math.random() * CYCLE;
       const all = [];
       for (let i = 0; i <= GRID; i++) for (let j = 0; j <= GRID; j++) for (const d of Object.keys(DIRS)) if (edgeOk(i, j, d)) laneCoords(i, j, d).forEach((_, k) => all.push(makeLane(i, j, d, k)));
       const ave = all.filter(L => L.ave), street = all.filter(L => !L.ave && L.len > 8);
-      const spawn = (pool, n) => {
+      const spawn = (pool, n, home = false) => {
         for (let tries = 0; n > 0 && tries < 400; tries++) {
           const L = pool[Math.floor(Math.random() * pool.length)], s = CAR / 2 + Math.random() * (L.len - CAR);
           if (L.cars.some(c => Math.abs(c.s - s) < CAR + 3) || (L.i <= 1 && Math.abs(L.a.x - rc(Math.floor(GRID / 2))) < 12)) continue;   // nada colado na entrada
@@ -196,11 +213,13 @@ export function createTraffic(audio) {
             const b = new THREE.Mesh(new THREE.PlaneGeometry(6, 2.6), new THREE.MeshBasicMaterial({ map: carGlow(), color: '#fff0c0', transparent: true, opacity: 0.35, blending: THREE.AdditiveBlending, depthWrite: false })); b.rotation.x = -Math.PI / 2; b.position.set(5.2, 0.08, zz * 0.6); mesh.add(b);
           }
           root.add(mesh);
-          const c = { mesh, lane: L, s, v: 0, vmax: L.ave ? 8.5 + Math.random() * 2 : 5.5 + Math.random() * 1.5, next: null, turn: null, wait: 0, solid: { x0: 0, x1: 0, z0: 0, z1: 0 }, horiz: false };
+          const c = { mesh, lane: L, s, v: 0, vmax: L.ave ? 8.5 + Math.random() * 2 : 5.5 + Math.random() * 1.5, next: null, turn: null, wait: 0, solid: { x0: 0, x1: 0, z0: 0, z1: 0 }, horiz: false, stay: home };
           L.cars.push(c); L.cars.sort((a, b) => a.s - b.s); cars.push(c); place(c); n--;
         }
       };
-      spawn(ave, nAve); spawn(street, nStreet);
+      if (stay) { const w = ave.filter(L => L.d === 'W'); spawn(w, Math.ceil(nAve / 2), true); spawn(ave.filter(L => L.d !== 'W'), Math.floor(nAve / 2), true); }   // os dois sentidos
+      else spawn(ave, nAve);
+      spawn(street, nStreet);
     },
     detach() { for (const c of cars) { const k = SOLIDS.indexOf(c.solid); if (k >= 0) SOLIDS.splice(k, 1); } if (root.parent) root.parent.remove(root); },
     /** obs: [{ circles: [[x, z, r], …] }] — a van e o motorista a pé. ear: posição de quem ouve (som dos motores). */
@@ -237,12 +256,13 @@ export function createTraffic(audio) {
         if (!ok && rem < 1.5) {                                          // parado na faixa de retenção
           c.wait += dt;
           const [i, j] = L.to;
-          if (c.wait > 7 && !isLight(i, j)) { c.avoid = c.next && c.next.d; c.next = null; c.wait = 0; }   // espera demais: outra saída
+          if (c.wait > 7 && !isLight(i, j)) { c.avoid = c.next && c.next.d; c.next = null; c.wait = busy ? 4.1 : 0; }   // espera demais: outra saída (Fluxo: sem perder a vez)
+          else if (busy && c.stay && c.wait > 2 && c.next && gapLane(c.next) && room(c.next) < CAR + GAP + 0.6 && exits(i, j, L.d).includes(L.d)) { c.avoid = c.next.d; c.next = null; c.wait = 0; }   // retorno sem lugar no vão: segue reto
         }
         if (ok && c.s >= L.len - 0.05) {                                 // entra no cruzamento
           L.cars.splice(L.cars.indexOf(c), 1);
           c.turn = makeTurn(L, c.next); c.s = 0; c.horiz = L.d === 'E' || L.d === 'W';
-          node(...L.to).occ.add(c);
+          const nd = node(...L.to); nd.occ.add(c); if (nd.vWait === c) nd.vWait = null;
         }
         place(c);
       }
