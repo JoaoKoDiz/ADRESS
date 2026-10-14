@@ -69,5 +69,5 @@ export function createMenu(stageEl) {
   stageEl.appendChild(btn);
   stageEl.appendChild(panel);
 
-  return { get explodeWrong() { return explodeWrong; }, get unstoppable() { return unstoppable; }, get wrongFx() { return wrongFx; } };
+  return { get isOpen() { return panel.classList.contains('open'); }, get explodeWrong() { return explodeWrong; }, get unstoppable() { return unstoppable; }, get wrongFx() { return wrongFx; } };
 }

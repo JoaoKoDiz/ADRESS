@@ -69,6 +69,7 @@ import { createJamSound } from './jamSound.js';
 import { createCityAmbience } from './cityAmbience.js';
 import { createShop } from './shop.js';
 import { createLevelSelect } from './levelSelect.js';
+import { createMatchTimer } from './matchTimer.js';
 import { createWalker } from './walker.js';
 import { createTalkBox, lineDuration } from './talkBox.js';
 import { whiten, whitenFade } from './whiteout.js';
@@ -945,6 +946,11 @@ const STORY_CP = {
 };
 const lock = createLockButton(stage, () => { career.unlockAll(); careerMap.setLocked(l => !career.isUnlocked(l)); }, () => career.allUnlocked, STORY_CP);
 // botão MISSÕES no canto superior direito durante a partida da Carreira (missões do bairro jogado)
+// Cronômetro da partida (canto superior esquerdo): começa em 00:00 no 1º quadro jogável, pausa com o MENU ou as missões
+// abertas, some nos menus e nas cenas (continua contando nelas), não zera na entrega certa do Livre; na Carreira congela na entrega certa.
+const matchTimer = createMatchTimer(stage);
+const TIMER_PLAY = ['drive', 'ring', 'dialog', 'fuel', 'walk', 'missile', 'chat', 'inside'];                 // partida na tela: aparece
+const TIMER_OFF = ['title', 'levelSelect', 'levelFly', 'shop', 'mapIn', 'map', 'mapOut', 'fadeIn', 'fadeOut'];   // menus e fades: não conta
 const missionsBtn = createMissionsButton(stage, () => {
   if (gameMode === 'career' && IN_GAME.includes(state) && !missions.isOpen) missions.open(careerLevel);
 });
@@ -1000,7 +1006,7 @@ function goBack() {
 
 function startFree(mode = 'free') {
   // Bairro 2: 6×6 com praça; Bairro 4: 5×5 com bloqueios; o resto: 4×4
-  endToMap = false;
+  endToMap = false; matchTimer.reset();
   const lv = mode === 'career' ? careerLevel : freeLevel;
   useNeighborhood(lv === 1 ? 'plaza6' : lv === 3 ? 'grid5' : lv === 4 ? 'grid6s' : lv === 5 ? 'city6' : lv === 6 ? 'city7' : lv === 7 ? 'city8' : lv === 8 ? 'hill8' : lv === 9 ? 'venice8' : lv === 10 ? 'canal8' : lv === 11 ? 'rail8' : lv === 12 ? 'favela8' : lv === 13 ? 'flux10' : lv === 14 ? 'farm10' : lv === 15 ? 'snow8' : lv === 16 ? 'garden8' : lv === 18 ? 'night10' : lv === 19 ? 'moon8' : lv === 17 ? 'modern8' : lv === 20 ? 'work8' : lv === 21 ? 'forest8' : lv === 22 ? 'canyon10' : lv === 23 ? 'med10' : 'grid4');   // 17–19 reservados; 20 = Lua   // 10 = Veneza, 11 = Travessia, 12 = Trilhos
   gameMode = mode;
@@ -1772,6 +1778,7 @@ function updateGrill(dt) {
 }
 
 function startNewRound(newMatch = true) {
+  if (newMatch) matchTimer.reset();                // nova partida: o cronômetro volta a 00:00 (começa no 1º quadro jogável)
   if (insideOn) leaveGrill();
   grill = null;
   footDelivery = false; unmoor();
@@ -1810,6 +1817,8 @@ function focusOf(h) {
 // ---------- Atualização ----------
 function update(dt, t) {
   stateT += dt;
+  if (matchTimer.armed && TIMER_PLAY.includes(state)) matchTimer.begin();
+  if (!TIMER_OFF.includes(state) && !menu.isOpen && !missions.isOpen) matchTimer.tick(dt);   // (pausado com o MENU ou as missões abertas)
   if (state !== 'title' && state !== 'levelSelect' && state !== 'levelFly' && state !== 'shop' && !(state === 'fadeOut' && endToMap) && input.toggleCamera()) rig.toggle();
 
   switch (state) {
@@ -1895,6 +1904,7 @@ function update(dt, t) {
         const stepBefore = game.step, indicated = game.route[game.step] === pending;
         dialog = game.visit(pending);
         if (gameMode === 'career') career.visit(pending, dialog.success, indicated, stepBefore, game);
+        if (gameMode === 'career' && dialog.success) matchTimer.stop();   // Carreira: a entrega certa encerra a partida — o tempo para aqui
         if (!dialog.narrator) world.showResident(pending, dialog.success ? 'happy' : 'angry');
         dialog.success ? audio.success() : dialog.narrator ? null : audio.grumble();
         setState('dialog');
@@ -2148,6 +2158,7 @@ function update(dt, t) {
 // ---------- HUD ----------
 const promptPos = new THREE.Vector3();
 function updateHUD() {
+  matchTimer.show((TIMER_PLAY.includes(state) && !approachLock()) || (state === 'fadeOut' && endToMap));   // cenas e aproximação da igreja: escondido
   music.setNowPlaying(nowPlaying());              // nome da faixa ao lado do botão de música
   music.setLift(talkBox.open);
   back.set(state === 'levelSelect' || state === 'shop' || (state === 'map' && !missions.isOpen) || (IN_GAME.includes(state) && !missions.isOpen));
@@ -2342,7 +2353,7 @@ window.ADRESS = {
   setCareerLevel(l) { careerLevel = l; },
   setFreeLevel(l) { freeLevel = l; },
   walker, jamSound, cityAmb, train, walkSolids, trolley, get tseq() { return tseq; }, get FAVELA() { return FAVELA; }, traffic, tractors, chickens, plow, workTraffic, banks, get SNOWV() { return SNOWV; }, get MEDV() { return MEDV; }, medLife, get chatNpc() { return chatNpc; }, night, get grillIn() { return grillIn; }, get insideOn() { return insideOn; }, get FARMLAND() { return FARMLAND; }, get GARDV() { return GARDV; }, gardGate, gateOpen, openGate,
-  get levelSelect() { return levelSelect; },
+  get levelSelect() { return levelSelect; }, matchTimer,
   shop,
   startGame: m => startFree(m), newRound: () => startNewRound(),
   get shadowTier() { return shadowTier; },
