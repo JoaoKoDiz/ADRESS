@@ -222,6 +222,13 @@ export const FARM_GATE = { blue: '#2f6fd0', red: '#d0352a', yellow: '#f0c22a', w
 }
 /** Nevasca (Nível 16): detalhes de inverno de cada casa comum (0–31), fixos por casa; só aparecem e só entram nas pistas no Nevasca. */
 export const SNOW_SCARF = { red: '#d8473a', blue: '#3a78d4', yellow: '#efbf2a', green: '#3c9d55' };
+/** Nível 23 (Cachoeira): 2 detalhes por casa (0–31), fixos: sacada de madeira virada para o desfiladeiro, jardinzinho, vasos, cobertura de madeira. */
+export const CANYON_EXTRAS = [];
+{
+  let seed = 2323; const rnd = n => { seed = (seed * 16807) % 2147483647; return seed % n; };
+  const IT = ['cy:balcony', 'cy:garden', 'cy:vases', 'cy:canopy'];
+  for (let h = 0; h < 32; h++) { const a = rnd(4); let b = rnd(3); if (b >= a) b++; CANYON_EXTRAS[h] = [IT[a], IT[b]]; }
+}
 export const SNOW_EXTRAS = [];
 /** Itens das casas que não aparecem nem entram nas pistas no Nevasca (cacto, piscina inflável, fonte, flamingo, girassóis, árvore com frutas). */
 export const SNOW_DROP = ['cactus', 'pool', 'fountain', 'flamingo', 'sunflowers', 'fruit'];
@@ -398,6 +405,9 @@ export const PHRASE = {
   // lugar (Bairros 9 e 10): vão no fim da pista
   'loc:top': 'na parte mais alta do bairro', 'loc:ramp': 'logo depois da subida', 'loc:stairs': 'ao lado da escadaria',
   'side:east': 'no Lado Leste', 'side:west': 'no Lado Oeste',
+  // Cachoeira (Nível 23)
+  'loc:bridge': 'perto da ponte', 'cy:balcony': 'sacada de madeira virada para o desfiladeiro', 'cy:garden': 'um jardinzinho na frente',
+  'cy:vases': 'vasos de flores na porta', 'cy:canopy': 'cobertura de madeira na porta',
   // Veneza
   'vfac:cream': 'fachada creme', 'vfac:ochre': 'fachada ocre', 'vfac:terracotta': 'fachada terracota', 'vfac:rose': 'fachada rosa envelhecido',
   'vfac:red': 'fachada vermelho queimado', 'vsh:green': 'persianas verdes', 'vsh:blue': 'persianas azuis', 'vsh:brown': 'persianas marrons',

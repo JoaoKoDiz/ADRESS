@@ -61,13 +61,20 @@ function buildGround(venice = false) {
   const cx = (ENTRANCE.x0 + ENTRANCE.x1) / 2;
 
   // grama até o horizonte
-  g.add(at(plane(4000, 4000, GRASS), MAP / 2, -0.04, MAP / 2));
+  const CY = CANAL && CANAL.canyon ? { X0: CANAL.x0, X1: CANAL.x1, ZN: -320, ZS: MAP + 44 } : null;   // Cachoeira: o desfiladeiro fica aberto
+  if (!CY) g.add(at(plane(4000, 4000, GRASS), MAP / 2, -0.04, MAP / 2));
+  else {
+    const L = 2000 + CY.X0, R = 2000 - CY.X1 + MAP;
+    g.add(at(plane(L, 4000, GRASS), CY.X0 - L / 2, -0.04, MAP / 2), at(plane(R, 4000, GRASS), CY.X1 + R / 2, -0.04, MAP / 2));
+    g.add(at(plane(CY.X1 - CY.X0, 2000, GRASS), (CY.X0 + CY.X1) / 2, -0.04, CY.ZN - 1000), at(plane(CY.X1 - CY.X0, 2000, GRASS), (CY.X0 + CY.X1) / 2, -0.04, CY.ZS + 1000));
+  }
   // manchas de grama fora do bairro (quebram a monotonia)
   const disc = new THREE.CylinderGeometry(1, 1, 0.02, 9);
   for (let i = 0; i < 70; i++) {
     const x = -90 + rand() * (MAP + 180), z = -80 + rand() * (MAP + 170);
     if (x > -4 && x < MAP + 4 && z > -4 && z < MAP + 4) continue;
     if (Math.abs(x - cx) < ROAD && z < 0) continue;
+    if (CY && x > CY.X0 - 4 && x < CY.X1 + 4) continue;
     const m = at(mesh(disc, GRASS_PATCHES[i % 2]), x, -0.03, z, 0, rand() * 3, 0);
     m.scale.set(2 + rand() * 4, 1, 1.5 + rand() * 3);
     g.add(m);
@@ -75,7 +82,8 @@ function buildGround(venice = false) {
 
   // asfalto dentro da sebe (os lotes com suas calçadas ficam por cima)
   // (vai um pouco por baixo da sebe para não aparecer grama entre a sebe e a rua)
-  g.add(at(plane(MAP - 0.6, MAP - 0.6, FAVELA ? '#b3a993' : FARMLAND ? '#86b85c' : SNOWV ? '#eef3f7' : MOONV ? '#b9bcc0' : GARDV ? '#86c25e' : ASPHALT), MAP / 2, 0, MAP / 2));   // Colheita: grama (estradas de terra à parte)   // Morro: chão de cimento (as ruas são desenhadas à parte)
+  if (CY) g.add(at(plane(CY.X0 - 0.3, MAP - 0.6, ASPHALT), (0.3 + CY.X0) / 2, 0, MAP / 2), at(plane(MAP - 0.3 - CY.X1, MAP - 0.6, ASPHALT), (CY.X1 + MAP - 0.3) / 2, 0, MAP / 2));
+  else g.add(at(plane(MAP - 0.6, MAP - 0.6, FAVELA ? '#b3a993' : FARMLAND ? '#86b85c' : SNOWV ? '#eef3f7' : MOONV ? '#b9bcc0' : GARDV ? '#86c25e' : ASPHALT), MAP / 2, 0, MAP / 2));   // Colheita: grama (estradas de terra à parte)   // Morro: chão de cimento (as ruas são desenhadas à parte)
   // estrada de acesso: continua para fora pela abertura na sebe norte
   if (venice) return g;                        // Veneza: só água (sem estrada de acesso, faixas, faixa de pedestres nem bueiros)
   const OUT = 420;
@@ -93,8 +101,9 @@ function buildGround(venice = false) {
     const c = roadCenter(i);
     for (let j = 0; j < GRID; j++) {
       const a = lotX(j) - WALK + 1, b = lotX(j) + LOT + WALK - 1;
-      if (!(FLUX && (i === FLUX.north || i === FLUX.south))) dashes(a, b, m => g.add(at(box(DASH, 0.02, LW, CENTER_LINE), m, 0.01, c)));   // ruas leste–oeste (a avenida tem faixas próprias)
-      dashes(a, b, m => g.add(at(box(LW, 0.02, DASH, CENTER_LINE), c, 0.01, m)));   // ruas norte–sul
+      const cyH = CY && CANAL.cols.includes(j), cyV = CY && c > CY.X0 && c < CY.X1;   // Cachoeira: nada no abismo (a ponte tem faixa própria)
+      if (!cyH && !(FLUX && (i === FLUX.north || i === FLUX.south))) dashes(a, b, m => g.add(at(box(DASH, 0.02, LW, CENTER_LINE), m, 0.01, c)));   // ruas leste–oeste (a avenida tem faixas próprias)
+      if (!cyV) dashes(a, b, m => g.add(at(box(LW, 0.02, DASH, CENTER_LINE), c, 0.01, m)));   // ruas norte–sul
     }
   }
   dashes(-120, -1.2, m => g.add(at(box(LW, 0.02, DASH, CENTER_LINE), cx, 0.01, m)));
@@ -131,6 +140,9 @@ function buildHedge() {
     [0, MAP - HEDGE, MAP, MAP, [-1, 1]],                                  // sul: face interna e externa
     [0, HEDGE, HEDGE, MAP - HEDGE, [1]], [MAP - HEDGE, HEDGE, MAP, MAP - HEDGE, [-1]], // oeste, leste
   ];
+  if (CANAL && CANAL.canyon) for (const k of [2, 1]) {                       // Cachoeira: a sebe não atravessa o desfiladeiro
+    const [x0, z0, x1, z1, f] = segs[k]; segs.splice(k, 1, [x0, z0, CANAL.x0, z1, f], [CANAL.x1, z0, x1, z1, f]);
+  }
   let n = 0;
   for (const [x0, z0, x1, z1, faces] of segs) {
     const alongX = x1 - x0 > z1 - z0;
@@ -204,6 +216,8 @@ function buildOutskirts(ground) {
     if (x > -6 - r && x < MAP + 6 + r && z > -6 - r && z < MAP + 8 + r) return false; // longe da sebe
     if (z > MAP && z < MAP + 9 + r) return false;         // ao sul: não pode cobrir a sebe vista pela câmera
     if (Math.abs(x - cx) < ROAD / 2 + 2 + r && z < 0) return false; // estrada de acesso livre
+    if (CANAL && CANAL.canyon && x > CANAL.x0 - 8 - r && x < CANAL.x1 + 8 + r) return false;   // Cachoeira: desfiladeiro
+    if (CANAL && CANAL.canyon && z > MAP + 30 && x > CANAL.x0 - 140 && x < CANAL.x1 + 140) return false;   // e o maciço da cachoeira
     return true;
   };
   const edgeDist = (x, z) => Math.hypot(Math.max(-x, 0, x - MAP), Math.max(-z, 0, z - MAP));

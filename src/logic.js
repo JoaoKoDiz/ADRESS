@@ -25,6 +25,8 @@ const ALL = [...Array(16).keys()];   // casas do bairro padrão (4×4)
 let PLACE = {};
 export const setPlaceTags = m => { PLACE = m || {}; };
 const isPlace = t => t.startsWith('loc:') || t.startsWith('side:');
+let FORCE_SIDE = false;                            // Cachoeira: toda pista diz o lado (Leste/Oeste)
+export const setForceSide = on => { FORCE_SIDE = !!on; };
 let DROP = null;                                   // Nevasca: características que não valem neste bairro
 let PHR = null;                                    // Nevasca: frases trocadas (ex.: varal congelado)
 export const setPhraseOverride = m => { PHR = m || null; };
@@ -36,7 +38,7 @@ export const isUnique = (h, s, pool = ALL) => pool.every(o => o === h || !s.ever
 /** Menor combinação de características que identifica só a casa h (às vezes cor + objeto, por variedade).
  *  Sempre tem ao menos uma característica visível; as de lugar às vezes entram mesmo sem precisar. */
 export function makeClue(h, pool = ALL) {
-  const tags = tagsOf(h), visual = s => s.some(t => !isPlace(t));
+  const tags = tagsOf(h), visual = s => s.some(t => !isPlace(t)) && (!FORCE_SIDE || !tags.some(t => t.startsWith('side:')) || s.some(t => t.startsWith('side:')));
   for (let k = 1; k <= tags.length; k++) {
     const opts = subsets(tags, k).filter(s => visual(s) && isUnique(h, s, pool));
     if (!opts.length) continue;

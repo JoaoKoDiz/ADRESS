@@ -80,11 +80,11 @@ export const SOLIDS = [];
 
 /** Troca a grade do bairro e refaz os obstáculos-base (lotes, praça e sebe). */
 export function configureGrid(kind) {
-  GRID = kind === 'plaza6' || kind === 'grid6s' || kind === 'city6' || kind === 'city7' ? 6 : kind === 'city8' || kind === 'hill8' || kind === 'canal8' || kind === 'rail8' || kind === 'venice8' || kind === 'favela8' || kind === 'snow8' || kind === 'moon8' || kind === 'garden8' ? 8 : kind === 'flux10' || kind === 'night10' || kind === 'farm10' ? 10 : kind === 'snow8' ? 14 : kind === 'moon8' ? 12 : kind === 'grid5' ? 5 : 4;
-  BUILD_H = kind === 'city8' || kind === 'canal8' || kind === 'rail8' ? 31 : kind === 'hill8' ? 23 : kind === 'favela8' ? 20 : kind === 'flux10' || kind === 'night10' ? 16.5 : kind === 'farm10' ? 10 : kind === 'city6' || kind === 'city7' ? 16.5 : 9.2;
+  GRID = kind === 'plaza6' || kind === 'grid6s' || kind === 'city6' || kind === 'city7' ? 6 : kind === 'city8' || kind === 'hill8' || kind === 'canal8' || kind === 'rail8' || kind === 'venice8' || kind === 'favela8' || kind === 'snow8' || kind === 'moon8' || kind === 'garden8' ? 8 : kind === 'flux10' || kind === 'night10' || kind === 'farm10' || kind === 'canyon10' ? 10 : kind === 'snow8' ? 14 : kind === 'moon8' ? 12 : kind === 'grid5' ? 5 : 4;
+  BUILD_H = kind === 'city8' || kind === 'canal8' || kind === 'rail8' ? 31 : kind === 'hill8' ? 23 : kind === 'favela8' ? 20 : kind === 'flux10' || kind === 'night10' || kind === 'canyon10' ? 16.5 : kind === 'farm10' ? 10 : kind === 'city6' || kind === 'city7' ? 16.5 : 9.2;
   // praça: bloco 2×2 central (linhas e colunas 2–3 do 6×6)
   const plazaSlots = kind === 'plaza6' ? [2 * GRID + 2, 2 * GRID + 3, 3 * GRID + 2, 3 * GRID + 3] : [];
-  ENTRANCE.road = kind === 'canal8' ? 2 : Math.floor(GRID / 2);   // rua do meio (no 5×5, a 3ª rua); no Bairro 10 o meio é o canal
+  ENTRANCE.road = kind === 'canal8' || kind === 'canyon10' ? 2 : Math.floor(GRID / 2);   // rua do meio (no 5×5, a 3ª rua); no Bairro 10 o meio é o canal
   ENTRANCE.x0 = roadCenter(ENTRANCE.road) - ROAD / 2;
   ENTRANCE.x1 = roadCenter(ENTRANCE.road) + ROAD / 2;
   VAN_START.x = roadCenter(ENTRANCE.road);
@@ -94,6 +94,10 @@ export function configureGrid(kind) {
     : null;
   CANAL = kind === 'canal8'
     ? { x0: roadCenter(3) + ROAD / 2, x1: roadCenter(5) - ROAD / 2, cols: [3, 4], bridges: [1, 4, 7], foot: [lotZ(2) + LOT / 2, lotZ(5) + LOT / 2] }
+    : kind === 'canyon10'                           // Nível 23 (Cachoeira): desfiladeiro nas colunas 4–5 (a rua 5 fica no fundo), 1 ponte alta na rua 5
+    ? (() => { const x0 = roadCenter(4) + ROAD / 2, x1 = roadCenter(6) - ROAD / 2, zb0 = roadCenter(5) - ROAD / 2, zb1 = roadCenter(5) + ROAD / 2, B = 4.6, L = 11;
+      return { x0, x1, cols: [4, 5], bridges: [5], foot: [], canyon: true, depth: 42,
+        bays: [{ x0, x1: x0 + B, z0: zb0 - L, z1: zb0 }, { x0: x1 - B, x1, z0: zb1, z1: zb1 + L }] }; })()   // mirantes nas cabeceiras
     : null;
   FAVELA = kind === 'favela8' ? planFavela(HEDGE * 2 + ROAD * 9 + LOT * 8, HEDGE) : null;
   FARMLAND = kind === 'farm10' ? planFarm(HEDGE * 2 + ROAD * 11 + LOT * 10, HEDGE) : null;
@@ -299,12 +303,14 @@ export function roadTopology() {
     for (const r of TERRAIN.ramps) exclude.add(k('V', r.j, r.i));
   }
   if (CANAL) {
-    for (let i = 0; i < GRID; i++) blocked.add(k('V', 4, i));
+    const [c0, c1] = CANAL.cols, mid = c0 + 1;     // (a rua do meio fica dentro do canal/desfiladeiro)
+    for (let i = 0; i < GRID; i++) blocked.add(k('V', mid, i));
     for (let i = 0; i <= GRID; i++) {
-      if (CANAL.bridges.includes(i)) { exclude.add(k('H', 3, i)); exclude.add(k('H', 4, i)); continue; }
-      for (const j of [3, 4]) { blocked.add(k('H', j, i, 'L')); blocked.add(k('H', j, i, 'R')); exclude.add(k('H', j, i)); }
-      skip.add(k('I', 4, i)); skip.add(k('M', 3, i)); skip.add(k('M', 4, i));
+      if (CANAL.bridges.includes(i)) { exclude.add(k('H', c0, i)); exclude.add(k('H', c1, i)); continue; }
+      for (const j of [c0, c1]) { blocked.add(k('H', j, i, 'L')); blocked.add(k('H', j, i, 'R')); exclude.add(k('H', j, i)); }
+      skip.add(k('I', mid, i)); skip.add(k('M', c0, i)); skip.add(k('M', c1, i));
     }
+    if (CANAL.canyon) for (let i = 0; i <= GRID; i++) for (const j of [c0, c1 + 1]) exclude.add(k('V', j, i));   // nada nas ruas da beira (mirantes e cabeceiras livres)
   }
   if (RAIL) for (const k2 of RAIL.route) exclude.add(k2);   // Bairro 11: nenhum bloqueio sobre os trilhos do bondinho
   for (const w of WARE_LIST) { const c = w.slots[0] % GRID, r = Math.floor(w.slots[0] / GRID); blocked.add(k('V', c + 1, r)); exclude.add(k('V', c + 1, r)); }
@@ -332,7 +338,13 @@ function rebuildBaseSolids() {
     { x0: MAP - HEDGE, z0: -0.5, x1: MAP + 0.5, z1: MAP + 0.5 },
   );
   const hr = ROAD / 2, rc = roadCenter;
-  if (CANAL) {                                     // canal: água em toda a faixa, menos nas 3 pontes; passarelas só a pé (vanOnly)
+  if (CANAL && CANAL.canyon) {                     // desfiladeiro: tudo é abismo, menos a ponte e os 2 mirantes (recortes nas cabeceiras)
+    const zb0 = rc(CANAL.bridges[0]) - hr, zb1 = rc(CANAL.bridges[0]) + hr, [w, e] = CANAL.bays, X0 = CANAL.x0, X1 = CANAL.x1;
+    SOLIDS.push({ x0: w.x1, x1: X1, z0: HEDGE, z1: zb0 }, { x0: X0, x1: w.x1, z0: HEDGE, z1: w.z0 },
+      { x0: X0, x1: e.x0, z0: zb1, z1: MAP - HEDGE }, { x0: e.x0, x1: X1, z0: e.z1, z1: MAP - HEDGE },
+      { x0: X0, x1: X1, z0: -400, z1: 0 }, { x0: X0 - 46, x1: X1 + 46, z0: MAP + 44, z1: MAP + 400 },   // fora: o desfiladeiro ao norte e o maciço da cachoeira ao sul
+      { x0: X0, x1: X1, z0: MAP, z1: MAP + 44 });
+  } else if (CANAL) {                                     // canal: água em toda a faixa, menos nas 3 pontes; passarelas só a pé (vanOnly)
     const marks = CANAL.bridges.map(i => ({ a: rc(i) - hr, b: rc(i) + hr, foot: false }))
       .concat(CANAL.foot.map(z => ({ a: z - 1.3, b: z + 1.3, foot: true }))).sort((p, q) => p.a - q.a);
     let z = HEDGE;

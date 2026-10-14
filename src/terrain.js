@@ -9,6 +9,7 @@ import { buildFluxScene } from './models/flux.js';
 import { buildFarmScene } from './models/farm.js';
 import { buildSnowScene } from './models/snow.js';
 import { buildGardenScene } from './models/garden.js';
+import { buildCanyonScene } from './canyon.js';
 import { MOONV, SNOWV, GARDV, FARMLAND, FLUX, WALK, FAVELA, RAIL as RAIL_PATH, VENICE, TERRAIN, CANAL, slotOrigin, doorPoint, lotX, lotZ, GRID, MAP, HEDGE, ROAD, LOT, roadCenter } from './layout.js';
 
 const ASPHALT = '#5d6470', WALLC = '#b9ad98', CAP = '#d8cfbe', RAIL = '#e8e2d4', STEPC = '#cfc6b4';
@@ -18,7 +19,7 @@ const hr = ROAD / 2, rc = roadCenter;
 export function buildTerrain() {
   const g = new THREE.Group();
   if (TERRAIN.kind === 'hill') buildHill(g);
-  if (CANAL) buildCanal(g);
+  if (CANAL) CANAL.canyon ? buildCanyonScene(g) : buildCanal(g);   // Nível 23: desfiladeiro, ponte alta e cachoeira
   if (RAIL_PATH) buildRail(g);
   if (VENICE) buildVenice(g);
   if (FAVELA) buildFavelaScene(g, FAVELA, MAP, HEDGE);

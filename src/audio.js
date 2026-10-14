@@ -8,7 +8,7 @@ const ENGINE_LP = 250, ENGINE_LP_RANGE = 120;     // filtro passa-baixa abre um 
 
 export function createAudio() {
   const Ctor = typeof window !== 'undefined' && (window.AudioContext || window.webkitAudioContext);
-  let ac = null, master = null, eng = null, traf = null, trafGain = -1, broken = !Ctor;
+  let ac = null, master = null, eng = null, traf = null, fall = null, trafGain = -1, broken = !Ctor;
   // últimos alvos agendados no motor (evita empilhar automações a cada quadro)
   let engGain = -1, engHz = -1;
 
@@ -40,6 +40,15 @@ export function createAudio() {
     tf.type = 'lowpass'; tf.frequency.value = 220; tg.gain.value = 0;
     t1.connect(tf); t2.connect(tf); tf.connect(tg); tg.connect(master); t1.start(); t2.start();
     traf = { t1, t2, tg };
+    // cachoeira (Nível 23): ruído contínuo (rosa, em loop) → passa-baixa → ganho pela distância
+    const wl = ac.sampleRate * 3, wb = ac.createBuffer(1, wl, ac.sampleRate), wd = wb.getChannelData(0);
+    let b0 = 0, b1 = 0, b2 = 0;
+    for (let i = 0; i < wl; i++) { const w = Math.random() * 2 - 1; b0 = 0.997 * b0 + w * 0.029; b1 = 0.985 * b1 + w * 0.032; b2 = 0.95 * b2 + w * 0.048; wd[i] = (b0 + b1 + b2 + w * 0.02) * 0.9; }
+    for (let i = 0; i < 2000; i++) { const k = i / 2000; wd[i] = wd[i] * k + wd[wl - 2000 + i] * (1 - k); }   // emenda sem estalo
+    const ws = ac.createBufferSource(), wf = ac.createBiquadFilter(), wg = ac.createGain();
+    ws.buffer = wb; ws.loop = true; ws.loopEnd = (wl - 2000) / ac.sampleRate; wf.type = 'lowpass'; wf.frequency.value = 900; wg.gain.value = 0;
+    ws.connect(wf); wf.connect(wg); wg.connect(master); ws.start();
+    fall = { wf, wg, last: -1 };
   }
 
   /** Nota curta com ataque rápido e decaimento exponencial. `glide` multiplica a frequência ao longo da nota. */
@@ -316,6 +325,14 @@ export function createAudio() {
       const gain = 0.03 * Math.max(0, Math.min(1, k)), t = ac.currentTime;
       if (Math.abs(gain - trafGain) > 0.0008) { trafGain = gain; traf.tg.gain.setTargetAtTime(gain, t, 0.25); }
       traf.t1.frequency.setTargetAtTime(52 + 30 * speed01, t, 0.3); traf.t2.frequency.setTargetAtTime(80 + 40 * speed01, t, 0.3);
+    }),
+    /** Cachoeira: k = 0 (longe) … 1 (bem perto). Mais perto, mais alto e mais agudo. */
+    waterfall: safe(k => {
+      if (!fall) return;
+      k = Math.max(0, Math.min(1, k));
+      if (Math.abs(k - fall.last) < 0.004) return;
+      fall.last = k; const t = ac.currentTime;
+      fall.wg.gain.setTargetAtTime(0.42 * k, t, 0.3); fall.wf.frequency.setTargetAtTime(500 + 1600 * k, t, 0.3);
     }),
     /** Ronco do motor: segue a velocidade (0..1) enquanto `running`; senão desaparece suavemente. */
     engine: safe((running, speed01) => {

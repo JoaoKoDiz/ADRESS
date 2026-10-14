@@ -6,7 +6,7 @@
 //  - só entram no cruzamento com espaço na saída (não travam o cruzamento) e trocam de saída se esperarem demais;
 //  - distância do carro da frente; param se a van (ou o motorista a pé) estiver na frente.
 import * as THREE from 'three';
-import { GRID, ROAD, roadCenter, FLUX, GAS_LIST, WARE_LIST, SOLIDS } from './layout.js';
+import { GRID, ROAD, roadCenter, FLUX, CANAL, GAS_LIST, WARE_LIST, SOLIDS } from './layout.js';
 import { buildCar, CAR_COLORS } from './barriers.js';
 import { mat, box, cyl, at } from './models/kit.js';
 
@@ -26,25 +26,27 @@ function carGlow() {
 export function createTraffic(audio) {
   const root = new THREE.Group(); root.name = 'traffic';
   let cars = [], lanes = new Map(), nodes = [], blockedV = new Set(), lights = [], t = 0, built = false;
-  const W = () => FLUX.widen;
-  const isLight = (i, j) => (i === FLUX.north || i === FLUX.south) && FLUX.lights.includes(j);
-  const isAve = i => i === FLUX.north || i === FLUX.south;
+  const W = () => (FLUX ? FLUX.widen : 0);   // (Nível 23 usa a mesma lógica sem avenida: ruas de mão dupla e o desfiladeiro só se cruza pela ponte)
+  const isLight = (i, j) => !!FLUX && (i === FLUX.north || i === FLUX.south) && FLUX.lights.includes(j);
+  const isAve = i => !!FLUX && (i === FLUX.north || i === FLUX.south);
   // caixa do cruzamento (na avenida, a pista é mais larga para dentro do canteiro)
-  const box2 = (i, j) => ({ x0: rc(j) - hr, x1: rc(j) + hr, z0: rc(i) - hr - (i === FLUX.south ? W() : 0), z1: rc(i) + hr + (i === FLUX.north ? W() : 0) });
+  const box2 = (i, j) => ({ x0: rc(j) - hr, x1: rc(j) + hr, z0: rc(i) - hr - (isAve(i) && i === FLUX.south ? W() : 0), z1: rc(i) + hr + (isAve(i) && i === FLUX.north ? W() : 0) });
   const node = (i, j) => nodes[i * (GRID + 1) + j];
   // existe o trecho saindo de (i, j) no sentido d?
   function edgeOk(i, j, d) {
     const [dx, dz] = DIRS[d], i2 = i + dz, j2 = j + dx;
     if (i2 < 0 || j2 < 0 || i2 > GRID || j2 > GRID) return false;
-    if (dz === 0) { if (i === FLUX.north && d !== 'W') return false; if (i === FLUX.south && d !== 'E') return false; return true; }
+    if (CANAL && dz === 0 && CANAL.cols.includes(Math.min(j, j2)) && !CANAL.bridges.includes(i)) return false;   // desfiladeiro: só pela ponte
+    if (CANAL && dz !== 0 && j === CANAL.cols[0] + 1) return false;
+    if (dz === 0) { if (isAve(i) && i === FLUX.north && d !== 'W') return false; if (isAve(i) && i === FLUX.south && d !== 'E') return false; return true; }
     const k = Math.min(i, i2);                                         // trecho vertical da coluna j entre as ruas k e k+1
-    if (k === FLUX.row && !FLUX.gaps.includes(j)) return false;
+    if (FLUX && k === FLUX.row && !FLUX.gaps.includes(j)) return false;
     return !blockedV.has(j + ',' + k);
   }
   // faixas (coordenada perpendicular) de um trecho saindo de (i, j) no sentido d
   function laneCoords(i, j, d) {
-    if (d === 'E') return i === FLUX.south ? [rc(i) + 0.9, rc(i) - 4.9] : [rc(i) + 1.9];
-    if (d === 'W') return i === FLUX.north ? [rc(i) - 0.9, rc(i) + 4.9] : [rc(i) - 1.9];
+    if (d === 'E') return isAve(i) && i === FLUX.south ? [rc(i) + 0.9, rc(i) - 4.9] : [rc(i) + 1.9];
+    if (d === 'W') return isAve(i) && i === FLUX.north ? [rc(i) - 0.9, rc(i) + 4.9] : [rc(i) - 1.9];
     if (d === 'S') return [rc(j) - 1.9];
     return [rc(j) + 1.9];
   }
@@ -133,7 +135,7 @@ export function createTraffic(audio) {
     // semáforos: um poste em cada canto dos cruzamentos com sinal (cabeças da avenida e da rua)
     const RED = mat('#ff2a1a', { emissive: '#ff2a1a', emissiveIntensity: 1.4 }), YEL = mat('#ffc21a', { emissive: '#ffc21a', emissiveIntensity: 1.4 }),
       GRN = mat('#22e05a', { emissive: '#22e05a', emissiveIntensity: 1.4 }), OFF = mat('#2a2d33');
-    for (const j of FLUX.lights) for (const i of [FLUX.north, FLUX.south]) {
+    for (const j of FLUX ? FLUX.lights : []) for (const i of [FLUX.north, FLUX.south]) {
       const b = box2(i, j);
       for (const [x, z, axis] of [[b.x0 - 0.6, b.z0 - 0.6, 'a'], [b.x1 + 0.6, b.z1 + 0.6, 'a'], [b.x1 + 0.6, b.z0 - 0.6, 'c'], [b.x0 - 0.6, b.z1 + 0.6, 'c']]) {
         const g = new THREE.Group(); g.position.set(x, 0, z); root.add(g);

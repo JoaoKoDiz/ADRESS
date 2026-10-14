@@ -1,7 +1,8 @@
 // ADRESS 3D — laço principal e máquina de estados da rodada.
 // Este arquivo define como cada módulo é usado (o "contrato" entre eles).
 import * as THREE from 'three';
-import { Game, ROUTE_LEN, setDroppedTags, setPhraseOverride } from './logic.js';
+import { Game, ROUTE_LEN, setDroppedTags, setPhraseOverride, setForceSide } from './logic.js';
+import { createCanyonFx } from './canyon.js';
 import { MAP, doorPoint, slotOrigin, DELIVERY_RADIUS, DELIVERY_MAX_SPEED, VAN, VAN_START, LOT_ANCHORS, SOLIDS, ENTRANCE, HEDGE, GRID, PLAZA, HOUSE_SLOTS, configureGrid, roadCenter, setGasStations, GAS_LIST, GAS_CANOPY, GAS_ISLANDS, GAS_PARTS, TERRAIN, CANAL, VENICE, RAIL, FAVELA, FLUX, FARMLAND, SPOTS, SNOWV, MOONV, GARDV, slotPlaceTags, roadTopology, WARE_LIST, WALK as L_WALK, LOT as L_LOT, ROAD as L_ROAD, slotY as L_slotY } from './layout.js';
 import { createLaser } from './laser.js';
 import { createUrsa } from './ursa.js';
@@ -18,10 +19,11 @@ import { createCameraRig } from './camera.js';
 import { createHUD } from './hud.js';
 import { createAudio } from './audio.js';
 import { buildLot } from './models/house.js';
+import { box as kbox, cyl as kcyl, sphere as ksphere, bakeStatic } from './models/kit.js';
 import { buildResident } from './models/resident.js';
 import { YARD_BUILDERS, YARD_BUILDERS_SNOW } from './models/yard.js';
 import { buildShopLot } from './models/shop.js';
-import { SHOPS, HOUSES, FUTS, L1_FIXED, L6_FIXED, WARES, TWINS, VENS, FAVS, MODS, FARMS, MOONS, GRILLBY, SNOW_FIXED, SNOW_EXTRAS, SNOW_DROP, GARDS } from './data.js';
+import { SHOPS, HOUSES, FUTS, L1_FIXED, L6_FIXED, WARES, TWINS, VENS, FAVS, MODS, FARMS, MOONS, GRILLBY, SNOW_FIXED, SNOW_EXTRAS, SNOW_DROP, GARDS, CANYON_EXTRAS } from './data.js';
 import { buildFavelaLot } from './models/favela.js';
 import { buildModLot, MOD_H } from './models/mod.js';
 import { createTraffic } from './traffic.js';
@@ -97,7 +99,7 @@ const game = new Game();
 // Bairros (grade em layout.js): 'grid4' (4×4 — Bairros 1 e 3, e o modo Livre), 'plaza6' (6×6 com praça — Bairro 2),
 // 'grid5' (5×5 com posto — Bairro 4), 'grid6s' (6×6 com postos e comércio — Bairro 5), 'city6' (6×6 de prédios — Bairro 6),
 // 'city7' (a mesma cidade, com 1–2 postos e 4–5 prédios comerciais — Bairro 7), 'city8' (igual ao Bairro 7, porém 8×8 — Bairro 8).
-const COMPOSED = ['grid5', 'grid6s', 'city6', 'city7', 'city8', 'hill8', 'canal8', 'rail8', 'flux10', 'night10'];   // bairros com composição sorteada a cada partida
+const COMPOSED = ['grid5', 'grid6s', 'city6', 'city7', 'city8', 'hill8', 'canal8', 'rail8', 'flux10', 'night10', 'canyon10'];   // bairros com composição sorteada a cada partida
 // Cada um tem sua própria cena, construída só na primeira vez que for jogado.
 const POOLS = { grid4: [...Array(16).keys(), ...Object.values(L1_FIXED)],   // grid4: as 16 casas + a casa fixa do Bairro 1 (só aparece nele)
   plaza6: [...Array(32).keys()], grid5: [...Array(25).keys(), ...SHOPS],   // grid5: Bairro 4 (25 casas + prédios comerciais)
@@ -114,9 +116,53 @@ const POOLS = { grid4: [...Array(16).keys(), ...Object.values(L1_FIXED)],   // g
   snow8: [...Array(32).keys(), GRILLBY],   // + o Grillby's (fixo no ponto 5)
   moon8: MOONS,   // Nível 17 (Órbita): módulos lunares   // Nível 16 (Nevasca): as casas de sempre, nevadas   // Nível 15 (Colheita): propriedades rurais
   flux10: [...Array(32).keys()].concat([...Array(28).keys()].map(k => 38 + k), SHOPS, WARES, MODS),
-  night10: [...Array(32).keys()].concat([...Array(28).keys()].map(k => 38 + k), SHOPS, WARES, MODS) };   // Nível 19 (Penumbra): o mapa do Fluxo, à noite   // Nível 14 (Fluxo): + prédios contemporâneos   // Nível 13 (Morro): casas de laje   // Nível 12 (Veneza): casas venezianas   // Bairro 11 (Trilhos): ferrovia, estações e galpões   // Bairro 10 (Travessia): + galpões e casas gêmeas   // city8 (Bairro 8): o mesmo, em 8×8, com prédios mais altos (e os futuristas, se USE_FUTS)
+  night10: [...Array(32).keys()].concat([...Array(28).keys()].map(k => 38 + k), SHOPS, WARES, MODS),
+  canyon10: [...Array(32).keys()].concat([...Array(28).keys()].map(k => 38 + k), SHOPS, WARES, MODS) };   // Nível 23 (Cachoeira): as duas margens   // Nível 19 (Penumbra): o mapa do Fluxo, à noite   // Nível 14 (Fluxo): + prédios contemporâneos   // Nível 13 (Morro): casas de laje   // Nível 12 (Veneza): casas venezianas   // Bairro 11 (Trilhos): ferrovia, estações e galpões   // Bairro 10 (Travessia): + galpões e casas gêmeas   // city8 (Bairro 8): o mesmo, em 8×8, com prédios mais altos (e os futuristas, se USE_FUTS)
 // lote de casa ou de prédio comercial
-const buildAnyLot = (h, opts) => h.grill ? buildGrillbyLot(h) : h.kind === 'gard' ? buildGardLot(h) : h.kind === 'moon' ? buildMoonLot(h) : SNOWV && h.kind === 'house' ? buildSnowLot(h, opts) : h.kind === 'farm' ? buildFarmLot(h) : h.kind === 'mod' ? buildModLot(h) : h.kind === 'fav' ? buildFavelaLot(h) : h.kind === 'ven' ? buildVeniceLot(h) : h.kind === 'ware' ? buildWareLot(h) : h.kind === 'shop' ? buildShopLot(h) : h.kind === 'apt' ? buildAptLot(h) : h.kind === 'fut' ? buildFutLot(h) : buildLot(h, opts);
+const buildAnyLot = (h, opts) => CANAL && CANAL.canyon && h.kind === 'house' ? canyonLot(h, opts) : h.grill ? buildGrillbyLot(h) : h.kind === 'gard' ? buildGardLot(h) : h.kind === 'moon' ? buildMoonLot(h) : SNOWV && h.kind === 'house' ? buildSnowLot(h, opts) : h.kind === 'farm' ? buildFarmLot(h) : h.kind === 'mod' ? buildModLot(h) : h.kind === 'fav' ? buildFavelaLot(h) : h.kind === 'ven' ? buildVeniceLot(h) : h.kind === 'ware' ? buildWareLot(h) : h.kind === 'shop' ? buildShopLot(h) : h.kind === 'apt' ? buildAptLot(h) : h.kind === 'fut' ? buildFutLot(h) : buildLot(h, opts);
+/** Nível 23 (Cachoeira): a casa de sempre + 2 detalhes (CANYON_EXTRAS): sacada de madeira (as duas laterais; só a virada para o
+ *  desfiladeiro aparece — canyonBalconies), jardinzinho, vasos na porta, cobertura de madeira na porta. */
+function canyonLot(h, opts) {
+  const lot = buildLot(h, opts), A = LOT_ANCHORS, HS = A.house, FZ = HS.z1, WD = '#9a6a3c', WL = '#c08a52', ex = new THREE.Group();
+  const add = (p, m, x, y, z, rx = 0, ry = 0, rz = 0) => { m.position.set(x, y, z); m.rotation.set(rx, ry, rz); p.add(m); };
+  const B = (w, hh, d, c) => kbox(w, hh, d, c), C = (r1, r2, hh, c, n = 8) => kcyl(r1, r2, hh, c, n), S = (r, c) => ksphere(r, c, 7, 5);
+  const FL = ['#ff5a7a', '#ffd23a', '#c25aff', '#ff8a2a', '#ffffff'];
+  for (const t of CANYON_EXTRAS[h.index] || []) {
+    if (t === 'cy:balcony') for (const [nm, sx] of [['cyBalE', 1], ['cyBalW', -1]]) {   // deque elevado de madeira na lateral, com guarda-corpo e 2 cadeiras
+      const b = new THREE.Group(); b.name = nm; const x = sx > 0 ? HS.x1 + 1.35 : HS.x0 - 1.35, zm = (HS.z0 + HS.z1) / 2;
+      add(b, B(2.5, 0.16, 5.4, WD), x, 1.3, zm);
+      for (const dz of [-2.5, 2.5]) for (const dx of [-1.1, 1.1]) add(b, B(0.18, 1.3, 0.18, '#7a5230'), x + dx, 0.65, zm + dz);
+      add(b, B(0.1, 0.1, 5.4, WL), x + sx * 1.2, 2.25, zm); for (const dz of [-2.6, 2.6]) add(b, B(2.5, 0.1, 0.1, WL), x, 2.25, zm + dz);
+      for (let k = 0; k <= 9; k++) add(b, B(0.07, 0.9, 0.07, WL), x + sx * 1.2, 1.8, zm - 2.6 + k * 0.578);
+      for (const dz of [-1, 1]) { add(b, B(0.6, 0.08, 0.6, '#3a6fb0'), x, 1.7, zm + dz); add(b, B(0.08, 0.6, 0.6, '#3a6fb0'), x - sx * 0.3, 2.0, zm + dz); }
+      add(b, B(0.9, 0.12, 0.14, '#7a5230'), x - sx * 0.4, 0.1, zm + 3.2, -0.9, 0, 0);   // degrauzinho
+      b.userData.dynamic = true; lot.add(b); bakeStatic(b); b.visible = false;
+    } else if (t === 'cy:garden') {                                    // canteiro de flores na frente (à esquerda da porta)
+      add(ex, B(2.6, 0.3, 1.1, '#7a5230'), HS.x0 + 1.8, 0.27, FZ + 1.0); add(ex, B(2.4, 0.08, 0.9, '#5a3b22'), HS.x0 + 1.8, 0.44, FZ + 1.0);
+      for (let k = 0; k < 7; k++) { const x = HS.x0 + 0.8 + k * 0.33, z = FZ + 0.8 + (k % 2) * 0.4; add(ex, C(0.03, 0.03, 0.4, '#3f7d34', 4), x, 0.65, z); add(ex, S(0.13, FL[k % 5]), x, 0.88, z); }
+      add(ex, S(0.38, '#4f8f3a'), HS.x0 + 0.5, 0.75, FZ + 1.0); add(ex, S(0.32, '#3f7d34'), HS.x0 + 3.1, 0.7, FZ + 1.0);
+    } else if (t === 'cy:vases') {                                     // dois vasos grandes de cerâmica ladeando a porta
+      for (const s2 of [-1, 1]) { const x = A.doorX + s2 * 1.05, z = FZ + 0.55;
+        add(ex, C(0.32, 0.22, 0.6, '#c8643a', 10), x, 0.42, z); add(ex, C(0.35, 0.35, 0.08, '#a84e2c', 10), x, 0.74, z);
+        add(ex, S(0.36, '#3f8f3a'), x, 1.0, z); add(ex, S(0.1, '#ff5a7a'), x + 0.18, 1.25, z + 0.1); add(ex, S(0.1, '#ffd23a'), x - 0.15, 1.2, z + 0.18); }
+    } else if (t === 'cy:canopy') {                                    // cobertura de madeira sobre a porta (2 pilares e telhadinho inclinado)
+      for (const s2 of [-1, 1]) add(ex, B(0.18, 2.5, 0.18, '#7a5230'), A.doorX + s2 * 1.25, 1.37, FZ + 1.5);
+      add(ex, B(2.9, 0.12, 1.8, WD), A.doorX, 2.68, FZ + 0.85, 0.16, 0, 0);
+      for (let k = 0; k < 6; k++) add(ex, B(0.08, 0.1, 1.8, '#7a5230'), A.doorX - 1.3 + k * 0.52, 2.78, FZ + 0.85, 0.16, 0, 0);
+    }
+  }
+  if (ex.children.length) { lot.add(ex); bakeStatic(ex); }
+  return lot;
+}
+/** Cachoeira: em cada casa com sacada, mostra só a do lado do desfiladeiro (margem oeste → sacada a leste, e vice-versa). */
+function canyonBalconies() {
+  game.layout.forEach((h, s) => {
+    if (h < 0 || h >= 32) return;
+    const lot = world.lotGroup(h); if (!lot) return;
+    const west = (s % GRID) < CANAL.cols[0], e = lot.getObjectByName('cyBalE'), w = lot.getObjectByName('cyBalW');
+    if (e) e.visible = west; if (w) w.visible = !west;
+  });
+}
 const USE_FUTS = false;                        // prédios futuristas (models/fut.js): guardados, desligados — troque para true para voltarem ao Bairro 8
 const TALL_FLOORS = 9;                         // Bairro 8: prédios residenciais mais altos (os outros bairros têm 5 andares)
 let world = createWorld({ renderer, buildLot: buildAnyLot, buildResident, yardBuilders: YARD_BUILDERS, pool: POOLS.grid4 });
@@ -141,8 +187,8 @@ function composeRound() {
   const city = neighborhood === 'city6', city7 = neighborhood === 'city7', city8 = neighborhood === 'city8';
   const shuffled = a => { a = a.slice(); for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; };
   // postos (2 lotes vizinhos da mesma linha): Bairro 4 tem 1; Bairro 5, 1 ou 2 (em linhas diferentes); a cidade, nenhum
-  const hill = neighborhood === 'hill8', canal = neighborhood === 'canal8', rail = neighborhood === 'rail8', flux = neighborhood === 'flux10' || neighborhood === 'night10';
-  const nGas = city ? 0 : neighborhood === 'grid6s' || city7 || city8 || hill || canal || rail ? 1 + Math.floor(Math.random() * 2) : 1;
+  const canyon = neighborhood === 'canyon10', hill = neighborhood === 'hill8', canal = neighborhood === 'canal8', rail = neighborhood === 'rail8', flux = neighborhood === 'flux10' || neighborhood === 'night10';
+  const nGas = city ? 0 : neighborhood === 'grid6s' || city7 || city8 || hill || canal || rail || canyon ? 1 + Math.floor(Math.random() * 2) : 1;
   // Bairro 9: postos só na parte baixa (linhas 0–3). Bairro 10: postos e galpões sempre de um lado só do canal, em linhas diferentes.
   const rows = shuffled([...Array(hill ? 4 : GRID).keys()]);
   const pairCol = () => canal ? [0, 1, 5, 6][Math.floor(Math.random() * 4)] : Math.floor(Math.random() * (GRID - 1));
@@ -167,7 +213,15 @@ function composeRound() {
       return out; };
     gasList.push(...take(nGas)); var fluxWares = take(2);
   }
-  const wareList = flux ? fluxWares : rail ? shuffled([[59, 60], [61, 62], [44, 45], [52, 53], [57, 58], [41, 42]]).filter(pairFree()).filter(p => !gasList.some(g => g.some(x => p.includes(x)))).slice(0, 2) : canal ? rows.slice(nGas, nGas + 2 + Math.floor(Math.random() * 2)).map(r => { const c = pairCol(); return [r * GRID + c, r * GRID + c + 1]; }) : [];
+  if (canyon) {                                // Cachoeira: 1–2 postos e 2 galpões, divididos entre as duas margens, em linhas diferentes e sem encostar
+    gasList.length = 0;
+    const W2 = [0, 1, 2], E2 = [6, 7, 8], rowsUsed = new Set(), out = [];
+    const pick = cols => { for (const r of shuffled([...Array(GRID).keys()])) { if (rowsUsed.has(r) || rowsUsed.has(r - 1) || rowsUsed.has(r + 1)) continue; rowsUsed.add(r); const c = cols[Math.floor(Math.random() * cols.length)]; return [r * GRID + c, r * GRID + c + 1]; } return null; };
+    const sides = shuffled([W2, E2]);
+    gasList.push(pick(sides[0])); if (nGas > 1) gasList.push(pick(sides[1]));
+    var canyonWares = [pick(W2), pick(E2)].filter(Boolean);
+  }
+  const wareList = canyon ? canyonWares : flux ? fluxWares : rail ? shuffled([[59, 60], [61, 62], [44, 45], [52, 53], [57, 58], [41, 42]]).filter(pairFree()).filter(p => !gasList.some(g => g.some(x => p.includes(x)))).slice(0, 2) : canal ? rows.slice(nGas, nGas + 2 + Math.floor(Math.random() * 2)).map(r => { const c = pairCol(); return [r * GRID + c, r * GRID + c + 1]; }) : [];
   setGasStations(gasList, wareList);
   SOLIDS.push(...world.extraSolids);                                  // troncos das árvores de fora
   if (gameMode === 'career') {
@@ -181,7 +235,7 @@ function composeRound() {
   if (hill) {                                   // Bairro 9: os 28 residenciais, 4–5 comerciais e casas no resto
     const nShops = 4 + Math.floor(Math.random() * 2), apts = [...Array(28).keys()].map(k => 38 + k);
     pool = apts.concat(shuffled(SHOPS).slice(0, nShops), shuffled(allHouses).slice(0, HOUSE_SLOTS.length - nShops - apts.length));
-  } else if (flux) {                            // Fluxo: galpões nos pares sorteados, 4 contemporâneos, 4–5 comerciais, 28 residenciais e casas
+  } else if (flux || canyon) {                  // Fluxo (e Cachoeira): galpões nos pares sorteados, 4 contemporâneos, 4–5 comerciais, 28 residenciais e casas
     const wares = shuffled(WARES).slice(0, wareList.length);
     fixed = {}; wareList.forEach((p, i) => { fixed[p[0]] = wares[i]; });
     const nShops = 4 + Math.floor(Math.random() * 2), apts = [...Array(28).keys()].map(k => 38 + k);
@@ -244,11 +298,16 @@ function composeRound() {
   // etiquetas de lugar das pistas: Bairro 9 (alto / subida / escadaria), Bairro 10 (Lado Leste / Oeste)
   game.placeTags = hill || rail ? layout => { const m = {}; layout.forEach((h, s) => { if (h >= 0) m[h] = slotPlaceTags(s); }); return m; }
     : canal ? layout => { const m = {}; layout.forEach((h, s) => { if (h >= 0) m[h] = [(s % GRID) < 4 ? 'side:west' : 'side:east']; }); return m; }
+    : canyon ? layout => { const m = {}; layout.forEach((h, s) => {   // Cachoeira: lado, "perto da ponte" e os detalhes das casas
+      if (h < 0) return; const c = s % GRID, r = Math.floor(s / GRID);
+      m[h] = [c < CANAL.cols[0] ? 'side:west' : 'side:east'].concat((r === 4 || r === 5) && [2, 3, 6, 7].includes(c) ? ['loc:bridge'] : [], h < 32 ? CANYON_EXTRAS[h] : []); });
+      return m; }
     : null;
   game.setNeighborhood(pool, HOUSE_SLOTS, GRID * GRID, fixed);
   world.setLayout(game.layout);
   world.setGas(gasList);
   if (city) showLounger();
+  if (canyon) { canyonBalconies(); traffic.reset(0, 16); }   // Cachoeira: sacadas viradas para o desfiladeiro; trânsito moderado nas ruas e na ponte
   if (flux) traffic.reset(...(neighborhood === 'night10' ? [10, 10] : []), neighborhood === 'night10');   // Fluxo: a rede depende dos postos/galpões da partida (Penumbra: menos carros, faróis)
   if (neighborhood === 'night10') night.layout(world, game, MAP);   // Penumbra: postes, letreiros e painéis para esta composição
   rig.refit();
@@ -397,6 +456,7 @@ function walkSolids() {
 }
 const train = createTrain();
 const traffic = createTraffic(audio);
+const canyonFx = createCanyonFx(audio);   // Nível 23 (Cachoeira): água correndo, cachoeira, névoa e o som pela distância
 const night = createNight();               // Nível 19 (Penumbra)
 const farmOut = createFarmOutside();       // Nível 15 (Colheita): entorno
 const gardGate = { arm: null, world: null, solid: null, k: 0 };   // Nível 17 (Jardins): cancela
@@ -556,6 +616,7 @@ function useNeighborhood(kind) {
     : null;
   game.arrange = null;
   setDroppedTags(kind === 'snow8' ? SNOW_DROP : null);
+  setForceSide(kind === 'canyon10');   // Cachoeira: toda pista diz o lado
   setPhraseOverride(kind === 'snow8' ? { clothesline: 'roupas congeladas no varal' } : null);   // Nevasca: o varal fica congelado   // Nevasca: sem cacto, piscina, fonte, flamingo, girassóis e frutas
   setBoatMode(kind === 'venice8');
   walker.setArea(kind === 'venice8' ? (x, z) => VENICE.walkable(x, z) : null);   // Veneza: a pé só em terra e nas pontes   // antes de construir a cena do bairro
@@ -573,14 +634,15 @@ function useNeighborhood(kind) {
   world.scene.add(walker.object); walker.show(false);
   hint.attach(world.scene); boom.attach(world.scene);
   if (kind === 'rail8') { world.scene.add(train.object); train.reset(); }
-  if (kind === 'flux10' || kind === 'night10') world.scene.add(traffic.object); else { traffic.detach(); traffic.silence(); }
+  if (kind === 'flux10' || kind === 'night10' || kind === 'canyon10') world.scene.add(traffic.object); else { traffic.detach(); traffic.silence(); }
+  if (kind === 'canyon10') canyonFx.attach(world.scene); else canyonFx.detach();
   night.attach(van, walker, kind === 'night10');
   if (kind === 'garden8') {                      // Jardins: a cancela da portaria (abre sozinha para a van)
     if (!gardGate.arm || gardGate.world !== world) { gardGate.arm = buildGateArm(GARDV); gardGate.world = world; world.scene.add(gardGate.arm); }
     gardGate.solid = { x0: GARDV.GATE.x0, x1: GARDV.GATE.x1, z0: GARDV.GATE.z - 0.3, z1: GARDV.GATE.z + 0.3 }; gardGate.k = 0; SOLIDS.push(gardGate.solid);
   }   // faróis da van e luz do personagem só no Penumbra
   if (kind === 'farm10') { world.scene.add(chickens.object); chickens.reset(); } else chickens.detach();
-  if (kind === 'farm10') { world.scene.add(tractors.object); tractors.reset(); } else { tractors.detach(); if (kind !== 'flux10' && kind !== 'night10') tractors.silence(); }
+  if (kind === 'farm10') { world.scene.add(tractors.object); tractors.reset(); } else { tractors.detach(); if (kind !== 'flux10' && kind !== 'night10' && kind !== 'canyon10') tractors.silence(); }
   van.setIce(kind === 'snow8' ? SNOWV.iceAt : null);   // Nevasca: placas de gelo
   van.setLowGravity(kind === 'moon8'); walker.setLowGravity(kind === 'moon8'); playerSuit.visible = kind === 'moon8';   // Órbita: gravidade baixa e capacete (só neste bairro)
   if (kind === 'snow8') { world.scene.add(plow.object); plow.reset({ loops: [SNOWV.plowLoop], build: buildPlow, speed: 4.6 }); } else plow.detach();
@@ -862,7 +924,7 @@ function goBack() {
 function startFree(mode = 'free') {
   // Bairro 2: 6×6 com praça; Bairro 4: 5×5 com bloqueios; o resto: 4×4
   const lv = mode === 'career' ? careerLevel : freeLevel;
-  useNeighborhood(lv === 1 ? 'plaza6' : lv === 3 ? 'grid5' : lv === 4 ? 'grid6s' : lv === 5 ? 'city6' : lv === 6 ? 'city7' : lv === 7 ? 'city8' : lv === 8 ? 'hill8' : lv === 9 ? 'venice8' : lv === 10 ? 'canal8' : lv === 11 ? 'rail8' : lv === 12 ? 'favela8' : lv === 13 ? 'flux10' : lv === 14 ? 'farm10' : lv === 15 ? 'snow8' : lv === 16 ? 'garden8' : lv === 18 ? 'night10' : lv === 19 ? 'moon8' : 'grid4');   // 17–19 reservados; 20 = Lua   // 10 = Veneza, 11 = Travessia, 12 = Trilhos
+  useNeighborhood(lv === 1 ? 'plaza6' : lv === 3 ? 'grid5' : lv === 4 ? 'grid6s' : lv === 5 ? 'city6' : lv === 6 ? 'city7' : lv === 7 ? 'city8' : lv === 8 ? 'hill8' : lv === 9 ? 'venice8' : lv === 10 ? 'canal8' : lv === 11 ? 'rail8' : lv === 12 ? 'favela8' : lv === 13 ? 'flux10' : lv === 14 ? 'farm10' : lv === 15 ? 'snow8' : lv === 16 ? 'garden8' : lv === 18 ? 'night10' : lv === 19 ? 'moon8' : lv === 22 ? 'canyon10' : 'grid4');   // 17–19 reservados; 20 = Lua   // 10 = Veneza, 11 = Travessia, 12 = Trilhos
   gameMode = mode;
   if (!COMPOSED.includes(neighborhood)) setupGrid4();   // Bairro 1 tem a casa fixa; o 3 (mesma grade) não
   resetGates();
@@ -1872,7 +1934,8 @@ function update(dt, t) {
     const i = SOLIDS.indexOf(gardGate.solid);
     if (gardGate.k > 0.5 && i >= 0) SOLIDS.splice(i, 1); else if (gardGate.k <= 0.5 && i < 0) SOLIDS.push(gardGate.solid);
   }
-  if (neighborhood === 'flux10' || neighborhood === 'night10') {                // Fluxo: trânsito; param na frente da van e do motorista a pé
+  if (neighborhood === 'canyon10') { const playing = IN_GAME.includes(state) || state === 'walk'; canyonFx.update(dt, playing ? (walker.visible ? walker : van) : null); }
+  if (neighborhood === 'flux10' || neighborhood === 'night10' || neighborhood === 'canyon10') {                // Fluxo (e Cachoeira): trânsito; param na frente da van e do motorista a pé
     const c = Math.cos(van.heading), s2 = Math.sin(van.heading), obs = [];
     if (!heli.flying) obs.push({ circles: [-1.5, 0, 1.5].map(k => [van.x + c * k, van.z + s2 * k, 1.25]) });
     if (walker.visible) obs.push({ circles: [[walker.x, walker.z, 0.6]] });
