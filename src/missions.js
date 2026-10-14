@@ -5,38 +5,28 @@
 // Missões por fase (nível). id liga a missão à regra em career.js; goal = quanto precisa para concluir.
 // Fases sem missões definidas usam o modelo (sem id: não avançam ainda).
 const PLACEHOLDER = () => Array.from({ length: 5 }, () => ({ id: null, name: 'MISSÃO', desc: 'Descrição breve da missão.', goal: 5 }));
-export const LEVEL_NAMES = ['Primeiros Dias', 'Olhos Abertos', 'Entregador Teimoso', 'Péssimo Senso de Direção', '', '', '', '', 'Veneza', '', '', '', '', '', '', '', '', '', '', '', '', '', '', ''];
+export const LEVEL_NAMES = ['Raízes', 'Horizontes', 'Entregador Teimoso', 'Péssimo Senso de Direção', '', '', '', '', 'Veneza', '', '', '', '', '', '', '', '', '', '', '', '', '', '', ''];
 /** Bairro 18: espaço reservado para níveis futuros (não dá para jogar; não travam o desbloqueio do 20). */
 export const RESERVED = [];   // (18 = Modernista, 21 = Operário, 22 = Bosque, 23 = Cachoeira; nenhum reservado agora)   // (o 17 é Jardins, o 19 é o Penumbra)
 export const MISSIONS = [
+  // Na Carreira, cumprir o objetivo só deixa a missão PENDENTE; ela é salva quando a mesma partida termina com a entrega
+  // certa (career.js). Abandonar/reiniciar/fechar descarta o que foi cumprido naquela tentativa.
   [
-    { id: 'firstShift', name: 'Primeiro Turno', desc: 'Complete uma partida inteira, realizando as 4 entregas erradas e a 5ª entrega correta.', goal: 1 },
-    { id: 'streets', name: 'Conhecendo a Vizinhança', desc: 'Passe por pelo menos 5 (das 10) ruas no bairro, antes de concluir a entrega correta.', goal: 5 },
-    { id: 'noRepeat', name: 'Sem Voltar Atrás', desc: 'Complete uma partida sem entrar quatro vezes na mesma rua.', goal: 1 },
-    { id: 'lap', name: 'Volta no Quarteirão', desc: 'Dê uma volta completa no bairro antes da quinta entrega.', goal: 1 },
-    { id: 'wrongWay', name: 'Duplo Erro', desc: 'Faça uma entrega incorreta da forma errada (entregue para a casa errada, mesmo que se trate de uma dica falsa).', goal: 1 },
+    { id: 'firstDelivery', name: 'Primeira entrega', desc: 'Faça uma entrega em qualquer casa.', goal: 1 },
+    { id: 'rightAddress', name: 'Endereço certo', desc: 'Conclua uma partida entregando na casa correta.', goal: 1 },
+    { id: 'lap', name: 'Volta no bairro', desc: 'Contorne todo o bairro pelas ruas externas antes de concluir a partida.', goal: 1 },
+    { id: 'wrongAddress', name: 'Endereço errado', desc: 'Faça uma entrega em uma casa diferente da indicada pela dica.', goal: 1 },
+    { id: 'noRush', name: 'Sem pressa', desc: 'Passe 10 minutos na mesma partida.', goal: 1 },
   ],
   [
-    { id: 'blue', name: 'Telhado Azul', desc: 'Faça 3 entregas em casas com telhados azuis (podendo ser ao longo de partidas diferentes).', goal: 3 },
-    { id: 'redWrong', name: 'Telhado Vermelho Errado', desc: 'Faça uma entrega falsa em uma casa com telhado vermelho.', goal: 1 },
-    { id: 'fountain', name: 'Fonte Pequena', desc: 'Faça duas entregas falsas em uma casa com uma fonte pequena (podendo ser ao longo de partidas diferentes).', goal: 2 },
-    { id: 'trampoline', name: 'Insistir no Pulo', desc: 'Insista em fazer uma entrega falsa na mesma casa que tenha um pula-pula, 4 vezes, na mesma partida.', goal: 4 },
-    { id: 'hint', name: 'Pequena Dica', desc: 'Use a dica 3 vezes (em partidas diferentes).', goal: 3 },
+    { id: 'biggerHood', name: 'Bairro maior', desc: 'Conclua uma partida no Bairro 2.', goal: 1 },
+    { id: 'plaza', name: 'Conheça a praça', desc: 'Saia da van e entre na praça central.', goal: 1 },
+    { id: 'noHint', name: 'Sem ajuda', desc: 'Conclua uma partida sem usar o botão de dica.', goal: 1 },
+    { id: 'fast', name: 'Entrega rápida', desc: 'Conclua uma partida em até 3 minutos.', goal: 1 },
+    { id: 'noBump', name: 'Sem esbarrar', desc: 'Conclua uma partida sem bater em casas, árvores ou postes.', goal: 1 },
   ],
-  [
-    { id: 'tenSame', name: 'Dez Vezes é Demais', desc: 'Faça 10 entregas falsas propositalmente na mesma casa durante uma única partida.', goal: 10 },
-    { id: 'tourist', name: 'Turista do Bairro', desc: 'Passe pela mesma rua 10 vezes antes de realizar a entrega correta.', goal: 10 },
-    { id: 'nextDoor', name: 'Não Era Aqui?', desc: 'Faça uma entrega em uma das 4 casas imediatamente ao lado daquela indicada pela dica falsa.', goal: 1 },
-    { id: 'opposite', name: 'Do Outro Lado', desc: 'Insista 3 vezes na entrega errada, em uma das 4 casas dos cantos do bairro, e repita isso logo em seguida, na casa no canto oposto.', goal: 1 },
-    { id: 'dizzy', name: 'Manobras Enjoativas', desc: 'Dê 5 voltas completas em torno de uma mesma casa.', goal: 5 },
-  ],
-  [
-    { id: 'colors', name: 'Confundi as Cores', desc: 'Ao receber uma dica falsa para um prédio comercial ou casa de cor azul, entregue propositalmente em um prédio comercial ou casa de telhado vermelho.', goal: 1 },
-    { id: 'roosters', name: 'Viciado em Galos', desc: 'Insista 3 entregas falsas em duas casas diferentes que tenham um galo de metal no telhado, na mesma partida.', goal: 2 },
-    { id: 'fountainSwap', name: 'Fonte Errada', desc: 'Quando a dica indicar uma casa com fonte pequena, entregue propositalmente em outra casa que também tenha uma fonte.', goal: 1 },
-    { id: 'expensive', name: 'É Muito Caro!', desc: 'Abasteça duas vezes no posto de gasolina na mesma partida (pare embaixo da cobertura, ao lado das bombas, e aperte E).', goal: 2 },
-    { id: 'knowHouse', name: 'Eu Conheço Essa Casa', desc: 'Insista 3 entregas incorretas propositalmente em uma casa, na mesma posição, em 2 partidas diferentes (uma em seguida da outra).', goal: 2 },
-  ],
+  PLACEHOLDER(),   // Bairro 3 (aguardando a nova lista)
+  PLACEHOLDER(),   // Bairro 4 (aguardando a nova lista)
   PLACEHOLDER(),   // Bairro 5
   PLACEHOLDER(),   // Bairro 6 (a cidade)
   PLACEHOLDER(),   // Bairro 7 (a cidade com caminhões e engarrafamentos)
@@ -80,6 +70,7 @@ const CSS = `
 .mission-bar { flex: 1; height: clamp(14px, 1.8vh, 20px); border-radius: 999px; background: #bdb6a8; overflow: hidden; }
 .mission-fill { height: 100%; width: 0%; background: #3c9d55; border-radius: 999px; }
 .mission-num { min-width: 3.2em; text-align: right; font-weight: 800; font-size: clamp(14px, 1.25vw, 18px); color: #5a3c1e; }
+.mission-pend { font-weight: 700; font-size: clamp(12px, 1.05vw, 15px); color: #c2570c; }
 `;
 
 /** Botão "MISSÕES (x/5)" no canto superior direito da área do jogo (fora da barra do topo). */
@@ -139,11 +130,13 @@ export function createMissions(store) {
     list.innerHTML = ms.map((m, k) => {
       const p = prog[k] || 0;
       const pct = Math.max(0, Math.min(100, p / m.goal * 100));
+      const pend = p < m.goal && store.isPending && store.isPending(i, k);   // cumprida nesta partida: falta terminar com a entrega certa
       return `<div class="mission">
         <div class="mission-name">${m.name}</div>
         <div class="mission-desc">${m.desc}</div>
         <div class="mission-row"><div class="mission-bar"><div class="mission-fill" style="width:${pct}%"></div></div>
         <div class="mission-num">${Math.min(p, m.goal)}/${m.goal}</div></div>
+        ${pend ? '<div class="mission-pend">Pendente: conclua esta partida com a entrega certa para salvar.</div>' : ''}
       </div>`;
     }).join('');
   }

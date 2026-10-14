@@ -257,6 +257,7 @@ export function createVan(scene, opts) {
 
   /** Empurra os 3 círculos para fora dos lotes e da sebe (3 iterações). Retorna true se encostou em algo. */
   let ghost = false;                 // "van imparável" (menu): atravessa tudo
+  const touched = new Set();         // sólidos em que a van encostou neste quadro (contador de batidas do Bairro 2)
   function collide() {
     let hit = false;
     const moon = TERRAIN.kind === 'moon';
@@ -272,7 +273,7 @@ export function createVan(scene, opts) {
             const dx = cx - b.cx, dz = cz - b.cz, d = Math.hypot(dx, dz), m = b.r + R;
             if (d >= m) continue;
             const ux = d > 1e-6 ? dx / d : 1, uz = d > 1e-6 ? dz / d : 0;
-            x += ux * (m - d); z += uz * (m - d); cx += ux * (m - d); cz += uz * (m - d); hit = true; continue;
+            x += ux * (m - d); z += uz * (m - d); cx += ux * (m - d); cz += uz * (m - d); hit = true; touched.add(b); continue;
           }
           const px = Math.max(b.x0, Math.min(cx, b.x1)), pz = Math.max(b.z0, Math.min(cz, b.z1));
           const dx = cx - px, dz = cz - pz, d = Math.hypot(dx, dz);
@@ -286,7 +287,7 @@ export function createVan(scene, opts) {
             const m = Math.min(l, r, t, bt);
             if (m === l) mx = -(l + R); else if (m === r) mx = r + R; else if (m === t) mz = -(t + R); else mz = bt + R;
           }
-          x += mx; z += mz; cx += mx; cz += mz; hit = true;
+          x += mx; z += mz; cx += mx; cz += mz; hit = true; touched.add(b);
         }
         if (moon) continue;                                         // Órbita: a lua não tem borda
         if (cx < lo) { x += lo - cx; hit = true; }
@@ -335,6 +336,7 @@ export function createVan(scene, opts) {
   }
 
   function update(dt, axis, scheme = 'screen') {
+    touched.clear();
     if (dt <= 0) return;
     const oldX = x, oldZ = z, oldHeading = heading;
     if (scheme === 'car') {
@@ -417,6 +419,14 @@ export function createVan(scene, opts) {
     object: root,
     /** Grupo da carroceria (balança na suspensão / afunda com o bagageiro pesado): porta, janelas e cabine. */
     body,
+    /** Sólidos (caixas de SOLIDS) em que a van encostou na última atualização. */
+    get touched() { return touched; },
+    /** Folga entre a van (seus 3 círculos) e a caixa b: ≤ 0 = encostada. */
+    gapTo(b) {
+      const c = Math.cos(heading), s = Math.sin(heading); let g = Infinity;
+      for (const o of OFFS) { const cx = x + c * o, cz = z + s * o, px = Math.max(b.x0, Math.min(cx, b.x1)), pz = Math.max(b.z0, Math.min(cz, b.z1)); g = Math.min(g, Math.hypot(cx - px, cz - pz) - R); }
+      return g;
+    },
     get x() { return x; },
     get z() { return z; },
     get heading() { return heading; },
