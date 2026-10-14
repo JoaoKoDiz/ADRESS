@@ -35,7 +35,7 @@ export function createBoom(scene, getWorld, audio) {
     const g = new THREE.Group();
     g.position.set(o.x, 0, o.z);
     const roof = ROOF_COL[HOUSES[h].roof];
-    const K = HOUSES[h].kind, small = K === 'row' ? 2.6 : K === 'wsh' ? 4.6 : 0;   // Operário: só a unidade (as vizinhas da fileira ficam inteiras)
+    const K = HOUSES[h].kind, small = K === 'row' ? 2.6 : K === 'wsh' ? 4.6 : K === 'mvh' ? 3.6 : K === 'mvs' ? 4.8 : 0;   // Operário: só a unidade (as vizinhas da fileira ficam inteiras)
     if (small) g.add(at(box(small * 2, 0.2, small * 2.4, '#6f6a60'), HX, 0.1, HZ));
     else if (HOUSES[h].kind === 'moon') g.add(at(cyl(7.6, 7.8, 1.1, '#8f939a', 20), HX, -0.49, HZ));   // Órbita: base do módulo chamuscada (na curvatura)
     else {

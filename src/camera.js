@@ -4,7 +4,7 @@
 //     Parada, a câmera sobe para olhar por cima dos telhados; entregando, vira um pouco para a casa visitada.
 //   'overview' (tecla C): visão fixa do SUL, com o bairro inteiro enquadrado na tela.
 import * as THREE from 'three';
-import { MAP, HEDGE, HOUSE_SLOTS, GAS_LIST, GAS_PARTS, BUILD_H, slotOrigin, LOT_ANCHORS, ENTRANCE, FAVELA, FARMLAND, SNOWV, MOONV, GARDV, FORESTV } from './layout.js';
+import { MAP, HEDGE, HOUSE_SLOTS, GAS_LIST, GAS_PARTS, BUILD_H, slotOrigin, LOT_ANCHORS, ENTRANCE, FAVELA, FARMLAND, SNOWV, MOONV, GARDV, FORESTV, MEDV } from './layout.js';
 import { FAV } from './favelaPlan.js';
 
 const PITCH = THREE.MathUtils.degToRad(57);   // inclinação para baixo
@@ -86,7 +86,8 @@ const SLOW_HEIGHT = 13;         //   (dá para ver os quintais da frente mesmo e
 const BOOM_MIN_DIST = 4.5;      // braço encolhido ao máximo (quando algo fica entre a van e a câmera)
 const BOOM_TOP_HEIGHT = 14.5;   //   … e a altura correspondente: encolher = subir e olhar mais para baixo
 const FIXED_DIST = 11.5, FIXED_HEIGHT = 10;   // braço da câmera (fixo; a van parada ou em movimento tem o mesmo enquadramento)
-const R0 = Math.hypot(FIXED_DIST, FIXED_HEIGHT - 2.2), EL0 = Math.atan2(FIXED_HEIGHT - 2.2, FIXED_DIST);   // distância e elevação padrão do braço (PIVOT_Y = 2,2)
+const R0_BASE = Math.hypot(FIXED_DIST, FIXED_HEIGHT - 2.2), EL0_BASE = Math.atan2(FIXED_HEIGHT - 2.2, FIXED_DIST);   // distância e elevação padrão do braço (PIVOT_Y = 2,2)
+let R0 = R0_BASE, EL0 = EL0_BASE;            // (o Medieval usa um braço mais curto e mais baixo: setProfile)
 const MIN_RADIUS = 3.2, MIN_ZOOM = 0.28;      // aproximação máxima
 const MIN_ELEV = 0.1, MAX_ELEV = 1.5;         // inclinação mínima/máxima do braço (rad)
 const CHASE_LOOK_AHEAD = 6;     // ponto olhado fica um pouco à frente da van
@@ -121,6 +122,15 @@ function buildCamBoxes() {
     for (const sp of SNOWV.spots) CAM_BOXES.push([sp.walkBox.x0 - 0.8, sp.walkBox.z0 - 0.8, sp.walkBox.x1 + 0.8, sp.walkBox.z1 + 0.8, sp.y + 7.8]);
     for (const p of SNOWV.pines) CAM_BOXES.push([p.x - 1.4, p.z - 1.4, p.x + 1.4, p.z + 1.4, p.y + 5.5]);
   }
+  if (MEDV) {                                                  // Medieval: patamares, muralha, casas (até o telhado), castelo, depósito, barracas, portão
+    const V = MEDV;
+    CAM_BOXES.push([V.MID.x0, V.MID.z0, MAP, MAP, V.MIDH + 0.5], [V.HIGH.x0, V.HIGH.z0, MAP, MAP, V.HIGHH + 0.5]);
+    for (const sp of V.spots) CAM_BOXES.push([sp.walkBox.x0 - 0.6, sp.walkBox.z0 - 0.6, sp.walkBox.x1 + 0.6, sp.walkBox.z1 + 0.6, sp.y + (sp.shop ? 9.5 : 9)]);
+    const C = V.castle; CAM_BOXES.push([C.x0 - 1, C.z0 - 1, C.x1 + 1, C.z1 + 1, V.HIGHH + 26]);
+    const D = V.depot; CAM_BOXES.push([D.x0 - 0.5, D.z0 - 0.5, D.x1 + 0.5, D.z1 + 0.5, V.MIDH + 5.5]);
+    for (const st of V.stalls) CAM_BOXES.push([st.box.x0 - 0.4, st.box.z0 - 0.4, st.box.x1 + 0.4, st.box.z1 + 0.4, V.MIDH + 3.4]);
+    CAM_BOXES.push([108, -1, 151, 4, 13]);                   // portão (torres e arco)
+  }
   if (FORESTV) {                                               // Bosque: patamar, casas e copas (o braço encurta antes de entrar numa árvore)
     if (FORESTV.MID) CAM_BOXES.push([FORESTV.MID.x0, FORESTV.MID.z0, MAP, MAP, 2.9]);
     for (const sp of FORESTV.spots) CAM_BOXES.push([sp.walkBox.x0 - 0.8, sp.walkBox.z0 - 0.8, sp.walkBox.x1 + 0.8, sp.walkBox.z1 + 0.8, sp.y + 7.8]);
@@ -130,7 +140,7 @@ function buildCamBoxes() {
     for (const sp of GARDV.spots) CAM_BOXES.push([sp.walkBox.x0 - 0.8, sp.walkBox.z0 - 0.8, sp.walkBox.x1 + 0.8, sp.walkBox.z1 + 0.8, 9]);
     for (const t of GARDV.trees) CAM_BOXES.push([t.x - 1.4, t.z - 1.4, t.x + 1.4, t.z + 1.4, 4.5]);
   }
-  for (const s of FAVELA || FARMLAND || SNOWV || MOONV || GARDV || FORESTV ? [] : HOUSE_SLOTS) {
+  for (const s of FAVELA || FARMLAND || SNOWV || MOONV || GARDV || FORESTV || MEDV ? [] : HOUSE_SLOTS) {
     const o = slotOrigin(s), H = LOT_ANCHORS.house;
     CAM_BOXES.push([o.x + H.x0 - 0.7 - CAM_PAD, o.z + H.z0 - 0.7 - CAM_PAD, o.x + H.x1 + 0.7 + CAM_PAD, o.z + H.z1 + 1.1 + CAM_PAD, BUILD_H + CAM_PAD]);
   }
@@ -325,6 +335,8 @@ export function createCameraRig() {
     resetView() { goalYaw = goalPitch = 0; zoomGoal = 1; },
     /** O bairro mudou de tamanho (ex.: Bairro 2, 6×6): refaz enquadramento e obstáculos da câmera. */
     refit() { rebuildGrid(); resize(lastW, lastH); },
+    /** Perfil do braço padrão do bairro: dist (× distância normal) e elev (radianos somados à inclinação). Medieval: mais perto e mais baixo. */
+    setProfile({ dist = 1, elev = 0 } = {}) { R0 = R0_BASE * dist; EL0 = EL0_BASE + elev; },
     /** Cena: levanta a mira da câmera atrás da van em `v` (suave; 0 volta ao normal). */
     setLookLift(v) { liftGoal = v; },
     /** Caixas extras que seguram o braço da câmera ([x0, z0, x1, z1, yTopo]); [] tira. */

@@ -29,6 +29,8 @@ export let FLUX = null;          // Nível 14 (Fluxo): avenida central (ruas 5 e
 export let FAVELA = null;        // Nível 13 (Morro): plano fixo sem grade (favelaPlan.js); os "lotes" são as casas de entrega
 export let FARMLAND = null;      // Nível 15 (Colheita): plano fixo rural (farmPlan.js); os "lotes" são as propriedades
 export let SNOWV = null;
+export let MEDV = null;           // Nível 24 (Medieval): plano fixo do burgo murado (medievalPlan.js)
+let MED_PLAN = null;               // (fixo: calculado uma vez)
 export let FORESTV = null;         // Nível 22 (Bosque): plano fixo do bairro no bosque de outono (forestPlan.js)
 export let GARDV = null;          // Nível 17 (Jardins): plano fixo do condomínio (gardenPlan.js)
 export let MOONV = null;         // Nível 17 (Órbita): plano fixo da colônia lunar (moonPlan.js)         // Nível 16 (Nevasca): plano fixo da vila nevada (snowPlan.js)
@@ -42,6 +44,7 @@ import { planSnow, SNOW } from './snowPlan.js';
 import { planForest, FOREST } from './forestPlan.js';
 import { planModern } from './modernPlan.js';
 import { planWork } from './workPlan.js';
+import { planMedieval } from './medievalPlan.js';
 import { planGarden } from './gardenPlan.js';
 import { planMoon } from './moonPlan.js';
 import { Vector3 as THREE_V } from 'three';
@@ -84,7 +87,7 @@ export const SOLIDS = [];
 
 /** Troca a grade do bairro e refaz os obstáculos-base (lotes, praça e sebe). */
 export function configureGrid(kind) {
-  GRID = kind === 'plaza6' || kind === 'grid6s' || kind === 'city6' || kind === 'city7' ? 6 : kind === 'city8' || kind === 'hill8' || kind === 'canal8' || kind === 'rail8' || kind === 'venice8' || kind === 'favela8' || kind === 'snow8' || kind === 'moon8' || kind === 'garden8' || kind === 'forest8' || kind === 'modern8' || kind === 'work8' ? 8 : kind === 'flux10' || kind === 'night10' || kind === 'farm10' || kind === 'canyon10' ? 10 : kind === 'snow8' ? 14 : kind === 'moon8' ? 12 : kind === 'grid5' ? 5 : 4;
+  GRID = kind === 'plaza6' || kind === 'grid6s' || kind === 'city6' || kind === 'city7' ? 6 : kind === 'city8' || kind === 'hill8' || kind === 'canal8' || kind === 'rail8' || kind === 'venice8' || kind === 'favela8' || kind === 'snow8' || kind === 'moon8' || kind === 'garden8' || kind === 'forest8' || kind === 'modern8' || kind === 'work8' ? 8 : kind === 'flux10' || kind === 'night10' || kind === 'farm10' || kind === 'canyon10' || kind === 'med10' ? 10 : kind === 'snow8' ? 14 : kind === 'moon8' ? 12 : kind === 'grid5' ? 5 : 4;
   BUILD_H = kind === 'city8' || kind === 'canal8' || kind === 'rail8' ? 31 : kind === 'hill8' ? 23 : kind === 'favela8' ? 20 : kind === 'flux10' || kind === 'night10' || kind === 'canyon10' ? 16.5 : kind === 'farm10' ? 10 : kind === 'city6' || kind === 'city7' ? 16.5 : 9.2;
   // praça: bloco 2×2 central (linhas e colunas 2–3 do 6×6)
   const plazaSlots = kind === 'plaza6' ? [2 * GRID + 2, 2 * GRID + 3, 3 * GRID + 2, 3 * GRID + 3] : [];
@@ -109,7 +112,8 @@ export function configureGrid(kind) {
   FORESTV = kind === 'forest8' ? planForest(HEDGE * 2 + ROAD * 9 + LOT * 8, HEDGE) : kind === 'modern8' ? planModern(HEDGE * 2 + ROAD * 9 + LOT * 8, HEDGE) : kind === 'work8' ? planWork(HEDGE * 2 + ROAD * 9 + LOT * 8, HEDGE) : null;   // (o Modernista usa o mesmo formato, sem patamar)
   MOONV = kind === 'moon8' ? (MOON_PLAN = MOON_PLAN || planMoon()) : null;   // (o plano da lua é fixo: calculado uma vez)
   GARDV = kind === 'garden8' ? planGarden(HEDGE * 2 + ROAD * 9 + LOT * 8, HEDGE) : null;
-  SPOTS = FAVELA || FARMLAND || SNOWV || MOONV || GARDV || FORESTV;
+  MEDV = kind === 'med10' ? (MED_PLAN = MED_PLAN || planMedieval(HEDGE * 2 + ROAD * 11 + LOT * 10, HEDGE)) : null;
+  SPOTS = FAVELA || FARMLAND || SNOWV || MOONV || GARDV || FORESTV || MEDV;
   setupFlux(kind);
   setupTerrain(kind);
   setupRail(kind);
@@ -147,6 +151,7 @@ function setupTerrain(kind) {
   const T = TERRAIN;
   if (FAVELA) { T.kind = 'favela'; T.ramps = []; T.stairs = []; T.H1 = FAV.H1; T.H2 = FAV.H2; T.h = FAVELA.h; return; }
   if (MOONV) { const p = new THREE_V(); T.kind = 'moon'; T.ramps = []; T.stairs = []; T.H1 = 0.5; T.H2 = 0.5; T.h = (x, z) => MOONV.bump(FRAME.toSphere(x, z, p)); return; }   // Órbita: só os tabuleiros das pontes
+  if (MEDV) { T.kind = 'med'; T.ramps = []; T.stairs = []; T.H1 = MEDV.MIDH; T.H2 = MEDV.HIGHH; T.h = MEDV.h; return; }
   if (FORESTV && FORESTV.MID) { T.kind = 'forest'; T.ramps = []; T.stairs = []; T.H1 = FOREST.MIDH; T.H2 = FOREST.MIDH; T.h = FORESTV.h; return; }
   if (SNOWV) { T.kind = 'snow'; T.ramps = []; T.stairs = []; T.H1 = SNOW.MIDH; T.H2 = SNOW.HIGHH; T.h = SNOWV.h; return; }
   T.H1 = 3; T.H2 = 6;
@@ -370,6 +375,7 @@ function rebuildBaseSolids() {
   if (FLUX) fluxSolids();
   if (FARMLAND) farmSolids();
   if (SNOWV) snowSolids(SNOWV);
+  if (MEDV) { snowSolids(MEDV); SOLIDS.push(...MEDV.solids.map(b => ({ ...b })), ...MEDV.vanOnly.map(b => ({ ...b, vanOnly: true }))); }   // Medieval: muros dos patamares, ladeiras, árvores, postes, fonte, barracas, castelo, depósito; quadrantes da praça e frades (só a van)
   if (FORESTV) snowSolids(FORESTV);
   if (FORESTV && FORESTV.yards) for (const y of FORESTV.yards) SOLIDS.push({ x0: y.x - 3, x1: y.x + 3, z0: y.z - 3, z1: y.z + 3 });   // Operário: pátios de serviço (caixas, tambores)
   if (FORESTV && FORESTV.plazas) for (const p of FORESTV.plazas) SOLIDS.push({ x0: p.x - 3.8, x1: p.x + 3.8, z0: p.z - 3.8, z1: p.z + 3.8, vanOnly: true });   // pracinhas: só a pé

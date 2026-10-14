@@ -389,6 +389,41 @@ export const WSH_FIRST = HOUSES.length;
 }
 export const WSHS = [...Array(20).keys()].map(k => WSH_FIRST + k);
 
+// ---- Medieval (Nível 24): casas do burgo (kind 'mvh': pedra, reboco ou enxaimel; térreas ou sobrados) e as 4 lojas da
+// praça (kind 'mvs', fixas no plano: padaria, ferraria, taverna, tecelagem). Só características permanentes viram pista.
+export const MV_COL = {
+  fac: { stone: '#a19a8c', plaster: '#efe3c6', timber: '#eadcbc', ochre: '#dcb878', rose: '#dcae9e' },
+  roof: { terracotta: '#b0582f', brown: '#7a4a2a', slate: '#5c626a', red: '#97382a' },
+  door: { brown: '#6b4428', green: '#3f6b3a', blue: '#2f5a8a', red: '#8e2e22', black: '#2b2622' },
+  shut: { green: '#4a7a42', blue: '#3a6a9a', red: '#9a3a2a', brown: '#7a5232' },
+  flag: { red: '#a8322a', blue: '#2f4f8f', green: '#3f6f3a', yellow: '#d9a62a' },
+};
+export const MVH_FIRST = HOUSES.length;
+{
+  const names = ['Mestre Bento', 'Dona Brites', 'Seu Gonçalo', 'Dona Leonor', 'Seu Afonso', 'Dona Inês', 'Seu Martim', 'Dona Urraca', 'Seu Vasco', 'Dona Mécia', 'Seu Fernão', 'Dona Guiomar', 'Seu Nuno', 'Dona Beatriz'];
+  const C = MV_COL, K = o => Object.keys(o);
+  let seed = 2424; const rnd = n => { seed = (seed * 16807) % 2147483647; return seed % n; };
+  const seen = [], sub = (x, y) => x.every(k => y.includes(k));
+  while (HOUSES.length < MVH_FIRST + 110) {
+    const floors = 1 + rnd(2), v = { fac: K(C.fac)[rnd(5)], roofc: K(C.roof)[rnd(4)], doorc: K(C.door)[rnd(5)], floors, arch: rnd(2) === 0,
+      shut: rnd(3) ? K(C.shut)[rnd(4)] : null, flower: rnd(3) === 0, banner: rnd(4) === 0 ? K(C.flag)[rnd(4)] : null, shield: rnd(5) === 0 ? K(C.flag)[rnd(4)] : null,
+      barrels: rnd(4) === 0, lantern: rnd(3) === 0, ivy: rnd(4) === 0, chimney: rnd(2) === 0, jetty: floors === 2 && rnd(2) === 0, asym: rnd(3) };
+    const t = ['mv:fac:' + v.fac, 'mv:roof:' + v.roofc, 'mv:door:' + v.doorc, 'mv:fl:' + v.floors].concat(v.arch ? ['mv:arch'] : [], v.shut ? ['mv:shut:' + v.shut] : [],
+      v.flower ? ['mv:flower'] : [], v.banner ? ['mv:banner:' + v.banner] : [], v.shield ? ['mv:shield:' + v.shield] : [], v.barrels ? ['mv:barrels'] : [],
+      v.lantern ? ['mv:lantern'] : [], v.ivy ? ['mv:ivy'] : [], v.chimney ? ['mv:chimney'] : []);
+    if (seen.some(o => sub(o, t) || sub(t, o))) continue;
+    seen.push(t);
+    HOUSES.push({ name: names[(HOUSES.length - MVH_FIRST) % names.length], kind: 'mvh', ...v, ftags: t });
+  }
+}
+export const MVHS = [...Array(110).keys()].map(k => MVH_FIRST + k);
+export const MVS_FIRST = HOUSES.length;
+[['bakery', 'PADARIA', 'bread', 'plaster', 'terracotta', 'brown', 'Mestre Padeiro'], ['smithy', 'FERRARIA', 'anvil', 'stone', 'slate', 'black', 'Mestre Ferreiro'],
+  ['tavern', 'TAVERNA DO JAVALI', 'mug', 'timber', 'brown', 'red', 'Taverneira Joana'], ['textile', 'TECELAGEM', 'spool', 'ochre', 'red', 'blue', 'Mestra Tecelã']]
+  .forEach(([shopKey, sign, symbol, fac, roofc, doorc, name]) => HOUSES.push({ name, kind: 'mvs', shopKey, sign, symbol, fac, roofc, doorc, ftags: ['mvs:' + shopKey] }));
+export const MVSS = [...Array(4).keys()].map(k => MVS_FIRST + k);
+export const MVS_KEY = { bakery: MVS_FIRST, smithy: MVS_FIRST + 1, tavern: MVS_FIRST + 2, textile: MVS_FIRST + 3 };
+
 export const ROOF_ITEMS = ['chimney', 'dish', 'solar', 'tank', 'rooster', 'kite', 'patch'];
 export const YARD_ITEMS = ['fruit', 'bare', 'cactus', 'sunflowers', 'ballbush', 'doghouse', 'pool', 'trampoline',
   'swing', 'bike', 'flamingo', 'gnome', 'clothesline', 'tires', 'fountain'];
@@ -418,7 +453,7 @@ HOUSES.forEach((h, i) => {
     h.roofItems = []; h.yardItems = [];
     return;
   }
-  if (h.kind === 'gard' || h.kind === 'mdh' || h.kind === 'mds' || h.kind === 'row' || h.kind === 'wsh') {
+  if (h.kind === 'gard' || h.kind === 'mdh' || h.kind === 'mds' || h.kind === 'row' || h.kind === 'wsh' || h.kind === 'mvh' || h.kind === 'mvs') {
     h.f = []; h.tags = h.ftags.slice();
     h.roofItems = []; h.yardItems = [];
     return;
@@ -499,6 +534,16 @@ export const PHRASE = {
   'fo:wood': 'lenha sob uma pequena cobertura', 'fo:wreath': 'uma guirlanda de folhas na porta', 'fo:bench': 'um banco de madeira na frente',
   'fo:porch': 'uma varanda de madeira', 'fo:tree:red': 'uma árvore de folhas vermelhas na entrada', 'fo:tree:yellow': 'uma árvore de folhas amarelas na entrada',
   'fo:tree:orange': 'uma árvore de folhas laranja na entrada',
+  // Medieval (Nível 24)
+  'mv:fac:stone': 'fachada de pedra', 'mv:fac:plaster': 'fachada de reboco claro', 'mv:fac:timber': 'vigas de madeira aparentes na fachada', 'mv:fac:ochre': 'fachada cor de ocre', 'mv:fac:rose': 'fachada rosada',
+  'mv:roof:terracotta': 'telhas cor de terracota', 'mv:roof:brown': 'telhado marrom', 'mv:roof:slate': 'telhado de ardósia cinza', 'mv:roof:red': 'telhado vermelho-escuro',
+  'mv:door:brown': 'porta marrom', 'mv:door:green': 'porta verde', 'mv:door:blue': 'porta azul', 'mv:door:red': 'porta vermelha', 'mv:door:black': 'porta escura',
+  'mv:fl:1': 'um andar', 'mv:fl:2': 'dois andares', 'mv:arch': 'porta em arco',
+  'mv:shut:green': 'venezianas verdes', 'mv:shut:blue': 'venezianas azuis', 'mv:shut:red': 'venezianas vermelhas', 'mv:shut:brown': 'venezianas marrons',
+  'mv:flower': 'floreiras nas janelas', 'mv:banner:red': 'um estandarte vermelho', 'mv:banner:blue': 'um estandarte azul', 'mv:banner:green': 'um estandarte verde', 'mv:banner:yellow': 'um estandarte amarelo',
+  'mv:shield:red': 'um escudo vermelho na fachada', 'mv:shield:blue': 'um escudo azul na fachada', 'mv:shield:green': 'um escudo verde na fachada', 'mv:shield:yellow': 'um escudo amarelo na fachada',
+  'mv:barrels': 'barris junto à entrada', 'mv:lantern': 'uma lanterna na porta', 'mv:ivy': 'uma trepadeira subindo a parede', 'mv:chimney': 'uma chaminé soltando fumaça',
+  'mvs:bakery': 'a placa com um pão', 'mvs:smithy': 'a placa com uma bigorna', 'mvs:tavern': 'a placa com uma caneca', 'mvs:textile': 'a placa com um carretel de linha',
   // Operário (Nível 21)
   'rfac:brick': 'fachada de tijolo aparente', 'rfac:cream': 'fachada creme', 'rfac:blue': 'fachada azul-clara', 'rfac:green': 'fachada verde-clara', 'rfac:ochre': 'fachada amarelo-ocre', 'rfac:pink': 'fachada rosa',
   'rdoor:green': 'porta verde', 'rdoor:red': 'porta vermelha', 'rdoor:blue': 'porta azul', 'rdoor:yellow': 'porta amarela', 'rdoor:brown': 'porta marrom', 'rdoor:white': 'porta branca',
@@ -583,6 +628,8 @@ export const REF = {
   shop: { a: 'o prédio', da: 'do prédio', na: 'no prédio', n: 'prédio' },
   oficina: { a: 'a oficina', da: 'da oficina', na: 'na oficina', n: 'oficina' }, borracharia: { a: 'a borracharia', da: 'da borracharia', na: 'na borracharia', n: 'borracharia' },
   mercadinho: { a: 'o mercadinho', da: 'do mercadinho', na: 'no mercadinho', n: 'mercadinho' },
+  padaria: { a: 'a padaria', da: 'da padaria', na: 'na padaria', n: 'padaria' }, ferraria: { a: 'a ferraria', da: 'da ferraria', na: 'na ferraria', n: 'ferraria' },
+  taverna: { a: 'a taverna', da: 'da taverna', na: 'na taverna', n: 'taverna' }, tecelagem: { a: 'a oficina de tecidos', da: 'da oficina de tecidos', na: 'na oficina de tecidos', n: 'oficina de tecidos' },
   store: { a: 'a loja', da: 'da loja', na: 'na loja', n: 'loja' },
   ware: { a: 'o galpão', da: 'do galpão', na: 'no galpão', n: 'galpão' },
   module: { a: 'o módulo', da: 'do módulo', na: 'no módulo', n: 'módulo' },

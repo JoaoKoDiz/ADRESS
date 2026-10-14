@@ -7,8 +7,10 @@ import { createForestFx } from './forestFx.js';
 import { forestLot } from './models/forest.js';
 import { buildModernLot } from './models/modern.js';
 import { buildRowLot } from './models/work.js';
+import { buildMedLot } from './models/medieval.js';
+import { createMedievalLife } from './medievalLife.js';
 import { buildCar, CAR_COLORS } from './barriers.js';
-import { MAP, doorPoint, slotOrigin, DELIVERY_RADIUS, DELIVERY_MAX_SPEED, VAN, VAN_START, LOT_ANCHORS, SOLIDS, ENTRANCE, HEDGE, GRID, PLAZA, HOUSE_SLOTS, configureGrid, roadCenter, setGasStations, GAS_LIST, GAS_CANOPY, GAS_ISLANDS, GAS_PARTS, TERRAIN, CANAL, VENICE, RAIL, FAVELA, FLUX, FARMLAND, SPOTS, SNOWV, MOONV, GARDV, FORESTV, slotPlaceTags, roadTopology, WARE_LIST, WALK as L_WALK, LOT as L_LOT, ROAD as L_ROAD, slotY as L_slotY } from './layout.js';
+import { MAP, doorPoint, slotOrigin, DELIVERY_RADIUS, DELIVERY_MAX_SPEED, VAN, VAN_START, LOT_ANCHORS, SOLIDS, ENTRANCE, HEDGE, GRID, PLAZA, HOUSE_SLOTS, configureGrid, roadCenter, setGasStations, GAS_LIST, GAS_CANOPY, GAS_ISLANDS, GAS_PARTS, TERRAIN, CANAL, VENICE, RAIL, FAVELA, FLUX, FARMLAND, SPOTS, SNOWV, MOONV, GARDV, FORESTV, MEDV, slotPlaceTags, roadTopology, WARE_LIST, WALK as L_WALK, LOT as L_LOT, ROAD as L_ROAD, slotY as L_slotY } from './layout.js';
 import { createLaser } from './laser.js';
 import { createUrsa } from './ursa.js';
 import { createSolar } from './solar.js';
@@ -28,7 +30,7 @@ import { box as kbox, cyl as kcyl, sphere as ksphere, bakeStatic, mat, at } from
 import { buildResident } from './models/resident.js';
 import { YARD_BUILDERS, YARD_BUILDERS_SNOW } from './models/yard.js';
 import { buildShopLot } from './models/shop.js';
-import { SHOPS, HOUSES, FUTS, L1_FIXED, L6_FIXED, WARES, TWINS, VENS, FAVS, MODS, FARMS, MOONS, GRILLBY, SNOW_FIXED, SNOW_EXTRAS, SNOW_DROP, GARDS, CANYON_EXTRAS, FOREST_EXTRAS, MDHS, MDSS, ROWS, WSHS } from './data.js';
+import { SHOPS, HOUSES, FUTS, L1_FIXED, L6_FIXED, WARES, TWINS, VENS, FAVS, MODS, FARMS, MOONS, GRILLBY, SNOW_FIXED, SNOW_EXTRAS, SNOW_DROP, GARDS, CANYON_EXTRAS, FOREST_EXTRAS, MDHS, MDSS, ROWS, WSHS, MVHS, MVSS, MVS_KEY } from './data.js';
 import { buildFavelaLot } from './models/favela.js';
 import { buildModLot, MOD_H } from './models/mod.js';
 import { createTraffic } from './traffic.js';
@@ -124,10 +126,11 @@ const POOLS = { grid4: [...Array(16).keys(), ...Object.values(L1_FIXED)],   // g
   night10: [...Array(32).keys()].concat([...Array(28).keys()].map(k => 38 + k), SHOPS, WARES, MODS),
   forest8: [...Array(32).keys(), ...SHOPS],
   modern8: MDHS.concat(MDSS),
-  work8: ROWS.concat(WSHS),   // Nível 21 (Operário): casas geminadas e oficinas/comércios   // Nível 18 (Modernista): casas geométricas e poucas lojas   // Nível 22 (Bosque): casas e alguns comércios
+  work8: ROWS.concat(WSHS),
+  med10: MVHS.concat(MVSS),   // Nível 24 (Medieval): casas do burgo + as 4 lojas da praça (fixas)   // Nível 21 (Operário): casas geminadas e oficinas/comércios   // Nível 18 (Modernista): casas geométricas e poucas lojas   // Nível 22 (Bosque): casas e alguns comércios
   canyon10: [...Array(32).keys()].concat([...Array(28).keys()].map(k => 38 + k), SHOPS, WARES, MODS) };   // Nível 23 (Cachoeira): as duas margens   // Nível 19 (Penumbra): o mapa do Fluxo, à noite   // Nível 14 (Fluxo): + prédios contemporâneos   // Nível 13 (Morro): casas de laje   // Nível 12 (Veneza): casas venezianas   // Bairro 11 (Trilhos): ferrovia, estações e galpões   // Bairro 10 (Travessia): + galpões e casas gêmeas   // city8 (Bairro 8): o mesmo, em 8×8, com prédios mais altos (e os futuristas, se USE_FUTS)
 // lote de casa ou de prédio comercial
-const buildAnyLot = (h, opts) => h.kind === 'row' || h.kind === 'wsh' ? buildRowLot(h) : h.kind === 'mdh' || h.kind === 'mds' ? buildModernLot(h) : FORESTV && !FORESTV.modern && (h.kind === 'house' || (h.kind === 'shop' && !h.grill)) ? forestLot(h.kind === 'house' ? buildLot(h, opts) : buildShopLot(h), h.kind === 'house' ? FOREST_EXTRAS[h.index] || [] : []) : CANAL && CANAL.canyon && h.kind === 'house' ? canyonLot(h, opts) : h.grill ? buildGrillbyLot(h) : h.kind === 'gard' ? buildGardLot(h) : h.kind === 'moon' ? buildMoonLot(h) : SNOWV && h.kind === 'house' ? buildSnowLot(h, opts) : h.kind === 'farm' ? buildFarmLot(h) : h.kind === 'mod' ? buildModLot(h) : h.kind === 'fav' ? buildFavelaLot(h) : h.kind === 'ven' ? buildVeniceLot(h) : h.kind === 'ware' ? buildWareLot(h) : h.kind === 'shop' ? buildShopLot(h) : h.kind === 'apt' ? buildAptLot(h) : h.kind === 'fut' ? buildFutLot(h) : buildLot(h, opts);
+const buildAnyLot = (h, opts) => h.kind === 'mvh' || h.kind === 'mvs' ? buildMedLot(h) : h.kind === 'row' || h.kind === 'wsh' ? buildRowLot(h) : h.kind === 'mdh' || h.kind === 'mds' ? buildModernLot(h) : FORESTV && !FORESTV.modern && (h.kind === 'house' || (h.kind === 'shop' && !h.grill)) ? forestLot(h.kind === 'house' ? buildLot(h, opts) : buildShopLot(h), h.kind === 'house' ? FOREST_EXTRAS[h.index] || [] : []) : CANAL && CANAL.canyon && h.kind === 'house' ? canyonLot(h, opts) : h.grill ? buildGrillbyLot(h) : h.kind === 'gard' ? buildGardLot(h) : h.kind === 'moon' ? buildMoonLot(h) : SNOWV && h.kind === 'house' ? buildSnowLot(h, opts) : h.kind === 'farm' ? buildFarmLot(h) : h.kind === 'mod' ? buildModLot(h) : h.kind === 'fav' ? buildFavelaLot(h) : h.kind === 'ven' ? buildVeniceLot(h) : h.kind === 'ware' ? buildWareLot(h) : h.kind === 'shop' ? buildShopLot(h) : h.kind === 'apt' ? buildAptLot(h) : h.kind === 'fut' ? buildFutLot(h) : buildLot(h, opts);
 /** Nível 23 (Cachoeira): a casa de sempre + 2 detalhes (CANYON_EXTRAS): sacada de madeira (as duas laterais; só a virada para o
  *  desfiladeiro aparece — canyonBalconies), jardinzinho, vasos na porta, cobertura de madeira na porta. */
 function canyonLot(h, opts) {
@@ -161,6 +164,14 @@ function canyonLot(h, opts) {
   }
   if (ex.children.length) { lot.add(ex); bakeStatic(ex); }
   return lot;
+}
+/** Medieval: céu coberto de nuvens cinzentas, luz difusa (sombras fracas), névoa clara; o sol não aparece. */
+function medSky(w) {
+  const sc = w.scene, SKYC = '#b5bcc3';
+  sc.background = new THREE.Color(SKYC); if (sc.fog) sc.fog.color.set(SKYC);
+  if (w.sunLight) { w.sunLight.intensity = 0.95; w.sunLight.color.set('#eef1f4'); }
+  const hemi = sc.children.find(o => o.isHemisphereLight); if (hemi) { hemi.intensity = 2.35; hemi.color.set('#e4e9ee'); hemi.groundColor.set('#857d66'); }
+  const sun = sc.getObjectByName('sun'); if (sun) sun.visible = false;
 }
 /** Cachoeira: em cada casa com sacada, mostra só a do lado do desfiladeiro (margem oeste → sacada a leste, e vice-versa). */
 function canyonBalconies() {
@@ -476,7 +487,9 @@ const chickens = createChickens();        // Nível 15 (Colheita): galinhas atra
 // limpa-neve estão fora do trecho. Os atalhos nunca são o único caminho até uma casa.
 const plow = createTractors(audio);
 const forestCars = createTractors(audio);   // Nível 22 (Bosque): poucos carros circulando devagar (mesma lógica dos tratores)
-const forestFx = createForestFx();          // Nível 22 (Bosque): luz de outono, folhas no chão e caindo
+const forestFx = createForestFx();
+const medLife = createMedievalLife(audio);   // Nível 24 (Medieval): moradores com rotinas, carroças, fumaça, nuvens, bandeiras, água e sons
+let chatNpc = null;                          // Medieval: morador com quem o jogador está conversando (estado 'chat')          // Nível 22 (Bosque): luz de outono, folhas no chão e caindo
 let workN = 0;
 const buildWorkVehicle = () => {                // Operário: carros e pequenas vans de serviço (frente em +X, como buildCar)
   if (workN++ % 2 === 0) return buildForestCar();
@@ -639,8 +652,10 @@ function setupGrid4() {
       for (const s of free) layout[s] = FORESTV.spots[s].wide ? sh2.pop() : rw.pop();
     };
   }
-  game.setNeighborhood(pool, HOUSE_SLOTS, Math.max(GRID * GRID, SPOTS ? SPOTS.spots.length : 0), l1 ? L1_FIXED : neighborhood === 'snow8' ? SNOW_FIXED : null);
+  const medFixed = MEDV ? Object.fromEntries(Object.entries(MEDV.shops).map(([k, sp]) => [MEDV.spots.indexOf(sp), MVS_KEY[k]])) : null;   // Medieval: as 4 lojas da praça ficam sempre no lugar
+  game.setNeighborhood(pool, HOUSE_SLOTS, Math.max(GRID * GRID, SPOTS ? SPOTS.spots.length : 0), l1 ? L1_FIXED : neighborhood === 'snow8' ? SNOW_FIXED : medFixed);
   world.setLayout(game.layout);
+  if (neighborhood === 'med10') medLife.layout(world, game, MEDV);
 }
 function useNeighborhood(kind) {
   if (kind === neighborhood) return;
@@ -663,7 +678,8 @@ function useNeighborhood(kind) {
   if (!w) {                                     // primeira vez: constrói (escondido pelo fade)
     w = worlds[kind] = createWorld({ renderer, buildLot: buildAnyLot, buildResident: kind === 'snow8' ? h => buildResident(h, { winter: true }) : buildResident, yardBuilders: kind === 'snow8' ? YARD_BUILDERS_SNOW() : YARD_BUILDERS, pool: POOLS[kind], dry: kind === 'city6' || kind === 'city7' || kind === 'city8' || kind === 'forest8', venice: kind === 'venice8', snow: kind === 'snow8', moon: kind === 'moon8', farm: kind === 'farm10' });
     if (kind === 'night10') night.setup(w);     // Penumbra: noite, asfalto molhado
-    if (kind === 'forest8') forestFx.setup(w, FORESTV, MAP);   // Bosque: tarde de outono, folhas
+    if (kind === 'forest8') forestFx.setup(w, FORESTV, MAP);
+    if (kind === 'med10') { medSky(w); medLife.setup(w, MEDV); }   // Medieval: céu nublado, luz difusa; vida do burgo   // Bosque: tarde de outono, folhas
     if (kind === 'farm10') farmOut.build(w.scene, MAP, VAN_START.x);   // Colheita: hectares de plantação em volta, tratores e colheitadeiras
   } else SOLIDS.push(...w.extraSolids);        // troncos das árvores de fora deste bairro
   world.hideResident();
@@ -675,6 +691,8 @@ function useNeighborhood(kind) {
   if (kind === 'rail8') { world.scene.add(train.object); train.reset(); }
   if (kind === 'flux10' || kind === 'night10' || kind === 'canyon10') world.scene.add(traffic.object); else { traffic.detach(); traffic.silence(); }
   if (kind === 'canyon10') canyonFx.attach(world.scene); else canyonFx.detach();
+  if (kind === 'med10') world.scene.add(medLife.object); else { medLife.detach(); }
+  rig.setProfile(kind === 'med10' ? { dist: 0.72, elev: -0.13 } : {});   // Medieval: câmera mais perto e mais baixa (fachadas acima, portas perto)
   night.attach(van, walker, kind === 'night10');
   if (kind === 'garden8') {                      // Jardins: a cancela da portaria (abre sozinha para a van)
     if (!gardGate.arm || gardGate.world !== world) { gardGate.arm = buildGateArm(GARDV); gardGate.world = world; world.scene.add(gardGate.arm); }
@@ -964,7 +982,7 @@ function goBack() {
 function startFree(mode = 'free') {
   // Bairro 2: 6×6 com praça; Bairro 4: 5×5 com bloqueios; o resto: 4×4
   const lv = mode === 'career' ? careerLevel : freeLevel;
-  useNeighborhood(lv === 1 ? 'plaza6' : lv === 3 ? 'grid5' : lv === 4 ? 'grid6s' : lv === 5 ? 'city6' : lv === 6 ? 'city7' : lv === 7 ? 'city8' : lv === 8 ? 'hill8' : lv === 9 ? 'venice8' : lv === 10 ? 'canal8' : lv === 11 ? 'rail8' : lv === 12 ? 'favela8' : lv === 13 ? 'flux10' : lv === 14 ? 'farm10' : lv === 15 ? 'snow8' : lv === 16 ? 'garden8' : lv === 18 ? 'night10' : lv === 19 ? 'moon8' : lv === 17 ? 'modern8' : lv === 20 ? 'work8' : lv === 21 ? 'forest8' : lv === 22 ? 'canyon10' : 'grid4');   // 17–19 reservados; 20 = Lua   // 10 = Veneza, 11 = Travessia, 12 = Trilhos
+  useNeighborhood(lv === 1 ? 'plaza6' : lv === 3 ? 'grid5' : lv === 4 ? 'grid6s' : lv === 5 ? 'city6' : lv === 6 ? 'city7' : lv === 7 ? 'city8' : lv === 8 ? 'hill8' : lv === 9 ? 'venice8' : lv === 10 ? 'canal8' : lv === 11 ? 'rail8' : lv === 12 ? 'favela8' : lv === 13 ? 'flux10' : lv === 14 ? 'farm10' : lv === 15 ? 'snow8' : lv === 16 ? 'garden8' : lv === 18 ? 'night10' : lv === 19 ? 'moon8' : lv === 17 ? 'modern8' : lv === 20 ? 'work8' : lv === 21 ? 'forest8' : lv === 22 ? 'canyon10' : lv === 23 ? 'med10' : 'grid4');   // 17–19 reservados; 20 = Lua   // 10 = Veneza, 11 = Travessia, 12 = Trilhos
   gameMode = mode;
   if (!COMPOSED.includes(neighborhood)) setupGrid4();   // Bairro 1 tem a casa fixa; o 3 (mesma grade) não
   resetGates();
@@ -1058,6 +1076,23 @@ function atPump() {
 }
 
 let footDelivery = false;              // Veneza: entrega feita a pé (depois do diálogo volta a andar)
+/** Medieval: morador conversável perto do personagem a pé; só vale se estiver mais perto que a porta de entrega. */
+function medTalkTarget() {
+  if (!MEDV || neighborhood !== 'med10' || !walker.visible) return null;
+  const npc = medLife.nearTalk(walker.x, walker.z);
+  if (!npc) return null;
+  if (nearHouse >= 0 && npc.x != null) {
+    const p = doorPoint(game.slotOf[nearHouse]);
+    if (Math.hypot(p.x - walker.x, p.z - walker.z) < Math.hypot(npc.x - walker.x, npc.z - walker.z)) return null;
+  }
+  return npc;
+}
+function startChat(npc) {
+  chatNpc = npc; nearHouse = -1;
+  const lines = medLife.talk(npc, walker.x, walker.z);
+  setState('chat');
+  talkBox.show(lines, () => { if (chatNpc) medLife.endTalk(chatNpc); chatNpc = null; actionLock = 0.4; setState('walk'); });
+}
 function findNearHouseFoot() {
   let best = 3.6, found = -1;
   for (const h of game.pool) {
@@ -1069,7 +1104,7 @@ function findNearHouseFoot() {
 }
 function findNearHouse() {
   if (Math.abs(van.speed) > DELIVERY_MAX_SPEED) return -1;
-  let best = FORESTV && FORESTV.work ? 3.3 : DELIVERY_RADIUS, found = -1;   // Operário: só a unidade bem em frente (as portas geminadas ficam a 6,4)
+  let best = FORESTV && FORESTV.work ? 3.3 : MEDV ? 4.8 : DELIVERY_RADIUS, found = -1;   // Operário: só a unidade bem em frente (as portas geminadas ficam a 6,4)
   for (const h of game.pool) {
     if (SPOTS && SPOTS.spots[game.slotOf[h]] && SPOTS.spots[game.slotOf[h]].foot) continue;   // Morro (becos/escadarias) e Jardins (entrada pelo parque): só a pé
     const p = doorPoint(game.slotOf[h]);
@@ -1731,6 +1766,8 @@ function startNewRound() {
   monster.reset();
   boom.reset(); clearLaserVoids(); restartMsg = null;
   world.setLayout(game.layout);
+  if (neighborhood === 'med10') medLife.layout(world, game, MEDV);   // Medieval: rotinas recomeçam com as casas desta partida
+  if (chatNpc) { medLife.endTalk(chatNpc); chatNpc = null; }
   resetGates();                                  // Colheita: porteiras fechadas de novo
   world.hideResident();
   resetVan();
@@ -1895,6 +1932,7 @@ function update(dt, t) {
       if (actionLock > 0 || !input.action()) break;
       if (nearGate >= 0) { openGate(nearGate); nearGate = -1; actionLock = 0.4; break; }
       if (nearVenK()) { startVeniceTalk(); break; }   // Veneza: falar com o K tem prioridade
+      { const npc = medTalkTarget(); if (npc) { startChat(npc); break; } }   // Medieval: conversar com um morador (quando ele está mais perto que a porta)
       if (nearGrillDoor()) { startGrill('in'); break; }   // Nevasca: entrar no Grillby's
       if (nearHouse >= 0) { pending = nearHouse; nearHouse = -1; footDelivery = true; audio.bell(); setState('ring'); }
       else if (nearLounger()) startRoofTalk();             // no terraço a van fica perto: falar com ele tem prioridade
@@ -1930,6 +1968,11 @@ function update(dt, t) {
       if (talkPhase === 'aside' && (!sp || sp.userData.asideDone())) { talkPhase = 'talk'; talkBox.show(talkLines, endTalk); }
       else if (talkPhase === 'talk') { talkBox.update(dt); if (input.action()) talkBox.press(); }
       else if (talkPhase === 'note') { if (input.action()) talkBox.pressNote(); }
+      break;
+    }
+    case 'chat': {                                  // Medieval: conversa com um morador (não é entrega nem dica)
+      walker.update(dt, { x: 0, z: 0 }, 'car', walkSolids(), van);
+      talkBox.update(dt); if (input.action()) talkBox.press();
       break;
     }
     case 'levelSelect': {
@@ -1975,6 +2018,13 @@ function update(dt, t) {
     if (gardGate.k > 0.5 && i >= 0) SOLIDS.splice(i, 1); else if (gardGate.k <= 0.5 && i < 0) SOLIDS.push(gardGate.solid);
   }
   if (neighborhood === 'canyon10') { const playing = IN_GAME.includes(state) || state === 'walk'; canyonFx.update(dt, playing ? (walker.visible ? walker : van) : null); }
+  if (neighborhood === 'med10') {                  // Medieval: a vida do burgo continua mesmo com o jogador parado
+    const me = walker.visible ? walker : van, playing = IN_GAME.includes(state) || state === 'chat';
+    medLife.update(dt, { t, playing, listener: { x: me.x, z: me.z }, van: { x: van.x, z: van.z, heading: van.heading, speed: van.speed, visible: van.object.visible && !heli.flying },
+      walker: { x: walker.x, z: walker.z, visible: walker.visible }, camera: rig.camera,
+      isDestroyed: s => { const h = game.layout[s]; return h >= 0 && boom.isDestroyed(h); },
+      busySpot: (state === 'ring' || state === 'dialog') && pending >= 0 ? game.slotOf[pending] : nearHouse >= 0 ? game.slotOf[nearHouse] : -1 });
+  }
   if (neighborhood === 'flux10' || neighborhood === 'night10' || neighborhood === 'canyon10') {                // Fluxo (e Cachoeira): trânsito; param na frente da van e do motorista a pé
     const c = Math.cos(van.heading), s2 = Math.sin(van.heading), obs = [];
     if (!heli.flying) obs.push({ circles: [-1.5, 0, 1.5].map(k => [van.x + c * k, van.z + s2 * k, 1.25]) });
@@ -2032,7 +2082,7 @@ function update(dt, t) {
       barriers.jamRects, foot ? walker.x : van.x, foot ? walker.z : van.z); }
   // entregando (campainha/diálogo) ou com o balão "E — Entregar" à vista: a câmera se volta para a casa
   const focusH = (state === 'ring' || state === 'dialog') ? pending : state === 'drive' ? nearHouse : -1;
-  const onFoot = state === 'walk' || state === 'grill' || (footDelivery && (state === 'ring' || state === 'dialog'));   // (Grillby's: na transição a câmera fica no personagem)              // a câmera segue o personagem a pé
+  const onFoot = state === 'walk' || state === 'chat' || state === 'grill' || (footDelivery && (state === 'ring' || state === 'dialog'));   // (Grillby's: na transição a câmera fica no personagem)              // a câmera segue o personagem a pé
   moonUpdate(dt);                                 // Órbita: a lua gira por baixo de quem o jogador controla
   if (!insideOn) rig.update(dt, onFoot ? { x: walker.x, z: walker.z, y: walker.floor, heading: walker.heading, speed: walker.speed, focus: null } : { x: van.x, z: van.z, y: heli.altitude, heading: van.heading, speed: van.speed, focus: null });   // sem câmera automática: quem controla é o jogador
   if (state === 'talk') { rig.camera.position.copy(talkCam.pos); rig.camera.lookAt(talkCam.look); }   // enquadramento fixo da conversa
@@ -2122,7 +2172,7 @@ function updateHUD() {
 
   const walkNear = state === 'walk' && walker.nearVan(van) && !nearLounger() && !nearChurchK() && !nearVenK() && !missions.isOpen;
   // a pé no Bairro 1: pegar a caixa / entregar ao K / conversar (balão em cima do personagem)
-  const walkAct = nearGrillDoor() && !missions.isOpen ? "Entrar no Grillby's" : state === 'walk' && nearGate >= 0 && !missions.isOpen ? 'Abrir porteira' : state === 'walk' && nearVenK() && !missions.isOpen ? 'Conversar' : state === 'walk' && nearHouse >= 0 && !missions.isOpen ? 'Entregar' : state === 'walk' && !walkNear && !missions.isOpen ? (nearParcel() ? 'Pegar a caixa' : nearK() ? (carrying ? 'Entregar a caixa' : 'Conversar') : nearLounger() || nearChurchK() ? 'Conversar' : '') : '';
+  const walkAct = state === 'walk' && medTalkTarget() && !missions.isOpen ? 'Conversar' : nearGrillDoor() && !missions.isOpen ? "Entrar no Grillby's" : state === 'walk' && nearGate >= 0 && !missions.isOpen ? 'Abrir porteira' : state === 'walk' && nearVenK() && !missions.isOpen ? 'Conversar' : state === 'walk' && nearHouse >= 0 && !missions.isOpen ? 'Entregar' : state === 'walk' && !walkNear && !missions.isOpen ? (nearParcel() ? 'Pegar a caixa' : nearK() ? (carrying ? 'Entregar a caixa' : 'Conversar') : nearLounger() || nearChurchK() ? 'Conversar' : '') : '';
   if (walkAct) {
     rig.camera.updateMatrixWorld();
     promptPos.set(walker.x, walker.floor + 2.7, walker.z).project(rig.camera);
@@ -2256,7 +2306,7 @@ window.ADRESS = {
   get careerLevel() { return careerLevel; },
   setCareerLevel(l) { careerLevel = l; },
   setFreeLevel(l) { freeLevel = l; },
-  walker, jamSound, train, walkSolids, trolley, get tseq() { return tseq; }, get FAVELA() { return FAVELA; }, traffic, tractors, chickens, plow, banks, get SNOWV() { return SNOWV; }, night, get grillIn() { return grillIn; }, get insideOn() { return insideOn; }, get FARMLAND() { return FARMLAND; }, gateOpen, openGate,
+  walker, jamSound, train, walkSolids, trolley, get tseq() { return tseq; }, get FAVELA() { return FAVELA; }, traffic, tractors, chickens, plow, banks, get SNOWV() { return SNOWV; }, get MEDV() { return MEDV; }, medLife, get chatNpc() { return chatNpc; }, night, get grillIn() { return grillIn; }, get insideOn() { return insideOn; }, get FARMLAND() { return FARMLAND; }, gateOpen, openGate,
   get levelSelect() { return levelSelect; },
   shop,
   startGame: m => startFree(m), newRound: () => startNewRound(),

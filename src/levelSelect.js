@@ -34,7 +34,7 @@ body.lsel-on .title-play, body.lsel-on .title-driver { visibility: hidden; }   /
 .lsel-hint b { display: inline-block; min-width: 1.3em; text-align: center; color: #fff; background: #ff7a1a; border-radius: 5px; padding: .05em .3em; margin: 0 .12em; }
 `;
 // nomes dos bairros (só nesta tela do Modo Livre)
-const NAMES = ['Bairro Raízes', 'Bairro Horizontes', 'Bairro Constância', 'Bairro Veredas', 'Bairro Ofício', 'Bairro Mirante', 'Bairro Altitude', 'Bairro Ápice', 'Bairro Encostas', 'Veneza', 'Bairro Travessia', 'Bairro Trilhos', 'Bairro Morro', 'Bairro Fluxo', 'Bairro Colheita', 'Bairro Nevasca', 'Bairro Jardins', 'Bairro Modernista', 'Bairro Penumbra', 'Lua', 'Bairro Operário', 'Bairro Bosque', 'Bairro Cachoeira'];   // 18: reservado
+const NAMES = ['Bairro Raízes', 'Bairro Horizontes', 'Bairro Constância', 'Bairro Veredas', 'Bairro Ofício', 'Bairro Mirante', 'Bairro Altitude', 'Bairro Ápice', 'Bairro Encostas', 'Veneza', 'Bairro Travessia', 'Bairro Trilhos', 'Bairro Morro', 'Bairro Fluxo', 'Bairro Colheita', 'Bairro Nevasca', 'Bairro Jardins', 'Bairro Modernista', 'Bairro Penumbra', 'Lua', 'Bairro Operário', 'Bairro Bosque', 'Bairro Cachoeira', 'Bairro Medieval'];   // 18: reservado
 // título do cartão (o Nível 10, Veneza, é especial: "NÍVEL 10" em vez de "BAIRRO 10")
 const TITLE = i => (i === 9 ? 'NÍVEL ' : 'BAIRRO ') + (i + 1);
 const COLS = 4, PER = 8;                    // 8 por página (4×2); as páginas seguem sozinhas conforme entram bairros
