@@ -6,12 +6,12 @@ import * as THREE from 'three';
 import { sphere, mesh, mat, at } from './kit.js';
 
 /** Cores do personagem (Shop): materiais únicos e compartilhados (jogo, tela inicial e Shop). */
-export const CHAR_DEFAULT = { skin: '#e8b48a', shirt: '#2a9df4', pants: '#2f3a55', shoes: '#1b1b1f' };
+export const CHAR_DEFAULT = { skin: '#e8b48a', shirt: '#2a9df4', pants: '#2f3a55', shoes: '#1b1b1f', cap: '#e3262e' };
 export const CHAR_MATS = Object.fromEntries(Object.entries(CHAR_DEFAULT).map(([k, c]) => [k, new THREE.MeshStandardMaterial({ color: c, roughness: 0.9, flatShading: true })]));
 export const setCharColors = c => { for (const k of Object.keys(CHAR_MATS)) if (c && c[k]) CHAR_MATS[k].color.set(c[k]); };
 
 const smooth = { roughness: 0.9 };                        // fosco e facetado (como a referência)
-const CAP = mat('#e3262e', smooth), LIP = mat('#5a2e22', smooth);
+const LIP = mat('#5a2e22', smooth);
 
 /** Esfera esticada (material pronto). */
 export const ball = (r, m, sx = 1, sy = 1, sz = 1) => { const o = sphere(r, m, 22, 16); o.scale.set(sx, sy, sz); return o; };
@@ -79,17 +79,101 @@ export function buildHead(r) {
     const t = mesh(new THREE.ConeGeometry(r * 0.2, r * 0.55, 5), HAIR2);
     t.position.set(x * r, y * r, s * r * 0.92); t.rotation.set(s * (Math.PI - 0.4), 0, 0); h.add(t);
   }
-  // boné justo: calota com espessura + aba ligada na borda da frente + botão
-  const R0 = r * 0.99, R1 = r * 1.07, TC = 1.08, pts = [[R0 * Math.sin(TC), R0 * Math.cos(TC)]];
-  for (let i = 0; i <= 8; i++) { const t = TC * (1 - i / 8); pts.push([R1 * Math.sin(t), R1 * Math.cos(t)]); }
-  h.add(lathe(pts, CAP, 12));
-  h.add(at(lowBall(r * 0.08, CAP, 1, 0.6, 1), 0, R1 * 0.99, 0));
-  const rc = R0 * Math.sin(TC), E = r * 0.62, A = 1.0, sh = new THREE.Shape();
-  for (let i = 0; i <= 10; i++) { const t = -A + 2 * A * i / 10; (i ? sh.lineTo.bind(sh) : sh.moveTo.bind(sh))(rc * Math.cos(t), rc * Math.sin(t)); }
-  for (let i = 10; i >= 0; i--) { const t = -A + 2 * A * i / 10, e = rc + E * Math.cos(t / A * Math.PI / 2) ** 1.2; sh.lineTo(e * Math.cos(t), e * Math.sin(t)); }
-  const brim = mesh(new THREE.ExtrudeGeometry(sh, { depth: r * 0.06, bevelEnabled: false, curveSegments: 4 }), CAP);
-  const bg = at(new THREE.Group(), 0, R0 * Math.cos(TC) + r * 0.02, 0, 0, 0, 0.12); brim.rotation.x = Math.PI / 2; bg.add(brim); h.add(bg);
+  // boné do jogador (modelo escolhido no Shop; trocar o modelo refaz o boné de todas as cabeças)
+  const slot = new THREE.Group(); slot.name = 'cap'; slot.userData.r = r; capSlots.add(slot); fillCap(slot); h.add(slot);
   return h;
+}
+
+// ---- bonés (Shop → Bonés): 6 formatos, todos com o material único CHAR_MATS.cap (a cor escolhida recolore o boné inteiro);
+// as partes se distinguem só por geometria e sombreamento. Cabeça de raio r, rosto para +X.
+export const CAP_MODELS = [
+  { name: 'Clássico', desc: 'Copa arredondada e aba curva.' },
+  { name: 'Aba reta', desc: 'Copa um pouco mais alta e aba plana.' },
+  { name: 'Trucker', desc: 'Frente estruturada e traseira de tela.' },
+  { name: 'Esportivo', desc: 'Baixo, ajustado à cabeça, com aba curva.' },
+  { name: 'Cinco painéis', desc: 'Copa mais baixa e levemente quadrada, aba curta.' },
+  { name: 'Virado para trás', desc: 'O clássico com a aba para trás.' },
+];
+let capModel = 0;
+const capSlots = new Set();
+function fillCap(slot) {
+  while (slot.children.length) { const o = slot.children[0]; slot.remove(o); o.traverse(x => { if (x.geometry) x.geometry.dispose(); }); }
+  slot.add(buildCap(slot.userData.r, capModel));
+}
+/** Troca o modelo do boné em todas as cabeças do jogador (jogo, tela inicial, van, Shop). */
+export function setCapModel(i) { capModel = Math.max(0, Math.min(CAP_MODELS.length - 1, i | 0)); capSlots.forEach(fillCap); }
+export const capModelNow = () => capModel;
+
+/** Calota: borda em `TC` (rad a partir do topo) no raio R0, superfície no raio R1; sy estica a copa acima da borda;
+ *  sq > 0 deixa a copa levemente quadrada. phi0/phiL: só um pedaço (ex.: metade da frente). */
+function dome(r, { R1 = 1.07, TC = 1.08, sy = 1, sq = 0, seg = 16, phi0 = 0, phiL = Math.PI * 2, R0 = 0.99 } = {}) {
+  const r0 = r * R0, r1 = r * R1, pts = [new THREE.Vector2(r0 * Math.sin(TC), r0 * Math.cos(TC))];
+  for (let i = 0; i <= 10; i++) { const t = TC * (1 - i / 10); pts.push(new THREE.Vector2(Math.max(1e-4, r1 * Math.sin(t)), r1 * Math.cos(t))); }
+  const geo = new THREE.LatheGeometry(pts, seg, phi0, phiL), p = geo.attributes.position, y0 = r0 * Math.cos(TC);
+  for (let k = 0; k < p.count; k++) {
+    let x = p.getX(k), y = p.getY(k), z = p.getZ(k);
+    if (sq) { const a = Math.atan2(z, x), f = 1 + sq * (1 / Math.max(Math.abs(Math.cos(a)), Math.abs(Math.sin(a))) - 1); x *= f; z *= f; }
+    p.setXYZ(k, x, y0 + (y - y0) * sy, z);
+  }
+  geo.computeVertexNormals();
+  return mesh(geo, CHAR_MATS.cap);
+}
+/** Aba: presa na borda (raio rc, altura y), comprimento E, meia-abertura A; curve dobra as pontas para baixo; tilt inclina (+ = sobe). */
+function brimAt(r, { rc, y, E, A = 1.0, curve = 0, tilt = 0.12, thick = 0.06, back = false }) {
+  const sh = new THREE.Shape();
+  for (let i = 0; i <= 12; i++) { const t = -A + 2 * A * i / 12; (i ? sh.lineTo.bind(sh) : sh.moveTo.bind(sh))(rc * Math.cos(t), rc * Math.sin(t)); }
+  for (let i = 12; i >= 0; i--) { const t = -A + 2 * A * i / 12, e = rc + E * Math.cos(t / A * Math.PI / 2) ** 1.2; sh.lineTo(e * Math.cos(t), e * Math.sin(t)); }
+  const geo = new THREE.ExtrudeGeometry(sh, { depth: r * thick, bevelEnabled: false, curveSegments: 4 }), p = geo.attributes.position, W = rc + E;
+  for (let k = 0; k < p.count; k++) p.setZ(k, p.getZ(k) + curve * r * (p.getY(k) / W) ** 2);   // (depois de girar, z vira "para baixo")
+  geo.computeVertexNormals();
+  const b = mesh(geo, CHAR_MATS.cap); b.rotation.x = Math.PI / 2;
+  const g = at(new THREE.Group(), 0, y, 0, 0, 0, tilt); g.add(b);
+  if (!back) return g;
+  const o = new THREE.Group(); o.rotation.y = Math.PI; o.add(g); return o;
+}
+/** Costura/nervura fina sobre a copa: arco do topo até a borda na direção phi. */
+function seam(r, R1, TC, phi, sy, y0) {
+  const t = mesh(new THREE.TorusGeometry(r * R1 + r * 0.012, r * 0.022, 4, 10, TC), CHAR_MATS.cap);
+  t.rotation.z = Math.PI / 2 - TC;
+  const g = new THREE.Group(); g.add(t); g.rotation.y = phi;
+  const s = new THREE.Group(); s.add(g); s.position.y = y0 * (1 - sy); s.scale.y = sy; return s;
+}
+function buildCap(r, model) {
+  const g = new THREE.Group(), TC = 1.08, rc = r * 0.99 * Math.sin(TC), yb = r * 0.99 * Math.cos(TC) + r * 0.02, y0 = r * 0.99 * Math.cos(TC);
+  const button = (R1, sy) => g.add(at(lowBall(r * 0.08, CHAR_MATS.cap, 1, 0.6, 1), 0, y0 + (r * R1 - y0) * sy - r * 0.005, 0));
+  if (model === 1) {                                    // Aba reta: copa mais alta, aba larga e plana
+    g.add(dome(r, { sy: 1.16 })); button(1.07, 1.16);
+    g.add(brimAt(r, { rc, y: yb, E: r * 0.7, A: 1.1, curve: 0, tilt: 0.02, thick: 0.07 }));
+  } else if (model === 2) {                             // Trucker: frente alta e estruturada (painel saliente); traseira em tela
+    const sy = 1.12;
+    g.add(dome(r, { sy, phi0: 0, phiL: Math.PI, R1: 1.085 }));                   // metade da frente (+X), mais encorpada
+    g.add(dome(r, { sy, phi0: Math.PI, phiL: Math.PI, R1: 1.05 }));              // metade de trás, rebaixada
+    for (const t of [0.42, 0.66, 0.9]) {                                          // tela: anéis e nervuras em relevo atrás
+      const R = r * 1.05 + r * 0.012, ring = mesh(new THREE.TorusGeometry(R * Math.sin(t), r * 0.018, 4, 12, Math.PI), CHAR_MATS.cap);
+      ring.rotation.x = Math.PI / 2; const rg = new THREE.Group(); rg.rotation.y = -Math.PI / 2; rg.add(ring);
+      rg.position.y = y0 + (R * Math.cos(t) - y0) * sy; g.add(rg);
+    }
+    for (let k = 1; k < 8; k++) g.add(seam(r, 1.05, TC, Math.PI / 2 + k * Math.PI / 8, sy, y0));
+    button(1.085, sy);
+    g.add(brimAt(r, { rc, y: yb, E: r * 0.64, curve: 0.18, tilt: 0.1 }));
+  } else if (model === 3) {                             // Esportivo: baixo e justo, aba bem curva e um pouco mais baixa
+    g.add(dome(r, { R1: 1.035, sy: 0.97, TC: 1.12 })); button(1.035, 0.97);
+    g.add(brimAt(r, { rc: r * 0.99 * Math.sin(1.12), y: r * 0.99 * Math.cos(1.12) + r * 0.02, E: r * 0.56, A: 0.95, curve: 0.38, tilt: 0.05, thick: 0.05 }));
+  } else if (model === 4) {                             // Cinco painéis: copa mais baixa e levemente quadrada, costuras, aba curta
+    const sy = 0.93;
+    g.add(dome(r, { sy, sq: 0.22, seg: 20, R1: 1.08 }));
+    for (let k = 0; k < 5; k++) g.add(seam(r, 1.08 * (1 + 0.22 * 0.15), TC, Math.PI / 2 + Math.PI / 5 + k * 2 * Math.PI / 5, sy, y0));
+    button(1.08, sy);
+    g.add(brimAt(r, { rc, y: yb, E: r * 0.44, A: 0.95, curve: 0.12, tilt: 0.08 }));
+  } else if (model === 5) {                             // Virado para trás: o clássico, aba atrás e mais alta (acima do cabelo da nuca)
+    g.add(dome(r)); button(1.07, 1);
+    const tb = 0.95;
+    g.add(brimAt(r, { rc: r * 1.0 * Math.sin(tb), y: r * 1.0 * Math.cos(tb) + r * 0.03, E: r * 0.58, curve: 0.25, tilt: 0.3, back: true }));
+  } else {                                              // Clássico: copa arredondada, aba curva
+    g.add(dome(r)); button(1.07, 1);
+    g.add(brimAt(r, { rc, y: yb, E: r * 0.62, curve: 0.25, tilt: 0.12 }));
+  }
+  return g;
 }
 const box3 = (w, hh, d, m) => mesh(new THREE.BoxGeometry(w, hh, d), m);
 

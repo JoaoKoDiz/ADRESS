@@ -4,14 +4,16 @@
 import { WHEEL_MODELS } from './wheels.js';
 import { RACK_MODELS } from './racks.js';
 import { DECALS } from './decals.js';
+import { CAP_MODELS, setCapModel } from './driver.js';
 
 const KEY = 'adress.shop.equip.v1';
-const LIMIT = { wheel: WHEEL_MODELS.length, rack: RACK_MODELS.length, decal: DECALS.length };
-export const look = { wheel: 0, rack: 0, decal: 0 };
+const LIMIT = { wheel: WHEEL_MODELS.length, rack: RACK_MODELS.length, decal: DECALS.length, cap: CAP_MODELS.length };
+export const look = { wheel: 0, rack: 0, decal: 0, cap: 0 };   // cap: boné do personagem (Shop → Bonés)
 try {
   const s = JSON.parse(localStorage.getItem(KEY) || 'null');
   if (s) for (const k of Object.keys(look)) if (Number.isInteger(s[k]) && s[k] >= 0 && s[k] < LIMIT[k]) look[k] = s[k];
 } catch (e) { /* ignora */ }
+setCapModel(look.cap);
 const save = () => { try { localStorage.setItem(KEY, JSON.stringify(look)); } catch (e) { /* ignora */ } };
 const vans = new Set();
 
@@ -25,6 +27,7 @@ export function registerVan(v) { vans.add(v); applyLook(v); }
 /** Equipa e salva: kind = 'wheel' | 'rack' | 'decal'; i = índice do modelo. Vale na hora para todas as vans registradas. */
 export function equip(kind, i) {
   look[kind] = i; save();
+  if (kind === 'cap') { setCapModel(i); return; }
   const fn = { wheel: 'setWheelModel', rack: 'setRackModel', decal: 'setDecalModel' }[kind];
   vans.forEach(v => v[fn](i));
 }

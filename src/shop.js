@@ -11,6 +11,7 @@ import { WHEEL_MODELS, WHEEL_DEFAULT, buildWheel, setWheelColors } from './model
 import { RACK_MODELS, buildRack } from './models/racks.js';
 import { DECALS, decalSheet, setDecalChecks, DECAL_CHECK_DEFAULT } from './models/decals.js';
 import { look, equip, refreshDecals } from './models/vanLook.js';
+import { CAP_MODELS, setCapModel } from './models/driver.js';
 
 const CSS = `
 .shopov { position: fixed; inset: 0; z-index: 25; display: none; padding: 62px clamp(14px, 2vw, 32px) clamp(14px, 2vw, 28px);
@@ -110,14 +111,14 @@ const CATS = [
   { id: 'rack', sec: 'van', name: 'Bagageiro', kind: 'items', desc: `O que vai em cima da van. O padrão são as caixas de entrega; os outros ${RACK_MODELS.length - 1} modelos têm cores fixas (não dá para mudar).` },
   { id: 'paint', sec: 'van', name: 'Pintura', kind: 'color', key: 'paint', pal: 'paint', desc: 'A cor da lataria da van.' },
   { id: 'decals', sec: 'van', name: 'Estampas', kind: 'items', desc: `Desenhos na lataria, feitos à mão e diferentes em cada lado. O texto ADRESS fica sempre lá (só as asas chegam a cobrir um pouco). ${DECALS.length - 1} estampas.` },
-  { id: 'caps', sec: 'char', name: 'Bonés', kind: 'items', desc: 'Bonés para o seu entregador.' },
+  { id: 'caps', sec: 'char', name: 'Bonés', kind: 'items', desc: 'O modelo e a cor do boné (uma cor só para o boné inteiro).' },
   { id: 'shirt', sec: 'char', name: 'Camisas', kind: 'color', key: 'shirt', pal: 'cloth', desc: 'A cor da camisa.' },
   { id: 'pants', sec: 'char', name: 'Calças', kind: 'color', key: 'pants', pal: 'cloth', desc: 'A cor da calça.' },
   { id: 'shoes', sec: 'char', name: 'Sapatos', kind: 'color', key: 'shoes', pal: 'shoes', desc: 'A cor dos sapatos.' },
   { id: 'skin', sec: 'char', name: 'Tom de pele', kind: 'color', key: 'skin', pal: 'skin', desc: 'O tom de pele do entregador.' },
 ];
 const SECTIONS = [['van', 'VAN'], ['char', 'PERSONAGEM']];
-const isFree = c => c.kind === 'color' || ['wheels', 'rack', 'decals'].includes(c.id);   // ainda não há moedas: o que já existe é grátis (Bonés ainda não foram feitos)
+const isFree = c => c.kind === 'color' || ['wheels', 'rack', 'decals', 'caps'].includes(c.id);   // ainda não há moedas: o que já existe é grátis
 const normHex = s => {
   s = String(s || '').trim().replace(/^#/, '');
   if (/^[0-9a-f]{3}$/i.test(s)) s = s.split('').map(ch => ch + ch).join('');
@@ -141,7 +142,9 @@ export function createShop() {
   const applyColors = () => { setVanPaint(draft.paint); setCharColors(draft); setWheelColors({ tire: draft.wheelTire, hub: draft.wheelHub }); setDecalChecks(draft.decalCheckA, draft.decalCheckB); };
   const save = keys => { for (const k of keys) colors[k] = draft[k]; try { localStorage.setItem(KEY, JSON.stringify(colors)); } catch (e) { /* ignora */ } };
   const dirtyKeys = keys => keys.some(k => draft[k] !== colors[k]);
+  let capSel = look.cap;                    // boné em visualização (começa no equipado)
   function revertColors() {                 // descarta o que não foi salvo
+    if (capSel !== look.cap) { capSel = look.cap; setCapModel(look.cap); }
     if (!dirtyKeys(Object.keys(DEFAULTS))) return;
     const chk = dirtyKeys(['decalCheckA', 'decalCheckB']);
     Object.assign(draft, colors); applyColors();
@@ -210,6 +213,7 @@ export function createShop() {
     const h = document.createElement('h3'); h.textContent = (cat.sec === 'van' ? 'Van · ' : 'Personagem · ') + cat.name; main.appendChild(h);
     const d = document.createElement('div'); d.className = 'shop-desc'; d.textContent = cat.desc; main.appendChild(d);
     if (cat.id === 'wheels' || cat.id === 'rack' || cat.id === 'decals') { gallery(); return; }
+    if (cat.id === 'caps') { capsMain(); return; }
     if (cat.kind === 'items') {
       const e = document.createElement('div'); e.className = 'shop-empty'; e.textContent = 'Nada à venda por enquanto. Os itens vão aparecer aqui.'; main.appendChild(e);
       const g = document.createElement('div'); g.className = 'shop-items';
@@ -250,6 +254,37 @@ export function createShop() {
     const refreshBar = saveBar(st => st ? `Cor salva: ${colors[key].toUpperCase()} (já vale no jogo).` : `Não salva ainda — a salva é ${colors[key].toUpperCase()}.`,
       () => !dirtyKeys([key]), () => { save([key]); saved('Cor salva: já vale no jogo.'); });
     paintUi();
+  }
+
+  // ---------- Bonés: modelo (prévia na hora no personagem) + cor única; Salvar grava os dois ----------
+  function capsMain() {
+    const g = document.createElement('div'); g.className = 'shop-items';
+    const dsc = document.createElement('div'); dsc.className = 'shop-desc';
+    let refreshBar = () => {};
+    const show = () => {
+      dsc.textContent = CAP_MODELS[capSel].name + ' — ' + CAP_MODELS[capSel].desc;
+      g.querySelectorAll('.shop-cardw').forEach(x => { x.classList.toggle('sel', +x.dataset.i === capSel); x.querySelector('small').textContent = look.cap === +x.dataset.i ? 'Equipado' : 'Grátis por enquanto'; });
+      refreshBar();
+    };
+    CAP_MODELS.forEach((m, i) => {
+      const c = document.createElement('div'); c.className = 'shop-item shop-cardw'; c.dataset.i = i; c.title = m.desc;
+      c.innerHTML = `<div class="img">🧢</div><b>${m.name}</b><small></small>`;
+      c.addEventListener('click', () => { capSel = i; setCapModel(i); show(); });
+      g.appendChild(c);
+    });
+    main.appendChild(g); main.appendChild(dsc);
+    const lbl = document.createElement('div'); lbl.className = 'shop-desc'; lbl.textContent = 'Cor do boné'; lbl.style.marginTop = '10px'; main.appendChild(lbl);
+    const sw = document.createElement('div'); sw.className = 'shop-sw';
+    const paintSw = () => sw.querySelectorAll('button').forEach(b => b.classList.toggle('sel', b.dataset.c === draft.cap));
+    for (const c of COLORS.cloth) {
+      const b = document.createElement('button'); b.type = 'button'; b.style.background = c; b.dataset.c = c; b.title = c.toUpperCase();
+      b.addEventListener('click', () => { draft.cap = c; applyColors(); paintSw(); refreshBar(); });
+      sw.appendChild(b);
+    }
+    main.appendChild(sw); paintSw();
+    refreshBar = saveBar(st => st ? `${CAP_MODELS[capSel].name}: equipado (já vale no jogo).` : `${CAP_MODELS[capSel].name}: ainda não salvo.`,
+      () => look.cap === capSel && !dirtyKeys(['cap']), () => { save(['cap']); equip('cap', capSel); show(); saved(`${CAP_MODELS[capSel].name}: salvo, já vale no jogo.`); });
+    show();
   }
 
   // ---------- galeria de modelos (Rodas e Bagageiro) ----------
@@ -478,7 +513,8 @@ export function createShop() {
       if (now >= pv.holdUntil) pv.angle += dt * 0.55;              // gira sozinho, a menos que o jogador tenha mexido há menos de 10 s
       const a = pv.angle;
       const tall = !char && !item && cat.id === 'rack' ? Math.max(0, pv.rackH - 1.6) : 0;           // carga alta: afasta e sobe a câmera
-      const d = char ? 6.4 : item ? 8 : 15 + tall * 1.6, hgt = char ? 2.0 : item ? 2.6 : 4.6 + tall * 1.2, ty = char ? 1.15 : item ? 1.4 : 1.2 + tall * 0.5;
+      const capV = char && cat.id === 'caps';                     // Bonés: câmera mais perto da cabeça
+      const d = capV ? 3.0 : char ? 6.4 : item ? 8 : 15 + tall * 1.6, hgt = capV ? 1.6 : char ? 2.0 : item ? 2.6 : 4.6 + tall * 1.2, ty = capV ? 1.75 : char ? 1.15 : item ? 1.4 : 1.2 + tall * 0.5;
       pv.camera.position.set(Math.cos(a) * d, hgt + ty - 1, Math.sin(a) * d);
       pv.camera.lookAt(0, ty, 0);
       if (char) pv.walker.update(dt, { x: 0, z: 0 }, 'car', [], { x: 1e6, z: 1e6 });
@@ -539,6 +575,7 @@ export function createShop() {
     _wheel(i) { wheelSel = i; if (cat.id === 'wheels') buildMain(); itemPreview(); },
     _decal(i) { decalSel = i; if (cat.id === 'decals') buildMain(); itemPreview(); },
     get _draft() { return { ...draft }; },
+    _cap(i) { capSel = i; setCapModel(i); if (cat.id === 'caps') buildMain(); },
     _rack(i) { rackSel = i; if (cat.id === 'rack') buildMain(); itemPreview(); },
     get _view() { return view; },
   };
