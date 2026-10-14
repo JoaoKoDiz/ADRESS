@@ -1120,12 +1120,13 @@ export function createMedievalLife(audio) {
       animMarks(lotMarks, dt, o => (o.userData._near == null || (t * 4 | 0) % 8 === 0 ? (o.userData._near = near(o)) : o.userData._near));
       // sons de ambiente
       chirpT -= dt;
-      if (chirpT <= 0) { chirpT = rnd(3, 11); const a = rnd(0, 6.3), r = rnd(8, 30), x = L.x + Math.cos(a) * r, z = L.z + Math.sin(a) * r; snd.chirp(0.5 + Math.random() * 0.5, panOf(x, z)); }
+      const Gd = V.garden, gK = clamp(1 - Math.hypot((Gd.x0 + Gd.x1) / 2 - L.x, (Gd.z0 + Gd.z1) / 2 - L.z) / 50, 0, 1);   // no jardim: mais pássaros (e mais perto)
+      if (chirpT <= 0) { chirpT = rnd(3, 11) * (1 - 0.72 * gK); const a = rnd(0, 6.3), r = rnd(8, 30) * (1 - 0.5 * gK), x = L.x + Math.cos(a) * r, z = L.z + Math.sin(a) * r; snd.chirp(Math.min(1, 0.5 + Math.random() * 0.5 + 0.3 * gK), panOf(x, z)); }
       const F = V.F, dF = Math.hypot(F.x - L.x, F.z - L.z), lv = V.level(L.x, L.z);
       snd.update(dt, {
         fountain: Math.pow(clamp(1 - dF / 42, 0, 1), 1.5), fountainPan: panOf(F.x, F.z),
         market: Math.pow(clamp((105 - dF) / 80, 0, 1), 1.6),
-        wind: clamp(0.25 + clamp((dF - 30) / 120, 0, 0.5) + (lv === 2 ? 0.35 : 0), 0, 1),
+        wind: clamp(0.25 + clamp((dF - 30) / 120, 0, 0.5) + (lv === 2 ? 0.35 : 0), 0, 1) * (1 - 0.6 * gK),   // o jardim junto da muralha é abrigado e quieto
         cart: cBest < 35 ? Math.pow(1 - cBest / 35, 1.5) * clamp(cSpd, 0, 1) : 0, cartPan: cPan,
       });
     },
