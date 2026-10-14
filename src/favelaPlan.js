@@ -129,9 +129,94 @@ export function planFavela(MAP, HEDGE) {
   }
 
   const h = (x, z) => {
+    if (x < 0 || x > MAP || z < 0 || z > MAP) return 0;                 // fora da sebe: a planície (o entorno construído é sólido)
     for (const r of ramps) if (x >= r.x0 && x <= r.x1 && z >= r.z0 && z <= r.z1) return r.h0 + (r.h1 - r.h0) * (z - r.z0) / (r.z1 - r.z0);
     for (const r of stairs) if (x >= r.x0 && x <= r.x1 && z >= r.z0 && z <= r.z1) return r.h0 + (r.h1 - r.h0) * (z - r.z0) / (r.z1 - r.z0);
     return z < B1 ? 0 : z < B2 ? H1 : H2;
   };
-  return { roads, segs, ramps, stairs, pads, alleys, market, square, court, spots, fillers, h, bandOf, bandY };
+  // postes dos fios: um em cada vértice das ruas (menos o primeiro), na calçada, fora do asfalto
+  const offRoad = (x, z) => { for (const [dx, dz] of [[5.4, 0.5], [-5.4, 0.5], [0.5, 5.4], [0.5, -5.4], [6.5, 4], [-6.5, -4]]) if (roadDist(x + dx, z + dz) > hw + 0.6) return [x + dx, z + dz]; return [x + 5.4, z]; };
+  const poles = roads.map(r => r.pts.slice(1).map(([x, z]) => offRoad(x, z)));
+  return { roads, segs, ramps, stairs, pads, alleys, market, square, court, spots, fillers, poles, h, bandOf, bandY, outside: planOutside(MAP, HEDGE) };
+}
+
+// ---- entorno (fora da sebe): terraços que descem do morro até a planície, com casas decorativas e alguns prédios mais
+// altos. Só cenário: nada aqui entra em SPOTS, no game.pool ou nas pistas. Terraços e casas são sólidos (a van não sobe
+// neles), a câmera usa as mesmas caixas e busy() tira as árvores de fora (world.js) de cima do casario.
+const OUT = { DEPTH: 50, NORTH: 17, SLOPE: 0.2 };
+function planOutside(MAP, HEDGE) {
+  const { B1, B2, H1, H2 } = FAV, D = OUT.DEPTH, N = OUT.NORTH;
+  let seed = 4177; const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+  const clamp01 = v => Math.max(0, Math.min(1, v));
+  const edgeH = z => z <= 0 ? 0 : z >= MAP ? H2 : H1 * clamp01((z - B1 + 8) / 16) + (H2 - H1) * clamp01((z - B2 + 8) / 16);   // altura do morro junto à sebe (suave entre as faixas)
+  const gapsN = [[44, 66], [84, 118]];       // ao norte: livre na estrada de acesso (com a placa) e no caminho da van na cena do monstro (monster.js)
+  const sides = [
+    { s: 'W', x0: -D, x1: 0, z0: -N, z1: MAP + D, fx: 1, fz: 0 }, { s: 'E', x0: MAP, x1: MAP + D, z0: -N, z1: MAP + D, fx: -1, fz: 0 },
+    { s: 'S', x0: 0, x1: MAP, z0: MAP, z1: MAP + D, fx: 0, fz: -1 }, { s: 'N', x0: 0, x1: MAP, z0: -N, z1: 0, fx: 0, fz: 1 },
+  ];
+  // 1) células (cada lado com a sua grade, que fecha certinho na sebe) e a altura do terraço de cada uma
+  const all = [];
+  for (const sd of sides) {
+    const nx = Math.max(1, Math.round((sd.x1 - sd.x0) / 7.6)), nz = Math.max(1, Math.round((sd.z1 - sd.z0) / 7.4)), cw = (sd.x1 - sd.x0) / nx, cd = (sd.z1 - sd.z0) / nz;
+    for (let j = 0; j < nz; j++) for (let i = 0; i < nx; i++) {
+      const x0 = sd.x0 + i * cw, z0 = sd.z0 + j * cd, x1 = x0 + cw, z1 = z0 + cd, mx = (x0 + x1) / 2, mz = (z0 + z1) / 2;
+      const d = Math.hypot(mx - Math.max(0, Math.min(MAP, mx)), mz - Math.max(0, Math.min(MAP, mz)));
+      const href = sd.s === 'N' ? 0 : sd.s === 'S' ? H2 : edgeH(mz);
+      const gap = sd.s === 'N' && gapsN.some(([a, b]) => x1 > a && x0 < b);
+      all.push({ sd, row: sd.s + j, x0, z0, x1, z1, mx, mz, cw, cd, d, gap, t: gap ? 0 : Math.max(0, Math.min(href, Math.round(href - OUT.SLOPE * d))) });
+    }
+  }
+  // 2) alguns prédios mais altos, espalhados no meio da encosta (nunca ao norte, perto da entrada)
+  const towers = [];
+  for (const c of all.filter(c => c.sd.s !== 'N' && c.d > 9 && c.d < 36).sort(() => rnd() - 0.5)) {
+    if (towers.length >= 12) break;
+    if (towers.every(o => Math.hypot(o.mx - c.mx, o.mz - c.mz) > 34)) { towers.push(c); c.tower = true; }
+  }
+  // 3) casas, árvores, sólidos (terraços vizinhos na mesma fileira viram um sólido só) e caixas da câmera
+  const cells = [], houses = [], trees = [], solids = [], cam = [];
+  let run = null;
+  const flush = () => { if (run) solids.push(run); run = null; };
+  for (const c of all) {
+    if (!run || run.row !== c.row || c.t === 0) flush();
+    if (c.gap) continue;
+    const pH = c.tower ? 1 : c.sd.s === 'N' ? 0.8 : c.d < 24 ? 0.92 : c.d < 44 ? 0.92 - (c.d - 24) * 0.035 : 0.1;
+    const house = rnd() < pH;
+    if (c.t > 0) {
+      if (run) { run.x1 = c.x1; run.z1 = Math.max(run.z1, c.z1); } else run = { row: c.row, x0: c.x0, z0: c.z0, x1: c.x1, z1: c.z1 };
+    }
+    const tone = c.d > 30 && c.t <= 1 ? 3 : Math.floor(rnd() * 3);            // topo do terraço: cimento, terra (fora, mais verde)
+    if (c.t > 0 || house) cells.push({ x0: c.x0, z0: c.z0, x1: c.x1, z1: c.z1, t: c.t, tone });
+    if (!house) {
+      if (c.t > 0 && rnd() < 0.45) trees.push({ x: c.mx + (rnd() - 0.5) * 2.5, z: c.mz + (rnd() - 0.5) * 2.5, y: c.t, s: 0.8 + rnd() * 0.5 });
+      if (c.t > 0) cam.push([c.x0, c.z0, c.x1, c.z1, c.t + 0.6]);
+      continue;
+    }
+    const tall = !!c.tower, w = tall ? c.cw - 0.5 : Math.min(c.cw - 0.7, 4.4 + rnd() * 2.6), dd = tall ? c.cd - 0.5 : Math.min(c.cd - 0.7, 4.4 + rnd() * 2.4);
+    const hx = c.mx + (rnd() - 0.5) * (c.cw - 0.5 - w), hz = c.mz + (rnd() - 0.5) * (c.cd - 0.5 - dd), r = rnd();
+    const floors = tall ? 5 + Math.floor(rnd() * 4) : c.d > 34 ? (r < 0.65 ? 1 : 2) : c.d > 20 ? (r < 0.35 ? 1 : r < 0.85 ? 2 : 3) : r < 0.2 ? 1 : r < 0.65 ? 2 : 3;   // mais baixas para fora: o casario desce até a planície
+    const hb = { x0: hx - w / 2, z0: hz - dd / 2, x1: hx + w / 2, z1: hz + dd / 2, y: c.t, floors, tall, tone: Math.floor(rnd() * 13),
+      raw: !tall && floors > 1 && rnd() < 0.3, tank: rnd() < 0.5 ? (rnd() < 0.7 ? 1 : 2) : 0, laundry: !tall && rnd() < 0.18, fx: c.sd.fx, fz: c.sd.fz, k: houses.length };
+    houses.push(hb);
+    const top = c.t + floors * 2.8 + 1.4;
+    if (c.t > 0) cam.push([c.x0, c.z0, c.x1, c.z1, top]);
+    else { solids.push({ x0: hb.x0 - 0.1, z0: hb.z0 - 0.1, x1: hb.x1 + 0.1, z1: hb.z1 + 0.1 }); cam.push([hb.x0 - 0.5, hb.z0 - 0.5, hb.x1 + 0.5, hb.z1 + 0.5, top]); }
+  }
+  flush();
+  for (const s of solids) delete s.row;
+  // a sebe fica num vão entre o morro e o entorno: onde o morro está alto, um aterro com o topo no nível da faixa a cobre
+  const fills = [];
+  for (const [z0, z1, y] of [[B1, B2, H1], [B2, MAP, H2]]) fills.push({ x0: -0.2, x1: HEDGE, z0, z1, y }, { x0: MAP - HEDGE, x1: MAP + 0.2, z0, z1, y });
+  fills.push({ x0: -0.2, x1: MAP + 0.2, z0: MAP - HEDGE, z1: MAP + 0.2, y: H2 });
+  for (const f of fills) cam.push([f.x0, f.z0, f.x1, f.z1, f.y + 0.6]);
+  // ocupação (grade de 2 m) para afastar as árvores de fora do casario e dos terraços
+  const G = 2, gx0 = -D - 4, gn = Math.ceil((MAP + 2 * D + 8) / G), occ = new Uint8Array(gn * gn);
+  const mark = (x0, z0, x1, z1) => { for (let a = Math.max(0, Math.floor((x0 - gx0) / G)); a <= Math.min(gn - 1, Math.floor((x1 - gx0) / G)); a++) for (let b = Math.max(0, Math.floor((z0 - gx0) / G)); b <= Math.min(gn - 1, Math.floor((z1 - gx0) / G)); b++) occ[b * gn + a] = 1; };
+  for (const c of cells) mark(c.x0 - 1, c.z0 - 1, c.x1 + 1, c.z1 + 1);
+  for (const f of fills) mark(f.x0, f.z0, f.x1, f.z1);
+  const busy = (x, z, r = 0) => {
+    for (let a = Math.floor((x - r - gx0) / G); a <= Math.floor((x + r - gx0) / G); a++) for (let b = Math.floor((z - r - gx0) / G); b <= Math.floor((z + r - gx0) / G); b++)
+      if (a >= 0 && b >= 0 && a < gn && b < gn && occ[b * gn + a]) return true;
+    return false;
+  };
+  return { cells, houses, trees, fills, solids, cam, busy };
 }

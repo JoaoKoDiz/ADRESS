@@ -112,6 +112,7 @@ function buildCamBoxes() {
     for (const f of FAVELA.fillers) CAM_BOXES.push([f.x0 - 0.5, f.z0 - 0.5, f.x1 + 0.5, f.z1 + 0.5, f.y + f.floors * 2.8 + 1.2]);
     for (const sp of FAVELA.spots) CAM_BOXES.push([sp.box.x0 - 0.6, sp.box.z0 - 0.6, sp.box.x1 + 0.6, sp.box.z1 + 0.6, sp.y + 3 * 2.8 + 1.8]);
     const m = FAVELA.market; CAM_BOXES.push([m.x0 - 0.6, m.z0 - 0.6, m.x1 + 0.6, m.z1 + 0.6, 7]);
+    for (const b of FAVELA.outside.cam) CAM_BOXES.push(b);    // entorno (com a van fora do bairro): terraços, casas e prédios
   }
   if (FARMLAND) {                                              // Colheita: construções e grupos de árvores
     for (const sp of FARMLAND.spots) CAM_BOXES.push([sp.box.x0 - 0.6, sp.box.z0 - 0.6, sp.box.x1 + 0.6, sp.box.z1 + 0.6, 10]);

@@ -43,6 +43,7 @@ const LINES = {
   child: ['Pega! Agora é você!', 'A gente está brincando de pega-pega em volta da fonte!', 'Quando eu crescer, vou ser guarda do castelo!'],
   walker: ['Vou visitar minha irmã. Ela mora aqui perto.', 'Que dia cinzento! Mas o burgo está animado.', 'Já viu o castelo de perto? Vale a subida.'],
   browser: ['Só estou olhando. Tudo é tão bonito aqui!', 'Vim ver se chegaram tecidos novos.', 'Adoro o barulho da fonte.'],
+  local: ['Vou ali na vizinha devolver uma panela.', 'Bom dia! A rua está movimentada hoje.', 'Esqueci o xale na casa da minha tia. De novo!'],
   child2: ['Mamãe disse que hoje tem pão doce!', 'Eu ajudo a escolher as maçãs.', 'Olha a fonte! Ela nunca para de jorrar.'],
 };
 
@@ -327,6 +328,27 @@ export function createMedievalLife(audio) {
       st.push(...enterH(s), { t: 'inside', dur: rnd(6, 15) });
       return st;
     },
+    local(n) {                                                                  // vizinho de passagem (troca de casa só enquanto está dentro, sem ninguém ver)
+      const L = ctxRef && ctxRef.listener; if (!L || !ctxGame) return [{ t: 'inside', dur: 3 }];
+      const taken = new Set(); for (const o of npcs) if (o !== n && !o.dead) { taken.add(o.home); taken.add(o.curSpot); if (o.visitTo != null) taken.add(o.visitTo); }
+      const cands = [];
+      for (let s = 0; s < V.spots.length; s++) {
+        const sp = V.spots[s]; if (sp.shop || !(ctxGame.layout[s] >= 0) || isDead(s) || taken.has(s) || s === busy()) continue;
+        const d = Math.hypot(sp.front.x - L.x, sp.front.z - L.z); if (d > 12 && d < 50) cands.push(s);
+      }
+      if (!cands.length) return [{ t: 'inside', dur: rnd(3, 6) }];
+      const fx = cam.rz, fz = -cam.rx, seen = cands.filter(o => { const q = V.spots[o].front, dx = q.x - cam.x, dz = q.z - cam.z; return (dx * fx + dz * fz) / (Math.hypot(dx, dz) || 1) > 0.35; });   // de preferência na frente da câmera
+      const pool = seen.length && Math.random() < 0.8 ? seen : cands;
+      const s = pool[Math.floor(Math.random() * pool.length)], sp = V.spots[s], lv = V.level(sp.px, sp.pz);
+      n.home = s; n.deps = [s]; n.visitTo = null; const p = indoor(sp); place(n, p.x, p.z, sp.ry, false);
+      const near = cands.filter(o => o !== s && V.level(V.spots[o].px, V.spots[o].pz) === lv && Math.hypot(V.spots[o].px - sp.px, V.spots[o].pz - sp.pz) < 40);
+      const v = near.length ? near[Math.floor(Math.random() * near.length)] : -1;
+      const st = [{ t: 'inside', dur: rnd(0.3, 4) }, ...exitH(s, Math.random() < 0.45 ? [{ t: 'give', name: 'basket', where: 'L', full: Math.random() < 0.5 }] : [])];
+      if (v >= 0 && Math.random() < 0.35) { n.visitTo = v; st.push(...visit(v), { t: 'call', fn: () => { n.visitTo = null; } }); }
+      else if (v >= 0) { const q = V.spots[v]; n.visitTo = v; st.push({ t: 'go', x: q.front.x, z: q.front.z, spot: v }, { t: 'face', ry: q.ry + Math.PI }, { t: 'act', act: 'talk', dur: 2.2, talk: true, spot: v }, { t: 'act', act: 'listen', dur: rnd(1.5, 3.5), spot: v }, { t: 'call', fn: () => { n.visitTo = null; } }); }
+      st.push(...enterH(s), { t: 'drop' }, { t: 'inside', dur: rnd(4, 12) });
+      return st;
+    },
     walker(n) {
       const s = n.home, st = [...exitH(s)];
       if (n.def.castle && Math.random() < 0.7) { const c = V.castle, p = { x: c.gateX - 7 + rnd(-2, 2), z: c.court.z0 + 3.5 }; st.push({ t: 'go', x: p.x, z: p.z }, { t: 'face', x: c.gateX, z: c.z0 }, { t: 'idle', dur: rnd(5, 9), look: { x: c.gateX, z: c.z0 } }); }
@@ -383,8 +405,10 @@ export function createMedievalLife(audio) {
     { role: 'child', plan: 'kids', k: 101, kid: 0, lines: 'child' }, { role: 'child', plan: 'kids', k: 104, kid: 1, lines: 'child' },
     { role: 'buyer', plan: 'browser', k: 122, bench: 1 }, { role: 'walker', plan: 'browser', k: 130, bench: 1, side: -1 }, { role: 'walker', plan: 'browser', k: 125, bench: 3, lead: true }, { role: 'child', plan: 'follow', k: 127, lines: 'child2' },
     { role: 'walker', plan: 'walker', k: 111, homeKind: 'low' }, { role: 'walker', plan: 'walker', k: 114, homeKind: 'low' }, { role: 'walker', plan: 'walker', k: 117, homeKind: 'mid', castle: true },
+    // vizinhos de passagem: saem de uma casa perto de onde o jogador está, vão a outra casa ali perto e voltam (a rua nunca fica vazia)
+    ...['walker', 'buyer', 'walker', 'buyer', 'walker', 'buyer', 'walker', 'buyer'].map((role, i) => ({ role, plan: 'local', k: 141 + i * 3, lines: 'local' })),
   ];
-  const ITEMS = { guardGate: ['spear'], guardCastle: ['spear'], buyer: ['basket'], sweeper: ['broom', 'pan'], water: ['bucket'], porter: ['crate', 'sack'], gardener: ['can'], baker: ['basket'], smith: ['hammer', 'tongs'], weaver: ['sheet'], keeper: ['mug', 'rag'] };
+  const ITEMS = { guardGate: ['spear'], guardCastle: ['spear'], buyer: ['basket'], sweeper: ['broom', 'pan'], water: ['bucket'], porter: ['crate', 'sack'], gardener: ['can'], baker: ['basket'], smith: ['hammer', 'tongs'], weaver: ['sheet'], keeper: ['mug', 'rag'], local: ['basket'] };
   function makeNpc(def, i) {
     const P = buildMedPerson({ role: def.role, k: def.k });
     for (const nm of ITEMS[def.plan] || []) P.items[nm] = buildItem(nm, { k: def.k });          // objetos prontos (nada é montado durante o jogo)
@@ -578,7 +602,7 @@ export function createMedievalLife(audio) {
     n.x = n.cx + rx * n.lat; n.z = n.cz + rz * n.lat;
     turn(n, Math.atan2(dx, dz), dt, 7);
     st.act = null; st.talk = 0;
-    if (n.v > 0.05) {
+    if (n.v > 0.05 || (want > 0 && n.v > 0)) {                                  // (arrancando: com dt = 1/60 a primeira aceleração dá 0,05 exatos)
       const prev = Math.floor(st.ph / Math.PI);
       st.mode = run ? 'run' : 'walk'; st.amp = clamp(n.v / (n.speed || 1), 0.3, 1.1);
       st.ph += n.v * dt * Math.PI / (n.P.child ? 0.42 : 0.6);
@@ -940,6 +964,7 @@ export function createMedievalLife(audio) {
         case 'kids': { const a = kids.ang[d.kid] = d.kid * 0.9; place(n, F.x + Math.sin(a) * 4.95, F.z + Math.cos(a) * 4.95, a + Math.PI / 2); break; }
         case 'browser': { n.home = A.browser[d.lead ? 1 : d.side < 0 ? 2 : 0]; if (n.home < 0) { kill(n); break; } n.deps = [n.home]; startInside(d.lead ? rnd(0, 4) : rnd(2, 12)); break; }
         case 'follow': { n.leader = npcs.find(q => q.def.plan === 'browser' && q.def.lead); n.inside = true; n.followSide = 1; break; }
+        case 'local': { n.visitTo = null; n.steps = [{ t: 'inside', dur: rnd(0.5, 8) }]; n.si = 0; n.inside = true; break; }
         case 'walker': {
           n.home = A.walker[ki++]; if (n.home < 0) { kill(n); break; } n.deps = [n.home]; n.visitable = A.houses;
           if (ki === 1) {                                                         // um já está na rua, indo visitar alguém
@@ -1029,6 +1054,7 @@ export function createMedievalLife(audio) {
         if (n.dead) continue;
         const dl = Math.hypot(n.x - L.x, n.z - L.z);
         n.near = dl < FAR;
+        if (n.def.plan === 'local' && !n.talking && dl > 70 && n.cur && (n.cur.t === 'inside' || (n.cur.t === 'go' && dl > FAR))) { resetNpc(n); n.home = -1; n.deps = []; n.visitTo = null; }   // ficou longe: passa a "morar" perto do jogador (fora de vista)
         if (n.def.plan === 'follow') followUpdate(n, dt);
         else if (n.def.plan !== 'kids') {
           if (n.workSpot >= 0 && n.workSpot === b && !n.inside && !n.yielding && !n.talking) workerYield(n);

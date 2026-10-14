@@ -1,15 +1,14 @@
 // Nível 23 (Cachoeira): desfiladeiro fundo entre as duas margens (colunas 4–5), ponte alta na rua 5, mirantes nas cabeceiras
 // e a cachoeira gigante no fim sul do desfiladeiro. buildCanyonScene = parte fixa (fundida em terrain.js);
 // createCanyonFx = água correndo (rio do alto, cortina, rio lá embaixo), espuma, névoa, objetos levados pela correnteza e o som.
-// A colisão (abismo, mirantes, maciço e os degraus dos lados) está em layout.js (rebuildBaseSolids); a mata das margens, fora
-// do bairro, em world.js (buildOutskirts, com os troncos em SOLIDS).
+// A colisão (abismo, mirantes, maciço e os degraus dos lados) está em layout.js (rebuildBaseSolids); a mata das margens (troncos
+// em SOLIDS) e a do alto do maciço e dos degraus, em world.js (buildOutskirts: sem sombra real).
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
-import { box, cyl, cone, mesh, at, textTexture } from './models/kit.js';
+import { box, cyl, mesh, at, textTexture } from './models/kit.js';
 import { CANAL, MAP, HEDGE, ROAD, roadCenter } from './layout.js';
 
 const ROCK = ['#8c7b66', '#7d6d5a', '#9a8a72', '#86745f'], MOSS = '#5f8a3e', LEAF = ['#4f8f3a', '#3f7d34', '#6aa046'];
-const PINE = ['#2f6f3f', '#3a8a50'], TRUNK = '#6b4526';
 const CONC = '#b8b2a6', RAILC = '#5b6168', PAVE = '#c9bea8';
 export const RIVER_Y = -40;
 const SHELF = 8;            // degrau de pedra no alto das paredes (para dentro da borda)
@@ -55,7 +54,7 @@ export function buildCanyonScene(g) {
       const r = 0.7 + rnd() * 0.6, d = 0.9 + r + rnd() * (face0 - 1.6 - 2 * r);
       bush(edge + inn * d, SHELF_Y + r * 0.3, z + 1.2 + rnd() * 3.6, r);
     }
-    if (rnd() < 0.45 && !busy(s, z + 3, 1.5)) {                      // cipó pendurado da beira do degrau
+    if (rnd() < 0.45 && !busy(s, z + 3, 3.6)) {                      // cipó pendurado da beira do degrau (longe do tabuleiro e dos postes)
       const len = 2.5 + rnd() * 3.5;
       add(box(0.24, len, 0.5 + rnd() * 0.5, MOSS), edge + inn * (face0 + 0.12), SHELF_Y - len / 2, z + 0.8 + rnd() * 4.4);
     }
@@ -88,7 +87,7 @@ export function buildCanyonScene(g) {
     const xc = sx > 0 ? b.x1 - 0.2 : b.x0 + 0.2, xr = sx > 0 ? b.x0 : b.x1;      // xc: balaustrada do lado do abismo; xr: beira da rua
     add(box(wx, 1.2, wz, CONC), xm, -0.6, zm); add(box(wx - 0.1, 0.06, wz - 0.1, PAVE), xm, 0.03, zm);
     const zNear = sx > 0 ? b.vz1 + 0.2 : b.vz0 - 0.2, zFar = sx > 0 ? b.vz0 : b.vz1;   // ponta da ponte (encosta na mureta dela) e o fundo
-    bal(xc, zFar, xc, zNear); bal(xr + sx * 0.7, zFar, xc - sx * 0.4, zFar);
+    bal(xc, zFar, xc, zNear); bal(xr + sx * 0.7, zFar, xc - sx * 0.17, zFar);   // (o fundo encosta no corrimão do lado do abismo)
     const [bx, bz] = b.bench;                                                    // banco (encosto do lado da rua)
     add(box(0.6, 0.1, 2.4, '#8a5a34'), bx, 0.5, bz); add(box(0.1, 0.5, 2.4, '#8a5a34'), bx - sx * 0.3, 0.8, bz);
     for (const d of [-1, 1]) add(box(0.5, 0.45, 0.1, '#4a4d52'), bx, 0.25, bz + d);
@@ -146,26 +145,7 @@ export function buildCanyonScene(g) {
     add(box(s * 1.6, s, s, ROCK[k & 3]), x, y, ZS - s * 0.3, 0, rnd() * 0.4 - 0.2, 0);
     if (rnd() < 0.4) { const r = Math.min(0.8 + rnd() * 0.9, s * 0.45); bush(x + (rnd() - 0.5) * s * 0.6, y + s * 0.5 + r * 0.3, ZS - s * 0.3, r); }   // em cima do bloco
   }
-  add(box(26, 0.4, 90, '#2f6f9a'), cx, TOP + 0.2, ZS + 45);            // leito do rio no alto (a água corre por cima: createCanyonFx)
-  // mata no alto do maciço e dos degraus: cada árvore com o tronco no chão do patamar em que está, longe das beiradas
-  const blocks = [{ x0: cx - W / 2 - 46, x1: cx - 22, z0: ZS, z1: ZS + 90, top: TOP }, { x0: cx + 22, x1: cx + W / 2 + 46, z0: ZS, z1: ZS + 90, top: TOP }]
-    .concat(C.rock.slice(1));
-  const higher = (b, x, z, m) => C.rock.some(o => o.top > b.top && x > o.x0 - m && x < o.x1 + m && z > o.z0 - m && z < o.z1 + m);
-  const tree = (x, y, z, s, pine) => {
-    if (pine) { add(cyl(0.22 * s, 0.32 * s, 1.4 * s, TRUNK, 6), x, y + 0.7 * s, z); add(cone(1.9 * s, 2.8 * s, PINE[0], 7), x, y + 2.5 * s, z); add(cone(1.4 * s, 2.3 * s, PINE[1], 7), x, y + 3.9 * s, z); return; }
-    add(cyl(0.26 * s, 0.36 * s, 2.0 * s, TRUNK, 6), x, y + 1.0 * s, z);
-    for (const [dx, dy, dz, r] of [[0, 2.7, 0, 1.7], [0.9, 2.3, 0.4, 1.15], [-0.7, 3.4, -0.3, 1.05]]) {
-      const m = at(mesh(blob, LEAF[Math.floor(rnd() * 3)]), x + dx * s, y + dy * s, z + dz * s, rnd() * 3, rnd() * 3, 0); m.scale.setScalar(r * s); g.add(m);
-    }
-  };
-  for (const b of blocks) {
-    const area = (b.x1 - b.x0) * (b.z1 - b.z0), want = Math.round(area / (b.top > 50 ? 52 : b.top > 30 ? 64 : 78)), placed = [];
-    for (let n = 0, t = 0; n < want && t < want * 30; t++) {
-      const s = 1.5 + rnd() * 1.2, m = 1.2 + s * 1.3, x = b.x0 + m + rnd() * (b.x1 - b.x0 - 2 * m), z = b.z0 + m + rnd() * (b.z1 - b.z0 - 2 * m);
-      if (higher(b, x, z, m) || placed.some(([px, pz, pr]) => Math.hypot(px - x, pz - z) < pr + s * 1.6)) continue;
-      placed.push([x, z, s * 1.6]); tree(x, b.top, z, s, rnd() < 0.6); n++;
-    }
-  }
+  add(box(23.6, 0.4, 90, '#2f6f9a'), cx, TOP + 0.2, ZS + 45);          // leito do rio no alto, entre as margens (a água corre por cima: createCanyonFx)
   // pedras no rio e na bacia da queda (sem encostar nos pilares da ponte nem umas nas outras)
   for (let k = 0, n = 0; k < 80 && n < 24; k++) {
     const z = ZN + rnd() * (ZS - ZN), x = cx + (rnd() - 0.5) * (W - 22), a = 1.5 + rnd() * 3, b2 = 1.5 + rnd() * 3, ry = rnd() * 3, r = Math.hypot(a, b2) / 2;
@@ -240,7 +220,7 @@ function colored(parts) {
  *  som contínuo pela distância. */
 export function createCanyonFx(audio) {
   const root = new THREE.Group(); root.name = 'canyon-fx';
-  root.userData.debug = () => ({ items, ups, obst: RIVER_OBST, rw, G });   // (testes)
+  root.userData.debug = () => ({ items, ups, obst: RIVER_OBST, rw, G, lanes });   // (testes)
   let built = false, river, top, sheets = [], foam = [], mist = [], splash = [], t = 0, src = null, G, rw;
   const items = [], ups = [];                   // lá embaixo (InstancedMesh) e no rio do alto (barril + galhos que caem)
   const M4 = new THREE.Matrix4(), Q = new THREE.Quaternion(), E = new THREE.Euler(), V = new THREE.Vector3(), S = new THREE.Vector3(), ZERO = new THREE.Matrix4().makeScale(0, 0, 0);
@@ -303,7 +283,8 @@ export function createCanyonFx(audio) {
     for (let i = 0; i < NL; i++) leafM.setColorAt(i, new THREE.Color(LC[i % LC.length]));
     leafM.instanceColor.needsUpdate = true;
     const spread = (i, n) => ZN + 20 + (ZS - 18 - ZN - 20) * ((i + Math.random() * 0.8) / n);
-    const add = (mesh, i, r, y, spd, k, n) => items.push({ mesh, i, r, y, spd, x: cx + (Math.random() - 0.5) * 12, z: spread(k, n), lane: (Math.random() - 0.5) * 12, ph: Math.random() * 6, yaw: Math.random() * 6, spin: (Math.random() - 0.5) * 0.5, fade: 1 });
+    planLanes();
+    const add = (mesh, i, r, y, spd, k, n) => items.push({ mesh, i, r, y, spd, x: cx, z: spread(k, n), p: lanes[Math.floor(Math.random() * lanes.length)], ph: Math.random() * 6, yaw: Math.random() * 6, spin: (Math.random() - 0.5) * 0.5, fade: 1 });
     const all = NL + NB + NC; let k = 0;
     for (let i = 0; i < NL; i++) add(leafM, i, 0.9, 0.06, 8.0, k++, all);
     for (let i = 0; i < NB; i++) add(branchM, i, 1.45, 0.08, 8.2, k++, all);
@@ -318,19 +299,39 @@ export function createCanyonFx(audio) {
     for (const it of items) place(it, 0);
     for (const u of ups) hideUp(u);
   }
-  // posição/rotação de um objeto lá embaixo
-  function place(it, dt) {
-    const { cx, ZN, ZS } = G, half = rw / 2;
-    it.z -= it.spd * dt; it.fade = Math.min(1, it.fade + dt * 0.8);
-    if (it.z < ZN + 12) { it.z = ZS - 15 - Math.random() * 5; it.lane = (Math.random() - 0.5) * 12; it.x = cx + it.lane; it.fade = 0; }
-    // desvio das pedras e dos pilares: o alvo lateral sai da frente de cada obstáculo que está chegando (até 2 passadas)
-    let tx = cx + it.lane + 0.9 * Math.sin(t * 0.35 + it.ph);
-    for (let pass = 0; pass < 2; pass++) for (const o of RIVER_OBST) {
-      const dz = it.z - o.z, need = o.hx + it.r + 0.7;
-      if (dz > -(o.hz + it.r + 0.6) && dz < o.hz + it.r + 14 && Math.abs(tx - o.x) < need) tx = o.x + (tx >= o.x ? need + 0.05 : -need - 0.05);
+  // Caminhos pelo rio (calculados uma vez): começam na bacia da queda e vão até o fim do desfiladeiro; cada um sai de uma faixa
+  // e desvia das pedras e dos pilares com antecedência (programação dinâmica numa grade de 1 × 0,25, inclinação limitada).
+  const Z0 = () => G.ZS - 14, laneAt = (p, z) => { const j = Math.max(0, Math.min(p.length - 1.001, Z0() - z)), j0 = Math.floor(j); return p[j0] + (p[j0 + 1] - p[j0]) * (j - j0); };
+  let lanes = [];
+  function planLanes() {
+    const { cx, ZN } = G, R = 1.45, DX = 0.25, half = rw / 2, lo = cx - half + R + 0.4, hi = cx + half - R - 0.4, nx = Math.floor((hi - lo) / DX) + 1, z0 = Z0(), nz = Math.ceil(z0 - (ZN + 10)) + 1;
+    const free = [];
+    for (let j = 0; j < nz; j++) {
+      const z = z0 - j, row = new Uint8Array(nx).fill(1);
+      for (const o of RIVER_OBST) if (Math.abs(z - o.z) < o.hz + R + 0.8) { const a = Math.ceil((o.x - o.hx - R - 0.8 - lo) / DX), b = Math.floor((o.x + o.hx + R + 0.8 - lo) / DX); for (let i = Math.max(0, a); i <= Math.min(nx - 1, b); i++) row[i] = 0; }
+      if (!row.some(v => v)) row.fill(1);
+      free.push(row);
     }
-    tx = Math.max(cx - half + it.r + 0.4, Math.min(cx + half - it.r - 0.4, tx));
-    const dx = tx - it.x, mv = 4.2 * dt; it.x += Math.abs(dx) < mv ? dx : Math.sign(dx) * mv;
+    lanes = [-8, -6, -4, -2, 0, 2, 4, 6, 8].map(off => {
+      const want = cx + off, from = [], cost = new Float32Array(nx).map((_, i) => (free[0][i] ? Math.abs(lo + i * DX - want) : 1e9));
+      for (let j = 1; j < nz; j++) {
+        const c2 = new Float32Array(nx).fill(1e9), fr = new Int16Array(nx);
+        for (let i = 0; i < nx; i++) { if (!free[j][i]) continue; let best = 1e9, bi = i;
+          for (let d = -2; d <= 2; d++) { const k = i + d; if (k >= 0 && k < nx && cost[k] < best) { best = cost[k]; bi = k; } }
+          c2[i] = best + Math.abs(lo + i * DX - want); fr[i] = bi; }
+        cost.set(c2); from.push(fr);
+      }
+      let i = cost.indexOf(Math.min(...cost)); const path = new Float32Array(nz); path[nz - 1] = lo + i * DX;
+      for (let j = nz - 1; j > 0; j--) { i = from[j - 1][i]; path[j - 1] = lo + i * DX; }
+      return path;
+    });
+  }
+  // posição/rotação de um objeto lá embaixo (segue o seu caminho; balança um pouco no lugar)
+  function place(it, dt) {
+    const { ZN, ZS } = G;
+    it.z -= it.spd * dt; it.fade = Math.min(1, it.fade + dt * 0.8);
+    if (it.z < ZN + 12) { it.z = ZS - 15 - Math.random() * 5; it.p = lanes[Math.floor(Math.random() * lanes.length)]; it.fade = 0; }
+    it.x = laneAt(it.p, it.z) + 0.25 * Math.sin(t * 0.35 + it.ph);
     it.yaw += it.spin * dt;
     const s = it.fade < 1 ? Math.max(0.001, it.fade) : 1;
     E.set(0.06 * Math.sin(t * 1.7 + it.ph), it.yaw, 0.06 * Math.cos(t * 1.3 + it.ph));

@@ -469,6 +469,7 @@ function favelaSolids() {
   const m = F.market; SOLIDS.push({ x0: m.x0, x1: m.x1, z0: m.z0, z1: m.z1 });
   for (const r of [F.square, F.court]) SOLIDS.push({ x0: r.x0, x1: r.x1, z0: r.z0, z1: r.z1, vanOnly: true });
   for (const f of F.fillers) SOLIDS.push({ x0: f.x0, x1: f.x1, z0: f.z0, z1: f.z1 });
+  for (const b of F.outside.solids) SOLIDS.push({ ...b });            // entorno: terraços e casas de fora (só cenário)
 }
 configureGrid('grid4');
 

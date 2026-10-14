@@ -728,7 +728,7 @@ export function renderMiniThumbnails(w = 480, h = 360) {
     // enquadra a maquete inteira (prédios altos incluídos), sempre do mesmo ângulo
     const sph = new THREE.Box3().setFromObject(mini).getBoundingSphere(new THREE.Sphere());
     const dir = (kind === 'farm' ? new THREE.Vector3(-11, 17, 21) : new THREE.Vector3(-6, 24, 27)).normalize(), t = Math.tan(THREE.MathUtils.degToRad(cam.fov / 2));   // Colheita: três quartos
-    const dist = sph.radius / Math.min(t, t * cam.aspect) * (kind === 'moon' ? 0.7 : kind === 'farm' ? 0.84 : 0.92);   // a lua: maior, sem cortar as bordas
+    const dist = sph.radius / Math.min(t, t * cam.aspect) * (kind === 'moon' ? 0.7 : kind === 'medieval' ? 0.74 : kind === 'farm' ? 0.84 : 0.92);   // a lua: maior, sem cortar as bordas
     if (kind === 'farm') sph.center.y -= 1.6;               // Colheita: centraliza a base (as construções puxam o centro para cima)
     cam.position.copy(sph.center).addScaledVector(dir, dist);
     cam.lookAt(sph.center);

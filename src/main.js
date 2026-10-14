@@ -32,12 +32,13 @@ import { buildResident } from './models/resident.js';
 import { YARD_BUILDERS, YARD_BUILDERS_SNOW } from './models/yard.js';
 import { buildShopLot } from './models/shop.js';
 import { SHOPS, HOUSES, FUTS, L1_FIXED, L6_FIXED, WARES, TWINS, VENS, FAVS, MODS, FARMS, MOONS, GRILLBY, SNOW_FIXED, SNOW_EXTRAS, SNOW_DROP, GARDS, CANYON_EXTRAS, FOREST_EXTRAS, MDHS, MDSS, ROWS, WSHS, MVHS, MVSS, MVS_KEY } from './data.js';
-import { buildFavelaLot } from './models/favela.js';
+import { buildFavelaLot, buildFavelaOutside } from './models/favela.js';
 import { buildModLot, MOD_H } from './models/mod.js';
 import { createTraffic } from './traffic.js';
 import { buildFarmLot } from './models/farm.js';
 import { createTractors } from './tractors.js';
 import { createChickens } from './chickens.js';
+import { createFavelaPets } from './favelaPets.js';
 import { buildSnowLot, buildSnowBank, buildPlow } from './models/snow.js';
 import { buildGardLot, buildGateArm, buildGardLive } from './models/garden.js';
 import { buildMoonLot, spaceSuit } from './models/moon.js';
@@ -483,6 +484,7 @@ const gardGate = { arm: null, live: null, world: null, solid: null, k: 0 };   //
 const mdGate = { arm: null, solid: null, k: 0 };   // Nível 18 (Modernista): cancela da portaria do condomínio
 const tractors = createTractors(audio);   // Nível 15 (Colheita): tratores devagar pelas estradas de terra
 const chickens = createChickens();        // Nível 15 (Colheita): galinhas atravessando as estradas
+const favPets = createFavelaPets();       // Nível 13 (Morro): cachorros caramelos e gatos
 // ---------- Nível 16 (Nevasca): gelo, limpa-neve e atalhos ----------
 // O limpa-neve (mesma lógica dos tratores) roda um laço que passa pelos 2 atalhos. Chegando perto de um atalho fechado,
 // o monte de neve some (o sólido sai) por ~45 s; depois ele volta, mas só quando a van, o motorista e o próprio
@@ -673,6 +675,7 @@ function useNeighborhood(kind) {
     if (kind === 'forest8') forestFx.setup(w, FORESTV, MAP);
     if (kind === 'med10') { medSky(w); medLife.setup(w, MEDV); SOLIDS.push(...MEDV.sceneSolids.map(b => ({ ...b })), ...MEDV.sceneVanOnly.map(b => ({ ...b, vanOnly: true }))); }   // (1ª vez: as colisões dos detalhes do cenário só existem depois de montar a cena)   // Medieval: céu nublado, luz difusa; vida do burgo   // Bosque: tarde de outono, folhas
     if (kind === 'farm10') farmOut.build(w.scene, MAP, VAN_START.x);   // Colheita: hectares de plantação em volta, tratores e colheitadeiras
+    if (kind === 'favela8') w.scene.add(buildFavelaOutside(FAVELA));   // Morro: casario e prédios do entorno (só cenário)
   } else SOLIDS.push(...w.extraSolids);        // troncos das árvores de fora deste bairro
   world.hideResident();
   world = w;
@@ -695,6 +698,7 @@ function useNeighborhood(kind) {
     mdGate.solid = { x0: FORESTV.GATE.x0, x1: FORESTV.GATE.x1, z0: FORESTV.GATE.z - 0.3, z1: FORESTV.GATE.z + 0.3 }; mdGate.k = 0; mdGate.arm.rotation.z = 0; SOLIDS.push(mdGate.solid);
   }   // faróis da van e luz do personagem só no Penumbra
   if (kind === 'farm10') { world.scene.add(chickens.object); chickens.reset(); } else chickens.detach();
+  if (kind === 'favela8') { world.scene.add(favPets.object); favPets.reset(); } else favPets.detach();
   if (kind === 'farm10') { world.scene.add(tractors.object); tractors.reset(); } else { tractors.detach(); if (kind !== 'flux10' && kind !== 'night10' && kind !== 'canyon10') tractors.silence(); }
   van.setIce(kind === 'snow8' ? SNOWV.iceAt : null);   // Nevasca: placas de gelo
   van.setLowGravity(kind === 'moon8'); walker.setLowGravity(kind === 'moon8'); playerSuit.visible = kind === 'moon8';   // Órbita: gravidade baixa e capacete (só neste bairro)
@@ -1766,6 +1770,7 @@ function startNewRound() {
   if (neighborhood === 'med10') medLife.layout(world, game, MEDV);   // Medieval: rotinas recomeçam com as casas desta partida
   if (chatNpc) { medLife.endTalk(chatNpc); chatNpc = null; }
   resetGates();                                  // Colheita: porteiras fechadas de novo
+  if (neighborhood === 'favela8') favPets.reset();   // Morro: bichos sorteados de novo
   world.hideResident();
   resetVan();
   rig.snap({ x: van.x, z: van.z, heading: van.heading, speed: 0 });
@@ -2040,6 +2045,7 @@ function update(dt, t) {
     traffic.update(dt, obs, playing ? (walker.visible ? walker : van) : null);
     if (!playing) traffic.silence();
   }
+  if (neighborhood === 'favela8') favPets.update(dt, van.object.visible && !heli.flying ? { x: van.x, z: van.z, hd: van.heading, speed: van.speed } : null, walker.visible ? { x: walker.x, z: walker.z } : null);   // Morro: bichos (param diante da van)
   if (neighborhood === 'farm10') {                // Colheita: tratores e porteiras
     const c = Math.cos(van.heading), s2 = Math.sin(van.heading), obs = [];
     if (!heli.flying) obs.push({ circles: [-1.5, 0, 1.5].map(k => [van.x + c * k, van.z + s2 * k, 1.25]) });
