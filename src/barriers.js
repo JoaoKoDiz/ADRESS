@@ -189,10 +189,11 @@ export function createBarriers() {
   let current = [];
   let jamRects = [];
   let jammed = [];                               // lotes (índices) que ficam sem acesso por causa de um engarrafamento
+  let list = [];                                 // bloqueios da partida (missões do Bairro 3): { id, kind 'H'|'V', j, i, side, x, z, type }
 
   function clear() {
     for (const s of solids) { const i = SOLIDS.indexOf(s); if (i >= 0) SOLIDS.splice(i, 1); }
-    solids = []; current = []; jammed = []; jamRects = [];
+    solids = []; current = []; jammed = []; jamRects = []; list = [];
     Object.values(pools).forEach(p => p.forEach(b => { b.visible = false; }));
   }
 
@@ -270,10 +271,12 @@ export function createBarriers() {
       if (type === 'truck') b.userData.cargo.material = mat(TRUCK_COLORS[Math.floor(Math.random() * TRUCK_COLORS.length)]);
       const s = alongX ? { x0: x - T.half, x1: x + T.half, z0: z - T.cross, z1: z + T.cross }
                        : { x0: x - T.cross, x1: x + T.cross, z0: z - T.half, z1: z + T.half };
+      s.bar = n;                                   // (contador de batidas e missões das barreiras)
       SOLIDS.push(s); solids.push(s);
+      list.push({ id: n, kind: c[0], j: c[1], i: c[2], side: c[0] === 'H' ? c[3] : null, x, z, type });
     });
     current = chosen;
   }
 
-  return { randomize, clear, get current() { return current; }, get count() { return current.length + jammed.length; }, get jammedSlots() { return jammed; }, get jamRects() { return jamRects; } };
+  return { randomize, clear, get current() { return current; }, get count() { return current.length + jammed.length; }, get jammedSlots() { return jammed; }, get jamRects() { return jamRects; }, get list() { return list; } };
 }

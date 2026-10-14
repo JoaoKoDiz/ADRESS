@@ -960,17 +960,20 @@ const lock = createLockButton(stage, () => refreshCareerMap(), () => career.allU
 // Cronômetro da partida (canto superior esquerdo): começa em 00:00 no 1º quadro jogável, pausa com o MENU ou as missões
 // abertas, some nos menus e nas cenas (continua contando nelas), não zera na entrega certa do Livre; na Carreira congela na entrega certa.
 const matchTimer = createMatchTimer(stage);
-// Bairro 2 (Livre e Carreira): contador de batidas da van em casas, árvores e postes (o mesmo vale para "Sem esbarrar").
-// Uma batida por encontro: o mesmo objeto só conta de novo depois que a van se afasta dele (folga > 1) e bate outra vez.
+// Bairros 2 e 3 (Livre e Carreira): contador de batidas da van em casas, árvores e postes — e, no Bairro 3, nas barreiras
+// (o mesmo vale para "Sem esbarrar" e para as missões das barreiras). Uma batida por encontro: o mesmo objeto só conta de
+// novo depois que a van se afasta dele (folga > 1) e bate outra vez.
 let bumps = 0;
 const bumpHold = new Set();
-const bumpLevel = () => neighborhood === 'plaza6';
-const bumpTarget = b => { const i = SOLIDS.indexOf(b); return (i >= 0 && i < HOUSE_SLOTS.length) || (world.extraSolids && world.extraSolids.includes(b)) || !!b.post; };   // lotes (casas), troncos das árvores, postes
+const bumpLevel = () => { const lv = gameMode === 'career' ? careerLevel : freeLevel; return lv === 1 || lv === 2; };
+const bumpTarget = b => { const i = SOLIDS.indexOf(b); return (i >= 0 && i < HOUSE_SLOTS.length) || (world.extraSolids && world.extraSolids.includes(b)) || !!b.post || b.bar != null; };   // lotes (casas), troncos das árvores, postes, barreiras
 function countBumps() {
-  for (const b of van.touched) if (!bumpHold.has(b) && bumpTarget(b)) { bumps++; bumpHold.add(b); }
+  for (const b of van.touched) if (!bumpHold.has(b) && bumpTarget(b)) { bumps++; bumpHold.add(b); if (gameMode === 'career') career.bump(b, barriers.list.length); }
   for (const b of bumpHold) if (!van.touched.has(b) && van.gapTo(b) > 1) bumpHold.delete(b);
 }
 const resetBumps = () => { bumps = 0; bumpHold.clear(); };
+/** Prédios comerciais da partida (grade): porta e frente do lote (as fachadas dão para o sul). */
+const shopFronts = () => game.pool.filter(h => HOUSES[h].kind === 'shop' && !boom.isDestroyed(h)).map(h => { const s = game.slotOf[h]; return { x: doorPoint(s).x, z: slotOrigin(s).z + L_LOT }; });
 const TIMER_PLAY = ['drive', 'ring', 'dialog', 'fuel', 'walk', 'missile', 'chat', 'inside'];                 // partida na tela: aparece
 const TIMER_OFF = ['title', 'levelSelect', 'levelFly', 'shop', 'mapIn', 'map', 'mapOut', 'fadeIn', 'fadeOut'];   // menus e fades: não conta
 const missionsBtn = createMissionsButton(stage, () => {
@@ -1876,6 +1879,7 @@ function update(dt, t) {
         else {
           if (!walker.placeBesideVan(van, walkSolids(), !!VENICE)) { fuelMsg = 'Encoste a lancha no cais para descer (L).'; fuelMsgT = 2.5; }   // Veneza: só desce em terra
           else {
+            if (gameMode === 'career') career.exitVan(van.x, van.z, van.heading, van.speed, shopFronts());   // Bairro 4: "Estacione de ré"
             van.stop(); nearHouse = -1; nearPump = false;
             walker.show(true);
             setState('walk');
@@ -1887,7 +1891,7 @@ function update(dt, t) {
       van.setGhost(free && (menu.unstoppable || heli.high));
       if (heli.landed) van.stop();                // pousado no teto: parado até decolar (H)
       if (!mooringStep(dt)) van.update(dt, heli.landed ? { x: 0, z: 0 } : approachLock() ? approachAxis() : input.axis(), approachLock() ? 'car' : rig.mode === 'chase' ? 'car' : 'screen');
-      if (bumpLevel() && !heli.flying) countBumps();  // Bairro 2: batidas da van (não conta no ar, nem descendo do helicóptero)
+      if (bumpLevel() && !heli.flying) countBumps();  // Bairros 2 e 3: batidas da van (não conta no ar, nem descendo do helicóptero)
       if (heli.on && rig.mode === 'chase') {      // no ar, A/D giram mesmo parado
         const ax = input.axis().x;
         if (ax) van.turn(ax * 2.2 * dt * (1 - Math.min(1, Math.abs(van.speed) / 5)));
@@ -1896,7 +1900,7 @@ function update(dt, t) {
       nearHouse = heli.flying ? -1 : findNearHouse();
       nearGate = heli.flying || Math.abs(van.speed) > DELIVERY_MAX_SPEED ? -1 : findNearGate(van.x + Math.cos(van.heading) * 2, van.z + Math.sin(van.heading) * 2, 6.5);   // Colheita: porteira fechada à frente
       if (nearGate >= 0) nearHouse = -1;
-      if (gameMode === 'career') career.tick(van.x, van.z, van.heading);   // ruas, entradas e esquinas (missões)
+      if (gameMode === 'career') career.tick(van.x, van.z, van.heading, { speed: van.speed, time: matchTimer.time, bars: barriers.list });   // ruas, barreiras, ré e cruzamentos (missões)
       if (input.hint()) requestHint();
       if (free && !MOONV && input.fire()) { van.stop(); nearHouse = -1; boom.fire(van, game.slotOf); setState('missile'); break; }
       actionLock = Math.max(0, actionLock - dt);
@@ -2378,7 +2382,7 @@ window.ADRESS = {
   setCareerLevel(l) { careerLevel = l; },
   setFreeLevel(l) { freeLevel = l; },
   walker, jamSound, cityAmb, train, walkSolids, trolley, get tseq() { return tseq; }, get FAVELA() { return FAVELA; }, traffic, tractors, chickens, plow, workTraffic, banks, get SNOWV() { return SNOWV; }, get MEDV() { return MEDV; }, medLife, get chatNpc() { return chatNpc; }, night, get grillIn() { return grillIn; }, get insideOn() { return insideOn; }, get FARMLAND() { return FARMLAND; }, get GARDV() { return GARDV; }, gardGate, gateOpen, openGate,
-  get levelSelect() { return levelSelect; }, matchTimer, get bumps() { return bumps; },
+  get levelSelect() { return levelSelect; }, matchTimer, get bumps() { return bumps; }, HOUSES, shopFronts,
   shop,
   startGame: m => startFree(m), newRound: () => startNewRound(),
   get shadowTier() { return shadowTier; },

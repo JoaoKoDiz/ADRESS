@@ -5,7 +5,7 @@
 // Missões por fase (nível). id liga a missão à regra em career.js; goal = quanto precisa para concluir.
 // Fases sem missões definidas usam o modelo (sem id: não avançam ainda).
 const PLACEHOLDER = () => Array.from({ length: 5 }, () => ({ id: null, name: 'MISSÃO', desc: 'Descrição breve da missão.', goal: 5 }));
-export const LEVEL_NAMES = ['Raízes', 'Horizontes', 'Entregador Teimoso', 'Péssimo Senso de Direção', '', '', '', '', 'Veneza', '', '', '', '', '', '', '', '', '', '', '', '', '', '', ''];
+export const LEVEL_NAMES = ['Raízes', 'Horizontes', 'Constância', 'Veredas', '', '', '', '', 'Veneza', '', '', '', '', '', '', '', '', '', '', '', '', '', '', ''];
 /** Bairro 18: espaço reservado para níveis futuros (não dá para jogar; não travam o desbloqueio do 20). */
 export const RESERVED = [];   // (18 = Modernista, 21 = Operário, 22 = Bosque, 23 = Cachoeira; nenhum reservado agora)   // (o 17 é Jardins, o 19 é o Penumbra)
 export const MISSIONS = [
@@ -25,8 +25,20 @@ export const MISSIONS = [
     { id: 'fast', name: 'Entrega rápida', desc: 'Conclua uma partida em até 3 minutos.', goal: 1 },
     { id: 'noBump', name: 'Sem esbarrar', desc: 'Conclua uma partida sem bater em casas, árvores ou postes.', goal: 1 },
   ],
-  PLACEHOLDER(),   // Bairro 3 (aguardando a nova lista)
-  PLACEHOLDER(),   // Bairro 4 (aguardando a nova lista)
+  [
+    { id: 'twoDetours', name: 'Dois desvios', desc: 'Vá de um lado ao outro de uma barreira e retorne usando um caminho diferente.', goal: 1 },
+    { id: 'stubborn', name: 'Barreira teimosa', desc: 'Bata três vezes na mesma barreira, afastando-se entre as batidas.', goal: 1 },
+    { id: 'allBars', name: 'Teste de resistência', desc: 'Bata em todas as barreiras da partida.', goal: 1 },
+    { id: 'offRoute', name: 'Fora da rota', desc: 'Faça entregas em duas casas diferentes, ambas fora das indicações das dicas.', goal: 1 },
+    { id: 'careful', name: 'Cuidado com as barreiras', desc: 'Conclua uma partida sem bater em nenhuma barreira.', goal: 1 },
+  ],
+  [
+    { id: 'fuelStop', name: 'Parada para abastecer', desc: 'Abasteça a van entre duas entregas.', goal: 1 },
+    { id: 'reversePark', name: 'Estacione de ré', desc: 'Estacione diante de um prédio comercial, com a traseira voltada para a entrada, e desça da van.', goal: 1 },
+    { id: 'reverse', name: 'Marcha à ré', desc: 'Percorra de ré uma rua inteira, de um cruzamento ao seguinte.', goal: 1 },
+    { id: 'lookStop', name: 'Olhe antes de seguir', desc: 'Pare por 3 segundos antes de atravessar três cruzamentos diferentes.', goal: 1 },
+    { id: 'quick', name: 'Entrega próxima', desc: 'Faça duas entregas consecutivas com até 45 segundos entre elas.', goal: 1 },
+  ],
   PLACEHOLDER(),   // Bairro 5
   PLACEHOLDER(),   // Bairro 6 (a cidade)
   PLACEHOLDER(),   // Bairro 7 (a cidade com caminhões e engarrafamentos)
