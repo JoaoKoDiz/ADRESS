@@ -759,8 +759,8 @@ export function createCareerMap(stageEl, audio) {
   scene.add(sun);
 
   // chão
-  const ground = new THREE.Mesh(new THREE.PlaneGeometry(800, 800), mat('#8fc865'));
-  ground.rotation.x = -Math.PI / 2;
+  const ground = new THREE.Mesh(new THREE.PlaneGeometry(1400, 800), mat('#8fc865'));
+  ground.rotation.x = -Math.PI / 2; ground.position.x = 250;   // cobre a estrada inteira (até o Bairro 24)
   scene.add(ground);
 
   // estrada com curvas suaves

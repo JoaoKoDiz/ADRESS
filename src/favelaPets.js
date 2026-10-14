@@ -268,7 +268,7 @@ export function createFavelaPets() {
     p.ph += dt * (moving > 2 ? 17 : moving > 0 ? 9.5 : 0);
     const amp = moving > 2 ? 0.85 : moving > 0 ? 0.55 : 0, sw = Math.sin(p.ph) * amp, L = p.lieK, Si = p.sitK, Sn = p.sniffK;
     g.root.position.set(p.x, p.y, p.z); g.root.rotation.y = -p.hd; g.root.scale.setScalar(p.size);
-    g.body.position.y = sp.bodyY * (1 - 0.62 * L) - sp.sitDrop * Si + (moving ? Math.abs(Math.sin(p.ph)) * 0.025 : 0) - (p.jump ? 0 : 0);
+    g.body.position.y = sp.bodyY * (1 - 0.62 * L) - sp.sitDrop * Si + (moving ? Math.abs(Math.sin(p.ph)) * 0.025 : 0);
     g.body.rotation.z = sp.sitPitch * Si - 0.08 * Sn + (p.jump ? 0.25 : 0);
     const [fl, fr, rl, rr] = g.legs;
     fl.rotation.z = sw + 1.45 * L - sp.sitPitch * Si + (p.jump ? 0.9 : 0); rr.rotation.z = sw - 1.35 * L + 0.85 * Si - (p.jump ? 0.7 : 0);

@@ -250,7 +250,7 @@ const CLOTHES = ['#e84a5f', '#ffd23f', '#3fa7d6', '#ffffff', '#7bc950'];
 export function buildFavelaOutside(F) {
   const O = F.outside, g = new THREE.Group(); g.name = 'favela-outside';
   const L = {};
-  const put = (k, x, y, z, sx, sy, sz, c) => (L[k] = L[k] || []).push([x, y, z, sx, sy, sz, c]);   // y = base (as peças nascem no chão)
+  const put = (k, x, y, z, sx, sy, sz, c, ry = 0) => (L[k] = L[k] || []).push([x, y, z, sx, sy, sz, c, ry]);   // y = base (as caixas nascem no chão; as vidraças, no centro)
   for (const f of O.fills) put('box', (f.x0 + f.x1) / 2, 0, (f.z0 + f.z1) / 2, f.x1 - f.x0, f.y, f.z1 - f.z0, CONC);
   for (const c of O.cells) put('box', (c.x0 + c.x1) / 2, -0.02, (c.z0 + c.z1) / 2, c.x1 - c.x0, Math.max(0.06, c.t + 0.02), c.z1 - c.z0, GROUND_TONES[c.tone]);
   for (const h of O.houses) {
@@ -258,10 +258,10 @@ export function buildFavelaOutside(F) {
     put('box', cx, y, cz, w, H - rawH, d, h.tall ? TALL_TONES[h.tone % TALL_TONES.length] : OUT_TONES[h.tone]);
     if (rawH) put('box', cx, y + H - rawH, cz, w - 0.1, rawH, d - 0.1, '#8e8a83');            // último andar ainda no bloco
     put('box', cx, y + H - 0.04, cz, w + 0.12, 0.16, d + 0.12, SLAB);                         // laje
-    // janelas (e a porta) numa face: normal (fx, fz), deslocamento ao longo da face
+    // janelas (e a porta) numa face: normal (fx, fz), deslocamento ao longo da face (um plano só, rente à parede)
     const win = (fx, fz, yy, off, c = WIN, ww = 0.95, hh = 0.8) => {
-      if (fx) put('box', fx > 0 ? h.x1 + 0.03 : h.x0 - 0.03, yy, cz + off, 0.08, hh, ww, c);
-      else put('box', cx + off, yy, fz > 0 ? h.z1 + 0.03 : h.z0 - 0.03, ww, hh, 0.08, c);
+      if (fx) put('pane', fx > 0 ? h.x1 + 0.02 : h.x0 - 0.02, yy + hh / 2, cz + off, ww, hh, 1, c, fx * Math.PI / 2);
+      else put('pane', cx + off, yy + hh / 2, fz > 0 ? h.z1 + 0.02 : h.z0 - 0.02, ww, hh, 1, c, fz > 0 ? 0 : Math.PI);
     };
     const along = (fx) => (fx ? d : w);
     if (h.tall) {                                                    // prédio: janelas em grade nas quatro faces, caixa-d'água e antena no topo
@@ -278,6 +278,7 @@ export function buildFavelaOutside(F) {
         else if ((h.k + f) % 2) { win(h.fx, h.fz, yy, -a * 0.24); win(h.fx, h.fz, yy, a * 0.24); }
         else win(h.fx, h.fz, yy, 0);
         if (h.fx) win(0, sx, yy, 0); else win(sx, 0, yy, 0);
+        if ((h.k + f) % 3 === 0) win(-h.fx, -h.fz, yy, 0);       // de vez em quando, uma janela para fora também
       }
       if (h.laundry) {                                               // varal na laje
         const yt = y + H + 0.12, zz = h.fz ? cz + h.fz * (d / 2 - 0.8) : cz, xx = h.fx ? cx + h.fx * (w / 2 - 0.8) : cx;
@@ -298,14 +299,15 @@ export function buildFavelaOutside(F) {
   }
   const geo = {
     box: new THREE.BoxGeometry(1, 1, 1).translate(0, 0.5, 0),
-    tank: new THREE.CylinderGeometry(0.75, 0.68, 1.15, 10).translate(0, 0.575, 0),
+    pane: new THREE.PlaneGeometry(1, 1),
+    tank: new THREE.CylinderGeometry(0.75, 0.68, 1.15, 8).translate(0, 0.575, 0),
     trunk: new THREE.CylinderGeometry(0.22, 0.32, 2.0, 6).translate(0, 1.0, 0),
     crown: new THREE.IcosahedronGeometry(1, 0),
   };
-  const M = new THREE.Matrix4(), Q = new THREE.Quaternion(), V = new THREE.Vector3(), S = new THREE.Vector3(), C = new THREE.Color();
+  const M = new THREE.Matrix4(), Q = new THREE.Quaternion(), V = new THREE.Vector3(), S = new THREE.Vector3(), C = new THREE.Color(), Y = new THREE.Vector3(0, 1, 0);
   for (const k of Object.keys(L)) {
     const list = L[k], im = new THREE.InstancedMesh(geo[k], new THREE.MeshStandardMaterial({ color: '#ffffff', roughness: 0.88, flatShading: true }), list.length);
-    list.forEach(([x, y, z, sx, sy, sz, c], i) => { M.compose(V.set(x, y, z), Q, S.set(sx, sy, sz)); im.setMatrixAt(i, M); im.setColorAt(i, C.set(c)); });
+    list.forEach(([x, y, z, sx, sy, sz, c, ry], i) => { M.compose(V.set(x, y, z), Q.setFromAxisAngle(Y, ry), S.set(sx, sy, sz)); im.setMatrixAt(i, M); im.setColorAt(i, C.set(c)); });
     im.castShadow = false; im.receiveShadow = false; im.computeBoundingSphere();
     g.add(im);
   }

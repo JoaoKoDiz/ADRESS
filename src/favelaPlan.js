@@ -213,6 +213,7 @@ function planOutside(MAP, HEDGE) {
   const mark = (x0, z0, x1, z1) => { for (let a = Math.max(0, Math.floor((x0 - gx0) / G)); a <= Math.min(gn - 1, Math.floor((x1 - gx0) / G)); a++) for (let b = Math.max(0, Math.floor((z0 - gx0) / G)); b <= Math.min(gn - 1, Math.floor((z1 - gx0) / G)); b++) occ[b * gn + a] = 1; };
   for (const c of cells) mark(c.x0 - 1, c.z0 - 1, c.x1 + 1, c.z1 + 1);
   for (const f of fills) mark(f.x0, f.z0, f.x1, f.z1);
+  mark(gapsN[0][0] + 3, -56, gapsN[0][1] - 3, 0);                     // o caminho da van na cena do monstro fica sem árvores
   const busy = (x, z, r = 0) => {
     for (let a = Math.floor((x - r - gx0) / G); a <= Math.floor((x + r - gx0) / G); a++) for (let b = Math.floor((z - r - gx0) / G); b <= Math.floor((z + r - gx0) / G); b++)
       if (a >= 0 && b >= 0 && a < gn && b < gn && occ[b * gn + a]) return true;
