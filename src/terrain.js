@@ -29,7 +29,7 @@ export function buildTerrain() {
   if (FAVELA) buildFavelaScene(g, FAVELA, MAP, HEDGE);
   if (FARMLAND) buildFarmScene(g, FARMLAND);
   if (SNOWV) buildSnowScene(g, SNOWV, MAP, HEDGE);
-  if (MEDV) buildMedScene(g, MEDV, MAP, HEDGE);   // Nível 24 (Medieval): muralha, portão, patamares, ruas de pedra, praça, castelo, jardim
+  if (MEDV) { const m = new THREE.Group(); buildMedScene(m, MEDV, MAP, HEDGE); MEDV.sceneSolids = m.userData.solids || []; MEDV.sceneVanOnly = m.userData.vanOnly || []; g.add(m); }   // (colisões dos detalhes do cenário: layout.js)   // Nível 24 (Medieval): muralha, portão, patamares, ruas de pedra, praça, castelo, jardim
   if (FORESTV) FORESTV.work ? buildWorkScene(g, FORESTV) : FORESTV.modern ? buildModernScene(g, FORESTV) : buildForestScene(g, FORESTV, MAP, HEDGE);   // Níveis 18 (Modernista) e 22 (Bosque)
   if (GARDV) buildGardenScene(g, GARDV);
   if (FLUX) buildFluxScene(g, { FLUX, GRID, ROAD, LOT, WALK, roadCenter, slotOrigin });

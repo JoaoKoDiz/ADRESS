@@ -26,9 +26,9 @@ export function planMedieval(MAP, HEDGE) {
     w1: [44.5, 55.5], w2: [44.5, 84.5], e9: [240, 58],
     c1: [101.4, 104], pn: [129.4, 104], c2: [157.4, 104], pe: [157.4, 130], c3: [157.4, 156], ps: [129.4, 156], c4: [101.4, 156], pw: [101.4, 130],
     mw1: [62, 104], mw3: [42, 131], mw4: [46, 160], mw5: [70, 186], mw6: [101.4, 190], wq: [72, 126.5],
-    s2: [129.4, 186], r3a: [147.5, 190.5], r3b: [188.5, 190.5],
-    e2: [190, 101], e3: [226.5, 104], e4: [226.5, 128], r4a: [226.5, 151.5], r4b: [226.5, 192.5], e5: [192, 132], e6: [192, 160],
-    h1: [207, 194], h2: [180, 206], h3: [180, 222],
+    s2: [129.4, 186], r3a: [147.5, 190.5], r3b: [191, 190.5],
+    e2: [190, 101], e3: [226.5, 104], e4: [226.5, 128], r4a: [226.5, 151.5], r4b: [226.5, 196.5], e5: [192, 132], e6: [192, 160],
+    h1: [207, 195], h2: [195, 205], h3: [180, 222],
     s3: [101.4, 222], s4: [62, 224], s5: [24, 221], s6: [140, 224], s8: [101.4, 249],
     rn: [F.x, F.z - RING], rs: [F.x, F.z + RING], rw: [F.x - RING, F.z], re: [F.x + RING, F.z],
   };
@@ -96,7 +96,7 @@ export function planMedieval(MAP, HEDGE) {
     { x0: 174, x1: 186, z0: 216, z1: 228 },                                 // junto ao jardim
     { x0: 52, x1: 64, z0: 120, z1: 129 },                                   // oeste do meio
   ];
-  const depot = { x0: 160.5, x1: 170.5, z0: 110, z1: 118, door: { x: 159.8, z: 114 } };   // depósito (não é destino): perto da praça
+  const depot = { x0: 162.8, x1: 172.8, z0: 110, z1: 118, door: { x: 162.1, z: 114 } };   // depósito (não é destino): perto da praça, recuado da rua (calçada livre)
   const gateArea = { x0: 112, x1: 147, z0: -2, z1: 24 };
   // travessas de pedestres (a van não passa: frades nas pontas)
   const alleys = [
@@ -105,6 +105,11 @@ export function planMedieval(MAP, HEDGE) {
     { a: [80, 104], b: [80, 132], w: 3.0 },                                 // entre as ruas do oeste do meio
     { a: [192, 104], b: [192, 130], w: 3.0 },
   ];
+  for (const al of alleys) {                                               // as pontas começam onde termina a calçada (os frades não ficam na pista)
+    const P0 = al.a.slice(), P1 = al.b.slice(), at2 = t => [P0[0] + (P1[0] - P0[0]) * t, P0[1] + (P1[1] - P0[1]) * t], ok = t => { const [x, z] = at2(t); return roadDist(x, z) >= hw + STRIP; };
+    let t0 = 0, t1 = 1; while (t0 < 0.5 && !ok(t0)) t0 += 0.005; while (t1 > 0.5 && !ok(t1)) t1 -= 0.005;
+    al.a = at2(t0).map(v => +v.toFixed(2)); al.b = at2(t1).map(v => +v.toFixed(2));
+  }
   const alleyBox = al => ({ x0: Math.min(al.a[0], al.b[0]) - al.w / 2 - 0.4, x1: Math.max(al.a[0], al.b[0]) + al.w / 2 + 0.4, z0: Math.min(al.a[1], al.b[1]) - al.w / 2, z1: Math.max(al.a[1], al.b[1]) + al.w / 2 });
   const reserved = [plazaArea, castle, castle.court, garden, depot, gateArea, ...largos, ...alleys.map(alleyBox), ...rampBoxes];
 
@@ -199,11 +204,32 @@ export function planMedieval(MAP, HEDGE) {
     }
   }
   const houseSpots = spots.filter(s => !s.shop);
+  // ---- construções de fundo (NÃO são destinos): celeiros, depósitos de pedra, casinhas e telheiros no miolo dos quarteirões,
+  //      atrás das fileiras da rua; dão densidade ao burgo sem confundir as pistas (recuadas, sem porta para a rua, cores apagadas) ----
+  const fillers = [];
+  const segOf = (x, z) => { let b = null, bd = 1e9; for (const sg of segs) { if (sg.type === 'ring' || sg.type === 'spoke') continue; const d = segDist(x, z, sg).d; if (d < bd) { bd = d; b = sg; } } return b; };
+  const fKinds = ['barn', 'stone', 'cottage', 'cottage', 'shed', 'stone', 'barn', 'cottage'];
+  const cand = []; for (let z = HEDGE + 6; z < E0 - 5; z += 3.5) for (let x = HEDGE + 6; x < E0 - 5; x += 3.5) cand.push([x + (rnd() - 0.5) * 2, z + (rnd() - 0.5) * 2]);
+  for (let i = cand.length - 1; i > 0; i--) { const j = Math.floor(rnd() * (i + 1)); [cand[i], cand[j]] = [cand[j], cand[i]]; }   // ordem embaralhada: espalha pelo mapa
+  for (const [px, pz] of cand) {
+    if (fillers.length >= 110) break;
+    if (roadDist(px, pz) < hw + STRIP + 9) continue;
+    const kind = fKinds[Math.floor(rnd() * fKinds.length)], w = kind === 'shed' ? 4 + rnd() * 2 : kind === 'barn' ? 8 + rnd() * 3 : 6.5 + rnd() * 3, d = kind === 'shed' ? 3 + rnd() : kind === 'barn' ? 7 + rnd() * 2 : 5.5 + rnd() * 2.5;
+    const sg = segOf(px, pz), ux = sg.b[0] - sg.a[0], uz = sg.b[1] - sg.a[1], ry0 = Math.atan2(uz, -ux);   // alinhada com a rua mais perto
+    const f = { px, pz, ry: Math.abs(Math.sin(ry0)) > 0.7 ? Math.PI / 2 * Math.sign(Math.sin(ry0)) : (Math.cos(ry0) > 0 ? 0 : Math.PI), w, d, kind, k: rnd() };
+    const cs = corners(f), box = { x0: Math.min(...cs.map(c => c.x)), x1: Math.max(...cs.map(c => c.x)), z0: Math.min(...cs.map(c => c.z)), z1: Math.max(...cs.map(c => c.z)) };
+    if (box.x0 < HEDGE + 1.5 || box.z0 < HEDGE + 1.5 || box.x1 > E0 - 1.5 || box.z1 > E0 - 1.5) continue;
+    if (cs.some(c => roadDist(c.x, c.z) < hw + STRIP + 4.5)) continue;
+    const lv = level(px, pz); if (cs.some(c => level(c.x, c.z) !== lv)) continue;
+    if ([MID, HIGH].some(P => (box.x0 < P.x0 + 1.8 && box.x1 > P.x0 - 1.8 && box.z1 > P.z0) || (box.z0 < P.z0 + 1.8 && box.z1 > P.z0 - 1.8 && box.x1 > P.x0))) continue;
+    if (reserved.some(r => hit(box, r, 1.5)) || spots.some(o => obbHit(f, o, 1.4)) || fillers.some(o => obbHit(f, o, 1.2 + (o.k + f.k) * 0.8))) continue;
+    f.y = [0, MIDH, HIGHH][lv]; f.box = box; fillers.push(f);
+  }
   // ---- detalhes de lugar: árvores pontuais (quintais, jardim, praça), bancos públicos, lanternas nas esquinas ----
   const lineDist = (x, z, a, b) => { const dx = b.x - a.x, dz = b.z - a.z, L2 = dx * dx + dz * dz || 1, t = Math.max(0, Math.min(1, ((x - a.x) * dx + (z - a.z) * dz) / L2)); return Math.hypot(x - a.x - dx * t, z - a.z - dz * t); };
   const access = spots.map(sp => [sp.front, sp.door]);
   const free = (x, z, r, road = hw + STRIP + r) => x > HEDGE + r + 0.8 && z > HEDGE + r + 0.8 && x < E0 - r - 0.8 && z < E0 - r - 0.8 && roadDist(x, z) >= road &&
-    !spots.some(o => inR(o.box, x, z, r + 0.2)) && !reserved.some(q => inR(q, x, z, r + 0.3)) && !access.some(([a, b]) => lineDist(x, z, a, b) < r + 1.2) &&
+    !spots.some(o => inR(o.box, x, z, r + 0.2)) && !fillers.some(o => inR(o.box, x, z, r + 0.4)) && !reserved.some(q => inR(q, x, z, r + 0.3)) && !access.some(([a, b]) => lineDist(x, z, a, b) < r + 1.2) &&
     [[r, 0], [-r, 0], [0, r], [0, -r]].every(([a, b]) => level(x + a, z + b) === level(x, z)) &&
     ![MID, HIGH].some(P => (Math.abs(x - P.x0) < r + 1.2 && z > P.z0 - r - 1) || (Math.abs(z - P.z0) < r + 1.2 && x > P.x0 - r - 1));
   const trees = [];
@@ -272,6 +298,7 @@ export function planMedieval(MAP, HEDGE) {
   for (const st of stalls) { const along = Math.abs(Math.sin(st.ry)) > 0.5; st.box = along ? { x0: st.x - 1.3, x1: st.x + 1.3, z0: st.z - st.w / 2, z1: st.z + st.w / 2 } : { x0: st.x - st.w / 2, x1: st.x + st.w / 2, z0: st.z - 1.3, z1: st.z + 1.3 }; solids.push({ ...st.box }); }
   solids.push({ x0: castle.x0, x1: castle.x1, z0: castle.z0, z1: castle.z1 });                       // castelo
   solids.push({ x0: depot.x0, x1: depot.x1, z0: depot.z0, z1: depot.z1 });                           // depósito
+  for (const f of fillers) solids.push({ ...f.box });                                                 // construções de fundo
   for (const al of alleys) for (const [x, z] of [al.a, al.b]) {                                        // frades nas pontas das travessas
     const v = Math.abs(al.b[0] - al.a[0]) < Math.abs(al.b[1] - al.a[1]);
     vanOnly.push(v ? { x0: x - al.w / 2, x1: x + al.w / 2, z0: z - 0.3, z1: z + 0.3 } : { x0: x - 0.3, x1: x + 0.3, z0: z - al.w / 2, z1: z + al.w / 2 });
@@ -283,7 +310,7 @@ export function planMedieval(MAP, HEDGE) {
   const guard = { a: { x: 121.5, z: 18 }, b: { x: 121.5, z: 40 }, look: { x: 129.4, z: 30 } };
   return {
     medieval: true, N, segs, ramps, MID, HIGH, h, level, spots, houseSpots, shops, trees, lamps, benches, roadDist, free, hw, RW, STRIP,
-    F, RING, ISLAND, FOUNT, PL, quads, stalls, plazaBenches, castle, garden, largos, depot, gateArea, alleys, cartLoops, guard, solids, vanOnly, nodeR: () => hw,
+    F, RING, ISLAND, FOUNT, PL, quads, stalls, plazaBenches, fillers, castle, garden, largos, depot, gateArea, alleys, cartLoops, guard, solids, vanOnly, nodeR: () => hw,
     walk: { nodes: WN, edges: WE, path: walkPath, nearest: nearestW }, MIDH, HIGHH,
   };
 }

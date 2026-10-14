@@ -3,6 +3,7 @@
 import * as THREE from 'three';
 import { box, cyl, sphere, cone, torus, at, mat, dynamic, bakeStatic } from './kit.js';
 import { SHIRTS, HAIRS, HOUSES, MOON_COL } from '../data.js';
+import { medLook } from './medievalPeople.js';
 
 const SKIN = '#f0c49a', PANTS = '#3d4a66', SHOES = '#2b2522', EYES = '#2a1d14', CHEEK = '#f29a8a';
 const CARDBOARD = '#c98a4a', TAPE = '#f3d9a6';
@@ -84,8 +85,19 @@ export const ALIEN = {
 };
 const FARM_LOOKS = ['plaid-straw', 'plain-cap-rolled', 'overalls-straw', 'plaid-cap', 'overalls-cap-rolled', 'plain-straw-rolled', 'plaid-rolled', 'overalls-plain'];
 
+// Medieval (Nível 24): o mesmo visual dos moradores do burgo (medievalPeople.js): túnica ou vestido, cinto, avental,
+// touca/capuz/chapéu, botas; nas 4 lojas, o padeiro, o ferreiro, a taverneira e a tecelã com as roupas do ofício.
+const MED_SHOP_ROLE = { bakery: 'baker', smithy: 'smith', tavern: 'keeper', textile: 'weaver' };
+function buildMedResident(h) {
+  const H = HOUSES[h], look = H.kind === 'mvs' ? medLook(MED_SHOP_ROLE[H.shopKey] || 'merchant', 7) : medLook(['buyer', 'walker', 'sweeper', 'water', 'gardener', 'merchant'][h % 6], h * 7 + 3);
+  if (look.hat === 'straw' && H.kind === 'mvh') look.hat = 'coif';
+  return buildCore(h, { shirt: look.top, hair: look.hair, farm: { pants: look.hose, boots: look.boots, rolled: look.rolled }, med: look, skin: look.skin });
+}
+
 /** opts.winter: no Nevasca, os moradores vestem roupa de inverno. */
 export function buildResident(houseIndex, opts = {}) {
+  const kd = HOUSES[houseIndex] && HOUSES[houseIndex].kind;
+  if (kd === 'mvh' || kd === 'mvs') return buildMedResident(houseIndex);
   const farm = HOUSES[houseIndex] && HOUSES[houseIndex].kind === 'farm';
   if (farm) return buildFarmResident(houseIndex);
   if (HOUSES[houseIndex] && HOUSES[houseIndex].kind === 'moon') {     // Órbita: ETs simpáticos de macacão espacial
@@ -108,8 +120,8 @@ export function buildResident(houseIndex, opts = {}) {
   return buildCore(houseIndex, { shirt, hair, ven, look, V, pk, striped });
 }
 
-function buildCore(houseIndex, { shirt, hair, ven = false, look = null, V = VEN_STYLE, pk = a => a[0], striped = false, farm = null, alien = null, winter = null }) {
-  const SK = alien ? alien.skin : SKIN;
+function buildCore(houseIndex, { shirt, hair, ven = false, look = null, V = VEN_STYLE, pk = a => a[0], striped = false, farm = null, alien = null, winter = null, med = null, skin = null }) {
+  const SK = alien ? alien.skin : skin || SKIN;
   const root = new THREE.Group();
   root.name = 'resident:' + houseIndex;
   const PANTS_ = farm ? farm.pants : PANTS, SHOES_ = farm ? (farm.boots || FARM_STYLE.boots) : SHOES;
@@ -121,11 +133,22 @@ function buildCore(houseIndex, { shirt, hair, ven = false, look = null, V = VEN_
   for (const s of [-1, 1]) {
     body.add(at(box(0.22, 0.5, 0.24, PANTS_), s * 0.14, 0.33, 0));
     if (winter) body.add(at(box(0.28, 0.3, 0.36, winter.boots), s * 0.14, 0.15, 0.04));   // Nevasca: botas
+    else if (med) body.add(at(box(0.26, 0.18, 0.34, SHOES_), s * 0.14, 0.09, 0.04));                // Medieval: botas curtas
     else body.add(at(box(0.26, farm ? 0.26 : 0.12, 0.34, SHOES_), s * 0.14, farm ? 0.13 : 0.06, 0.04));   // Colheita: botas
   }
   // tronco (camisa) + cinto
   body.add(at(cyl(0.34, 0.37, 0.62, shirt, 10), 0, 0.88, 0));
-  body.add(at(cyl(0.375, 0.375, 0.08, PANTS_, 10), 0, 0.6, 0));
+  body.add(at(cyl(0.375, 0.375, 0.08, med ? med.belt : PANTS_, 10), 0, 0.6, 0));
+  if (med) {                                                           // Medieval: barra da túnica ou saia, avental, colete, capa, gola
+    if (med.dress) { body.add(at(cyl(0.38, 0.56, 0.56, med.dress, 12), 0, 0.36, 0)); body.add(at(cyl(0.565, 0.565, 0.05, med.dress, 12), 0, 0.11, 0)); }
+    else body.add(at(cyl(0.375, 0.43, 0.3, shirt, 10), 0, 0.47, 0));
+    body.add(at(box(0.1, 0.07, 0.03, '#c9a85a'), 0, 0.6, 0.39));
+    if (med.apron) { body.add(at(box(0.46, med.dress ? 0.56 : 0.46, 0.04, med.apron), 0, med.dress ? 0.36 : 0.4, med.dress ? 0.48 : 0.43, med.dress ? -0.3 : -0.16, 0, 0)); if (med.bib) body.add(at(box(0.36, 0.28, 0.04, med.apron), 0, 0.94, 0.37)); }
+    if (med.vest) for (const sd of [-1, 1]) body.add(at(box(0.22, 0.56, 0.05, med.vest), sd * 0.18, 0.88, 0.35, 0, sd * 0.38, 0));
+    if (med.cape) body.add(at(cyl(0.31, 0.53, 0.42, med.cape, 12), 0, 1.0, -0.02));
+    if (med.hat === 'hood') body.add(at(cyl(0.3, 0.5, 0.34, med.hatColor, 12), 0, 1.06, 0));
+    body.add(at(torus(0.25, 0.04, med.top, 4, 12), 0, 1.175, 0, Math.PI / 2, 0, 0));
+  }
   if (winter) {                                                        // Nevasca: casaco grosso (até o quadril), zíper, barra e cachecol
     body.add(at(cyl(0.41, 0.46, 0.76, shirt, 12), 0, 0.84, 0));
     body.add(at(box(0.05, 0.66, 0.04, '#2b2b2b'), 0, 0.86, 0.43));
@@ -166,10 +189,22 @@ function buildCore(houseIndex, { shirt, hair, ven = false, look = null, V = VEN_
     body.add(at(cyl(0.377, 0.377, 0.07, '#d8dade', 10), 0, 0.64, 0));    // cinto
   } else {
     // cabelo: calota + nuca
-    const cap = at(sphere(0.43, hair, 12, 8), 0, hy + 0.12, -0.06);
-    cap.scale.set(1, 0.72, 1);
-    head.add(cap);
-    head.add(at(box(0.72, 0.4, 0.22, hair), 0, hy - 0.02, -0.26));
+    const bald = med && med.hairStyle === 'bald';                     // Medieval: careca (só a coroa de cabelo atrás)
+    if (!bald) { const cap = at(sphere(0.43, hair, 12, 8), 0, hy + 0.12, -0.06); cap.scale.set(1, 0.72, 1); head.add(cap); }
+    head.add(at(box(0.72, bald ? 0.2 : 0.4, 0.22, hair), 0, bald ? hy - 0.06 : hy - 0.02, -0.26));
+  }
+  if (med) {                                                          // Medieval: coque/trança, barba, touca, lenço, capuz ou chapéu
+    if (med.hairStyle === 'bun') head.add(at(sphere(0.16, hair, 8, 6), 0, hy + 0.24, -0.38));
+    if (med.hairStyle === 'braid') head.add(at(cyl(0.075, 0.05, 0.5, hair, 6), 0, hy - 0.36, -0.38, 0.25, 0, 0));
+    if (med.beard) { const bd = at(sphere(0.24, med.beard, 8, 6), 0, hy - 0.23, 0.2); bd.scale.set(1.25, 0.85, 0.75); head.add(bd); head.add(at(box(0.26, 0.06, 0.07, med.beard), 0, hy - 0.11, 0.38)); }
+    const hc = med.hatColor, hemi = r => new THREE.Mesh(new THREE.SphereGeometry(r, 10, 4, 0, Math.PI * 2, 0, Math.PI / 2), mat(hc));
+    if (med.hat === 'coif') { head.add(at(hemi(0.46), 0, hy + 0.04, -0.03)); head.add(at(box(0.82, 0.46, 0.22, hc), 0, hy - 0.08, -0.26)); }
+    else if (med.hat === 'kerchief') { head.add(at(hemi(0.47), 0, hy + 0.08, -0.04)); head.add(at(sphere(0.1, hc, 6, 4), 0, hy + 0.02, -0.46)); }
+    else if (med.hat === 'hood') { const hd = new THREE.Mesh(new THREE.SphereGeometry(0.52, 10, 6, Math.PI * 0.8, Math.PI * 1.4, 0, Math.PI * 0.62), mat(hc)); head.add(at(hd, 0, hy - 0.02, -0.04)); head.add(at(box(0.86, 0.5, 0.3, hc), 0, hy - 0.24, -0.28)); }
+    else if (med.hat === 'felt' || med.hat === 'straw') { const r = med.hat === 'straw' ? 0.66 : 0.58; head.add(at(cyl(r, r, 0.04, hc, 14), 0, hy + 0.37, -0.03)); head.add(at(cyl(0.33, 0.38, 0.28, hc, 12), 0, hy + 0.5, -0.03)); head.add(at(cyl(0.385, 0.385, 0.06, '#4a3020', 12), 0, hy + 0.41, -0.03)); }
+    else if (med.hat === 'cap') { const c = hemi(0.46); c.scale.y = 0.8; head.add(at(c, 0, hy + 0.1, -0.03)); }
+    else if (med.hat === 'beret') head.add(at(cyl(0.47, 0.44, 0.12, hc, 12), 0.03, hy + 0.38, -0.04, 0, 0, 0.14));
+    else if (med.hat === 'baker') { head.add(at(cyl(0.42, 0.4, 0.3, hc, 12), 0, hy + 0.42, -0.02)); const t = sphere(0.46, hc, 10, 6); t.scale.set(1, 0.42, 1); head.add(at(t, 0, hy + 0.58, -0.02)); }
   }
   if (winter) {                                                       // gorro de lã (meia esfera sobre o cabelo), barra dobrada e pompom
     const beanie = new THREE.Mesh(new THREE.SphereGeometry(0.46, 14, 7, 0, Math.PI * 2, 0, Math.PI / 2), mat(winter.hat));
@@ -198,7 +233,7 @@ function buildCore(houseIndex, { shirt, hair, ven = false, look = null, V = VEN_
       head.add(at(sphere(0.065, EYES, 6, 4), s * 0.15, hy + 0.05, 0.36));
       head.add(at(sphere(0.065, CHEEK, 6, 4), s * 0.25, hy - 0.08, 0.31));
     }
-    head.add(at(sphere(0.06, SKIN, 6, 4), 0, hy - 0.04, 0.4));
+    head.add(at(sphere(0.06, SK, 6, 4), 0, hy - 0.04, 0.4));
   }
 
   // expressões (trocadas por setMood)

@@ -127,18 +127,20 @@ function buildCamBoxes() {
     CAM_BOXES.push([V.MID.x0, V.MID.z0, MAP, MAP, V.MIDH + 0.5], [V.HIGH.x0, V.HIGH.z0, MAP, MAP, V.HIGHH + 0.5]);
     for (const sp of V.spots) CAM_BOXES.push([sp.walkBox.x0 - 0.6, sp.walkBox.z0 - 0.6, sp.walkBox.x1 + 0.6, sp.walkBox.z1 + 0.6, sp.y + (sp.shop ? 9.5 : 9)]);
     const C = V.castle; CAM_BOXES.push([C.x0 - 1, C.z0 - 1, C.x1 + 1, C.z1 + 1, V.HIGHH + 26]);
+    for (const f of V.fillers || []) CAM_BOXES.push([f.box.x0 - 0.5, f.box.z0 - 0.5, f.box.x1 + 0.5, f.box.z1 + 0.5, f.y + 6.5]);
     const D = V.depot; CAM_BOXES.push([D.x0 - 0.5, D.z0 - 0.5, D.x1 + 0.5, D.z1 + 0.5, V.MIDH + 5.5]);
     for (const st of V.stalls) CAM_BOXES.push([st.box.x0 - 0.4, st.box.z0 - 0.4, st.box.x1 + 0.4, st.box.z1 + 0.4, V.MIDH + 3.4]);
-    CAM_BOXES.push([108, -1, 151, 4, 13]);                   // portão (torres e arco)
+    CAM_BOXES.push([108, -12, 125.2, 4, 14], [133.6, -12, 151, 4, 14]);   // torres do portão (o vão do arco fica livre: a câmera acompanha a van por baixo)
   }
   if (FORESTV) {                                               // Bosque: patamar, casas e copas (o braço encurta antes de entrar numa árvore)
     if (FORESTV.MID) CAM_BOXES.push([FORESTV.MID.x0, FORESTV.MID.z0, MAP, MAP, 2.9]);
     for (const sp of FORESTV.spots) CAM_BOXES.push([sp.walkBox.x0 - 0.8, sp.walkBox.z0 - 0.8, sp.walkBox.x1 + 0.8, sp.walkBox.z1 + 0.8, sp.y + 7.8]);
     if (FORESTV.modern || FORESTV.work) for (const t of FORESTV.trees) { const r = (t.type === 'wide' ? 2.2 : 1.6) * t.s; CAM_BOXES.push([t.x - r, t.z - r, t.x + r, t.z + r, t.y + (t.type === 'tall' ? 6 : 5) * t.s]); }
   }
-  if (GARDV) {                                                 // Jardins: casas (até o telhado do 2º andar), coreto e árvores do parque
-    for (const sp of GARDV.spots) CAM_BOXES.push([sp.walkBox.x0 - 0.8, sp.walkBox.z0 - 0.8, sp.walkBox.x1 + 0.8, sp.walkBox.z1 + 0.8, 9]);
-    for (const t of GARDV.trees) CAM_BOXES.push([t.x - 1.4, t.z - 1.4, t.x + 1.4, t.z + 1.4, 4.5]);
+  if (GARDV) {                                                 // Jardins: casas (até o bico do chalé de 2 andares), árvores, guarita e salão do clube
+    for (const sp of GARDV.spots) CAM_BOXES.push([sp.walkBox.x0 - 0.8, sp.walkBox.z0 - 0.8, sp.walkBox.x1 + 0.8, sp.walkBox.z1 + 0.8, 10]);
+    for (const t of GARDV.trees) { const r = 1.4 * t.s; CAM_BOXES.push([t.x - r, t.z - r, t.x + r, t.z + r, (t.type === 'tall' ? 5 : t.type === 'palm' ? 5.6 : 3.9) * t.s]); }
+    for (const b of [GARDV.BOOTH, GARDV.club.hall]) CAM_BOXES.push([b.x0 - 1.4, b.z0 - 1.4, b.x1 + 1.4, b.z1 + 1.4, b === GARDV.BOOTH ? 3.6 : 4.2]);
   }
   for (const s of FAVELA || FARMLAND || SNOWV || MOONV || GARDV || FORESTV || MEDV ? [] : HOUSE_SLOTS) {
     const o = slotOrigin(s), H = LOT_ANCHORS.house;

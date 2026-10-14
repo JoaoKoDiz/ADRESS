@@ -2,7 +2,7 @@
 // integrada) e lojas de arquitetura parecida; cenário fixo (calçadas contínuas, rotatórias com ilha, balões, postes simples).
 // Lote centrado na origem, frente em +z (z = 8,6), como as casas do Jardins.
 import * as THREE from 'three';
-import { box, cyl, sphere, at, mat, textTexture } from './kit.js';
+import { box, cyl, sphere, at, mat, textTexture, bakeStatic } from './kit.js';
 import { MDH_COL } from '../data.js';
 import { MODERN } from '../modernPlan.js';
 import { autumnTree } from './forest.js';
@@ -21,7 +21,7 @@ export function buildModernLot(h) {
   };
   const win = (x0, x1, y0, y1, z) => { const m = new THREE.Mesh(new THREE.BoxGeometry(x1 - x0, y1 - y0, 0.08), glassMat()); m.position.set((x0 + x1) / 2, G + (y0 + y1) / 2, z); g.add(m);
     P(box(x1 - x0 + 0.16, 0.1, 0.14, DARK), (x0 + x1) / 2, G + y0 - 0.02, z); };
-  if (h.kind === 'mds') return buildModernShop(g, P, h, fac, win, G);
+  if (h.kind === 'mds') return bakeStatic(buildModernShop(g, P, h, fac, win, G));   // (assado: o bairro funde todos os lotes por material)
   const two = h.floors === 2, H = 3.0;
   let fz;
   // volumes (formas diferentes: L com garagem, andar de cima em balanço, barra comprida com bloco alto atrás, dois blocos desencontrados)
@@ -68,7 +68,7 @@ export function buildModernLot(h) {
   }
   if (h.pool) { P(box(2.8, 0.14, 2.4, '#e2e0da'), 1.6, 0.17, 4.0); P(box(2.4, 0.06, 2.0, '#5aa9d6', { roughness: 0.1, metalness: 0.2 }), 1.6, 0.24, 4.0); }
   if (h.bench) { P(box(1.9, 0.12, 0.55, WOOD), 1.6, G + 0.5, 7.2); for (const s of [-0.75, 0.75]) P(box(0.18, 0.45, 0.5, CONC), 1.6 + s, G + 0.22, 7.2); }
-  return g;
+  return bakeStatic(g);
 }
 
 function buildModernShop(g, P, h, fac, win, G) {
@@ -98,6 +98,7 @@ export function buildModernScene(g, V) {
     if (s.type !== 'cul') for (let t = 4; t < len - 4; t += 3.4) add(box(0.22, 0.02, 1.6, '#f2f2f2'), ax + (bx - ax) * t / len, 0.13, az + (bz - az) * t / len, 0, ry, 0);
   }
   for (const [k, [x, z]] of Object.entries(V.N)) {
+    if (k === 'n0') continue;                                                       // a rua de entrada termina reta na abertura do muro
     const r = V.nodeR(k);
     add(cyl(r + 1.7, r + 1.7, 0.08, SW, 28), x, 0.04, z); add(cyl(r, r, 0.06, ASPH, 28), x, 0.092, z);
   }
@@ -116,5 +117,36 @@ export function buildModernScene(g, V) {
     const bg = new THREE.Group(); bg.position.set(b.x, 0, b.z); bg.rotation.y = b.ry; g.add(bg);
     bg.add(at(box(2.0, 0.12, 0.6, WOOD), 0, 0.5, 0)); for (const d of [-0.8, 0.8]) bg.add(at(box(0.2, 0.45, 0.55, CONC), d, 0.22, 0));
   }
+  buildCondoWall(add, V);
   return g;
+}
+
+/** Muro do condomínio (no lugar da sebe): concreto claro com pilares e capa escura; portaria com guarita e placa. */
+function buildCondoWall(add, V) {
+  const { WALL_H } = MODERN, WALLC = '#e9e6df', PIL = '#d2cec5', CAPC = '#6f737a';
+  for (const w of V.walls) {
+    const lx = w.x1 - w.x0, lz = w.z1 - w.z0, cx = (w.x0 + w.x1) / 2, cz = (w.z0 + w.z1) / 2, alongX = lx > lz, len = alongX ? lx : lz;
+    add(box(lx, WALL_H, lz, WALLC), cx, WALL_H / 2, cz);
+    add(box(alongX ? lx : lx + 0.2, 0.14, alongX ? lz + 0.2 : lz, CAPC), cx, WALL_H + 0.07, cz);
+    // pilares a cada ~12, salientes só para fora (por dentro, a face fica rente à colisão)
+    const out = Math.sign((alongX ? cz : cx) - V.MAP / 2) * 0.15, n = Math.max(1, Math.round(len / 12)), a0 = alongX ? w.x0 : w.z0;
+    for (let k = 0; k <= n; k++) {
+      const u = Math.min(a0 + len - 0.45, Math.max(a0 + 0.45, a0 + len * k / n));
+      add(box(alongX ? 0.9 : lx + 0.3, WALL_H + 0.3, alongX ? lz + 0.3 : 0.9, PIL), alongX ? u : cx + out, (WALL_H + 0.3) / 2, alongX ? cz + out : u);
+    }
+  }
+  // portaria: pilares largos dos dois lados da abertura (a cancela sai do pilar oeste), guarita e placa
+  const G = V.GATE;
+  for (const x of [G.x0 - 0.6, G.x1 + 0.6]) { add(box(1.2, WALL_H + 0.9, 1.2, PIL), x, (WALL_H + 0.9) / 2, V.HEDGE - 0.6); add(box(1.4, 0.16, 1.4, CAPC), x, WALL_H + 0.98, V.HEDGE - 0.7); }
+  const B = V.BOOTH, bx = (B.x0 + B.x1) / 2, bz = (B.z0 + B.z1) / 2, bw = B.x1 - B.x0, bd = B.z1 - B.z0;
+  add(box(bw, 2.8, bd, '#f4f3ef'), bx, 1.4, bz);
+  add(box(bw + 1.4, 0.24, bd + 1.0, CAPC), bx - 0.5, 2.92, bz);                       // laje com beiral (mais larga do lado da rua)
+  add(box(0.08, 1.1, bd - 1.2, GLASS, { roughness: 0.2, metalness: 0.15, emissive: '#2a4a6a', emissiveIntensity: 0.18 }), B.x0 - 0.02, 1.75, bz);   // janela para a rua
+  add(box(bw - 1.0, 1.1, 0.08, GLASS, { roughness: 0.2, metalness: 0.15, emissive: '#2a4a6a', emissiveIntensity: 0.18 }), bx, 1.75, B.z0 - 0.02);  // janela para a entrada
+  add(box(1.0, 2.1, 0.08, '#2b2d33'), bx + 0.8, 1.05, B.z1 + 0.02);                  // porta (fundos)
+  add(box(0.5, 0.06, bd - 1.2, CONC), B.x0 - 0.3, 1.18, bz);                          // balcão da janela
+  const tex = textTexture('RESIDENCIAL MODERNISTA', { width: 1024, height: 128, bg: '#2b2d33', fg: '#f4f3ef', font: 'bold 70px "Trebuchet MS", sans-serif' });
+  const sign = new THREE.Mesh(new THREE.PlaneGeometry(9, 1.125), new THREE.MeshBasicMaterial({ map: tex }));
+  const wz = V.walls[0].z0;                                                           // face de fora do muro norte (quem chega vê)
+  add(sign, G.x0 - 7.0, 1.55, wz - 0.03, 0, Math.PI, 0);
 }

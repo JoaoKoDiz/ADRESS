@@ -309,6 +309,11 @@ export function buildItem(name, o = {}) {
       P(G.cyl(0.072, 0.072, 0.03, 8), '#f2ead8', 0, 0.085, 0); break;
     }
     case 'rag': P(G.box(0.16, 0.035, 0.14), '#e9dfc6', 0, 0, 0, 0.2, 0.3, 0.1); break;
+    case 'dirt': {                                             // montinho de folhas secas e poeira (varredor)
+      const C = ['#8a6a3e', '#a8803e', '#6f5a3a', '#b8943e', '#7a6a52'];
+      for (let i = 0; i < 9; i++) { const a = i * 2.4 + k, r = 0.08 + (i % 4) * 0.08; P(G.sph(0.09 + (i % 3) * 0.03, 6, 4), C[(i + k) % C.length], Math.cos(a) * r, 0.02, Math.sin(a) * r, 0, a, 0, 1.3, 0.28, 0.9); }
+      break;
+    }
     case 'bread': P(G.sph(0.1, 7, 5), '#c98a3c', 0, 0, 0, 0, 0, 0, 1.8, 0.8, 1); break;
     default: P(G.box(0.2, 0.2, 0.2), '#888888', 0, 0, 0);
   }
@@ -466,14 +471,16 @@ export function animatePerson(P, s) {
     }
     armsBusy = true; head += 0.2;
     if (Math.floor(at * 6 / Math.PI) !== s._g) { s._g = Math.floor(at * 6 / Math.PI); s.ev && s.ev.push('swish'); }
-  } else if (act === 'fill' && onBody) {                                                    // abaixa o balde sob a bica, espera encher e levanta
-    const down = smooth(0.1, 0.9, at) * (1 - smooth(3.0, 3.8, at)), bend = 0.15 + 0.45 * down, hd = onBody.userData.handle;
-    const by = 0.98 - 0.22 * down, bz = fitZ(by - 0.09, 0.42 + 0.3 * down, 0.07, bend);
+  } else if (act === 'fill' && onBody) {                                                    // põe o balde na grade da bica, espera encher e levanta cheio
+    const crouch = Math.max(smooth(0, 0.75, at) * (1 - smooth(1.0, 1.5, at)), smooth(3.0, 3.6, at) * (1 - smooth(3.95, 4.55, at)));
+    const hold = at < 1.15 || at > 3.35, k = at < 0.8 ? smooth(0, 0.8, at) : at < 3.9 ? 1 : 1 - smooth(3.9, 4.5, at);
+    b.body.position.y = -0.2 * crouch; b.hipL.rotation.x = b.hipR.rotation.x = -0.55 * crouch; b.kneeL.rotation.x = b.kneeR.rotation.x = 1.0 * crouch;
+    b.waist.rotation.x = 0.1 + 0.62 * crouch;
+    const gy = 0.2 * crouch + 0.57, by = 0.92 + (gy - 0.92) * k, bz = 0.38 + (0.5 - 0.38) * k, hd = onBody.userData.handle;   // no chão: a alça fica 0,57 acima
     onBody.position.set(0, by, bz); onBody.quaternion.identity();
-    const pl = [hd[0].x, by + hd[0].y, bz], pr = [hd[1].x, by + hd[1].y, bz];
-    b.waist.rotation.x = bend;
-    b.hipL.rotation.x = b.hipR.rotation.x = -0.3 * down; b.kneeL.rotation.x = b.kneeR.rotation.x = 0.55 * down; b.body.position.y = -0.09 * down;
-    reach(P, -1, ...pl, -0.6, -0.5, -0.3); reach(P, 1, ...pr, 0.6, -0.5, -0.3); armsBusy = true; head += 0.2;
+    if (hold) { reach(P, -1, hd[0].x, by + hd[0].y, bz, -0.6, -0.5, -0.3); reach(P, 1, hd[1].x, by + hd[1].y, bz, 0.6, -0.5, -0.3); }
+    else { reach(P, -1, -0.38, 0.62, 0.1, -1, 0, -0.2); reach(P, 1, 0.38, 0.62, 0.1, 1, 0, -0.2); }               // mãos na cintura, esperando encher
+    armsBusy = true; head += hold ? 0.25 : 0.35;
   } else if (act === 'pour') {                                                              // rega os vasos/floreiras
     b.shR.rotation.set(-1.05 - 0.08 * sin(t * 1.7), 0, 0.12); b.elR.rotation.set(-0.35, 0, 0); armsBusy = true;
     b.shL.rotation.set(0.1, 0, -0.35); b.elL.rotation.set(-1.6, 0, 0);
@@ -504,6 +511,8 @@ export function animatePerson(P, s) {
     b.shL.rotation.set(-2.8 * u, 0, -0.1 - 0.3 * u); b.shR.rotation.set(-2.8 * u, 0, 0.1 + 0.3 * u); b.elL.rotation.set(-0.15 - 0.5 * u, 0, 0); b.elR.rotation.set(-0.15 - 0.5 * u, 0, 0);
     armsBusy = true; head -= 0.3 * u;
   }
+  // ---- mãos em pontos dados (rédeas da carroça etc.) ----
+  if (s.hands && !armsBusy) { const [l, r] = s.hands; reach(P, -1, ...l, -0.6, -0.6, -0.2); reach(P, 1, ...r, 0.6, -0.6, -0.2); armsBusy = true; }
   // ---- sentado: mãos nos joelhos ----
   if (s.mode === 'sit' && !armsBusy && act !== 'talk') {
     const hipY = 0.78;
@@ -548,4 +557,86 @@ export function animatePerson(P, s) {
     const st = can.userData.stream, on = act === 'pour' && can.parent;
     st.visible = !!on; if (on) { st.rotation.x = -can.userData.tilt; st.position.set(0, -0.11, 0.46); }        // fio d'água sempre para baixo
   }
+}
+
+// ---- carroça: cavalo + carroça de 2 rodas, frente para +X (como buildCar), uma malha com esqueleto ----
+const HORSES = [['#7a4a2a', '#3a2418'], ['#b8ab98', '#6a6058'], ['#5a3a26', '#2a1a12']];
+/** v: variante (0 feno, 1 barris/caixotes). userData.tick(s, v, t, pitch) anima rodas, pernas, cabeça e cocheiro; userData.feet(s) → índice da passada. */
+export function buildCart(v = 0) {
+  const bones = [];
+  const B = (name, parent, x, y, z) => { const b = new THREE.Bone(); b.name = name; b.position.set(x, y, z); if (parent) parent.add(b); bones.push(b); return b; };
+  const base = B('base', null, 0, 0, 0);
+  const wL = B('wL', base, -1.05, 0.62, 0.86), wR = B('wR', base, -1.05, 0.62, -0.86);
+  const lFL = B('lFL', base, 1.62, 1.08, 0.19), lFR = B('lFR', base, 1.62, 1.08, -0.19), lBL = B('lBL', base, 0.68, 1.08, 0.19), lBR = B('lBR', base, 0.68, 1.08, -0.19);
+  const neck = B('neck', base, 1.86, 1.42, 0), tail = B('tail', base, 0.32, 1.42, 0);
+  const parts = [], P = (bone, geo, color, x, y, z, rx, ry, rz, sx, sy, sz) => parts.push({ bone: bones.indexOf(bone), geo, color, m: tm(x, y, z, rx, ry, rz, sx, sy, sz) });
+  const [HC, MANE] = HORSES[v % HORSES.length], WOOD = '#8a6038', WOODL = '#a8794a', DARKW = '#5a3c24', IRON = '#4a4e56', LEATHER = '#4a2e1c';
+  // cavalo
+  P(base, G.sph(0.5, 10, 7), HC, 1.17, 1.32, 0, 0, 0, 0, 1.78, 0.95, 0.78);
+  P(base, G.sph(0.36, 8, 6), HC, 1.78, 1.36, 0, 0, 0, 0, 1, 1.1, 1.0);                       // peito
+  P(base, G.sph(0.34, 8, 6), HC, 0.52, 1.36, 0, 0, 0, 0, 1, 1.05, 1.05);                      // anca
+  for (const [bn, sd] of [[lFL, 1], [lFR, -1], [lBL, 1], [lBR, -1]]) {
+    P(bn, G.box(0.17, 0.98, 0.17), HC, 0, -0.5, 0); P(bn, G.box(0.2, 0.12, 0.21), '#2b2420', 0, -1.02, 0.0);
+    if (v % 3 === 1) P(bn, G.box(0.19, 0.16, 0.19), '#efe8dc', 0, -0.88, 0);                   // "meias" brancas
+    void sd;
+  }
+  P(neck, G.box(0.32, 0.86, 0.3), HC, 0.16, 0.3, 0, 0, 0, -0.62);
+  P(neck, G.box(0.62, 0.3, 0.27), HC, 0.6, 0.62, 0, 0, 0, -0.42);                            // cabeça
+  P(neck, G.box(0.22, 0.24, 0.24), shade(HC, 0.75), 0.86, 0.5, 0, 0, 0, -0.42);              // focinho
+  for (const sd of [-1, 1]) { P(neck, G.cone(0.06, 0.18, 4), HC, 0.36, 0.86, sd * 0.09, 0, 0, -0.2); P(neck, G.sph(0.04, 5, 4), '#1d1612', 0.55, 0.7, sd * 0.14); }
+  P(neck, G.box(0.1, 0.84, 0.1), MANE, 0.0, 0.36, 0, 0, 0, -0.62); P(neck, G.box(0.12, 0.12, 0.1), MANE, 0.38, 0.86, 0, 0, 0, -0.3);
+  P(neck, G.box(0.04, 0.32, 0.3), LEATHER, 0.5, 0.6, 0, 0, 0, -0.42);                          // cabresto
+  P(tail, G.cyl(0.05, 0.12, 0.72, 6), MANE, -0.14, -0.3, 0, 0, 0, -0.32);
+  // arreio: colar, cilha, varais e rédeas
+  P(base, G.torus(0.3, 0.08, 5, 12), LEATHER, 1.86, 1.48, 0, 0, Math.PI / 2, -0.5);
+  P(base, G.box(0.16, 0.98, 0.82), LEATHER, 1.32, 1.32, 0);
+  for (const sd of [-1, 1]) {
+    P(base, G.box(1.85, 0.07, 0.07), WOOD, 0.8, 1.04, sd * 0.5, 0, sd * 0.02, 0.1);
+    P(base, G.box(2.2, 0.025, 0.025), '#3a2a1e', 1.12, 1.8, sd * 0.13, 0, 0, 0.165);
+  }
+  // carroça
+  P(base, G.box(1.95, 0.1, 1.45), WOODL, -1.05, 0.88, 0);
+  for (const sd of [-1, 1]) { P(base, G.box(1.95, 0.32, 0.06), WOOD, -1.05, 1.08, sd * 0.72); P(base, G.box(1.95, 0.05, 0.08), DARKW, -1.05, 1.25, sd * 0.72); }
+  P(base, G.box(0.06, 0.32, 1.45), WOOD, -2.0, 1.08, 0); P(base, G.box(0.06, 0.5, 1.45), WOOD, -0.09, 1.15, 0);
+  P(base, G.box(0.12, 0.12, 1.85), DARKW, -1.05, 0.66, 0); P(base, G.box(1.9, 0.1, 0.1), DARKW, -1.05, 0.8, 0.5); P(base, G.box(1.9, 0.1, 0.1), DARKW, -1.05, 0.8, -0.5);
+  P(base, G.box(0.42, 0.08, 1.2), WOOD, -0.36, 1.18, 0); for (const sd of [-1, 1]) P(base, G.box(0.08, 0.26, 0.08), DARKW, -0.36, 1.03, sd * 0.5);
+  if (v % 2 === 0) {                                                                          // feno e forcado
+    P(base, G.box(1.6, 0.42, 1.25), '#e3c46a', -1.15, 1.15, 0); P(base, G.sph(0.65, 8, 5), '#e8cc72', -1.15, 1.33, 0, 0, 0, 0, 1.25, 0.45, 0.95);
+    P(base, G.cyl(0.025, 0.025, 1.5, 5), WOOD, -1.3, 1.65, 0.3, 0, 0, 1.2); P(base, G.box(0.04, 0.3, 0.18), IRON, -0.62, 1.95, 0.3, 0, 0, 1.2);
+  } else {                                                                                    // barris, caixote e saco
+    for (const [x, z] of [[-1.6, 0.34], [-1.6, -0.34], [-0.98, 0.34]]) { P(base, G.cyl(0.25, 0.25, 0.58, 9), '#8a5a32', x, 1.22, z); for (const dy of [-0.18, 0.18]) P(base, G.cyl(0.258, 0.258, 0.04, 9), IRON, x, 1.22 + dy, z); }
+    P(base, G.box(0.56, 0.42, 0.5), '#b0804e', -0.95, 1.14, -0.3); P(base, G.sph(0.26, 8, 6), '#e6d8b4', -0.98, 1.45, -0.28, 0, 0.4, 0, 1.3, 0.65, 0.85);
+  }
+  // rodas (raios)
+  for (const w of [wL, wR]) {
+    P(w, G.torus(0.58, 0.05, 4, 16), DARKW, 0, 0, 0); P(w, G.torus(0.6, 0.025, 3, 16), IRON, 0, 0, 0);
+    for (let i = 0; i < 3; i++) P(w, G.box(0.05, 1.12, 0.04), WOOD, 0, 0, 0, 0, 0, i * Math.PI / 3);
+    P(w, G.cyl(0.11, 0.11, 0.2, 8), DARKW, 0, 0, 0, Math.PI / 2, 0, 0);
+  }
+  const tmp = new THREE.Group(); tmp.add(base); tmp.updateMatrixWorld(true);
+  const geom = bake(parts, bones.map(b => b.matrixWorld.clone()));
+  tmp.remove(base);
+  const mesh = new THREE.SkinnedMesh(geom, PEOPLE_MAT); mesh.add(base); mesh.updateMatrixWorld(true); mesh.bind(new THREE.Skeleton(bones));
+  mesh.castShadow = true; mesh.receiveShadow = true;
+  const g = new THREE.Group(), inner = new THREE.Group(); g.add(inner); inner.add(mesh); g.name = 'cart';
+  const drv = buildMedPerson({ role: 'driver', k: v + 3 });
+  drv.root.position.set(-0.38, 0.92, 0); drv.root.rotation.y = Math.PI / 2; inner.add(drv.root);
+  const ds = { mode: 'sit', seat: 0.28, t: 0, hands: [[-0.13, 0.98, 0.42], [0.13, 0.98, 0.42]] };
+  g.userData = {
+    inner, driver: drv,
+    tick(s, vel, t, pitch = 0, near = true) {
+      inner.rotation.z = pitch;
+      wL.rotation.z = wR.rotation.z = -s / 0.6;
+      if (!near) return;
+      const a = Math.min(1, vel / 1.2), ph = s * (Math.PI * 2 / 1.7);
+      lFL.rotation.z = lBR.rotation.z = 0.36 * a * Math.sin(ph); lFR.rotation.z = lBL.rotation.z = 0.36 * a * Math.sin(ph + Math.PI);
+      neck.rotation.z = 0.07 * a * Math.sin(2 * ph) + 0.03 * Math.sin(t * 0.7 + v);
+      tail.rotation.x = 0.15 * Math.sin(t * 1.3 + v); tail.rotation.z = 0.06 * Math.sin(t * 0.9);
+      ds.t = t; ds.lookYaw = 0.35 * Math.sin(t * 0.21 + v * 2) * Math.sin(t * 0.07 + v);
+      animatePerson(drv, ds); drv.b.body.position.y += 0.012 * a * Math.abs(Math.sin(ph * 2));
+    },
+    /** número de passadas (4 por ciclo) — para o som dos cascos. */
+    steps: s => Math.floor(s * 4 / 1.7),
+  };
+  return g;
 }

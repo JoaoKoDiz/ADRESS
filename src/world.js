@@ -217,7 +217,7 @@ function buildOutskirts(ground) {
     if (z > MAP && z < MAP + 9 + r) return false;         // ao sul: não pode cobrir a sebe vista pela câmera
     if (Math.abs(x - cx) < ROAD / 2 + 2 + r && z < 0) return false; // estrada de acesso livre
     if (CANAL && CANAL.canyon && x > CANAL.x0 - 8 - r && x < CANAL.x1 + 8 + r) return false;   // Cachoeira: desfiladeiro
-    if (CANAL && CANAL.canyon && z > MAP + 30 && x > CANAL.x0 - 140 && x < CANAL.x1 + 140) return false;   // e o maciço da cachoeira
+    if (CANAL && CANAL.canyon && CANAL.rock.some(b => x > b.x0 - r - 2 && x < b.x1 + r + 2 && z > b.z0 - r - 2 && z < b.z1 + r + 2)) return false;   // e o maciço da cachoeira (com os degraus dos lados)
     return true;
   };
   const edgeDist = (x, z) => Math.hypot(Math.max(-x, 0, x - MAP), Math.max(-z, 0, z - MAP));
@@ -272,6 +272,45 @@ function buildOutskirts(ground) {
       }
     }
     fakeShadow(x, z, 0.5 * s, 1.2 * s);
+  }
+  if (CANAL && CANAL.canyon) {                    // Cachoeira: mata nas duas margens do desfiladeiro, fora do bairro (ao norte e entre a sebe e o maciço)
+    const C = CANAL, rockAt = (x, z, m) => C.rock.some(b => x > b.x0 - m && x < b.x1 + m && z > b.z0 - m && z < b.z1 + m);
+    const okC = (x, z, r) => !(x > C.x0 - 2.4 - r * 0.4 && x < C.x1 + 2.4 + r * 0.4)          // tronco fora do desfiladeiro (a copa pode passar da cerca)
+      && (z < -8 - r || z > MAP + 9 + r) && !(Math.abs(x - cx) < ROAD / 2 + 2 + r && z < 0)   // longe da sebe e da estrada de acesso
+      && !rockAt(x, z, r + 1.5) && free(x, z, r);
+    let n = 0, tr = 0;
+    while (n < 300 && tr++ < 40000) {
+      const side = rand() < 0.5 ? -1 : 1, d = 2.6 + Math.pow(rand(), 1.7) * 48, x = side < 0 ? C.x0 - d : C.x1 + d;
+      const z = rand() < 0.85 ? -10 - rand() * 300 : MAP + 9 + rand() * 40;
+      const s = 0.95 + rand() * 0.75, r = 2.2 * s;
+      if (!okC(x, z, r)) continue;
+      placed.push([x, z, r]); n++;
+      SOLIDS.push({ x0: x - r * 0.3, z0: z - r * 0.3, x1: x + r * 0.3, z1: z + r * 0.3 });   // tronco (a van bate)
+      if (rand() < 0.55) {                         // pinheiro (tronco apoiado no chão, y = 0)
+        g.add(at(cyl(0.22 * s, 0.3 * s, 1.2 * s, TRUNK, 6), x, 0.6 * s, z));
+        g.add(at(cone(1.9 * s, 2.6 * s, PINE[n % 2], 7), x, 2.2 * s, z));
+        g.add(at(cone(1.4 * s, 2.2 * s, PINE[(n + 1) % 2], 7), x, 3.5 * s, z));
+        fakeShadow(x, z, 2.6 * s, 1.6 * s);
+      } else {                                     // árvore redonda
+        g.add(at(cyl(0.26 * s, 0.36 * s, 2.0 * s, TRUNK, 6), x, 1.0 * s, z));
+        const c = LEAVES[n % LEAVES.length];
+        const b1 = at(mesh(blob, c), x, 2.7 * s, z, rand() * 3, rand() * 3, 0); b1.scale.setScalar(1.7 * s);
+        const b2 = at(mesh(blob, LEAVES[(n + 1) % LEAVES.length]), x + 0.9 * s, 2.3 * s, z + 0.4 * s, rand() * 3, 0, rand() * 3); b2.scale.setScalar(1.15 * s);
+        const b3 = at(mesh(blob, c), x - 0.7 * s, 3.4 * s, z - 0.3 * s, 0, rand() * 3, rand() * 3); b3.scale.setScalar(1.05 * s);
+        g.add(b1, b2, b3);
+        fakeShadow(x, z, 2.7 * s, 1.9 * s);
+      }
+    }
+    for (let k = 0, tb = 0; k < 90 && tb++ < 20000;) {   // arbustos entre as árvores
+      const side = rand() < 0.5 ? -1 : 1, d = 2.2 + rand() * 40, x = side < 0 ? C.x0 - d : C.x1 + d, z = rand() < 0.85 ? -10 - rand() * 300 : MAP + 9 + rand() * 40;
+      const s = 0.7 + rand() * 0.6, r = 1.1 * s;
+      if (!okC(x, z, r)) continue;
+      placed.push([x, z, r]); k++;
+      SOLIDS.push({ x0: x - r * 0.3, z0: z - r * 0.3, x1: x + r * 0.3, z1: z + r * 0.3 });
+      const b = at(mesh(blob, LEAVES[(k + 1) % LEAVES.length]), x, 0.55 * s, z, rand() * 3, rand() * 3, 0);
+      b.scale.set(1.2 * s, 0.85 * s, 1.1 * s); g.add(b);
+      fakeShadow(x, z, 0.5 * s, 1.2 * s);
+    }
   }
   return g;
 }
@@ -421,7 +460,7 @@ export function createWorld({ renderer, buildLot, buildResident, yardBuilders, p
   // falsas): economiza o filtro de sombra em boa parte da tela — ~15% do tempo de GPU na UHD integrada.
   const outside = new Set([GRASS, ...GRASS_PATCHES, GRASS_SHADOW].map(c => mat(c)));
   ground.traverse(o => { if (o.isMesh && outside.has(o.material)) o.receiveShadow = false; });
-  if (!venice && !moon) { if (!MEDV) scene.add(baked(buildHedge(), true, true)); scene.add(baked(outskirts, false, false)); }   // Medieval: no lugar da sebe, a muralha (terrain.js)   // Veneza: só laguna em volta
+  if (!venice && !moon) { if (!MEDV && !(FORESTV && FORESTV.modern) && !GARDV) scene.add(baked(buildHedge(), true, true)); scene.add(baked(outskirts, false, false)); }   // Medieval: no lugar da sebe, a muralha (terrain.js); Modernista: o muro do condomínio (models/modern.js); Jardins: o muro com a portaria (models/garden.js)   // Veneza: só laguna em volta
   if (PLAZA) scene.add(baked(buildPlaza(), true, true));
   if (MOONV) {                                  // Órbita: a esfera (só recebe sombra) e o cenário fundido
     const ms = buildMoonScene(new THREE.Group(), MOONV), gr = ms.getObjectByName('moon-ground');

@@ -7,6 +7,7 @@ import { createForestFx } from './forestFx.js';
 import { forestLot } from './models/forest.js';
 import { buildModernLot } from './models/modern.js';
 import { buildRowLot } from './models/work.js';
+import { createWorkTraffic } from './workTraffic.js';
 import { buildMedLot } from './models/medieval.js';
 import { createMedievalLife } from './medievalLife.js';
 import { buildCar, CAR_COLORS } from './barriers.js';
@@ -38,7 +39,7 @@ import { buildFarmLot } from './models/farm.js';
 import { createTractors } from './tractors.js';
 import { createChickens } from './chickens.js';
 import { buildSnowLot, buildSnowBank, buildPlow } from './models/snow.js';
-import { buildGardLot, buildGateArm } from './models/garden.js';
+import { buildGardLot, buildGateArm, buildGardLive } from './models/garden.js';
 import { buildMoonLot, spaceSuit } from './models/moon.js';
 import { FRAME } from './moonFrame.js';
 import { MOON } from './moonPlan.js';
@@ -478,7 +479,8 @@ const traffic = createTraffic(audio);
 const canyonFx = createCanyonFx(audio);   // Nível 23 (Cachoeira): água correndo, cachoeira, névoa e o som pela distância
 const night = createNight();               // Nível 19 (Penumbra)
 const farmOut = createFarmOutside();       // Nível 15 (Colheita): entorno
-const gardGate = { arm: null, world: null, solid: null, k: 0 };   // Nível 17 (Jardins): cancela
+const gardGate = { arm: null, live: null, world: null, solid: null, k: 0 };   // Nível 17 (Jardins): cancela, portãozinho de pedestres e patinhos do lago
+const mdGate = { arm: null, solid: null, k: 0 };   // Nível 18 (Modernista): cancela da portaria do condomínio
 const tractors = createTractors(audio);   // Nível 15 (Colheita): tratores devagar pelas estradas de terra
 const chickens = createChickens();        // Nível 15 (Colheita): galinhas atravessando as estradas
 // ---------- Nível 16 (Nevasca): gelo, limpa-neve e atalhos ----------
@@ -490,17 +492,7 @@ const forestCars = createTractors(audio);   // Nível 22 (Bosque): poucos carros
 const forestFx = createForestFx();
 const medLife = createMedievalLife(audio);   // Nível 24 (Medieval): moradores com rotinas, carroças, fumaça, nuvens, bandeiras, água e sons
 let chatNpc = null;                          // Medieval: morador com quem o jogador está conversando (estado 'chat')          // Nível 22 (Bosque): luz de outono, folhas no chão e caindo
-let workN = 0;
-const buildWorkVehicle = () => {                // Operário: carros e pequenas vans de serviço (frente em +X, como buildCar)
-  if (workN++ % 2 === 0) return buildForestCar();
-  const g = new THREE.Group(), c = ['#f4f1ea', '#2f6fb0', '#e8b02a'][workN % 3], a = (m, x, y, z) => g.add(at(m, x, y, z));
-  a(kbox(3.6, 1.7, 1.9, c), -0.3, 1.25, 0); a(kbox(1.2, 1.2, 1.85, c), 1.9, 1.0, 0); a(kbox(0.9, 0.7, 1.7, '#2b4a6e'), 2.0, 1.45, 0);
-  a(kbox(2.4, 0.5, 0.04, '#c8402f'), -0.3, 1.4, 0.96); a(kbox(2.4, 0.5, 0.04, '#c8402f'), -0.3, 1.4, -0.96);
-  for (const x of [-1.4, 1.6]) for (const s of [-1, 1]) a(kcyl(0.42, 0.42, 0.3, '#1f2023', 10), x, 0.42, s * 0.95);
-  g.children.slice(-4).forEach(m => { m.rotation.x = Math.PI / 2; });
-  g.traverse(o => { if (o.isMesh) o.castShadow = true; });
-  return g;
-};
+const workTraffic = createWorkTraffic(audio);   // Nível 21 (Operário): caminhões, vans e carros pelas ruas (reserva nos cruzamentos)
 const buildForestCar = () => { const m = buildCar(); m.userData.body.material = mat(CAR_COLORS[Math.floor(Math.random() * CAR_COLORS.length)]); return m; };
 const banks = [];                                // { cut, mesh, open, t, k }
 function resetBanks() {
@@ -679,7 +671,7 @@ function useNeighborhood(kind) {
     w = worlds[kind] = createWorld({ renderer, buildLot: buildAnyLot, buildResident: kind === 'snow8' ? h => buildResident(h, { winter: true }) : buildResident, yardBuilders: kind === 'snow8' ? YARD_BUILDERS_SNOW() : YARD_BUILDERS, pool: POOLS[kind], dry: kind === 'city6' || kind === 'city7' || kind === 'city8' || kind === 'forest8', venice: kind === 'venice8', snow: kind === 'snow8', moon: kind === 'moon8', farm: kind === 'farm10' });
     if (kind === 'night10') night.setup(w);     // Penumbra: noite, asfalto molhado
     if (kind === 'forest8') forestFx.setup(w, FORESTV, MAP);
-    if (kind === 'med10') { medSky(w); medLife.setup(w, MEDV); }   // Medieval: céu nublado, luz difusa; vida do burgo   // Bosque: tarde de outono, folhas
+    if (kind === 'med10') { medSky(w); medLife.setup(w, MEDV); SOLIDS.push(...MEDV.sceneSolids.map(b => ({ ...b })), ...MEDV.sceneVanOnly.map(b => ({ ...b, vanOnly: true }))); }   // (1ª vez: as colisões dos detalhes do cenário só existem depois de montar a cena)   // Medieval: céu nublado, luz difusa; vida do burgo   // Bosque: tarde de outono, folhas
     if (kind === 'farm10') farmOut.build(w.scene, MAP, VAN_START.x);   // Colheita: hectares de plantação em volta, tratores e colheitadeiras
   } else SOLIDS.push(...w.extraSolids);        // troncos das árvores de fora deste bairro
   world.hideResident();
@@ -695,14 +687,19 @@ function useNeighborhood(kind) {
   rig.setProfile(kind === 'med10' ? { dist: 0.72, elev: -0.13 } : {});   // Medieval: câmera mais perto e mais baixa (fachadas acima, portas perto)
   night.attach(van, walker, kind === 'night10');
   if (kind === 'garden8') {                      // Jardins: a cancela da portaria (abre sozinha para a van)
-    if (!gardGate.arm || gardGate.world !== world) { gardGate.arm = buildGateArm(GARDV); gardGate.world = world; world.scene.add(gardGate.arm); }
+    if (!gardGate.arm || gardGate.world !== world) { gardGate.arm = buildGateArm(GARDV); gardGate.live = buildGardLive(GARDV); gardGate.world = world; world.scene.add(gardGate.arm, gardGate.live); }
     gardGate.solid = { x0: GARDV.GATE.x0, x1: GARDV.GATE.x1, z0: GARDV.GATE.z - 0.3, z1: GARDV.GATE.z + 0.3 }; gardGate.k = 0; SOLIDS.push(gardGate.solid);
+  }
+  if (kind === 'modern8') {                      // Modernista: a cancela na abertura do muro (abre sozinha para a van e para quem está a pé)
+    if (!mdGate.arm) { mdGate.arm = buildGateArm(FORESTV); world.scene.add(mdGate.arm); }   // (o mundo do bairro é construído uma vez só)
+    mdGate.solid = { x0: FORESTV.GATE.x0, x1: FORESTV.GATE.x1, z0: FORESTV.GATE.z - 0.3, z1: FORESTV.GATE.z + 0.3 }; mdGate.k = 0; mdGate.arm.rotation.z = 0; SOLIDS.push(mdGate.solid);
   }   // faróis da van e luz do personagem só no Penumbra
   if (kind === 'farm10') { world.scene.add(chickens.object); chickens.reset(); } else chickens.detach();
   if (kind === 'farm10') { world.scene.add(tractors.object); tractors.reset(); } else { tractors.detach(); if (kind !== 'flux10' && kind !== 'night10' && kind !== 'canyon10') tractors.silence(); }
   van.setIce(kind === 'snow8' ? SNOWV.iceAt : null);   // Nevasca: placas de gelo
   van.setLowGravity(kind === 'moon8'); walker.setLowGravity(kind === 'moon8'); playerSuit.visible = kind === 'moon8';   // Órbita: gravidade baixa e capacete (só neste bairro)
-  if (kind === 'forest8' || kind === 'modern8' || kind === 'work8') { world.scene.add(forestCars.object); forestCars.reset({ loops: kind === 'forest8' ? [...FORESTV.carLoops, FORESTV.carLoops[0].slice().reverse()] : kind === 'work8' ? [...FORESTV.carLoops, FORESTV.carLoops[3].slice().reverse()] : FORESTV.carLoops, build: kind === 'work8' ? buildWorkVehicle : buildForestCar, speed: kind === 'forest8' ? 3.0 : kind === 'work8' ? 4.2 : 3.6 }); } else forestCars.detach();   // Bosque / Modernista: trânsito leve
+  if (kind === 'forest8') { world.scene.add(forestCars.object); forestCars.reset({ loops: [...FORESTV.carLoops, FORESTV.carLoops[0].slice().reverse()], build: buildForestCar, speed: 3.0 }); } else forestCars.detach();   // Bosque: trânsito leve (o Modernista não tem carros circulando)
+  if (kind === 'work8') { world.scene.add(workTraffic.object); workTraffic.reset(FORESTV, VAN_START); } else workTraffic.detach();   // Operário: caminhões, vans e carros
   if (kind === 'snow8') { world.scene.add(plow.object); plow.reset({ loops: [SNOWV.plowLoop], build: buildPlow, speed: 4.6 }); } else plow.detach();
   resetBanks();
   if (kind === 'venice8') { world.scene.add(npcBoats.object); npcBoats.reset(); world.scene.add(rope); } else npcBoats.detach();   // Bairro 11: trem e cancelas
@@ -1104,7 +1101,7 @@ function findNearHouseFoot() {
 }
 function findNearHouse() {
   if (Math.abs(van.speed) > DELIVERY_MAX_SPEED) return -1;
-  let best = FORESTV && FORESTV.work ? 3.3 : MEDV ? 4.8 : DELIVERY_RADIUS, found = -1;   // Operário: só a unidade bem em frente (as portas geminadas ficam a 6,4)
+  let best = FORESTV && FORESTV.work ? 3.9 : MEDV ? 4.8 : DELIVERY_RADIUS, found = -1;   // Operário: só a unidade bem em frente (os portões geminados ficam a 8)
   for (const h of game.pool) {
     if (SPOTS && SPOTS.spots[game.slotOf[h]] && SPOTS.spots[game.slotOf[h]].foot) continue;   // Morro (becos/escadarias) e Jardins (entrada pelo parque): só a pé
     const p = doorPoint(game.slotOf[h]);
@@ -2016,9 +2013,19 @@ function update(dt, t) {
     gardGate.arm.rotation.z = gardGate.k * 1.45;
     const i = SOLIDS.indexOf(gardGate.solid);
     if (gardGate.k > 0.5 && i >= 0) SOLIDS.splice(i, 1); else if (gardGate.k <= 0.5 && i < 0) SOLIDS.push(gardGate.solid);
+    gardGate.live.userData.update(dt, t, state === 'walk' ? walker : null);   // portãozinho (abre para quem está a pé) e patinhos
+  }
+  if (neighborhood === 'modern8' && mdGate.arm) {   // Modernista: a cancela sobe quando a van (ou o personagem) chega perto e desce depois
+    const G = FORESTV.GATE, px = state === 'walk' ? walker.x : van.x, pz = state === 'walk' ? walker.z : van.z, near = Math.hypot(px - G.x, pz - G.z) < 20;
+    mdGate.k += ((near ? 1 : 0) - mdGate.k) * Math.min(1, dt * 3);
+    mdGate.arm.rotation.z = mdGate.k * 1.45;
+    const i = SOLIDS.indexOf(mdGate.solid);
+    if (mdGate.k > 0.5 && i >= 0) SOLIDS.splice(i, 1); else if (mdGate.k <= 0.5 && i < 0) SOLIDS.push(mdGate.solid);
   }
   if (neighborhood === 'canyon10') { const playing = IN_GAME.includes(state) || state === 'walk'; canyonFx.update(dt, playing ? (walker.visible ? walker : van) : null); }
-  if (neighborhood === 'med10') {                  // Medieval: a vida do burgo continua mesmo com o jogador parado
+  const medActive = neighborhood === 'med10' && (IN_GAME.includes(state) || ['chat', 'fadeIn', 'fadeOut', 'laser', 'missile', 'boss'].includes(state));
+  if (neighborhood === 'med10' && !medActive) medLife.silence();   // menus, título, mapa: o burgo fica em silêncio
+  if (medActive) {                                 // Medieval: a vida do burgo continua mesmo com o jogador parado
     const me = walker.visible ? walker : van, playing = IN_GAME.includes(state) || state === 'chat';
     medLife.update(dt, { t, playing, listener: { x: me.x, z: me.z }, van: { x: van.x, z: van.z, heading: van.heading, speed: van.speed, visible: van.object.visible && !heli.flying },
       walker: { x: walker.x, z: walker.z, visible: walker.visible }, camera: rig.camera,
@@ -2043,13 +2050,14 @@ function update(dt, t) {
     chickens.update(dt, heli.flying ? null : { x: van.x, z: van.z, circles: [-1.5, 0, 1.5].map(k => [van.x + c * k, van.z + s2 * k]) });
     updateGates(dt);
   }
-  if (neighborhood === 'forest8' || neighborhood === 'modern8' || neighborhood === 'work8') {   // Bosque, Modernista e Operário: carros devagar (e, no Bosque, folhas caindo perto de quem joga)
+  if (neighborhood === 'forest8' || neighborhood === 'work8') {   // Bosque e Operário: carros devagar (e, no Bosque, folhas caindo perto de quem joga)
     const c = Math.cos(van.heading), s2 = Math.sin(van.heading), obs = [];
     if (!heli.flying) obs.push({ circles: [-1.5, 0, 1.5].map(k => [van.x + c * k, van.z + s2 * k, 1.25]) });
     if (walker.visible) obs.push({ circles: [[walker.x, walker.z, 0.6]] });
     const playing = IN_GAME.includes(state) || state === 'walk', me = walker.visible ? walker : van;
-    forestCars.update(dt, obs, playing ? me : null);
-    if (!playing) forestCars.silence();
+    const cars = neighborhood === 'work8' ? workTraffic : forestCars;   // Operário: caminhões e vans (workTraffic.js)
+    cars.update(dt, obs, playing ? me : null);
+    if (!playing) cars.silence();
     if (neighborhood === 'forest8') {               // copas transparentes quando escondem quem joga ou a casa do destino
       const hd = playing && game.route ? game.route[game.step] : -1, sp = hd >= 0 && game.slotOf[hd] != null ? FORESTV.spots[game.slotOf[hd]] : null;
       forestFx.update(dt, { x: me.x, y: TERRAIN.h(me.x, me.z), z: me.z }, rig.camera.position, sp ? { x: sp.cx, y: sp.y + 2.5, z: sp.cz } : null);
@@ -2306,7 +2314,7 @@ window.ADRESS = {
   get careerLevel() { return careerLevel; },
   setCareerLevel(l) { careerLevel = l; },
   setFreeLevel(l) { freeLevel = l; },
-  walker, jamSound, train, walkSolids, trolley, get tseq() { return tseq; }, get FAVELA() { return FAVELA; }, traffic, tractors, chickens, plow, banks, get SNOWV() { return SNOWV; }, get MEDV() { return MEDV; }, medLife, get chatNpc() { return chatNpc; }, night, get grillIn() { return grillIn; }, get insideOn() { return insideOn; }, get FARMLAND() { return FARMLAND; }, gateOpen, openGate,
+  walker, jamSound, train, walkSolids, trolley, get tseq() { return tseq; }, get FAVELA() { return FAVELA; }, traffic, tractors, chickens, plow, workTraffic, banks, get SNOWV() { return SNOWV; }, get MEDV() { return MEDV; }, medLife, get chatNpc() { return chatNpc; }, night, get grillIn() { return grillIn; }, get insideOn() { return insideOn; }, get FARMLAND() { return FARMLAND; }, get GARDV() { return GARDV; }, gardGate, gateOpen, openGate,
   get levelSelect() { return levelSelect; },
   shop,
   startGame: m => startFree(m), newRound: () => startNewRound(),

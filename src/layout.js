@@ -87,7 +87,7 @@ export const SOLIDS = [];
 
 /** Troca a grade do bairro e refaz os obstáculos-base (lotes, praça e sebe). */
 export function configureGrid(kind) {
-  GRID = kind === 'plaza6' || kind === 'grid6s' || kind === 'city6' || kind === 'city7' ? 6 : kind === 'city8' || kind === 'hill8' || kind === 'canal8' || kind === 'rail8' || kind === 'venice8' || kind === 'favela8' || kind === 'snow8' || kind === 'moon8' || kind === 'garden8' || kind === 'forest8' || kind === 'modern8' || kind === 'work8' ? 8 : kind === 'flux10' || kind === 'night10' || kind === 'farm10' || kind === 'canyon10' || kind === 'med10' ? 10 : kind === 'snow8' ? 14 : kind === 'moon8' ? 12 : kind === 'grid5' ? 5 : 4;
+  GRID = kind === 'plaza6' || kind === 'grid6s' || kind === 'city6' || kind === 'city7' ? 6 : kind === 'city8' || kind === 'hill8' || kind === 'canal8' || kind === 'rail8' || kind === 'venice8' || kind === 'favela8' || kind === 'snow8' || kind === 'moon8' || kind === 'forest8' ? 8 : kind === 'flux10' || kind === 'night10' || kind === 'farm10' || kind === 'canyon10' || kind === 'med10' || kind === 'modern8' || kind === 'garden8' || kind === 'work8' ? 10 : kind === 'snow8' ? 14 : kind === 'moon8' ? 12 : kind === 'grid5' ? 5 : 4;
   BUILD_H = kind === 'city8' || kind === 'canal8' || kind === 'rail8' ? 31 : kind === 'hill8' ? 23 : kind === 'favela8' ? 20 : kind === 'flux10' || kind === 'night10' || kind === 'canyon10' ? 16.5 : kind === 'farm10' ? 10 : kind === 'city6' || kind === 'city7' ? 16.5 : 9.2;
   // praça: bloco 2×2 central (linhas e colunas 2–3 do 6×6)
   const plazaSlots = kind === 'plaza6' ? [2 * GRID + 2, 2 * GRID + 3, 3 * GRID + 2, 3 * GRID + 3] : [];
@@ -102,16 +102,21 @@ export function configureGrid(kind) {
   CANAL = kind === 'canal8'
     ? { x0: roadCenter(3) + ROAD / 2, x1: roadCenter(5) - ROAD / 2, cols: [3, 4], bridges: [1, 4, 7], foot: [lotZ(2) + LOT / 2, lotZ(5) + LOT / 2] }
     : kind === 'canyon10'                           // Nível 23 (Cachoeira): desfiladeiro nas colunas 4–5 (a rua 5 fica no fundo), 1 ponte alta na rua 5
-    ? (() => { const x0 = roadCenter(4) + ROAD / 2, x1 = roadCenter(6) - ROAD / 2, zb0 = roadCenter(5) - ROAD / 2, zb1 = roadCenter(5) + ROAD / 2, B = 4.6, L = 11;
+    ? (() => { const x0 = roadCenter(4) + ROAD / 2, x1 = roadCenter(6) - ROAD / 2, zb0 = roadCenter(5) - ROAD / 2, zb1 = roadCenter(5) + ROAD / 2, B = 4.6, L = 11, c = (x0 + x1) / 2, ZS = MAP + 44;
+      // mirante: área livre (z0..z1, encosta na ponte) e piso visível (vz0..vz1, até a beira do tabuleiro); banco, luneta e placa (sólidos pequenos)
+      const bay = (bx0, bx1, z0, z1, vz0, vz1, sx) => { const zm = (vz0 + vz1) / 2, xr = sx > 0 ? bx0 : bx1, xc = sx > 0 ? bx1 - 0.2 : bx0 + 0.2;
+        return { x0: bx0, x1: bx1, z0, z1, vz0, vz1, sx, bench: [xr + sx * 1.0, zm + 1.8], scope: [xc - sx * 0.9, zm - 2], sign: [xr + sx * 1.3, sx > 0 ? vz1 - 0.4 : vz0 + 0.4] }; };
       return { x0, x1, cols: [4, 5], bridges: [5], foot: [], canyon: true, depth: 42,
-        bays: [{ x0, x1: x0 + B, z0: zb0 - L, z1: zb0 }, { x0: x1 - B, x1, z0: zb1, z1: zb1 + L }] }; })()   // mirantes nas cabeceiras
+        bays: [bay(x0, x0 + B, zb0 - L, zb0, zb0 - L, zb0 - 0.8, 1), bay(x1 - B, x1, zb1, zb1 + L, zb1 + 0.8, zb1 + L, -1)],   // mirantes nas cabeceiras
+        rock: [{ x0: x0 - 46, x1: x1 + 46, z0: ZS, z1: ZS + 90, top: 64 }].concat(...[[67, 122, -8, 98, 39.7], [118, 176, -14, 104, 19.2], [172, 230, -6, 110, 7.7]]   // maciço da cachoeira + 3 degraus de pedra de cada lado
+          .map(([a, b, z0, z1, top]) => [{ x0: c - b, x1: c - a, z0: ZS + z0, z1: ZS + z1, top }, { x0: c + a, x1: c + b, z0: ZS + z0, z1: ZS + z1, top }])) }; })()
     : null;
   FAVELA = kind === 'favela8' ? planFavela(HEDGE * 2 + ROAD * 9 + LOT * 8, HEDGE) : null;
   FARMLAND = kind === 'farm10' ? planFarm(HEDGE * 2 + ROAD * 11 + LOT * 10, HEDGE) : null;
   SNOWV = kind === 'snow8' ? planSnow(HEDGE * 2 + ROAD * 9 + LOT * 8, HEDGE) : null;
-  FORESTV = kind === 'forest8' ? planForest(HEDGE * 2 + ROAD * 9 + LOT * 8, HEDGE) : kind === 'modern8' ? planModern(HEDGE * 2 + ROAD * 9 + LOT * 8, HEDGE) : kind === 'work8' ? planWork(HEDGE * 2 + ROAD * 9 + LOT * 8, HEDGE) : null;   // (o Modernista usa o mesmo formato, sem patamar)
+  FORESTV = kind === 'forest8' ? planForest(HEDGE * 2 + ROAD * 9 + LOT * 8, HEDGE) : kind === 'modern8' ? planModern(HEDGE * 2 + ROAD * 11 + LOT * 10, HEDGE) : kind === 'work8' ? planWork(HEDGE * 2 + ROAD * 11 + LOT * 10, HEDGE) : null;   // (o Modernista e o Operário usam o mesmo formato, sem patamar; área 10×10)
   MOONV = kind === 'moon8' ? (MOON_PLAN = MOON_PLAN || planMoon()) : null;   // (o plano da lua é fixo: calculado uma vez)
-  GARDV = kind === 'garden8' ? planGarden(HEDGE * 2 + ROAD * 9 + LOT * 8, HEDGE) : null;
+  GARDV = kind === 'garden8' ? planGarden(HEDGE * 2 + ROAD * 11 + LOT * 10, HEDGE) : null;   // (área 10×10)
   MEDV = kind === 'med10' ? (MED_PLAN = MED_PLAN || planMedieval(HEDGE * 2 + ROAD * 11 + LOT * 10, HEDGE)) : null;
   SPOTS = FAVELA || FARMLAND || SNOWV || MOONV || GARDV || FORESTV || MEDV;
   setupFlux(kind);
@@ -351,10 +356,11 @@ function rebuildBaseSolids() {
   const hr = ROAD / 2, rc = roadCenter;
   if (CANAL && CANAL.canyon) {                     // desfiladeiro: tudo é abismo, menos a ponte e os 2 mirantes (recortes nas cabeceiras)
     const zb0 = rc(CANAL.bridges[0]) - hr, zb1 = rc(CANAL.bridges[0]) + hr, [w, e] = CANAL.bays, X0 = CANAL.x0, X1 = CANAL.x1;
-    SOLIDS.push({ x0: w.x1, x1: X1, z0: HEDGE, z1: zb0 }, { x0: X0, x1: w.x1, z0: HEDGE, z1: w.z0 },
-      { x0: X0, x1: e.x0, z0: zb1, z1: MAP - HEDGE }, { x0: e.x0, x1: X1, z0: e.z1, z1: MAP - HEDGE },
+    SOLIDS.push({ x0: w.x1 - 0.4, x1: X1, z0: HEDGE, z1: zb0 }, { x0: X0, x1: w.x1, z0: HEDGE, z1: w.z0 + 0.2 },   // (cobrem também as balaustradas dos mirantes)
+      { x0: X0, x1: e.x0 + 0.4, z0: zb1, z1: MAP - HEDGE }, { x0: e.x0, x1: X1, z0: e.z1 - 0.2, z1: MAP - HEDGE },
       { x0: X0, x1: X1, z0: -400, z1: 0 }, { x0: X0 - 46, x1: X1 + 46, z0: MAP + 44, z1: MAP + 400 },   // fora: o desfiladeiro ao norte e o maciço da cachoeira ao sul
-      { x0: X0, x1: X1, z0: MAP, z1: MAP + 44 });
+      { x0: X0, x1: X1, z0: MAP, z1: MAP + 44 }, ...CANAL.rock.slice(1).map(b => ({ x0: b.x0, x1: b.x1, z0: b.z0, z1: b.z1 })),   // degraus de pedra dos lados
+      ...[w, e].flatMap(b => [[b.bench, 0.35, 1.25], [b.scope, 0.25, 0.25], [b.sign, 0.15, 0.15]].map(([[x, z], hx, hz]) => ({ x0: x - hx, x1: x + hx, z0: z - hz, z1: z + hz }))));   // banco, luneta e placa dos mirantes
   } else if (CANAL) {                                     // canal: água em toda a faixa, menos nas 3 pontes; passarelas só a pé (vanOnly)
     const marks = CANAL.bridges.map(i => ({ a: rc(i) - hr, b: rc(i) + hr, foot: false }))
       .concat(CANAL.foot.map(z => ({ a: z - 1.3, b: z + 1.3, foot: true }))).sort((p, q) => p.a - q.a);
@@ -375,12 +381,17 @@ function rebuildBaseSolids() {
   if (FLUX) fluxSolids();
   if (FARMLAND) farmSolids();
   if (SNOWV) snowSolids(SNOWV);
-  if (MEDV) { snowSolids(MEDV); SOLIDS.push(...MEDV.solids.map(b => ({ ...b })), ...MEDV.vanOnly.map(b => ({ ...b, vanOnly: true }))); }   // Medieval: muros dos patamares, ladeiras, árvores, postes, fonte, barracas, castelo, depósito; quadrantes da praça e frades (só a van)
+  if (MEDV) { snowSolids(MEDV); SOLIDS.push(...MEDV.solids.map(b => ({ ...b })), ...MEDV.vanOnly.map(b => ({ ...b, vanOnly: true })), ...(MEDV.sceneSolids || []).map(b => ({ ...b })), ...(MEDV.sceneVanOnly || []).map(b => ({ ...b, vanOnly: true }))); }   // Medieval: muros dos patamares, ladeiras, árvores, postes, fonte, barracas, castelo, depósito; quadrantes da praça e frades (só a van)
   if (FORESTV) snowSolids(FORESTV);
   if (FORESTV && FORESTV.yards) for (const y of FORESTV.yards) SOLIDS.push({ x0: y.x - 3, x1: y.x + 3, z0: y.z - 3, z1: y.z + 3 });   // Operário: pátios de serviço (caixas, tambores)
   if (FORESTV && FORESTV.plazas) for (const p of FORESTV.plazas) SOLIDS.push({ x0: p.x - 3.8, x1: p.x + 3.8, z0: p.z - 3.8, z1: p.z + 3.8, vanOnly: true });   // pracinhas: só a pé
+  if (FORESTV && FORESTV.modern) SOLIDS.push(...FORESTV.solids.map(b => ({ ...b })));   // Modernista: guarita da portaria (o muro usa a colisão da sebe)
   if (FORESTV && FORESTV.islands) for (const i of FORESTV.islands) SOLIDS.push({ x0: i.x - i.r * 0.85, x1: i.x + i.r * 0.85, z0: i.z - i.r * 0.85, z1: i.z + i.r * 0.85 });   // Modernista: ilhas das rotatórias   // Bosque: borda do patamar, ladeiras, troncos, postes e bancos
-  if (GARDV) SOLIDS.push(...GARDV.hedges.map(b => ({ ...b })), ...GARDV.bollards.map(b => ({ ...b })), ...GARDV.solids.map(b => ({ ...b })));   // Jardins: cerca viva do parque, balizadores (só a van), equipamentos, ilhas, guarita
+  if (GARDV) {                                     // Jardins: o muro norte tem também o vão de pedestres da portaria
+    const nw = SOLIDS.find(b => b.x0 === ENTRANCE.x1 && b.z0 === -0.5 && b.z1 === HEDGE);
+    if (nw) { SOLIDS.push({ ...nw, x0: GARDV.PED.x1 }); nw.x1 = GARDV.PED.x0; }
+    SOLIDS.push(...GARDV.hedges.map(b => ({ ...b })), ...GARDV.bollards.map(b => ({ ...b })), ...GARDV.solids.map(b => ({ ...b })), ...GARDV.vanOnly.map(b => ({ ...b, vanOnly: true })));   // cerca viva do parque, balizadores (só a van), equipamentos, ilhas, guarita, lago, clube, árvores
+  }
   if (MOONV) moonSolids();
   if (TERRAIN.kind === 'hill') {                   // muros das encostas (nas ladeiras não há muro; nas escadarias, só para a van)
     const isRamp = (j, i) => TERRAIN.ramps.some(r => r.j === j && r.i === i), isStair = (j, i) => TERRAIN.stairs.some(r => r.j === j && r.i === i);

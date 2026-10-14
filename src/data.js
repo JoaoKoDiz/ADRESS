@@ -284,8 +284,9 @@ export const MOONS = [...Array(32).keys()].map(k => 286 + k);
 export const GRILLBY = HOUSES.length;
 HOUSES.push({ name: "Grillby's", kind: 'shop', grill: true, noDelivery: true });   // só o bar (entrar/sair); nunca é destino de entrega
 export const SNOW_FIXED = { 5: GRILLBY };
-// ---- Jardins (Nível 17): casas de condomínio (1 ou 2 andares, arquitetura parecida), índices a partir de GARD_FIRST.
-// Variam: fachada, telhado, porta, andares, flores, pergolado, banco na varanda, portão, caixa de correio e enfeite na entrada.
+// ---- Jardins (Nível 17): casas de condomínio (1 ou 2 andares, no estilo das casas dos Bairros 1–6), índices a partir de GARD_FIRST.
+// Variam: fachada, telhado, porta, andares, modelo (clássica, chalé, em L, com garagem), flores, pergolado, banco na varanda,
+// portão, caixa de correio e enfeite na entrada.
 export const GARD_COL = {
   wall: { cream: '#f3e6c8', white: '#f4f2ec', peach: '#f2c9a8', sage: '#c9d8b4', gray: '#c9ccd1' },
   roof: { red: '#b5402f', gray: '#5f646c', green: '#3f7a4a', brown: '#7a4a2a' },
@@ -294,23 +295,24 @@ export const GARD_COL = {
   gate: { blue: '#2f78d0', red: '#d0352a', white: '#f4f1ea', green: '#2f9a4a', black: '#2b2b2b' },
   mail: { red: '#d8473a', blue: '#3a78d4', yellow: '#efbf2a', green: '#3c9d55' },
 };
-export const GARD_FIRST = HOUSES.length;
+export const GARD_FIRST = HOUSES.length, GARD_N = 64;    // (64 casas para ~58 pontos: a cada partida algumas ficam de fora)
 {
   const names = ['Seu Ronaldo', 'Dona Clarice', 'Seu Otávio', 'Dona Heloísa', 'Seu Mauro', 'Dona Sílvia', 'Seu Augusto', 'Dona Lúcia', 'Seu Fernando', 'Dona Marta', 'Seu Caio', 'Dona Teresa'];
   const C = GARD_COL, K = o => Object.keys(o);
   let seed = 1717; const rnd = n => { seed = (seed * 16807) % 2147483647; return seed % n; };
   const seen = [], sub = (x, y) => x.every(k => y.includes(k));
-  while (HOUSES.length < GARD_FIRST + 40) {
+  while (HOUSES.length < GARD_FIRST + GARD_N) {
     const v = { wall: K(C.wall)[rnd(5)], roofc: K(C.roof)[rnd(4)], doorc: K(C.door)[rnd(5)], floors: 1 + rnd(2), flower: rnd(4) ? K(C.flower)[rnd(5)] : null,
-      pergola: rnd(3) === 0, bench: rnd(3) === 0, gate: K(C.gate)[rnd(5)], mail: K(C.mail)[rnd(4)], deco: ['statue', 'vases', null][rnd(3)] };
+      pergola: rnd(3) === 0, bench: rnd(3) === 0, gate: K(C.gate)[rnd(5)], mail: K(C.mail)[rnd(4)], deco: ['statue', 'vases', null][rnd(3)],
+      model: ['classic', 'classic', 'chalet', 'ell', 'garage'][rnd(5)] };
     const t = ['gwall:' + v.wall, 'groof:' + v.roofc, 'gdoor:' + v.doorc, 'gfl:' + v.floors, 'ggate:' + v.gate, 'gmail:' + v.mail]
-      .concat(v.flower ? ['gflow:' + v.flower] : [], v.pergola ? ['gperg'] : [], v.bench ? ['gbench'] : [], v.deco ? ['gdeco:' + v.deco] : []);
+      .concat(v.flower ? ['gflow:' + v.flower] : [], v.pergola ? ['gperg'] : [], v.bench ? ['gbench'] : [], v.deco ? ['gdeco:' + v.deco] : [], v.model !== 'classic' ? ['gmod:' + v.model] : []);
     if (seen.some(o => sub(o, t) || sub(t, o))) continue;
     seen.push(t);
     HOUSES.push({ name: names[(HOUSES.length - GARD_FIRST) % names.length], kind: 'gard', ...v, ftags: t });
   }
 }
-export const GARDS = [...Array(40).keys()].map(k => GARD_FIRST + k);            // ponto 5 do plano: parte baixa, perto da entrada, de frente para a rua
+export const GARDS = [...Array(GARD_N).keys()].map(k => GARD_FIRST + k);            // casas dos Jardins (índices em HOUSES)
 
 // ---- Modernista (Nível 18): casas geométricas (1 ou 2 andares; volumes deslocados, laje plana, vidro azulado) e lojas
 // de arquitetura parecida. Índices a partir de MDH_FIRST (40 casas) e MDS_FIRST (6 lojas).
@@ -601,11 +603,12 @@ export const PHRASE = {
   'gfl:1': 'um andar só', 'gfl:2': 'dois andares',
   'gflow:red': 'flores vermelhas', 'gflow:yellow': 'flores amarelas', 'gflow:purple': 'flores roxas', 'gflow:white': 'flores brancas', 'gflow:pink': 'flores cor-de-rosa',
   'gperg': 'um pergolado', 'gbench': 'um banco na varanda',
+  'gmod:chalet': 'o bico do telhado virado para a rua', 'gmod:ell': 'formato em L', 'gmod:garage': 'uma garagem ao lado',
   'ggate:blue': 'portão azul', 'ggate:red': 'portão vermelho', 'ggate:white': 'portão branco', 'ggate:green': 'portão verde', 'ggate:black': 'portão preto',
   'gmail:red': 'caixa de correio vermelha', 'gmail:blue': 'caixa de correio azul', 'gmail:yellow': 'caixa de correio amarela', 'gmail:green': 'caixa de correio verde',
   'gdeco:statue': 'uma escultura na entrada', 'gdeco:vases': 'vasos na entrada',
   'loc:gazebo': 'perto do coreto', 'loc:playground': 'em frente ao playground', 'loc:flowers': 'perto do jardim de flores', 'loc:court': 'perto da quadra',
-  'loc:gate': 'perto da portaria', 'loc:parkdoor': 'com a entrada pelo parque',
+  'loc:gate': 'perto da portaria', 'loc:parkdoor': 'com a entrada pelo parque', 'loc:lake': 'perto do lago', 'loc:club': 'perto do clube',
   'rporch': 'uma varanda', 'rx:tank': 'uma caixa-d’água', 'rx:hay': 'fardos de feno na entrada',
   // prédios contemporâneos (Nível 14)
   'mfac:white': 'volumes brancos', 'mfac:gray': 'volumes cinza-escuros', 'mglass:blue': 'vidros azuis', 'mglass:aqua': 'vidros verde-água',

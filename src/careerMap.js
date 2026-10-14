@@ -49,7 +49,7 @@ function roadGeometry(curve, samples) {
 //   canal    — canal no meio, pontes e um galpão (Bairro 10, Travessia)
 //   rail     — trilhos em L com curva, trem e estação (Bairro 11, Trilhos)
 //   venice   — canais, fachadas venezianas coloridas e a Ponte de Rialto (Nível 12, Veneza)
-export const MINI_KINDS = ['houses', 'plaza', 'barriers', 'trucks', 'gas', 'city', 'jam', 'jam8', 'hill', 'venice', 'canal', 'rail', 'favela', 'flux', 'farm', 'snow', 'garden', 'modern', 'night', 'moon', 'work', 'forest', 'canyon'];   // 21 reservado, 22 = Bosque, 23 = Cachoeira   // 17–19 reservados (null), 20 = Lua   // 13 = Morro, 14 = Fluxo, 15 = Colheita, 16 = Nevasca, 17 = Órbita   // 10 = Veneza, 11 = Travessia, 12 = Trilhos
+export const MINI_KINDS = ['houses', 'plaza', 'barriers', 'trucks', 'gas', 'city', 'jam', 'jam8', 'hill', 'venice', 'canal', 'rail', 'favela', 'flux', 'farm', 'snow', 'garden', 'modern', 'night', 'moon', 'work', 'forest', 'canyon', 'medieval'];   // 21 reservado, 22 = Bosque, 23 = Cachoeira   // 17–19 reservados (null), 20 = Lua   // 13 = Morro, 14 = Fluxo, 15 = Colheita, 16 = Nevasca, 17 = Órbita   // 10 = Veneza, 11 = Travessia, 12 = Trilhos
 
 /** Bairro em miniatura do tipo `kind`: base de grama, sebe, ruas e o que caracteriza o bairro. gray = fase bloqueada. */
 function miniNeighborhood(kind, colors, gray = false) {
@@ -57,7 +57,7 @@ function miniNeighborhood(kind, colors, gray = false) {
   const roof = i => G(colors[i % colors.length], '#8c8c8c');
   const g = new THREE.Group();
   const add = (m, x, y, z, rx = 0, ry = 0, rz = 0) => g.add(at(m, x, y, z, rx, ry, rz));
-  if (kind !== 'moon' && kind !== 'canyon') {     // base com sebe (a Lua não tem: só a esfera)
+  if (kind !== 'moon' && kind !== 'canyon' && kind !== 'medieval') {     // base com sebe (a Lua não tem: só a esfera; o Medieval tem muralha)
     add(box(15, 0.3, 15, G('#d4cdbb', '#b9b9b9')), 0, 0.15, 0);
     add(box(14, 0.4, 14, G('#95cc68', '#a3a3a3')), 0, 0.2, 0);
     for (const [x, z, w, d] of [[0, -7, 14.4, 0.6], [0, 7, 14.4, 0.6], [-7, 0, 0.6, 14.4], [7, 0, 0.6, 14.4]]) {
@@ -158,20 +158,53 @@ function miniNeighborhood(kind, colors, gray = false) {
     for (const [x, z, y] of [[5.6, -5.2, 2.1], [-6, -1.4, 2.1], [1.2, 5.8, 0.45], [-1.6, 1.8, 0.45]]) { add(cone(0.75, 1.6, G('#2f6b45', '#8a8a8a'), 7), x, y + 0.9, z); add(cone(0.4, 0.5, SN, 7), x, y + 1.5, z); }
     return bakeStatic(g);
   }
-  if (kind === 'garden') {                       // Nível 17 (Jardins): portaria, ruas curvas, parque comprido e casinhas
-    const Y = 0.4, ASF = G('#5d6470', '#6e6e6e');
-    const seg = (ax, az, bx, bz, w = 1.3) => add(box(w, 0.06, Math.hypot(bx - ax, bz - az), ASF), (ax + bx) / 2, Y + 0.04, (az + bz) / 2, 0, Math.atan2(bx - ax, bz - az), 0);
-    const loop = [[-5.6, -2.6], [-2, -3.1], [0, -2.8], [2.2, -3.2], [5.6, -2.5], [6, 2.4], [2.2, 3.2], [0, 2.8], [-2.2, 3.1], [-5.8, 2.5]];
-    loop.forEach((p, i) => { const q = loop[(i + 1) % loop.length]; seg(p[0], p[1], q[0], q[1]); add(cyl(0.65, 0.65, 0.06, ASF, 12), p[0], Y + 0.04, p[1]); });
-    seg(0, -7, 0, -2.8); add(cyl(1.2, 1.2, 0.07, ASF, 16), 0, Y + 0.045, -4.9); add(cyl(0.45, 0.45, 0.2, G('#6fb34f', '#a3a3a3'), 12), 0, Y + 0.12, -4.9);   // entrada e rotatória
-    add(box(9.4, 0.08, 3.2, G('#9ad46a', '#b0b0b0')), 0, Y + 0.05, 0);                                                   // parque comprido
-    for (const [x0, x1] of [[-4.7, -0.5], [0.5, 4.7]]) for (const z of [-1.6, 1.6]) add(box(x1 - x0, 0.35, 0.18, G('#3f7d3a', '#8a8a8a')), (x0 + x1) / 2, Y + 0.2, z);
-    add(box(9, 0.07, 0.35, G('#e2d8c4', '#c8c8c8')), 0, Y + 0.09, 0);
-    add(cyl(0.6, 0.6, 0.25, G('#d9d2c4', '#bbbbbb'), 8), -3, Y + 0.15, 0); add(cone(0.75, 0.6, G('#b5402f', '#8c8c8c'), 8), -3, Y + 0.9, 0);   // coreto
-    add(box(1.6, 0.06, 1.1, G('#3f8a8a', '#9a9a9a')), 3, Y + 0.1, 0);                                                    // quadra
-    for (const [x, z] of [[-1.4, 0.7], [1.4, -0.7], [-4.2, -0.8], [4.4, 0.8]]) { add(cyl(0.06, 0.08, 0.5, G('#6b4526', '#6a6a6a'), 5), x, Y + 0.3, z); add(sphere(0.38, G('#3f8f3a', '#8a8a8a'), 7, 5), x, Y + 0.7, z); }
-    house(-4.6, -5.3, roof(0), 0.55); house(4.4, -5.3, roof(1), 0.55); house(-4, 5.3, roof(2), 0.6); house(0.6, 5.4, roof(3), 0.55); house(4.8, 5.2, roof(0), 0.55);
-    add(box(0.8, 0.8, 0.8, G('#f1ede2', '#cfcfcf')), 1.0, Y + 0.4, -6.0); add(box(1.4, 0.08, 0.08, G('#d8312a', '#8a8a8a')), -0.4, Y + 0.55, -6.2);   // guarita e cancela
+  if (kind === 'garden') {                       // Nível 17 (Jardins): muro com portaria, ruas com balões, lago com patos, parque, clube, casas e árvores
+    const Y = 0.4, ASF = G('#5d6470', '#6e6e6e'), WALLC = G('#efe6d2', '#c9c9c9'), CAPC = G('#d7cbb1', '#b5b5b5');
+    const seg = (ax, az, bx, bz, w = 0.5) => add(box(w, 0.06, Math.hypot(bx - ax, bz - az) + w * 0.4, ASF), (ax + bx) / 2, Y + 0.04, (az + bz) / 2, 0, Math.atan2(bx - ax, bz - az), 0);
+    const path = (pts, w) => pts.slice(1).forEach((q, i) => seg(pts[i][0], pts[i][1], q[0], q[1], w));
+    // muro em volta (cobre a sebe da base), com pilares
+    for (const [x, z, w, d] of [[0, -7, 14.5, 0.7], [0, 7, 14.5, 0.7], [-7, 0, 0.7, 14.5], [7, 0, 0.7, 14.5]]) {
+      add(box(w, 1.05, d, WALLC), x, 0.72, z);
+      for (let k = -7; k <= 7; k += 1.75) add(box(0.5, 1.18, 0.82, CAPC), w > 1 ? k : x, 0.79, w > 1 ? z : k);
+    }
+    // ruas: entrada, rotatórias, ramais com balão, anel e avenidas
+    seg(0, -7.2, 0, -5); for (const z of [-5, 5.4]) { add(cyl(0.6, 0.6, 0.07, ASF, 16), 0, Y + 0.045, z); add(cyl(0.22, 0.22, 0.18, G('#6fb34f', '#a3a3a3'), 10), 0, Y + 0.12, z); }
+    for (const z of [-5.35, 5.35]) for (const sx of [-1, 1]) { path([[0, z], [sx * 2.6, z + 0.15], [sx * 5.6, z - 0.05]]); add(cyl(0.46, 0.46, 0.07, ASF, 14), sx * 5.7, Y + 0.045, z); }
+    path([[0, -5], [0, -3.2]]); path([[0, 3.2], [0, 5.4]]);
+    const ring = [[0, -3.2], [-2.6, -3.3], [-4.6, -3.2], [-5.4, -2.6], [-5.5, 0], [-5.4, 2.6], [-4.6, 3.2], [-2.6, 3.3], [0, 3.15], [2.6, 3.3], [4.6, 3.2], [5.4, 2.6], [5.5, 0], [5.4, -2.6], [4.6, -3.2], [2.6, -3.3], [0, -3.2]];
+    path(ring);
+    // portaria: pilares do portal, guarita, cancela e passagem de pedestres
+    for (const x of [-0.42, 0.42]) add(box(0.32, 1.5, 0.5, CAPC), x, 0.95, -7);
+    add(box(0.55, 0.55, 0.5, G('#f4f1ea', '#d6d6d6')), 0.62, Y + 0.28, -6.35); add(box(0.75, 0.08, 0.7, G('#5f646c', '#8a8a8a')), 0.6, Y + 0.6, -6.35);
+    add(box(0.75, 0.07, 0.07, G('#d8312a', '#8a8a8a')), 0.02, Y + 0.38, -6.25); add(box(0.08, 0.3, 0.08, G('#5f646c', '#8a8a8a')), 0.38, Y + 0.18, -6.25);
+    add(box(0.16, 0.6, 0.12, G('#2f4a3a', '#7a7a7a')), 0.95, 0.75, -6.62);
+    // lago com patinhos (oeste do miolo)
+    { const lake = cyl(1, 1, 0.06, G('#4aa3d8', '#a5a5a5'), 20); lake.scale.set(0.82, 1, 1.4); add(lake, -4.0, Y + 0.05, 0);
+      const rim = cyl(1, 1, 0.05, G('#b8b0a2', '#bdbdbd'), 20); rim.scale.set(0.95, 1, 1.55); add(rim, -4.0, Y + 0.03, 0);
+      for (const [x, z, r] of [[-4.2, -0.5, 0.09], [-4.05, -0.3, 0.05], [-3.95, -0.15, 0.05], [-3.7, 0.6, 0.08]]) add(sphere(r, G(r > 0.06 ? '#f6f4ee' : '#f2d24e', '#e0e0e0'), 6, 4), x, Y + 0.12, z);
+      add(box(0.18, 0.12, 0.18, G('#d8b48a', '#bdbdbd')), -4.0, Y + 0.12, -0.75); }
+    // parque com cerca viva, caminhos, chafariz, coreto, playground, quadra e flores
+    add(box(5.6, 0.07, 3.3, G('#9ad46a', '#b0b0b0')), 0, Y + 0.05, 0);
+    for (const z of [-1.65, 1.65]) for (const [x0, x1] of [[-2.8, -0.15], [0.15, 2.8]]) add(box(x1 - x0, 0.2, 0.1, G('#3f7d3a', '#8a8a8a')), (x0 + x1) / 2, Y + 0.12, z);
+    for (const x of [-2.8, 2.8]) add(box(0.1, 0.2, 3.3, G('#3f7d3a', '#8a8a8a')), x, Y + 0.12, 0);
+    add(box(5.4, 0.08, 0.16, G('#e2d8c4', '#c8c8c8')), 0, Y + 0.09, 0); add(box(0.16, 0.08, 3.2, G('#e2d8c4', '#c8c8c8')), 0, Y + 0.09, 0);
+    add(cyl(0.22, 0.25, 0.14, G('#cfcac0', '#bbbbbb'), 10), 0, Y + 0.15, 0); add(cyl(0.18, 0.18, 0.04, G('#6fb3e0', '#a5a5a5'), 10), 0, Y + 0.23, 0);
+    add(cyl(0.32, 0.32, 0.12, G('#d9d2c4', '#bbbbbb'), 8), -1.16, Y + 0.12, -0.83); add(cone(0.42, 0.34, G('#b5402f', '#8c8c8c'), 8), -1.16, Y + 0.55, -0.83);   // coreto
+    add(box(0.5, 0.03, 0.5, G('#e6d39a', '#c4c4c4')), 1.16, Y + 0.1, -0.83); add(box(0.12, 0.22, 0.12, G('#3f8ad0', '#8a8a8a')), 1.0, Y + 0.2, -0.95); add(box(0.2, 0.03, 0.06, G('#e0402a', '#8a8a8a')), 1.25, Y + 0.18, -0.7);   // playground
+    add(box(0.95, 0.04, 0.6, G('#3f8a8a', '#9a9a9a')), -1.05, Y + 0.1, 0.9);                                              // quadra
+    for (let k = 0; k < 6; k++) add(sphere(0.07, G(['#e0402a', '#f2c23a', '#9b5de5', '#ff7ab0', '#f4f4f4', '#ff9a3a'][k], '#b0b0b0'), 6, 4), 1.05 + Math.cos(k) * 0.25, Y + 0.14, 0.9 + Math.sin(k) * 0.25);   // flores
+    // clube: salão, piscina e estacionamento
+    add(box(1.1, 0.32, 0.75, G('#f4f2ec', '#d6d6d6')), 3.6, Y + 0.18, -1.2); add(box(1.25, 0.05, 0.9, G('#5f646c', '#8a8a8a')), 3.6, Y + 0.36, -1.2);
+    add(box(1.2, 0.04, 2.0, G('#e8dcc4', '#c4c4c4')), 3.65, Y + 0.06, 0.75); add(box(0.75, 0.05, 1.3, G('#3fc0e8', '#a5a5a5')), 3.6, Y + 0.08, 0.75);
+    add(box(0.8, 0.04, 1.7, ASF), 4.8, Y + 0.05, -0.8);
+    // casas (fileiras dos ramais, do anel e das laterais)
+    let k = 0;
+    for (const x of [-5.4, -3.6, -1.8, 1.8, 3.6, 5.4]) { house(x, -6.25, roof(k++), 0.3); house(x * 0.95, -4.4, roof(k++), 0.3); house(x * 0.95, 4.45, roof(k++), 0.3); house(x, 6.25, roof(k++), 0.3); }
+    for (const x of [-2.2, -1.1, 1.1, 2.2]) { house(x, -2.35, roof(k++), 0.28); house(x, 2.35, roof(k++), 0.28); }
+    for (const z of [-1.8, 0, 1.8]) for (const x of [-6.35, 6.35]) house(x, z, roof(k++), 0.28);
+    // árvores (ruas, cantos, beira do lago e faixas verdes)
+    for (const [x, z] of [[-1.2, -5.9], [1.3, -5.9], [-6.3, -3.4], [6.3, -3.4], [-6.3, 3.4], [6.3, 3.4], [-4.8, -1.4], [-3.2, 1.3], [-4.9, 1.5], [-3.1, -1.3], [4.7, 2.0], [2.6, 3.8], [-2.6, 3.8], [-2.6, -3.8], [2.6, -3.8], [-0.6, 3.75], [0.6, -3.75], [-1.9, 0.5], [1.9, -0.4], [6.3, 5.3], [-6.3, -5.3], [0.6, 6.6], [-0.7, 6.6]])
+      tinyTree(x, z, 0.24);
     return bakeStatic(g);
   }
   if (kind === 'forest') {                       // Nível 22 (Bosque): ruas sinuosas, casinhas entre árvores de outono
@@ -194,42 +227,85 @@ function miniNeighborhood(kind, colors, gray = false) {
     for (const [x, z, c] of [[-2, -1.5, '#e8822a'], [2.5, 2.6, '#c63a24'], [-4, 3.4, '#e8c23a'], [0.8, -3.6, '#d9701c'], [-5.4, -2.6, '#c63a24'], [5.6, -3.2, '#e8c23a']]) add(box(0.5, 0.03, 0.4, G(c, '#9a9a9a')), x, Y + 0.02, z, 0, x, 0);   // folhas no chão
     return bakeStatic(g);
   }
-  if (kind === 'work') {                         // Nível 21 (Operário): fileiras de casas geminadas de tijolo, oficina com portão e pneus
-    const Y = 0.4, BR = ['#a5553a', '#9a4c34', '#b05e40'], PAINT = ['#efe2c4', '#8fb3d1', '#9cc39a', '#e0b25a', '#e8a8a0'];
-    add(box(14, 0.06, 1.6, ROADC), 0, Y + 0.03, -1.2); add(box(1.6, 0.06, 14, ROADC), -0.8, Y + 0.03, 0); add(box(14, 0.06, 1.6, ROADC), 0, Y + 0.03, 4.4);
-    const row = (x0, z, n, ry, two) => {                  // fileira: unidades encostadas, molduras claras, portas, telhado contínuo
-      const gg = new THREE.Group(); gg.position.set(x0, Y, z); gg.rotation.y = ry; g.add(gg);
-      const a = (m, px, py, pz, rx = 0) => gg.add(at(m, px, py, pz, rx, 0, 0));
-      for (let k = 0; k < n; k++) {
-        const x = k * 1.15, hh = two && k % 2 ? 1.5 : 1.0, c = G((k % 3 === 1) ? PAINT[k % 5] : BR[k % 3], '#bdbdbd');
-        a(box(1.15, hh, 1.4, c), x, hh / 2, 0); a(box(0.08, hh, 0.06, G('#ece4d4', '#d6d6d6')), x - 0.57, hh / 2, 0.71);
-        a(box(0.3, 0.55, 0.04, G(['#3f8a4a', '#c8402f', '#2f6fb0', '#e8b02a'][k % 4], '#777777')), x - 0.2, 0.28, 0.71); a(box(0.35, 0.3, 0.04, G('#7fa6c4', '#9a9a9a')), x + 0.25, hh - 0.35, 0.71);
-        a(box(1.17, 0.08, 0.95, G('#b5502f', '#8c8c8c')), x, hh + 0.2, 0.32, 0.45); a(box(1.17, 0.08, 0.95, G('#b5502f', '#8c8c8c')), x, hh + 0.2, -0.32, -0.45);
+  if (kind === 'work') {                         // Nível 21 (Operário): grade de ruas, fileiras de casas geminadas (duas águas, jardinzinho com cerca branca), oficina, caminhão e van
+    const Y = 0.4, FAC = ['#a5553a', '#efe2c4', '#8fb3d1', '#9cc39a', '#e0b25a', '#e8a8a0'], RF = ['#b5502f', '#5f646c', '#7a4a2a'], DOOR = ['#3f8a4a', '#c8402f', '#2f6fb0', '#e8b02a'];
+    const SW = G('#cfcac0', '#b4b4b4'), DASH = G('#f2d45c', '#c8c8c8');
+    for (const z of [-3.3, 2.9]) { add(box(14, 0.05, 1.5, SW), 0, Y + 0.02, z); add(box(14, 0.06, 1.0, ROADC), 0, Y + 0.04, z); for (let x = -6.4; x < 6.6; x += 0.9) add(box(0.4, 0.02, 0.06, DASH), x, Y + 0.08, z); }
+    add(box(1.5, 0.05, 14, SW), 0.6, Y + 0.021, 0); add(box(1.0, 0.06, 14, ROADC), 0.6, Y + 0.041, 0);   // rua da entrada (norte–sul)
+    for (let z = -6.6; z < 6.8; z += 0.9) if (Math.abs(z + 3.3) > 0.7 && Math.abs(z - 2.9) > 0.7) add(box(0.06, 0.02, 0.4, DASH), 0.6, Y + 0.08, z);
+    add(box(1.5, 0.05, 4.7, SW), -4.4, Y + 0.022, -0.2); add(box(1.0, 0.06, 4.7, ROADC), -4.4, Y + 0.042, -0.2);   // travessa
+    let n = 0;
+    const row = (x0, z, cnt, face) => {             // fileira: unidades encostadas, frente para +z (face 1) ou −z (face −1)
+      for (let k = 0; k < cnt; k++) {
+        const i = n++, two = i % 3 === 1, h = two ? 1.25 : 0.8, fac = G(FAC[(i * 5) % FAC.length], '#bdbdbd'), rc = G(RF[i % 3], '#8c8c8c');
+        const gg = new THREE.Group(); gg.position.set(x0 + k * 1.0, Y, z); gg.rotation.y = face > 0 ? 0 : Math.PI; g.add(gg);
+        const a = (m, px, py, pz, rx = 0) => gg.add(at(m, px, py, pz, rx, 0, 0));
+        a(box(1.0, h, 0.95, fac), 0, h / 2, -0.15);                                        // casa
+        a(box(1.02, 0.07, 0.62, rc), 0, h + 0.16, 0.09, 0.55); a(box(1.02, 0.07, 0.62, rc), 0, h + 0.16, -0.39, -0.55);   // duas águas, cumeeira ao longo da rua
+        a(box(0.06, h, 0.04, G('#ece4d4', '#d6d6d6')), -0.5, h / 2, 0.34);                // pilastra da divisa
+        a(box(0.22, 0.42, 0.04, G(DOOR[i % 4], '#777777')), -0.22, 0.21, 0.34);          // porta
+        a(box(0.3, 0.24, 0.04, G('#ffffff', '#dddddd')), 0.2, 0.44, 0.34); a(box(0.24, 0.18, 0.05, G('#8fc6e8', '#9a9a9a')), 0.2, 0.44, 0.35);   // janela
+        if (two) { a(box(0.3, 0.24, 0.04, G('#ffffff', '#dddddd')), -0.22, 0.92, 0.34); a(box(0.3, 0.24, 0.04, G('#ffffff', '#dddddd')), 0.2, 0.92, 0.34); }
+        a(box(1.0, 0.04, 0.52, G('#95cc68', '#a3a3a3')), 0, 0.02, 0.6);                  // jardinzinho
+        a(box(0.68, 0.16, 0.04, G('#fbf8f1', '#e0e0e0')), 0.16, 0.1, 0.84);               // cerca branca (o portão fica aberto, em frente à porta)
       }
     };
-    row(-5.6, -3.4, 5, 0, true); row(0.6, -3.4, 5, 0, false); row(-5.6, 2.2, 4, 0, false);
-    row(-3.0, 5.6, 3, Math.PI, true);
-    const wx = 3.6, wz = 2.3;                             // oficina: portão largo, placa, pneus e carro
-    add(box(4.4, 1.6, 2.2, G('#a5553a', '#bdbdbd')), wx, Y + 0.8, wz); add(box(4.4, 0.18, 2.3, G('#7a7f86', '#9a9a9a')), wx, Y + 1.68, wz);
-    add(box(2.2, 1.1, 0.05, G('#2f6fb0', '#888888')), wx - 0.6, Y + 0.55, wz + 1.11); add(box(3.0, 0.35, 0.05, G('#f4f1ea', '#dddddd')), wx, Y + 1.4, wz + 1.12);
-    for (let k = 0; k < 4; k++) add(cyl(0.22, 0.22, 0.14, G('#1f2023', '#555555'), 10), wx + 1.6, Y + 0.08 + k * 0.15, wz + 1.6);
-    add(box(1.4, 0.45, 0.7, G('#d8473a', '#8a8a8a')), wx - 0.6, Y + 0.3, wz + 2.0);
-    tinyTree(-0.8 + 2.2, 6.6, 0.45); tinyTree(6.0, -6.0, 0.45);
+    row(-6.0, -4.91, 5, 1); row(2.3, -4.91, 4, 1);                                       // ao norte da 1ª rua
+    row(-3.1, -1.69, 3, -1); row(2.0, -1.69, 2, -1);                                     // ao sul da 1ª rua
+    row(-3.1, 1.29, 3, 1); row(2.0, 1.29, 5, 1);                                         // ao norte da 2ª rua
+    row(-6.0, 4.51, 3, -1); row(-2.9, 4.51, 2, -1);                                      // ao sul da 2ª rua
+    const wx = 5.0, wz = -1.35;                                                          // oficina (frente para a 1ª rua): portão largo, placa, pneus
+    add(box(2.2, 1.1, 1.3, G('#a5553a', '#bdbdbd')), wx, Y + 0.55, wz); add(box(2.2, 0.16, 1.32, G('#7a7f86', '#9a9a9a')), wx, Y + 1.16, wz);
+    add(box(1.1, 0.75, 0.05, G('#2f6fb0', '#888888')), wx - 0.35, Y + 0.38, wz - 0.66); add(box(1.6, 0.26, 0.05, G('#f4f1ea', '#dddddd')), wx, Y + 0.92, wz - 0.67);
+    add(box(2.2, 0.03, 0.55, G('#b9b3a6', '#b0b0b0')), wx, Y + 0.02, wz - 0.93);
+    for (let k = 0; k < 3; k++) add(cyl(0.16, 0.16, 0.1, G('#1f2023', '#555555'), 10), wx + 0.75, Y + 0.06 + k * 0.11, wz - 0.9);
+    const truck = (x, z, ry, c) => {                                                    // caminhão baú
+      const t = new THREE.Group(); t.position.set(x, Y, z); t.rotation.y = ry; g.add(t);
+      t.add(at(box(0.62, 0.62, 0.62, G(c, '#9a9a9a')), 0.72, 0.42, 0)); t.add(at(box(0.04, 0.26, 0.5, G('#2b4a6e', '#777777')), 1.04, 0.56, 0));
+      t.add(at(box(1.35, 0.8, 0.66, G('#f4f1ea', '#d6d6d6')), -0.3, 0.52, 0)); t.add(at(box(1.0, 0.16, 0.02, G(c, '#9a9a9a')), -0.3, 0.55, 0.34));
+      for (const wx2 of [-0.65, 0.72]) for (const s of [-1, 1]) t.add(at(cyl(0.14, 0.14, 0.08, G('#1f2023', '#555555'), 8), wx2, 0.14, s * 0.3, Math.PI / 2, 0, 0));
+    };
+    const fvan = (x, z, ry, c) => {                                                     // furgão
+      const t = new THREE.Group(); t.position.set(x, Y, z); t.rotation.y = ry; g.add(t);
+      t.add(at(box(1.1, 0.6, 0.6, G(c, '#a8a8a8')), -0.12, 0.42, 0)); t.add(at(box(0.36, 0.34, 0.58, G(c, '#a8a8a8')), 0.6, 0.29, 0));
+      t.add(at(box(0.04, 0.24, 0.5, G('#2b4a6e', '#777777')), 0.44, 0.6, 0)); t.add(at(box(0.7, 0.12, 0.02, G('#e8b02a', '#bbbbbb')), -0.15, 0.45, 0.31));
+      for (const wx2 of [-0.45, 0.55]) for (const s of [-1, 1]) t.add(at(cyl(0.13, 0.13, 0.08, G('#1f2023', '#555555'), 8), wx2, 0.13, s * 0.28, Math.PI / 2, 0, 0));
+    };
+    truck(-2.4, -3.05, 0, '#c8402f'); fvan(3.4, 2.65, Math.PI, '#2f6fb0'); fvan(0.35, -0.6, -Math.PI / 2, '#f4f1ea');
+    add(cyl(0.95, 0.95, 0.05, G('#d8cfbd', '#c4c4c4'), 16), 4.2, Y + 0.03, 5.3); tinyTree(4.2, 5.3, 0.5);   // pracinha
+    for (const x of [3.3, 5.1]) add(box(0.5, 0.1, 0.18, G('#8a5a36', '#7a7a7a')), x, Y + 0.18, 5.3, 0, Math.PI / 2, 0);
+    tinyTree(-5.8, -0.2, 0.42); tinyTree(-1.9, -0.2, 0.4); tinyTree(6.3, 5.9, 0.45); tinyTree(-5.9, -1.8, 0.38);
     return bakeStatic(g);
   }
-  if (kind === 'modern') {                       // Nível 18 (Modernista): ruas curvas largas, rotatória, casas geométricas de laje plana e jardins
-    const Y = 0.4, SWC = G('#d6d3cc', '#c4c4c4');
-    const road = (pts, w = 1.5) => {
-      for (let k = 0; k < pts.length - 1; k++) { const [ax, az] = pts[k], [bx, bz] = pts[k + 1], len = Math.hypot(bx - ax, bz - az), ry = Math.atan2(bx - ax, bz - az);
-        add(box(w + 0.5, 0.05, len, SWC), (ax + bx) / 2, Y + 0.02, (az + bz) / 2, 0, ry, 0); add(box(w, 0.06, len, ROADC), (ax + bx) / 2, Y + 0.04, (az + bz) / 2, 0, ry, 0); }
-      for (const [x, z] of pts) { add(cyl(w / 2 + 0.25, w / 2 + 0.25, 0.05, SWC, 14), x, Y + 0.021, z); add(cyl(w / 2, w / 2, 0.06, ROADC, 14), x, Y + 0.041, z); }
-    };
-    road([[0.6, -7], [0.4, -3.4]]); road([[0.4, -3.4], [-3.0, -1.8], [-4.6, 1.6], [-3.2, 5.0], [0.4, 6.4]]); road([[0.4, -3.4], [3.6, -1.6], [4.6, 1.8], [3.4, 5.0], [0.4, 6.4]]);
-    road([[-4.6, 1.6], [-6.4, 1.2]], 1.2);
-    add(cyl(1.6, 1.6, 0.06, ROADC, 20), 0.4, Y + 0.05, -3.4); add(cyl(0.7, 0.7, 0.2, G('#7fc45c', '#a0a0a0'), 16), 0.4, Y + 0.12, -3.4);   // rotatória
-    add(box(0.2, 0.9, 0.2, G('#ec7a26', '#9a9a9a')), 0.4, Y + 0.6, -3.4);
-    const W = c => G(c, '#cfcfcf'), mod = (x, z, ry, fac, two, door) => {   // casa modernista: 2 volumes deslocados, laje plana, vidro azul
-      const gg = new THREE.Group(); gg.position.set(x, Y, z); gg.rotation.y = ry; g.add(gg);
+  if (kind === 'modern') {                       // Nível 18 (Modernista): condomínio murado com portaria, ruas largas em teia (5 rotatórias, balões) e casas de laje plana
+    const Y = 0.4, SWC = G('#d6d3cc', '#c4c4c4'), GRN = G('#7fc45c', '#a0a0a0');
+    for (const m of g.children.filter(m => m.position.y === 0.65)) g.remove(m);   // sem a sebe da base: no lugar dela, o muro
+    const seg = (a, b, w = 0.75) => { const len = Math.hypot(b[0] - a[0], b[1] - a[1]), ry = Math.atan2(b[0] - a[0], b[1] - a[1]), x = (a[0] + b[0]) / 2, z = (a[1] + b[1]) / 2;
+      add(box(w + 0.3, 0.05, len, SWC), x, Y + 0.02, z, 0, ry, 0); add(box(w, 0.06, len, ROADC), x, Y + 0.04, z, 0, ry, 0); };
+    const disc = (p, r) => { add(cyl(r + 0.15, r + 0.15, 0.05, SWC, 16), p[0], Y + 0.021, p[1]); add(cyl(r, r, 0.06, ROADC, 16), p[0], Y + 0.041, p[1]); };
+    // nós do plano (modernPlan.js), na escala da maquete
+    const N = { n0: [0, -7], r1: [0, -3.9], a1: [-1.8, -3.4], b1: [1.8, -3.4], r2: [-3.65, -1.9], r3: [3.65, -1.9], c1: [-0.45, -1.65], r4: [0, 0.5],
+      w1: [-4.7, 0.1], w2: [-4.45, 2.5], w3: [-3.1, 4.5], e1: [4.75, 0.1], e2: [4.5, 2.5], e3: [3.15, 4.5], m1: [-2.2, 1.6], m2: [2.2, 1.6], c2: [0.35, 2.9], r5: [0, 5.2],
+      d1: [-5.8, -3.5], d2: [5.8, -3.5], d3: [-5.0, 5.95], d4: [5.0, 5.95], d5: [-3.0, -5.65], d6: [3.0, -5.65] };
+    for (const [a, b] of [['n0', 'r1'], ['r1', 'a1'], ['a1', 'r2'], ['r1', 'b1'], ['b1', 'r3'], ['r1', 'c1'], ['c1', 'r4'], ['r2', 'w1'], ['w1', 'w2'], ['w2', 'w3'], ['w3', 'r5'],
+      ['r3', 'e1'], ['e1', 'e2'], ['e2', 'e3'], ['e3', 'r5'], ['r4', 'm1'], ['m1', 'w2'], ['r4', 'm2'], ['m2', 'e2'], ['r4', 'c2'], ['c2', 'r5'],
+      ['r2', 'd1'], ['r3', 'd2'], ['w3', 'd3'], ['e3', 'd4'], ['r1', 'd5'], ['r1', 'd6']]) seg(N[a], N[b]);
+    for (const k of ['a1', 'b1', 'c1', 'w1', 'w2', 'w3', 'e1', 'e2', 'e3', 'm1', 'm2', 'c2']) disc(N[k], 0.375);
+    for (const k of ['d1', 'd2', 'd3', 'd4', 'd5', 'd6']) disc(N[k], 0.6);                                       // balões de retorno
+    for (const k of ['r1', 'r2', 'r3', 'r4', 'r5']) { disc(N[k], 0.72); add(cyl(0.34, 0.34, 0.16, GRN, 12), N[k][0], Y + 0.1, N[k][1]); add(box(0.12, 0.42, 0.12, G('#ec7a26', '#9a9a9a')), N[k][0], Y + 0.36, N[k][1]); }   // rotatórias com escultura
+    // muro do condomínio com pilares e a portaria (abertura, pilares largos, cancela e guarita)
+    const WC = G('#ece9e2', '#d0d0d0'), PC = G('#d2cec5', '#bcbcbc'), CC = G('#6f737a', '#8a8a8a');
+    for (const [x, z, w, d] of [[-3.75, -6.95, 6.5, 0.3], [3.75, -6.95, 6.5, 0.3], [0, 6.95, 14.2, 0.3], [-6.95, 0, 0.3, 13.6], [6.95, 0, 0.3, 13.6]]) {
+      add(box(w, 0.75, d, WC), x, Y + 0.375, z); add(box(w + (w > d ? 0 : 0.1), 0.06, d + (w > d ? 0.1 : 0), CC), x, Y + 0.78, z);
+      const n = Math.round(Math.max(w, d) / 2.3);
+      for (let k = 0; k <= n; k++) { const u = -Math.max(w, d) / 2 + Math.max(w, d) * k / n; add(box(w > d ? 0.22 : 0.4, 0.85, w > d ? 0.4 : 0.22, PC), x + (w > d ? u : 0), Y + 0.42, z + (w > d ? 0 : u)); }
+    }
+    for (const x of [-0.62, 0.62]) { add(box(0.4, 1.05, 0.45, PC), x, Y + 0.52, -6.95); add(box(0.46, 0.06, 0.5, CC), x, Y + 1.07, -6.95); }
+    add(box(0.9, 0.06, 0.06, G('#d8312a', '#8a8a8a')), -0.05, Y + 0.45, -6.95); for (const x of [-0.35, 0.05, 0.45]) add(box(0.14, 0.065, 0.065, G('#f4f4f4', '#dddddd')), x, Y + 0.45, -6.95);   // cancela
+    add(box(0.7, 0.62, 0.85, G('#f4f3ef', '#d6d6d6')), 1.05, Y + 0.31, -6.15); add(box(0.92, 0.07, 1.05, CC), 0.98, Y + 0.65, -6.15);   // guarita
+    add(box(0.03, 0.22, 0.55, G('#8cc2e8', '#9a9a9a')), 0.69, Y + 0.4, -6.15);
+    const W = c => G(c, '#cfcfcf'), mod = (x, z, ry, fac, two, door, s = 0.42) => {   // casa modernista: 2 volumes deslocados, laje plana, vidro azul
+      const gg = new THREE.Group(); gg.position.set(x - Math.sin(ry) * 0.18, Y, z - Math.cos(ry) * 0.18); gg.rotation.y = ry; gg.scale.setScalar(s); g.add(gg);   // um pouco recuada da rua
       const a = (m, px, py, pz) => gg.add(at(m, px, py, pz));
       a(box(2.6, 0.06, 2.6, G('#7fc45c', '#a3a3a3')), 0, 0.03, 0);
       a(box(1.9, 0.9, 1.3, W(fac)), -0.25, 0.48, -0.4); a(box(2.1, 0.08, 1.5, W('#ecebe6')), -0.25, 0.96, -0.4);
@@ -237,10 +313,75 @@ function miniNeighborhood(kind, colors, gray = false) {
       a(box(1.0, 0.5, 0.05, G('#8cc2e8', '#9a9a9a')), -0.6, 0.5, 0.26); a(box(0.3, 0.6, 0.05, G(door, '#777777')), 0.3, 0.33, 0.26);
       a(box(0.9, 0.7, 1.0, W('#bfc3c8')), 0.95, 0.38, -0.55); a(box(0.3, 0.06, 0.4, G('#b07a44', '#888888')), 0.55, 0.85, 0.15);
     };
-    mod(-4.6, -5.0, 0.4, '#f4f3ef', true, '#2f6fb0'); mod(4.8, -5.0, -0.4, '#e3d4b8', false, '#c8402f'); mod(-1.4, 1.4, 0, '#bfc3c8', true, '#e8b02a');
-    mod(2.0, 1.6, 0, '#f4f3ef', false, '#3f8a4a'); mod(-5.4, 5.0, 0.6, '#e3d4b8', false, '#ec7a26'); mod(4.8, 5.4, -0.5, '#f4f3ef', true, '#2b2d33');
-    for (const [x, z] of [[-6.2, -1.8], [6.4, -1.2], [-0.4, 4.0], [6.2, 2.6], [-2.4, -6.2], [2.6, -6.4]]) tinyTree(x, z, 0.45);
-    add(box(0.9, 0.04, 0.7, G('#5aa9d6', '#9a9a9a')), 1.0, Y + 0.08, 3.6);
+    const FAC = ['#f4f3ef', '#e3d4b8', '#bfc3c8'], DOOR = ['#2f6fb0', '#c8402f', '#e8b02a', '#3f8a4a', '#ec7a26', '#2b2d33'];
+    [[-5.98, -4.65, 0.16], [5.6, -4.65, 0.16], [-6.02, -2.3, 2.96], [5.99, -2.29, -2.97], [-1.42, -2.23, -2.48], [1.92, -1.82, 2.48], [-3.01, -0.71, -2.06], [3.03, -0.69, 2.09],
+      [-1.76, 0.1, 0.46], [1.32, -0.13, -0.45], [-5.16, 3.49, 2.16], [5.22, 3.49, -2.16], [-2.73, 3.04, -0.98], [2.79, 3.04, 0.98], [-1.53, 3.83, -0.21], [1.59, 3.82, 0.21],
+      [-2.93, 5.71, 2.93], [2.98, 5.71, -2.93], [-2.6, -6.2, -0.53], [2.75, -6.2, 0.52]].forEach(([x, z, ry], i) => mod(x, z, ry, FAC[i % 3], i % 2 === 0, DOOR[i % 6]));
+    for (const [x, z] of [[-6.2, 1.4], [6.2, 1.4], [-0.1, -0.6], [-6.1, 4.6], [6.2, 4.7], [-4.0, -4.4], [4.0, -4.4], [0.1, 4.1], [-3.3, 1.6], [3.4, 1.7]]) tinyTree(x, z, 0.32);
+    return bakeStatic(g);
+  }
+  if (kind === 'medieval') {                     // Nível 24 (Medieval): burgo murado — muralha com torres e portão, ruas de pedra, praça com fonte
+    // e barracas, casas de telhado terroso (enxaimel, reboco, pedra), patamares com muros de arrimo e o castelo no alto
+    const STN = G('#a19a8c', '#a3a3a3'), STL = G('#c3baa8', '#bdbdbd'), SLT = G('#5c626a', '#7a7a7a'), GR = G('#8a985c', '#a3a3a3'), COB = G('#8a8378', '#8f8f8f'), DK = G('#2a2622', '#5a5a5a');
+    const Y0 = 0.42, Y1 = 0.72, Y2 = 1.32;                                               // chão da parte baixa, do patamar do meio e do alto
+    add(box(15, 0.3, 15, G('#b3a893', '#b5b5b5')), 0, 0.15, 0); add(box(14, 0.12, 14, GR), 0, 0.36, 0);
+    add(box(14, Y1 - Y0, 10.2, GR), 0, Y0 + (Y1 - Y0) / 2, 1.9); add(box(14, Y1 - Y0 + 0.12, 0.16, STN), 0, Y0 + (Y1 - Y0) / 2 + 0.06, -3.2);   // patamar do meio + muro
+    add(box(4.9, Y2 - Y1, 4.7, GR), 4.55, Y1 + (Y2 - Y1) / 2, 4.65); add(box(4.9, Y2 - Y1 + 0.12, 0.16, STN), 4.55, Y1 + (Y2 - Y1) / 2 + 0.06, 2.3); add(box(0.16, Y2 - Y1 + 0.12, 4.7, STN), 2.1, Y1 + (Y2 - Y1) / 2 + 0.06, 4.65);
+    // muralha com ameias, torres nos cantos (telhado cônico de ardósia) e portão no meio do fundo
+    const WH = 1.25;
+    for (const [x, z, w, d] of [[-3.95, -7, 6.1, 0.4], [3.95, -7, 6.1, 0.4], [0, 7, 14.4, 0.4], [-7, 0, 0.4, 14.4], [7, 0, 0.4, 14.4]]) {
+      add(box(w, WH, d, STN), x, 0.3 + WH / 2, z);
+      const n = Math.round(Math.max(w, d) / 0.55);
+      for (let k = 0; k < n; k++) { const u = -Math.max(w, d) / 2 + (k + 0.5) * Math.max(w, d) / n; add(box(w > d ? 0.26 : 0.4, 0.2, w > d ? 0.4 : 0.26, STN), x + (w > d ? u : 0), 0.3 + WH + 0.1, z + (w > d ? 0 : u)); }
+    }
+    for (const [x, z] of [[-7, -7], [7, -7], [-7, 7], [7, 7]]) { add(cyl(0.62, 0.66, 1.9, STN, 10), x, 0.3 + 0.95, z); add(cone(0.78, 1.1, SLT, 10), x, 0.3 + 1.9 + 0.55, z); }
+    for (const sx of [-1, 1]) { add(box(1.0, 2.0, 1.1, STN), sx * 1.0, 0.3 + 1.0, -7); for (const dx of [-0.32, 0.32]) add(box(0.24, 0.24, 0.24, STN), sx * 1.0 + dx, 0.3 + 2.12, -7.3); add(box(0.5, 0.32, 0.03, G('#a8322a', '#8a8a8a')), sx * 1.0 + 0.25, 0.3 + 2.85, -7.0); add(cyl(0.025, 0.025, 0.75, DK, 4), sx * 1.0, 0.3 + 2.55, -7.0); }
+    add(box(1.0, 0.7, 1.0, STN), 0, 0.3 + 1.55, -7); add(box(0.62, 0.95, 1.06, DK), 0, 0.3 + 0.475, -7);
+    // ruas de pedra: do portão até a praça (sobe a ladeira), rua da parte baixa, contorno da praça e o caminho até o castelo
+    const road = (pts, y, w = 0.62) => {
+      for (let k = 0; k < pts.length - 1; k++) { const [ax, az] = pts[k], [bx, bz] = pts[k + 1], len = Math.hypot(bx - ax, bz - az); add(box(w, 0.05, len, COB), (ax + bx) / 2, y + 0.025, (az + bz) / 2, 0, Math.atan2(bx - ax, bz - az), 0); }
+      for (const [x, z] of pts) add(cyl(w / 2, w / 2, 0.05, COB, 10), x, y + 0.026, z);
+    };
+    road([[0, -6.8], [0.15, -5.3], [0, -3.3]], Y0); add(box(0.62, 0.05, Math.hypot(0.9, Y1 - Y0), COB), 0, (Y0 + Y1) / 2 + 0.03, -2.8, -Math.atan2(Y1 - Y0, 0.9), 0, 0);
+    road([[-6.2, -5.3], [-3, -5.45], [0.15, -5.3], [3.2, -5.4], [6.2, -5.3]], Y0);
+    road([[0, -2.35], [0, -1.45], [-1.6, -1.45], [-1.6, 1.5], [1.6, 1.5], [1.6, -1.45], [0, -1.45]], Y1);
+    road([[0, 1.5], [0, 3.1], [1.7, 3.2]], Y1); road([[-1.6, 0], [-4.2, 0.2], [-5.6, 2.8]], Y1); road([[1.6, 0], [4.8, -0.2], [5.4, 1.4]], Y1);
+    add(box(1.6, 0.05, 0.62, COB), 2.65, (Y1 + Y2) / 2 + 0.03, 3.25, 0, 0, Math.atan2(Y2 - Y1, 1.6)); road([[3.45, 3.25], [4.4, 3.4], [4.6, 3.8]], Y2);
+    // praça: lajes claras, fonte com água e 4 barracas com toldos listrados
+    add(box(3.0, 0.04, 2.7, STL), 0, Y1 + 0.03, 0.03); add(cyl(0.62, 0.62, 0.05, COB, 16), 0, Y1 + 0.06, 0.03);
+    add(cyl(0.32, 0.34, 0.16, STL, 8), 0, Y1 + 0.15, 0.03); add(cyl(0.26, 0.26, 0.04, G('#5f8ea8', '#9a9a9a'), 8), 0, Y1 + 0.22, 0.03); add(cyl(0.05, 0.06, 0.35, STL, 6), 0, Y1 + 0.35, 0.03); add(cyl(0.14, 0.06, 0.06, STL, 8), 0, Y1 + 0.46, 0.03);
+    [[-0.95, -0.85, '#b8342a'], [0.95, -0.85, '#2f5a9a'], [-0.95, 0.9, '#d9a62a'], [0.95, 0.9, '#3f7a46']].forEach(([x, z, c]) => {
+      add(box(0.5, 0.18, 0.3, G('#94693f', '#8a8a8a')), x, Y1 + 0.14, z);
+      for (let k = 0; k < 3; k++) add(box(0.18, 0.03, 0.42, G(k % 2 ? '#efe1c4' : c, '#c4c4c4')), x - 0.17 + k * 0.17, Y1 + 0.42, z, z < 0 ? 0.3 : -0.3, 0, 0);
+      for (const sx of [-1, 1]) add(box(0.03, 0.4, 0.03, G('#6e4a2e', '#7a7a7a')), x + sx * 0.23, Y1 + 0.24, z);
+    });
+    // casas medievais: corpo (reboco, ocre, rosado, enxaimel ou pedra), telhado de duas águas terroso, porta e janelinhas acesas
+    const ROOFS = ['#b0582f', '#97382a', '#7a4a2a', '#5c626a'], FACS = ['#efe3c6', '#dcb878', '#dcae9e', '#eadcbc', '#a19a8c'];
+    const mh = (x, z, ry, y, i, two = i % 3 === 0) => {
+      const gg = new THREE.Group(); gg.position.set(x, y, z); gg.rotation.y = ry; g.add(gg);
+      const a = (m, px, py, pz, rx = 0) => gg.add(at(m, px, py, pz, rx, 0, 0)), hh = two ? 0.95 : 0.62, fc = FACS[i % 5], rc = G(ROOFS[(i * 3 + 1) % 4], '#8c8c8c');
+      a(box(0.9, hh, 0.72, G(fc, '#cfcfcf')), 0, hh / 2, 0);
+      for (const s of [-1, 1]) a(box(0.94, 0.05, 0.5, rc), 0, hh + 0.17, s * 0.19, s * 0.72);
+      if (i % 5 === 3) for (const px of [-0.3, 0, 0.3]) a(box(0.04, hh, 0.02, G('#4b3322', '#666666')), px, hh / 2, 0.37);
+      a(box(0.18, 0.32, 0.02, G(['#6b4428', '#3f6b3a', '#2f5a8a', '#8e2e22'][i % 4], '#5c5c5c')), -0.18, 0.16, 0.37);
+      for (const py of two ? [0.3, 0.68] : [0.33]) a(box(0.16, 0.14, 0.02, G('#ffd88a', '#bdbdbd')), 0.2, py, 0.37);
+      if (i % 4 === 1) a(box(0.1, 0.32, 0.1, STN), 0.3, hh + 0.3, -0.05);
+    };
+    let k = 0;
+    for (const x of [-5.7, -4.7, -3.7, -1.8, 1.9, 2.9, 3.9, 5.5]) mh(x, -6.15, 0, Y0, k++);                         // parte baixa: fileiras dos dois lados da rua
+    for (const x of [-5.5, -4.5, -2.6, 2.5, 3.5, 4.5, 5.6]) mh(x, -4.45, Math.PI, Y0, k++);
+    for (const [x, z, ry] of [[-1.2, -2.3, Math.PI], [1.25, -2.3, Math.PI], [-2.55, -0.6, Math.PI / 2], [-2.55, 0.65, Math.PI / 2], [2.55, -0.6, -Math.PI / 2], [2.6, 0.7, -Math.PI / 2],
+      [-5.3, -1.3, 0.3], [-6.1, 1.4, 1.2], [-4.7, 3.6, 0.6], [-3.3, 1.7, 0], [-1.2, 2.55, 0], [-2.4, 4.6, 0], [-0.9, 4.7, 0], [-5.5, 5.7, 0], [-3.9, 5.9, 0], [1.0, 5.6, 0], [5.0, -1.5, 0], [6.0, 0.4, -1.4], [3.4, 1.0, Math.PI]]) mh(x, z, ry, Y1, k++);
+    // castelo no alto: muralhas, 4 torres redondas com cones, torre de menagem e bandeiras
+    const cx = 4.75, cz = 5.2, cy = Y2;
+    add(box(2.6, 0.9, 2.2, STN), cx, cy + 0.45, cz);
+    for (const [dx, dz] of [[-1.3, -1.1], [1.3, -1.1], [-1.3, 1.1], [1.3, 1.1]]) { add(cyl(0.38, 0.4, 1.6, STN, 10), cx + dx, cy + 0.8, cz + dz); add(cone(0.5, 0.9, SLT, 10), cx + dx, cy + 1.6 + 0.45, cz + dz); add(box(0.2, 0.13, 0.02, G(dx * dz > 0 ? '#2f4f8f' : '#a8322a', '#8a8a8a')), cx + dx + 0.1, cy + 2.7, cz + dz); add(cyl(0.015, 0.015, 0.4, DK, 4), cx + dx, cy + 2.6, cz + dz); }
+    add(box(1.0, 2.6, 1.0, STN), cx + 0.05, cy + 1.3, cz + 0.3); add(cone(0.78, 1.0, SLT, 4), cx + 0.05, cy + 3.1, cz + 0.3, 0, Math.PI / 4, 0);
+    add(box(0.18, 0.12, 0.02, G('#d9a62a', '#8a8a8a')), cx + 0.15, cy + 3.95, cz + 0.3); add(cyl(0.015, 0.015, 0.45, DK, 4), cx + 0.05, cy + 3.8, cz + 0.3);
+    for (const dy of [0.95, 1.5, 2.05]) for (const dx of [-0.22, 0.22]) add(box(0.1, 0.18, 0.02, G('#ffd88a', '#bdbdbd')), cx + 0.05 + dx, cy + dy, cz - 0.21);
+    add(box(0.42, 0.55, 0.02, DK), cx, cy + 0.28, cz - 1.11); add(box(0.4, 0.28, 0.02, G('#2f4f8f', '#8a8a8a')), cx, cy + 0.72, cz - 1.12);
+    add(box(2.6, 0.03, 1.0, STL), cx, cy + 0.02, cz - 1.7);
+    for (const [x, z] of [[-6.2, -3.9], [6.2, -3.8], [-6.1, 6.2], [2.1, -3.9], [-3.6, -3.8], [5.9, 2.6]]) { add(cyl(0.06, 0.08, 0.4, G('#6b4526', '#6a6a6a'), 6), x, (z > -3.2 ? Y1 : Y0) + 0.2, z); add(sphere(0.34, G('#5e8f3a', '#8a8a8a'), 7, 5), x, (z > -3.2 ? Y1 : Y0) + 0.55, z); }
     return bakeStatic(g);
   }
   if (kind === 'canyon') {                       // Nível 23 (Cachoeira): duas margens, desfiladeiro fundo, ponte alta e a cachoeira gigante no fundo
@@ -557,7 +698,7 @@ function boardTexture(gray = false) {
 }
 
 const PALETTES = [['red', 'blue', 'yellow', 'green'], ['purple', 'red', 'gray', 'yellow', 'blue', 'green', 'red', 'yellow'], ['blue', 'green', 'red', 'purple'],
-  ['yellow', 'gray', 'blue', 'red'], ['green', 'purple', 'yellow', 'blue'], ['red'], ['blue'], ['green'], ['red', 'blue', 'yellow', 'purple'], ['red'], ['blue', 'green', 'red'], ['green', 'yellow', 'purple'], ['red'], ['blue', 'red', 'yellow', 'green'], ['red', 'blue'], ['red', 'blue', 'green', 'yellow'], ['red', 'blue', 'gray', 'green'], ['blue', 'red', 'yellow', 'green'], ['red'], ['blue'], ['red', 'gray', 'red', 'blue'], ['red', 'blue', 'yellow', 'green', 'purple'], ['red', 'blue', 'yellow', 'green', 'purple']];
+  ['yellow', 'gray', 'blue', 'red'], ['green', 'purple', 'yellow', 'blue'], ['red'], ['blue'], ['green'], ['red', 'blue', 'yellow', 'purple'], ['red'], ['blue', 'green', 'red'], ['green', 'yellow', 'purple'], ['red'], ['blue', 'red', 'yellow', 'green'], ['red', 'blue'], ['red', 'blue', 'green', 'yellow'], ['red', 'blue', 'gray', 'green'], ['blue', 'red', 'yellow', 'green'], ['red'], ['blue'], ['red', 'gray', 'red', 'blue'], ['red', 'blue', 'yellow', 'green', 'purple'], ['red', 'blue', 'yellow', 'green', 'purple'], ['red']];
 
 /** Miniatura da lua: fundo preto, poucas estrelas pequenas e a lua por cima. */
 function spaceShot(src, w, h) {
