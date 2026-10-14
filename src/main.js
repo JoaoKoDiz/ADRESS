@@ -959,6 +959,22 @@ function showPlayPanel() {
   if (titleDriver) { titleDriver.reset(); titleDriver.start(); }
   setState('title');
 }
+// Carreira: a entrega certa encerra a partida. Fade-out de ~1 s (controles parados) e, com a tela preta, a partida acaba e
+// volta o mapa da Carreira com fade-in, a van ao lado do bairro jogado. As missões já foram registradas e salvas na entrega
+// (career.visit → setProgress, que só aumenta e não conta de novo o que já estava concluído); o mapa relê os desbloqueios.
+let endToMap = false;
+const CAREER_END_FADE = 1.0;
+function finishCareerMatch() {
+  endToMap = false;
+  dialog = null; world.hideResident(); missions.close();
+  startNewRound(false); game.delivered = 0;           // limpa o bairro para a próxima vez (a próxima partida começa ao jogar de novo)
+  career.stop();
+  careerMap = careerMap || createCareerMap(stage, audio);
+  careerMap.resize(stage.clientWidth, stage.clientHeight);
+  careerMap.enter(careerLevel); careerMap.setLocked(l => !career.isUnlocked(l));   // bairro novo desbloqueado aparece colorido
+  fade = 1; hud.setFade(1);
+  setState('mapIn');
+}
 function goBack() {
   if (state === 'title' && title.visible && title.screen === 'play' && !title.starting) {
     if (titleDriver) titleDriver.stop();
@@ -984,6 +1000,7 @@ function goBack() {
 
 function startFree(mode = 'free') {
   // Bairro 2: 6×6 com praça; Bairro 4: 5×5 com bloqueios; o resto: 4×4
+  endToMap = false;
   const lv = mode === 'career' ? careerLevel : freeLevel;
   useNeighborhood(lv === 1 ? 'plaza6' : lv === 3 ? 'grid5' : lv === 4 ? 'grid6s' : lv === 5 ? 'city6' : lv === 6 ? 'city7' : lv === 7 ? 'city8' : lv === 8 ? 'hill8' : lv === 9 ? 'venice8' : lv === 10 ? 'canal8' : lv === 11 ? 'rail8' : lv === 12 ? 'favela8' : lv === 13 ? 'flux10' : lv === 14 ? 'farm10' : lv === 15 ? 'snow8' : lv === 16 ? 'garden8' : lv === 18 ? 'night10' : lv === 19 ? 'moon8' : lv === 17 ? 'modern8' : lv === 20 ? 'work8' : lv === 21 ? 'forest8' : lv === 22 ? 'canyon10' : lv === 23 ? 'med10' : 'grid4');   // 17–19 reservados; 20 = Lua   // 10 = Veneza, 11 = Travessia, 12 = Trilhos
   gameMode = mode;
@@ -1754,7 +1771,7 @@ function updateGrill(dt) {
   if (g.swapped && g.t >= 2.15) { fade = 0; grill = null; actionLock = 0.4; setState(insideOn ? 'inside' : 'walk'); }
 }
 
-function startNewRound() {
+function startNewRound(newMatch = true) {
   if (insideOn) leaveGrill();
   grill = null;
   footDelivery = false; unmoor();
@@ -1763,7 +1780,7 @@ function startNewRound() {
   if (COMPOSED.includes(neighborhood)) composeRound(); else game.newRound();
   refreshBarriers();                             // Bairro 3: barreiras em lugares novos
   applyJams();                                   // Bairro 7: as entregas só entre os lotes que a van consegue alcançar
-  if (gameMode === 'career') career.startMatch(careerLevel);   // nova partida da Carreira
+  if (gameMode === 'career' && newMatch) career.startMatch(careerLevel);   // nova partida da Carreira (no fim da partida, a próxima começa no mapa)
   hint.clear(); hintUsed = false; hintStep = -1; hintCount = 0;
   heli.reset();
   monster.reset();
@@ -1793,7 +1810,7 @@ function focusOf(h) {
 // ---------- Atualização ----------
 function update(dt, t) {
   stateT += dt;
-  if (state !== 'title' && state !== 'levelSelect' && state !== 'levelFly' && state !== 'shop' && input.toggleCamera()) rig.toggle();
+  if (state !== 'title' && state !== 'levelSelect' && state !== 'levelFly' && state !== 'shop' && !(state === 'fadeOut' && endToMap) && input.toggleCamera()) rig.toggle();
 
   switch (state) {
     case 'drive': {
@@ -1886,7 +1903,7 @@ function update(dt, t) {
     case 'dialog':
       if ((stateT > 0.25 && input.action()) || (dialog.success && stateT > SUCCESS_AUTO)) {
         if (dialog.success && gameMode === 'free') nextDelivery();
-        else if (dialog.success) setState('fadeOut');
+        else if (dialog.success) { endToMap = true; setState('fadeOut'); }   // Carreira: entrega certa encerra a partida e volta ao mapa
         else {
           const visited = dialog.h;
           dialog = null; world.hideResident(); setState(footDelivery ? 'walk' : 'drive'); footDelivery = false; actionLock = 0.6;
@@ -1910,9 +1927,9 @@ function update(dt, t) {
     case 'missile':
       if (boom.missileDone) { restartMsg = 'Casa destruída! A partida vai reiniciar…'; setState('fadeOut'); }
       break;
-    case 'fadeOut':
-      fade = Math.min(1, stateT / FADE_TIME);
-      if (fade >= 1) { startNewRound(); setState('fadeIn'); }
+    case 'fadeOut':                                 // (controles parados: nada aqui lê o teclado)
+      fade = Math.min(1, stateT / (endToMap ? CAREER_END_FADE : FADE_TIME));
+      if (fade >= 1) { if (endToMap) finishCareerMatch(); else { startNewRound(); setState('fadeIn'); } }
       break;
     case 'walk': {                                  // a pé: sem entregas, sem abastecer; E perto da van volta a dirigir
       if (approach.phase === 'revealed' && churchShown && walker.z > MAP_W() + CHURCH_Z + 3.5 && Math.abs(walker.x - MAP_W() / 2) < 11.8) {

@@ -55,6 +55,7 @@ ADRESS é um jogo 3D de entregas, aconchegante e meio cômico.
   - Sem destruição, míssil, helicóptero ou explosões.
   - Botão **MISSÕES x/5** no canto superior direito (ou tecla **M**).
   - Botão **Voltar** no canto superior esquerdo.
+  - **Fim da partida:** depois da entrega certa (diálogo do morador), fade-out de ~1 s com os controles parados (`endToMap`, `CAREER_END_FADE` em `main.js`); com a tela preta, `finishCareerMatch` encerra a partida e volta ao mapa da Carreira com fade-in, a van ao lado do bairro jogado. As missões já foram salvas na entrega (`career.visit` → `setProgress`, que só aumenta e não conta de novo); o mapa relê os desbloqueios (`setLocked`), então o bairro novo aparece colorido (com o aviso "Bairro N desbloqueado!"). A próxima partida começa ao jogar de novo (`startNewRound(false)` não abre outra partida no `career`). No Livre nada muda: a entrega certa traz a próxima pista na mesma partida.
 
 **Controles:**
 
