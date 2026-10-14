@@ -12,7 +12,7 @@
 import * as THREE from 'three';
 import { GRID, ROAD, roadCenter, FLUX, CANAL, GAS_LIST, WARE_LIST, SOLIDS } from './layout.js';
 import { buildCar, CAR_COLORS } from './barriers.js';
-import { mat, box, cyl, at } from './models/kit.js';
+import { mat, box, cyl, at, bakeStatic } from './models/kit.js';
 
 const hr = ROAD / 2, rc = roadCenter, CAR = 4.6, GAP = 2.2;
 const DIRS = { E: [1, 0], W: [-1, 0], S: [0, 1], N: [0, -1] };
@@ -208,6 +208,7 @@ export function createTraffic(audio) {
           const L = pool[Math.floor(Math.random() * pool.length)], s = CAR / 2 + Math.random() * (L.len - CAR);
           if (L.cars.some(c => Math.abs(c.s - s) < CAR + 3) || (L.i <= 1 && Math.abs(L.a.x - rc(Math.floor(GRID / 2))) < 12)) continue;   // nada colado na entrada
           const mesh = buildCar(); mesh.userData.body.material = mat(CAR_COLORS[Math.floor(Math.random() * CAR_COLORS.length)]);
+          bakeStatic(mesh);                                              // 1 malha por material (de 11 para 6 por carro: a avenida cheia pesa menos)
           if (night) for (const zz of [0.7, -0.7]) {                 // Penumbra: faróis acesos (brilho + luz no chão)
             const g = new THREE.Sprite(new THREE.SpriteMaterial({ map: carGlow(), color: '#fff2c8', blending: THREE.AdditiveBlending, transparent: true, depthWrite: false })); g.scale.setScalar(1.3); g.position.set(2.35, 0.95, zz); mesh.add(g);
             const b = new THREE.Mesh(new THREE.PlaneGeometry(6, 2.6), new THREE.MeshBasicMaterial({ map: carGlow(), color: '#fff0c0', transparent: true, opacity: 0.35, blending: THREE.AdditiveBlending, depthWrite: false })); b.rotation.x = -Math.PI / 2; b.position.set(5.2, 0.08, zz * 0.6); mesh.add(b);

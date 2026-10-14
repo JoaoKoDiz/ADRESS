@@ -66,6 +66,7 @@ import { createBarriers } from './barriers.js';
 import { createTitleDriver } from './titleDriver.js';
 import { createCareerMap } from './careerMap.js';
 import { createJamSound } from './jamSound.js';
+import { createCityAmbience } from './cityAmbience.js';
 import { createShop } from './shop.js';
 import { createLevelSelect } from './levelSelect.js';
 import { createWalker } from './walker.js';
@@ -329,7 +330,7 @@ function composeRound() {
   world.setGas(gasList);
   if (city) showLounger();
   if (canyon) { canyonBalconies(); traffic.reset(0, 16); }   // Cachoeira: sacadas viradas para o desfiladeiro; trânsito moderado nas ruas e na ponte
-  if (flux) traffic.reset(...(neighborhood === 'night10' ? [10, 10] : []), neighborhood === 'night10');   // Fluxo: a rede depende dos postos/galpões da partida (Penumbra: menos carros, faróis)
+  if (flux) traffic.reset(...(neighborhood === 'night10' ? [10, 10, true] : [32, 18, false, true]));   // Fluxo: a rede depende dos postos/galpões da partida; avenida movimentada nos dois sentidos (os carros dela ficam nela) (Penumbra: menos carros, faróis)
   if (neighborhood === 'night10') night.layout(world, game, MAP);   // Penumbra: postes, letreiros e painéis para esta composição
   rig.refit();
 }
@@ -622,6 +623,7 @@ function updateTrolleySeq(dt) {
   }
 }                // Bairro 11: trem entre as estações e cancelas das passagens de nível
 const jamSound = createJamSound(audio);     // Bairro 7: música perto dos engarrafamentos (fade-in/out, loop perfeito)
+const cityAmb = createCityAmbience(audio);   // Bairros 7 e 8: som ambiente urbano baixo e contínuo (um laço só)
 const monster = createMonster(world.scene, stage, audio);   // final secreto: 16 casas destruídas
 const allDestroyed = () => game.pool.every(h => boom.isDestroyed(h));
 
@@ -2093,7 +2095,8 @@ function update(dt, t) {
   boom.update(dt);
   { const foot = state === 'walk';              // quem está perto: a van ou, a pé, o personagem
     jamSound.update(dt, IN_GAME.includes(state) && [6, 7, 10].includes(gameMode === 'career' ? careerLevel : freeLevel) && !missions.isOpen,   // Bairros 7, 8 e 11 (Travessia)
-      barriers.jamRects, foot ? walker.x : van.x, foot ? walker.z : van.z); }
+      barriers.jamRects, foot ? walker.x : van.x, foot ? walker.z : van.z);
+    cityAmb.update(dt, (IN_GAME.includes(state) || foot || state === 'fadeIn') && (neighborhood === 'city7' || neighborhood === 'city8'), jamSound.debug.level / 0.7); }   // Bairros 7 e 8: cidade ao fundo (abaixa com a música dos engarrafamentos)
   // entregando (campainha/diálogo) ou com o balão "E — Entregar" à vista: a câmera se volta para a casa
   const focusH = (state === 'ring' || state === 'dialog') ? pending : state === 'drive' ? nearHouse : -1;
   const onFoot = state === 'walk' || state === 'chat' || state === 'grill' || (footDelivery && (state === 'ring' || state === 'dialog'));   // (Grillby's: na transição a câmera fica no personagem)              // a câmera segue o personagem a pé
@@ -2320,7 +2323,7 @@ window.ADRESS = {
   get careerLevel() { return careerLevel; },
   setCareerLevel(l) { careerLevel = l; },
   setFreeLevel(l) { freeLevel = l; },
-  walker, jamSound, train, walkSolids, trolley, get tseq() { return tseq; }, get FAVELA() { return FAVELA; }, traffic, tractors, chickens, plow, workTraffic, banks, get SNOWV() { return SNOWV; }, get MEDV() { return MEDV; }, medLife, get chatNpc() { return chatNpc; }, night, get grillIn() { return grillIn; }, get insideOn() { return insideOn; }, get FARMLAND() { return FARMLAND; }, get GARDV() { return GARDV; }, gardGate, gateOpen, openGate,
+  walker, jamSound, cityAmb, train, walkSolids, trolley, get tseq() { return tseq; }, get FAVELA() { return FAVELA; }, traffic, tractors, chickens, plow, workTraffic, banks, get SNOWV() { return SNOWV; }, get MEDV() { return MEDV; }, medLife, get chatNpc() { return chatNpc; }, night, get grillIn() { return grillIn; }, get insideOn() { return insideOn; }, get FARMLAND() { return FARMLAND; }, get GARDV() { return GARDV; }, gardGate, gateOpen, openGate,
   get levelSelect() { return levelSelect; },
   shop,
   startGame: m => startFree(m), newRound: () => startNewRound(),
