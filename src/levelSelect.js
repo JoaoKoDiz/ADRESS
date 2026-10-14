@@ -22,6 +22,26 @@ const CSS = `
   box-shadow: 0 4px 0 #a8480b, 0 8px 18px rgba(0,0,0,.28); display: flex; align-items: center; justify-content: center; padding: 0; }
 .lsel-arrow:hover { filter: brightness(1.08); }
 .lsel-arrow.off { visibility: hidden; }   /* some, mas guarda o lugar: a grade não muda de posição */
+/* última página: seta → cinza e desativada (há mais bairros, ainda fechados) + botão "i" logo acima dela */
+.lsel-nextwrap { position: relative; flex: none; display: flex; }
+.lsel-arrow.locked { background: #b9b3a9; border-color: #ece7de; color: #f6f3ee; cursor: not-allowed; box-shadow: 0 4px 0 #8c867c, 0 8px 18px rgba(0,0,0,.2); }
+.lsel-arrow.locked:hover { filter: none; }
+.lsel-info { position: absolute; left: 50%; bottom: calc(100% + clamp(8px, 1.4vh, 14px)); transform: translateX(-50%);
+  width: clamp(28px, 2.4vw, 38px); height: clamp(28px, 2.4vw, 38px); border-radius: 50%; border: 3px solid #ff7a1a; background: #fff3d6; color: #c2570c;
+  font: italic 900 clamp(15px, 1.35vw, 21px)/1 Georgia,"Times New Roman",serif; padding: 0; cursor: pointer;
+  display: none; align-items: center; justify-content: center; box-shadow: 0 3px 0 rgba(168,72,11,.55), 0 5px 12px rgba(0,0,0,.25); transition: transform .12s; }
+.lsel-nextwrap.locked .lsel-info { display: flex; }
+.lsel-info:hover { transform: translateX(-50%) scale(1.1); }
+.lsel-modal { position: absolute; inset: 0; z-index: 2; display: none; align-items: center; justify-content: center; background: rgba(30,22,14,.38); }
+.lsel-modal.on { display: flex; }
+.lsel-modal-box { width: min(560px, 88vw); max-height: 86vh; overflow: auto; box-sizing: border-box; background: #fff3d6; border: 4px solid #ff7a1a;
+  border-radius: clamp(14px, 1.4vw, 20px); padding: clamp(18px, 3vh, 32px) clamp(20px, 2.4vw, 36px); color: #000; text-align: left;
+  box-shadow: 0 10px 0 rgba(168,72,11,.35), 0 18px 40px rgba(0,0,0,.35); user-select: text; }
+.lsel-modal-box h3 { margin: 0 0 .8em; font-weight: 900; font-size: clamp(20px, min(2vw, 3.6vh), 30px); color: #000; }
+.lsel-modal-box p { margin: 0 0 1em; font-weight: 600; font-size: clamp(14px, min(1.25vw, 2.3vh), 19px); line-height: 1.55; color: #000; }
+.lsel-modal-ok { display: block; margin: clamp(14px, 2.4vh, 24px) auto 0; padding: .4em 2em; border: 4px solid #fff3d6; border-radius: 999px; background: #ff7a1a; color: #fff;
+  font: 900 clamp(16px, min(1.6vw, 3vh), 24px) "Trebuchet MS","Segoe UI",system-ui,sans-serif; cursor: pointer; box-shadow: 0 0 0 3px #ff7a1a, 0 5px 0 #a8480b; }
+.lsel-modal-ok:hover { filter: brightness(1.08); }
 .lsel-card.soon { cursor: default; opacity: .5; border-style: dashed; box-shadow: none; background: rgba(255,243,214,.55); }
 .lsel-card.soon .ph { width: 100%; aspect-ratio: 4 / 3; display: flex; align-items: center; justify-content: center;
   font-weight: 900; font-size: clamp(14px, min(1.5vw, 2.6vh), 24px); color: #8a6a44; letter-spacing: .04em; }
@@ -46,8 +66,14 @@ export function createLevelSelect(onPick) {
   const el = document.createElement('div');
   el.className = 'lsel';
   el.innerHTML = '<h2>Escolha o bairro</h2><div class="lsel-row"><button type="button" class="lsel-arrow prev" aria-label="Página anterior">&#8592;</button>' +
-    '<div class="lsel-grid"></div><button type="button" class="lsel-arrow next" aria-label="Próxima página">&#8594;</button></div><button type="button" class="lsel-play"></button>' +
-    '<div class="lsel-hint"><b>←</b><b>↑</b><b>↓</b><b>→</b> Escolher &nbsp;·&nbsp; <b>E</b> Jogar</div>';
+    '<div class="lsel-grid"></div><div class="lsel-nextwrap"><button type="button" class="lsel-info" aria-label="Sobre os próximos bairros">i</button>' +
+    '<button type="button" class="lsel-arrow next" aria-label="Próxima página">&#8594;</button></div></div><button type="button" class="lsel-play"></button>' +
+    '<div class="lsel-hint"><b>←</b><b>↑</b><b>↓</b><b>→</b> Escolher &nbsp;·&nbsp; <b>E</b> Jogar</div>' +
+    '<div class="lsel-modal" role="dialog" aria-modal="true" aria-labelledby="lsel-modal-title"><div class="lsel-modal-box"><h3 id="lsel-modal-title">Além das entregas</h3>' +
+    '<p>Se você concluiu os 24 bairros, pode ficar tranquilo: a jornada principal está completa.</p>' +
+    '<p>Os próximos quatro níveis pertencem exclusivamente à história secundária. São extras opcionais para quem, ao longo do caminho, decidiu olhar além das entregas e acompanhar os pequenos detalhes.</p>' +
+    '<p>Você não precisa completá-los para considerar sua jornada de entregador concluída. Mas, para quem quiser descobrir um pouco mais, a história ainda continua.</p>' +
+    '<button type="button" class="lsel-modal-ok">Entendi</button></div></div>';
   document.body.appendChild(el);
   const grid = el.querySelector('.lsel-grid'), playBtn = el.querySelector('.lsel-play');
   playBtn.tabIndex = -1;
@@ -56,7 +82,16 @@ export function createLevelSelect(onPick) {
   const prevBtn = el.querySelector('.lsel-arrow.prev'), nextBtn = el.querySelector('.lsel-arrow.next');
   for (const b of [prevBtn, nextBtn]) { b.tabIndex = -1; b.addEventListener('mousedown', e => e.preventDefault()); }
   prevBtn.addEventListener('click', () => goPage(page - 1));
-  nextBtn.addEventListener('click', () => goPage(page + 1));
+  nextBtn.addEventListener('click', () => { if (!nextBtn.disabled) goPage(page + 1); });
+  // última página: a seta → fica cinza e desativada; o "i" acima dela abre a janela "Além das entregas" (fecha com Entendi, E/Enter ou Esc; continua na mesma página)
+  const nextWrap = el.querySelector('.lsel-nextwrap'), infoBtn = el.querySelector('.lsel-info'), modal = el.querySelector('.lsel-modal'), okBtn = el.querySelector('.lsel-modal-ok');
+  for (const b of [infoBtn, okBtn]) { b.tabIndex = -1; b.addEventListener('mousedown', e => e.preventDefault()); }
+  const openInfo = () => modal.classList.add('on'), closeInfo = () => modal.classList.remove('on');
+  infoBtn.addEventListener('click', openInfo);
+  okBtn.addEventListener('click', closeInfo);
+  addEventListener('keydown', e => {                       // Esc fecha só a janela (sem abrir o menu de opções)
+    if (e.code === 'Escape' && modal.classList.contains('on')) { e.stopImmediatePropagation(); closeInfo(); }
+  }, true);
   let cards = null, sel = 0, page = 0, COUNT = 0;
   const pages = () => Math.ceil(COUNT / PER);
 
@@ -76,7 +111,9 @@ export function createLevelSelect(onPick) {
       grid.appendChild(c);
     }
     prevBtn.classList.toggle('off', page === 0);
-    nextBtn.classList.toggle('off', page >= pages() - 1);   // só se a próxima página tiver ao menos 1 bairro
+    const last = page >= pages() - 1;                        // última página: seta cinza e desativada (mais bairros virão), com o "i"
+    nextBtn.classList.toggle('locked', last); nextBtn.disabled = last; nextBtn.setAttribute('aria-disabled', String(last));
+    nextWrap.classList.toggle('locked', last);
   }
   function goPage(p, row = 0) {
     if (p < 0 || p >= pages()) return;
@@ -101,8 +138,11 @@ export function createLevelSelect(onPick) {
   }
   return {
     open(level = 0) { if (!cards) build(); sel = Math.min(level, COUNT - 1); while (sel > 0 && !cards[sel]) sel--; showPage(Math.floor(sel / PER)); paint(); el.classList.add('on'); document.body.classList.add('lsel-on'); },
-    close() { el.classList.remove('on'); document.body.classList.remove('lsel-on'); },
+    close() { closeInfo(); el.classList.remove('on'); document.body.classList.remove('lsel-on'); },
     get isOpen() { return el.classList.contains('on'); },
+    /** Janela "Além das entregas" aberta (o teclado da seleção fica parado; E/Enter fecha). */
+    get infoOpen() { return modal.classList.contains('on'); },
+    openInfo, closeInfo,
     get selected() { return sel; },
     /** dx/dy: um passo de seta dentro da página (ignora os "Em breve"); nas bordas laterais, troca de página. */
     move(dx, dy) {

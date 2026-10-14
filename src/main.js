@@ -1980,6 +1980,7 @@ function update(dt, t) {
       break;
     }
     case 'levelSelect': {
+      if (levelSelect.infoOpen) { if (input.action()) levelSelect.closeInfo(); break; }   // janela "Além das entregas": E/Enter = Entendi
       const n = input.nav();
       if (n.x || n.y) levelSelect.move(n.x, n.y);
       if (input.action()) confirmLevel(levelSelect.selected);
