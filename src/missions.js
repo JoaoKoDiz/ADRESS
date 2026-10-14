@@ -7,7 +7,7 @@
 const PLACEHOLDER = () => Array.from({ length: 5 }, () => ({ id: null, name: 'MISSÃO', desc: 'Descrição breve da missão.', goal: 5 }));
 export const LEVEL_NAMES = ['Primeiros Dias', 'Olhos Abertos', 'Entregador Teimoso', 'Péssimo Senso de Direção', '', '', '', '', 'Veneza', '', '', '', '', '', '', '', '', '', '', '', '', '', ''];
 /** Bairro 18: espaço reservado para níveis futuros (não dá para jogar; não travam o desbloqueio do 20). */
-export const RESERVED = [17, 20, 21];   // (21 e 22 ainda vazios; o 23 é a Cachoeira)   // (o 17 é Jardins, o 19 é o Penumbra)
+export const RESERVED = [17, 20];   // (o 21 ainda vazio; 22 = Bosque, 23 = Cachoeira)   // (o 17 é Jardins, o 19 é o Penumbra)
 export const MISSIONS = [
   [
     { id: 'firstShift', name: 'Primeiro Turno', desc: 'Complete uma partida inteira, realizando as 4 entregas erradas e a 5ª entrega correta.', goal: 1 },
@@ -54,7 +54,7 @@ export const MISSIONS = [
   PLACEHOLDER(),   // Bairro 19 (Penumbra)
   PLACEHOLDER(),   // Bairro 20 (Lua)
   PLACEHOLDER(),   // Bairro 21 (reservado)
-  PLACEHOLDER(),   // Bairro 22 (reservado)
+  PLACEHOLDER(),   // Bairro 22 (Bosque)
   PLACEHOLDER(),   // Bairro 23 (Cachoeira)
 ];
 

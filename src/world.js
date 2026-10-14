@@ -3,7 +3,7 @@
 // e os moradores (criados sob demanda na primeira visita).
 import * as THREE from 'three';
 import {
-  HEDGE, ROAD, LOT, WALK, MAP, GRID, PLAZA, lotX, lotZ, slotOrigin, slotY, roadCenter, ENTRANCE, LOT_ANCHORS, SOLIDS, TERRAIN, CANAL, RAIL, VENICE, FAVELA, FLUX, FARMLAND, SPOTS, SNOWV, GARDV, MOONV,
+  HEDGE, ROAD, LOT, WALK, MAP, GRID, PLAZA, lotX, lotZ, slotOrigin, slotY, roadCenter, ENTRANCE, LOT_ANCHORS, SOLIDS, TERRAIN, CANAL, RAIL, VENICE, FAVELA, FLUX, FARMLAND, SPOTS, SNOWV, GARDV, MOONV, FORESTV,
 } from './layout.js';
 import { HOUSES } from './data.js';
 import { buildTerrain } from './terrain.js';
@@ -83,7 +83,7 @@ function buildGround(venice = false) {
   // asfalto dentro da sebe (os lotes com suas calçadas ficam por cima)
   // (vai um pouco por baixo da sebe para não aparecer grama entre a sebe e a rua)
   if (CY) g.add(at(plane(CY.X0 - 0.3, MAP - 0.6, ASPHALT), (0.3 + CY.X0) / 2, 0, MAP / 2), at(plane(MAP - 0.3 - CY.X1, MAP - 0.6, ASPHALT), (CY.X1 + MAP - 0.3) / 2, 0, MAP / 2));
-  else g.add(at(plane(MAP - 0.6, MAP - 0.6, FAVELA ? '#b3a993' : FARMLAND ? '#86b85c' : SNOWV ? '#eef3f7' : MOONV ? '#b9bcc0' : GARDV ? '#86c25e' : ASPHALT), MAP / 2, 0, MAP / 2));   // Colheita: grama (estradas de terra à parte)   // Morro: chão de cimento (as ruas são desenhadas à parte)
+  else g.add(at(plane(MAP - 0.6, MAP - 0.6, FAVELA ? '#b3a993' : FARMLAND ? '#86b85c' : SNOWV ? '#eef3f7' : MOONV ? '#b9bcc0' : GARDV ? '#86c25e' : FORESTV ? '#93a256' : ASPHALT), MAP / 2, 0, MAP / 2));   // Colheita: grama (estradas de terra à parte)   // Morro: chão de cimento (as ruas são desenhadas à parte)
   // estrada de acesso: continua para fora pela abertura na sebe norte
   if (venice) return g;                        // Veneza: só água (sem estrada de acesso, faixas, faixa de pedestres nem bueiros)
   const OUT = 420;
@@ -428,7 +428,7 @@ export function createWorld({ renderer, buildLot, buildResident, yardBuilders, p
     const fl = ms.getObjectByName('moon-flat');
     ms.remove(gr); home.add(gr); ms.remove(fl); home.add(baked(fl, false, true));
     home.add(baked(ms, true, true));
-  } else if (TERRAIN.kind !== 'flat' || CANAL || RAIL || VENICE || FLUX || FARMLAND || SNOWV || GARDV) scene.add(baked(buildTerrain(), true, true));   // Bairros 9, 10 e 11
+  } else if (TERRAIN.kind !== 'flat' || CANAL || RAIL || VENICE || FLUX || FARMLAND || SNOWV || GARDV || FORESTV) scene.add(baked(buildTerrain(), true, true));   // Bairros 9, 10 e 11
 
   // os 16 lotes, construídos uma única vez (cada casa mantém sua identidade; só muda de lugar)
   // (só as casas deste bairro: `pool`; o array é indexado pelo índice da casa)

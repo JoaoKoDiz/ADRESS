@@ -3,7 +3,10 @@
 import * as THREE from 'three';
 import { Game, ROUTE_LEN, setDroppedTags, setPhraseOverride, setForceSide } from './logic.js';
 import { createCanyonFx } from './canyon.js';
-import { MAP, doorPoint, slotOrigin, DELIVERY_RADIUS, DELIVERY_MAX_SPEED, VAN, VAN_START, LOT_ANCHORS, SOLIDS, ENTRANCE, HEDGE, GRID, PLAZA, HOUSE_SLOTS, configureGrid, roadCenter, setGasStations, GAS_LIST, GAS_CANOPY, GAS_ISLANDS, GAS_PARTS, TERRAIN, CANAL, VENICE, RAIL, FAVELA, FLUX, FARMLAND, SPOTS, SNOWV, MOONV, GARDV, slotPlaceTags, roadTopology, WARE_LIST, WALK as L_WALK, LOT as L_LOT, ROAD as L_ROAD, slotY as L_slotY } from './layout.js';
+import { createForestFx } from './forestFx.js';
+import { forestLot } from './models/forest.js';
+import { buildCar, CAR_COLORS } from './barriers.js';
+import { MAP, doorPoint, slotOrigin, DELIVERY_RADIUS, DELIVERY_MAX_SPEED, VAN, VAN_START, LOT_ANCHORS, SOLIDS, ENTRANCE, HEDGE, GRID, PLAZA, HOUSE_SLOTS, configureGrid, roadCenter, setGasStations, GAS_LIST, GAS_CANOPY, GAS_ISLANDS, GAS_PARTS, TERRAIN, CANAL, VENICE, RAIL, FAVELA, FLUX, FARMLAND, SPOTS, SNOWV, MOONV, GARDV, FORESTV, slotPlaceTags, roadTopology, WARE_LIST, WALK as L_WALK, LOT as L_LOT, ROAD as L_ROAD, slotY as L_slotY } from './layout.js';
 import { createLaser } from './laser.js';
 import { createUrsa } from './ursa.js';
 import { createSolar } from './solar.js';
@@ -19,11 +22,11 @@ import { createCameraRig } from './camera.js';
 import { createHUD } from './hud.js';
 import { createAudio } from './audio.js';
 import { buildLot } from './models/house.js';
-import { box as kbox, cyl as kcyl, sphere as ksphere, bakeStatic } from './models/kit.js';
+import { box as kbox, cyl as kcyl, sphere as ksphere, bakeStatic, mat } from './models/kit.js';
 import { buildResident } from './models/resident.js';
 import { YARD_BUILDERS, YARD_BUILDERS_SNOW } from './models/yard.js';
 import { buildShopLot } from './models/shop.js';
-import { SHOPS, HOUSES, FUTS, L1_FIXED, L6_FIXED, WARES, TWINS, VENS, FAVS, MODS, FARMS, MOONS, GRILLBY, SNOW_FIXED, SNOW_EXTRAS, SNOW_DROP, GARDS, CANYON_EXTRAS } from './data.js';
+import { SHOPS, HOUSES, FUTS, L1_FIXED, L6_FIXED, WARES, TWINS, VENS, FAVS, MODS, FARMS, MOONS, GRILLBY, SNOW_FIXED, SNOW_EXTRAS, SNOW_DROP, GARDS, CANYON_EXTRAS, FOREST_EXTRAS } from './data.js';
 import { buildFavelaLot } from './models/favela.js';
 import { buildModLot, MOD_H } from './models/mod.js';
 import { createTraffic } from './traffic.js';
@@ -117,9 +120,10 @@ const POOLS = { grid4: [...Array(16).keys(), ...Object.values(L1_FIXED)],   // g
   moon8: MOONS,   // Nível 17 (Órbita): módulos lunares   // Nível 16 (Nevasca): as casas de sempre, nevadas   // Nível 15 (Colheita): propriedades rurais
   flux10: [...Array(32).keys()].concat([...Array(28).keys()].map(k => 38 + k), SHOPS, WARES, MODS),
   night10: [...Array(32).keys()].concat([...Array(28).keys()].map(k => 38 + k), SHOPS, WARES, MODS),
+  forest8: [...Array(32).keys(), ...SHOPS],   // Nível 22 (Bosque): casas e alguns comércios
   canyon10: [...Array(32).keys()].concat([...Array(28).keys()].map(k => 38 + k), SHOPS, WARES, MODS) };   // Nível 23 (Cachoeira): as duas margens   // Nível 19 (Penumbra): o mapa do Fluxo, à noite   // Nível 14 (Fluxo): + prédios contemporâneos   // Nível 13 (Morro): casas de laje   // Nível 12 (Veneza): casas venezianas   // Bairro 11 (Trilhos): ferrovia, estações e galpões   // Bairro 10 (Travessia): + galpões e casas gêmeas   // city8 (Bairro 8): o mesmo, em 8×8, com prédios mais altos (e os futuristas, se USE_FUTS)
 // lote de casa ou de prédio comercial
-const buildAnyLot = (h, opts) => CANAL && CANAL.canyon && h.kind === 'house' ? canyonLot(h, opts) : h.grill ? buildGrillbyLot(h) : h.kind === 'gard' ? buildGardLot(h) : h.kind === 'moon' ? buildMoonLot(h) : SNOWV && h.kind === 'house' ? buildSnowLot(h, opts) : h.kind === 'farm' ? buildFarmLot(h) : h.kind === 'mod' ? buildModLot(h) : h.kind === 'fav' ? buildFavelaLot(h) : h.kind === 'ven' ? buildVeniceLot(h) : h.kind === 'ware' ? buildWareLot(h) : h.kind === 'shop' ? buildShopLot(h) : h.kind === 'apt' ? buildAptLot(h) : h.kind === 'fut' ? buildFutLot(h) : buildLot(h, opts);
+const buildAnyLot = (h, opts) => FORESTV && (h.kind === 'house' || (h.kind === 'shop' && !h.grill)) ? forestLot(h.kind === 'house' ? buildLot(h, opts) : buildShopLot(h), h.kind === 'house' ? FOREST_EXTRAS[h.index] || [] : []) : CANAL && CANAL.canyon && h.kind === 'house' ? canyonLot(h, opts) : h.grill ? buildGrillbyLot(h) : h.kind === 'gard' ? buildGardLot(h) : h.kind === 'moon' ? buildMoonLot(h) : SNOWV && h.kind === 'house' ? buildSnowLot(h, opts) : h.kind === 'farm' ? buildFarmLot(h) : h.kind === 'mod' ? buildModLot(h) : h.kind === 'fav' ? buildFavelaLot(h) : h.kind === 'ven' ? buildVeniceLot(h) : h.kind === 'ware' ? buildWareLot(h) : h.kind === 'shop' ? buildShopLot(h) : h.kind === 'apt' ? buildAptLot(h) : h.kind === 'fut' ? buildFutLot(h) : buildLot(h, opts);
 /** Nível 23 (Cachoeira): a casa de sempre + 2 detalhes (CANYON_EXTRAS): sacada de madeira (as duas laterais; só a virada para o
  *  desfiladeiro aparece — canyonBalconies), jardinzinho, vasos na porta, cobertura de madeira na porta. */
 function canyonLot(h, opts) {
@@ -467,6 +471,9 @@ const chickens = createChickens();        // Nível 15 (Colheita): galinhas atra
 // o monte de neve some (o sólido sai) por ~45 s; depois ele volta, mas só quando a van, o motorista e o próprio
 // limpa-neve estão fora do trecho. Os atalhos nunca são o único caminho até uma casa.
 const plow = createTractors(audio);
+const forestCars = createTractors(audio);   // Nível 22 (Bosque): poucos carros circulando devagar (mesma lógica dos tratores)
+const forestFx = createForestFx();          // Nível 22 (Bosque): luz de outono, folhas no chão e caindo
+const buildForestCar = () => { const m = buildCar(); m.userData.body.material = mat(CAR_COLORS[Math.floor(Math.random() * CAR_COLORS.length)]); return m; };
 const banks = [];                                // { cut, mesh, open, t, k }
 function resetBanks() {
   for (const b of banks) if (b.mesh.parent) b.mesh.parent.remove(b.mesh);
@@ -601,7 +608,11 @@ const allDestroyed = () => game.pool.every(h => boom.isDestroyed(h));
 function setupGrid4() {
   const lv = gameMode === 'career' ? careerLevel : freeLevel;
   const l1 = neighborhood === 'grid4' && lv === 0;
-  const pool = POOLS[neighborhood].filter(h => l1 || !Object.values(L1_FIXED).includes(h));
+  let pool = POOLS[neighborhood].filter(h => l1 || !Object.values(L1_FIXED).includes(h));
+  if (neighborhood === 'forest8') {               // Bosque: 4 comércios sorteados, o resto casas
+    const sh = a => { a = a.slice(); for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; };
+    pool = sh([...Array(32).keys()]).slice(0, HOUSE_SLOTS.length - 4).concat(sh(SHOPS).slice(0, 4));
+  }
   game.setNeighborhood(pool, HOUSE_SLOTS, GRID * GRID, l1 ? L1_FIXED : neighborhood === 'snow8' ? SNOW_FIXED : null);
   world.setLayout(game.layout);
 }
@@ -612,6 +623,7 @@ function useNeighborhood(kind) {
   APT_BUILD.mixed = kind === 'canal8' || kind === 'rail8';  // Bairros 10 e 11: prédios das duas alturas
   train.detach();
   game.placeTags = kind === 'venice8' || kind === 'favela8' || kind === 'moon8' || kind === 'garden8' ? layout => { const m = {}; layout.forEach((h, s) => { if (h >= 0) m[h] = slotPlaceTags(s); }); return m; }
+    : kind === 'forest8' ? layout => { const m = {}; layout.forEach(h => { if (h >= 0 && FOREST_EXTRAS[h]) m[h] = FOREST_EXTRAS[h].slice(); }); return m; }   // Bosque: detalhes de outono nas pistas
     : kind === 'snow8' ? layout => { const m = {}; layout.forEach(h => { if (h >= 0 && SNOW_EXTRAS[h]) m[h] = SNOW_EXTRAS[h].slice(); }); return m; }   // Nevasca: detalhes de inverno nas pistas
     : null;
   game.arrange = null;
@@ -625,6 +637,7 @@ function useNeighborhood(kind) {
   if (!w) {                                     // primeira vez: constrói (escondido pelo fade)
     w = worlds[kind] = createWorld({ renderer, buildLot: buildAnyLot, buildResident: kind === 'snow8' ? h => buildResident(h, { winter: true }) : buildResident, yardBuilders: kind === 'snow8' ? YARD_BUILDERS_SNOW() : YARD_BUILDERS, pool: POOLS[kind], dry: kind === 'city6' || kind === 'city7' || kind === 'city8', venice: kind === 'venice8', snow: kind === 'snow8', moon: kind === 'moon8', farm: kind === 'farm10' });
     if (kind === 'night10') night.setup(w);     // Penumbra: noite, asfalto molhado
+    if (kind === 'forest8') forestFx.setup(w, FORESTV, MAP);   // Bosque: tarde de outono, folhas
     if (kind === 'farm10') farmOut.build(w.scene, MAP, VAN_START.x);   // Colheita: hectares de plantação em volta, tratores e colheitadeiras
   } else SOLIDS.push(...w.extraSolids);        // troncos das árvores de fora deste bairro
   world.hideResident();
@@ -645,6 +658,7 @@ function useNeighborhood(kind) {
   if (kind === 'farm10') { world.scene.add(tractors.object); tractors.reset(); } else { tractors.detach(); if (kind !== 'flux10' && kind !== 'night10' && kind !== 'canyon10') tractors.silence(); }
   van.setIce(kind === 'snow8' ? SNOWV.iceAt : null);   // Nevasca: placas de gelo
   van.setLowGravity(kind === 'moon8'); walker.setLowGravity(kind === 'moon8'); playerSuit.visible = kind === 'moon8';   // Órbita: gravidade baixa e capacete (só neste bairro)
+  if (kind === 'forest8') { world.scene.add(forestCars.object); forestCars.reset({ loops: [...FORESTV.carLoops, FORESTV.carLoops[0].slice().reverse()], build: buildForestCar, speed: 3.0 }); } else forestCars.detach();
   if (kind === 'snow8') { world.scene.add(plow.object); plow.reset({ loops: [SNOWV.plowLoop], build: buildPlow, speed: 4.6 }); } else plow.detach();
   resetBanks();
   if (kind === 'venice8') { world.scene.add(npcBoats.object); npcBoats.reset(); world.scene.add(rope); } else npcBoats.detach();   // Bairro 11: trem e cancelas
@@ -924,7 +938,7 @@ function goBack() {
 function startFree(mode = 'free') {
   // Bairro 2: 6×6 com praça; Bairro 4: 5×5 com bloqueios; o resto: 4×4
   const lv = mode === 'career' ? careerLevel : freeLevel;
-  useNeighborhood(lv === 1 ? 'plaza6' : lv === 3 ? 'grid5' : lv === 4 ? 'grid6s' : lv === 5 ? 'city6' : lv === 6 ? 'city7' : lv === 7 ? 'city8' : lv === 8 ? 'hill8' : lv === 9 ? 'venice8' : lv === 10 ? 'canal8' : lv === 11 ? 'rail8' : lv === 12 ? 'favela8' : lv === 13 ? 'flux10' : lv === 14 ? 'farm10' : lv === 15 ? 'snow8' : lv === 16 ? 'garden8' : lv === 18 ? 'night10' : lv === 19 ? 'moon8' : lv === 22 ? 'canyon10' : 'grid4');   // 17–19 reservados; 20 = Lua   // 10 = Veneza, 11 = Travessia, 12 = Trilhos
+  useNeighborhood(lv === 1 ? 'plaza6' : lv === 3 ? 'grid5' : lv === 4 ? 'grid6s' : lv === 5 ? 'city6' : lv === 6 ? 'city7' : lv === 7 ? 'city8' : lv === 8 ? 'hill8' : lv === 9 ? 'venice8' : lv === 10 ? 'canal8' : lv === 11 ? 'rail8' : lv === 12 ? 'favela8' : lv === 13 ? 'flux10' : lv === 14 ? 'farm10' : lv === 15 ? 'snow8' : lv === 16 ? 'garden8' : lv === 18 ? 'night10' : lv === 19 ? 'moon8' : lv === 21 ? 'forest8' : lv === 22 ? 'canyon10' : 'grid4');   // 17–19 reservados; 20 = Lua   // 10 = Veneza, 11 = Travessia, 12 = Trilhos
   gameMode = mode;
   if (!COMPOSED.includes(neighborhood)) setupGrid4();   // Bairro 1 tem a casa fixa; o 3 (mesma grade) não
   resetGates();
@@ -1952,6 +1966,15 @@ function update(dt, t) {
     if (!playing) tractors.silence();
     chickens.update(dt, heli.flying ? null : { x: van.x, z: van.z, circles: [-1.5, 0, 1.5].map(k => [van.x + c * k, van.z + s2 * k]) });
     updateGates(dt);
+  }
+  if (neighborhood === 'forest8') {               // Bosque: carros devagar e folhas caindo perto de quem joga
+    const c = Math.cos(van.heading), s2 = Math.sin(van.heading), obs = [];
+    if (!heli.flying) obs.push({ circles: [-1.5, 0, 1.5].map(k => [van.x + c * k, van.z + s2 * k, 1.25]) });
+    if (walker.visible) obs.push({ circles: [[walker.x, walker.z, 0.6]] });
+    const playing = IN_GAME.includes(state) || state === 'walk', me = walker.visible ? walker : van;
+    forestCars.update(dt, obs, playing ? me : null);
+    if (!playing) forestCars.silence();
+    forestFx.update(dt, { x: me.x, z: me.z });
   }
   if (neighborhood === 'snow8') {                 // Nevasca: limpa-neve e atalhos
     const c = Math.cos(van.heading), s2 = Math.sin(van.heading), obs = [];

@@ -222,6 +222,18 @@ export const FARM_GATE = { blue: '#2f6fd0', red: '#d0352a', yellow: '#f0c22a', w
 }
 /** Nevasca (Nível 16): detalhes de inverno de cada casa comum (0–31), fixos por casa; só aparecem e só entram nas pistas no Nevasca. */
 export const SNOW_SCARF = { red: '#d8473a', blue: '#3a78d4', yellow: '#efbf2a', green: '#3c9d55' };
+/** Nível 22 (Bosque): 2–3 detalhes de outono por casa (0–31), fixos; ~metade tem uma árvore colorida junto da entrada. */
+export const FOREST_EXTRAS = [];
+{
+  let seed = 2222; const rnd = n => { seed = (seed * 16807) % 2147483647; return seed % n; };
+  const IT = ['fo:leaves', 'fo:rake', 'fo:apples', 'fo:wood', 'fo:wreath', 'fo:bench', 'fo:porch'], TC = ['red', 'yellow', 'orange'];
+  for (let h = 0; h < 32; h++) {
+    const n = 2 + rnd(2), list = [];
+    while (list.length < n) { const it = IT[rnd(IT.length)]; if (!list.includes(it)) list.push(it); }
+    if (rnd(2) === 0) list.push('fo:tree:' + TC[rnd(3)]);
+    FOREST_EXTRAS[h] = list;
+  }
+}
 /** Nível 23 (Cachoeira): 2 detalhes por casa (0–31), fixos: sacada de madeira virada para o desfiladeiro, jardinzinho, vasos, cobertura de madeira. */
 export const CANYON_EXTRAS = [];
 {
@@ -405,6 +417,11 @@ export const PHRASE = {
   // lugar (Bairros 9 e 10): vão no fim da pista
   'loc:top': 'na parte mais alta do bairro', 'loc:ramp': 'logo depois da subida', 'loc:stairs': 'ao lado da escadaria',
   'side:east': 'no Lado Leste', 'side:west': 'no Lado Oeste',
+  // Bosque (Nível 22)
+  'fo:leaves': 'uma pilha de folhas no quintal', 'fo:rake': 'um ancinho encostado na frente', 'fo:apples': 'um cesto de maçãs na entrada',
+  'fo:wood': 'lenha sob uma pequena cobertura', 'fo:wreath': 'uma guirlanda de folhas na porta', 'fo:bench': 'um banco de madeira na frente',
+  'fo:porch': 'uma varanda de madeira', 'fo:tree:red': 'uma árvore de folhas vermelhas na entrada', 'fo:tree:yellow': 'uma árvore de folhas amarelas na entrada',
+  'fo:tree:orange': 'uma árvore de folhas laranja na entrada',
   // Cachoeira (Nível 23)
   'loc:bridge': 'perto da ponte', 'cy:balcony': 'sacada de madeira virada para o desfiladeiro', 'cy:garden': 'um jardinzinho na frente',
   'cy:vases': 'vasos de flores na porta', 'cy:canopy': 'cobertura de madeira na porta',

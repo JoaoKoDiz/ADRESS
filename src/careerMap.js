@@ -49,7 +49,7 @@ function roadGeometry(curve, samples) {
 //   canal    — canal no meio, pontes e um galpão (Bairro 10, Travessia)
 //   rail     — trilhos em L com curva, trem e estação (Bairro 11, Trilhos)
 //   venice   — canais, fachadas venezianas coloridas e a Ponte de Rialto (Nível 12, Veneza)
-export const MINI_KINDS = ['houses', 'plaza', 'barriers', 'trucks', 'gas', 'city', 'jam', 'jam8', 'hill', 'venice', 'canal', 'rail', 'favela', 'flux', 'farm', 'snow', 'garden', null, 'night', 'moon', null, null, 'canyon'];   // 21–22 reservados, 23 = Cachoeira   // 17–19 reservados (null), 20 = Lua   // 13 = Morro, 14 = Fluxo, 15 = Colheita, 16 = Nevasca, 17 = Órbita   // 10 = Veneza, 11 = Travessia, 12 = Trilhos
+export const MINI_KINDS = ['houses', 'plaza', 'barriers', 'trucks', 'gas', 'city', 'jam', 'jam8', 'hill', 'venice', 'canal', 'rail', 'favela', 'flux', 'farm', 'snow', 'garden', null, 'night', 'moon', null, 'forest', 'canyon'];   // 21 reservado, 22 = Bosque, 23 = Cachoeira   // 17–19 reservados (null), 20 = Lua   // 13 = Morro, 14 = Fluxo, 15 = Colheita, 16 = Nevasca, 17 = Órbita   // 10 = Veneza, 11 = Travessia, 12 = Trilhos
 
 /** Bairro em miniatura do tipo `kind`: base de grama, sebe, ruas e o que caracteriza o bairro. gray = fase bloqueada. */
 function miniNeighborhood(kind, colors, gray = false) {
@@ -172,6 +172,26 @@ function miniNeighborhood(kind, colors, gray = false) {
     for (const [x, z] of [[-1.4, 0.7], [1.4, -0.7], [-4.2, -0.8], [4.4, 0.8]]) { add(cyl(0.06, 0.08, 0.5, G('#6b4526', '#6a6a6a'), 5), x, Y + 0.3, z); add(sphere(0.38, G('#3f8f3a', '#8a8a8a'), 7, 5), x, Y + 0.7, z); }
     house(-4.6, -5.3, roof(0), 0.55); house(4.4, -5.3, roof(1), 0.55); house(-4, 5.3, roof(2), 0.6); house(0.6, 5.4, roof(3), 0.55); house(4.8, 5.2, roof(0), 0.55);
     add(box(0.8, 0.8, 0.8, G('#f1ede2', '#cfcfcf')), 1.0, Y + 0.4, -6.0); add(box(1.4, 0.08, 0.08, G('#d8312a', '#8a8a8a')), -0.4, Y + 0.55, -6.2);   // guarita e cancela
+    return bakeStatic(g);
+  }
+  if (kind === 'forest') {                       // Nível 22 (Bosque): ruas sinuosas, casinhas entre árvores de outono
+    const DIRT = ROADC, Y = 0.4;
+    const road = (pts, w = 1.2) => {
+      for (let k = 0; k < pts.length - 1; k++) { const [ax, az] = pts[k], [bx, bz] = pts[k + 1], len = Math.hypot(bx - ax, bz - az); add(box(w, 0.06, len, DIRT), (ax + bx) / 2, Y + 0.03, (az + bz) / 2, 0, Math.atan2(bx - ax, bz - az), 0); }
+      for (const [x, z] of pts) add(cyl(w / 2, w / 2, 0.06, DIRT, 14), x, Y + 0.031, z);
+    };
+    road([[0.6, -7], [0.4, -4.6], [-1.6, -2.6], [-2.2, 0.4], [-0.8, 3.0], [1.6, 4.2], [4.2, 3.4]]);
+    road([[0.4, -4.6], [2.8, -3.4], [4.4, -0.8], [3.6, 1.6], [4.2, 3.4], [5.0, 6.6]]);
+    road([[-2.2, 0.4], [-5.0, 1.4], [-6.6, 4.6]], 1.0);
+    add(box(4.6, 0.5, 4.2, G('#8a7152', '#a0a0a0')), 4.5, 0.55, 4.7);                       // patamar baixo
+    add(box(4.6, 0.06, 4.2, G('#93a256', '#a3a3a3')), 4.5, 0.83, 4.7);
+    let k = 0;
+    for (const [x, z, ry] of [[-3.4, -4.8, 0], [-4.4, -1.8, 0.4], [1.8, -0.6, -0.3], [-3.6, 4.4, 0.6], [1.0, 6.0, 0], [5.6, -4.8, 0]]) house(x, z, roof(k++), 0.5);
+    const T = [['#e8822a', '#d9701c'], ['#e8c23a', '#f2d24e'], ['#c63a24', '#d24a2c'], ['#9a6232', '#a8703e'], ['#5e8f3a', '#6c9a40']];
+    const tree = (x, z, i, r = 0.62) => { add(cyl(0.08, 0.11, 0.7, G('#6b4526', '#6a6a6a'), 6), x, Y + 0.35, z); add(sphere(r, G(T[i][0], '#8a8a8a'), 7, 5), x, Y + 0.8 + r * 0.6, z); add(sphere(r * 0.6, G(T[i][1], '#999999'), 6, 4), x + r * 0.5, Y + 0.7 + r * 0.5, z + 0.2); };
+    const spots = [[-5.8, -6.0], [-1.6, -6.2], [3.2, -6.0], [6.2, -2.2], [-6.2, -0.4], [-0.4, -0.8], [-0.2, 1.6], [2.4, 1.6], [-5.8, 2.6], [-2.2, 6.2], [3.2, 6.4], [6.2, 0.8], [-4.2, -3.4], [6.4, 5.9], [-1.0, 4.6]];
+    spots.forEach(([x, z], i) => tree(x, z, i % 7 === 6 ? 4 : i % 4, 0.5 + (i % 3) * 0.12));
+    for (const [x, z, c] of [[-2, -1.5, '#e8822a'], [2.5, 2.6, '#c63a24'], [-4, 3.4, '#e8c23a'], [0.8, -3.6, '#d9701c'], [-5.4, -2.6, '#c63a24'], [5.6, -3.2, '#e8c23a']]) add(box(0.5, 0.03, 0.4, G(c, '#9a9a9a')), x, Y + 0.02, z, 0, x, 0);   // folhas no chão
     return bakeStatic(g);
   }
   if (kind === 'canyon') {                       // Nível 23 (Cachoeira): duas margens, desfiladeiro fundo, ponte alta e a cachoeira gigante no fundo
@@ -488,7 +508,7 @@ function boardTexture(gray = false) {
 }
 
 const PALETTES = [['red', 'blue', 'yellow', 'green'], ['purple', 'red', 'gray', 'yellow', 'blue', 'green', 'red', 'yellow'], ['blue', 'green', 'red', 'purple'],
-  ['yellow', 'gray', 'blue', 'red'], ['green', 'purple', 'yellow', 'blue'], ['red'], ['blue'], ['green'], ['red', 'blue', 'yellow', 'purple'], ['red'], ['blue', 'green', 'red'], ['green', 'yellow', 'purple'], ['red'], ['blue', 'red', 'yellow', 'green'], ['red', 'blue'], ['red', 'blue', 'green', 'yellow'], ['red', 'blue', 'gray', 'green'], [], ['red'], ['blue'], [], [], ['red', 'blue', 'yellow', 'green', 'purple']];
+  ['yellow', 'gray', 'blue', 'red'], ['green', 'purple', 'yellow', 'blue'], ['red'], ['blue'], ['green'], ['red', 'blue', 'yellow', 'purple'], ['red'], ['blue', 'green', 'red'], ['green', 'yellow', 'purple'], ['red'], ['blue', 'red', 'yellow', 'green'], ['red', 'blue'], ['red', 'blue', 'green', 'yellow'], ['red', 'blue', 'gray', 'green'], [], ['red'], ['blue'], [], ['red', 'blue', 'yellow', 'green', 'purple'], ['red', 'blue', 'yellow', 'green', 'purple']];
 
 /** Miniatura da lua: fundo preto, poucas estrelas pequenas e a lua por cima. */
 function spaceShot(src, w, h) {

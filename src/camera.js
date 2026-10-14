@@ -4,7 +4,7 @@
 //     Parada, a câmera sobe para olhar por cima dos telhados; entregando, vira um pouco para a casa visitada.
 //   'overview' (tecla C): visão fixa do SUL, com o bairro inteiro enquadrado na tela.
 import * as THREE from 'three';
-import { MAP, HEDGE, HOUSE_SLOTS, GAS_LIST, GAS_PARTS, BUILD_H, slotOrigin, LOT_ANCHORS, ENTRANCE, FAVELA, FARMLAND, SNOWV, MOONV, GARDV } from './layout.js';
+import { MAP, HEDGE, HOUSE_SLOTS, GAS_LIST, GAS_PARTS, BUILD_H, slotOrigin, LOT_ANCHORS, ENTRANCE, FAVELA, FARMLAND, SNOWV, MOONV, GARDV, FORESTV } from './layout.js';
 import { FAV } from './favelaPlan.js';
 
 const PITCH = THREE.MathUtils.degToRad(57);   // inclinação para baixo
@@ -121,11 +121,16 @@ function buildCamBoxes() {
     for (const sp of SNOWV.spots) CAM_BOXES.push([sp.walkBox.x0 - 0.8, sp.walkBox.z0 - 0.8, sp.walkBox.x1 + 0.8, sp.walkBox.z1 + 0.8, sp.y + 7.8]);
     for (const p of SNOWV.pines) CAM_BOXES.push([p.x - 1.4, p.z - 1.4, p.x + 1.4, p.z + 1.4, p.y + 5.5]);
   }
+  if (FORESTV) {                                               // Bosque: patamar, casas e copas (o braço encurta antes de entrar numa árvore)
+    CAM_BOXES.push([FORESTV.MID.x0, FORESTV.MID.z0, MAP, MAP, FORESTV.MID ? 2.9 : 0]);
+    for (const sp of FORESTV.spots) CAM_BOXES.push([sp.walkBox.x0 - 0.8, sp.walkBox.z0 - 0.8, sp.walkBox.x1 + 0.8, sp.walkBox.z1 + 0.8, sp.y + 7.8]);
+    for (const t of FORESTV.trees) { const r = (t.type === 'wide' ? 2.2 : 1.6) * t.s; CAM_BOXES.push([t.x - r, t.z - r, t.x + r, t.z + r, t.y + (t.type === 'tall' ? 6 : 5) * t.s]); }
+  }
   if (GARDV) {                                                 // Jardins: casas (até o telhado do 2º andar), coreto e árvores do parque
     for (const sp of GARDV.spots) CAM_BOXES.push([sp.walkBox.x0 - 0.8, sp.walkBox.z0 - 0.8, sp.walkBox.x1 + 0.8, sp.walkBox.z1 + 0.8, 9]);
     for (const t of GARDV.trees) CAM_BOXES.push([t.x - 1.4, t.z - 1.4, t.x + 1.4, t.z + 1.4, 4.5]);
   }
-  for (const s of FAVELA || FARMLAND || SNOWV || MOONV || GARDV ? [] : HOUSE_SLOTS) {
+  for (const s of FAVELA || FARMLAND || SNOWV || MOONV || GARDV || FORESTV ? [] : HOUSE_SLOTS) {
     const o = slotOrigin(s), H = LOT_ANCHORS.house;
     CAM_BOXES.push([o.x + H.x0 - 0.7 - CAM_PAD, o.z + H.z0 - 0.7 - CAM_PAD, o.x + H.x1 + 0.7 + CAM_PAD, o.z + H.z1 + 1.1 + CAM_PAD, BUILD_H + CAM_PAD]);
   }
