@@ -2,7 +2,7 @@
 // Uma fase é liberada só quando as 5 missões da fase anterior estão concluídas e salvas; a 1 começa liberada.
 // Objetivo cumprido durante a partida = missão PENDENTE; só é salva quando a mesma partida termina com a entrega certa.
 import { MISSIONS, RESERVED } from './missions.js';
-import { GRID, ROAD, roadCenter } from './layout.js';
+import { GRID, ROAD, LOT, roadCenter, slotOrigin } from './layout.js';
 
 const KEY = 'adress.career.v1';
 const LEVELS = MISSIONS.length;
@@ -43,6 +43,42 @@ function inArm(a, x, z) {
   const lat = V ? dx : dz, u = V ? dz : dx, sg = a.side === 'N' || a.side === 'W' ? -1 : 1;
   return Math.abs(lat) < ROAD / 2 + 0.6 && u * sg > 0 && Math.abs(u) <= LOOK_FAR + 1;
 }
+// Nível 5: voltas em volta de uma quadra (a pé e de van). Cada quadra (lote) tem LAP_N checkpoints invisíveis ao longo dos
+// 4 lados (o ponto mais perto do contorno do lote); a volta é a soma dos passos de um checkpoint ao vizinho, com sinal
+// (ir e voltar na mesma esquina se anula). Fecha quando a soma chega a ±LAP_N: deu a volta toda e voltou ao início.
+const LAP_N = 16;
+const angDiff = (a, b) => { let d = (a - b) % (Math.PI * 2); if (d > Math.PI) d -= Math.PI * 2; if (d < -Math.PI) d += Math.PI * 2; return d; };
+/** Distância (com sinal: < 0 dentro) ao contorno do lote s e posição no contorno (0..1, sentido horário a partir do canto noroeste). */
+function perim(s, x, z) {
+  const o = slotOrigin(s), x0 = o.x, z0 = o.z, x1 = o.x + LOT, z1 = o.z + LOT;
+  let px = Math.max(x0, Math.min(x, x1)), pz = Math.max(z0, Math.min(z, z1)), d;
+  if (px === x && pz === z) {                                       // dentro: o lado mais perto
+    const m = Math.min(x - x0, x1 - x, z - z0, z1 - z); d = -m;
+    if (m === x - x0) px = x0; else if (m === x1 - x) px = x1; else if (m === z - z0) pz = z0; else pz = z1;
+  } else d = Math.hypot(x - px, z - pz);
+  const t = pz === z0 ? px - x0 : px === x1 ? LOT + pz - z0 : pz === z1 ? 2 * LOT + x1 - px : 3 * LOT + z1 - pz;
+  return { d, t: t / (4 * LOT) };
+}
+/** Avança as voltas de todas as quadras perto de (x, z); devolve as quadras em que uma volta acabou de fechar. */
+function lapStep(map, x, z, inside, jump) {
+  const done = [];
+  for (let s = 0; s < GRID * GRID; s++) {
+    let st = map.get(s);
+    if (jump) { if (st) st.sec = null; continue; }
+    const p = perim(s, x, z);
+    if (p.d < -inside || p.d > ROAD + 3) continue;                    // longe desta quadra: fica como estava
+    if (!st) map.set(s, st = { sec: null, w: 0, laps: 0 });
+    const sec = Math.floor(p.t * LAP_N) % LAP_N;
+    if (st.sec === null) { st.sec = sec; st.w = 0; continue; }
+    let d = sec - st.sec; if (d > LAP_N / 2) d -= LAP_N; if (d < -LAP_N / 2) d += LAP_N;
+    st.sec = sec;
+    if (Math.abs(d) > 2) { st.w = 0; continue; }                     // voltou por outro ponto: a volta recomeça daqui
+    st.w += d;
+    if (Math.abs(st.w) >= LAP_N) { st.w = 0; st.laps++; done.push(s); }
+  }
+  return done;
+}
+const TURN_HALF = NODE_HALF + 2;                                    // zona das manobras no cruzamento (com folga)
 const armOf = (j, i, x, z) => { const dx = x - roadCenter(j), dz = z - roadCenter(i); return Math.abs(dx) > Math.abs(dz) ? (dx > 0 ? 'E' : 'W') : (dz > 0 ? 'S' : 'N'); };
 
 const CSS = `
@@ -149,7 +185,9 @@ export function createCareer() {
   // Bairro 3: desvios em volta de cada barreira, batidas por barreira, entregas fora da indicação
   let legs = new Map(), barHits = new Map(), barHitN = 0, offRoute = new Set();
   // Bairro 4: entregas/abastecer, intervalo entre entregas, marcha à ré, paradas antes dos cruzamentos
-  let deliveries = 0, fueled = false, lastDelT = null, rev = null, look = null, stopAt = null, lookSet = new Set(), prevPos = null;
+  let deliveries = 0, fueled = false, fuelStops = 0, lastDelT = null, rev = null, look = null, stopAt = null, lookSet = new Set(), prevPos = null;
+  // Bairro 5: manobra no cruzamento em andamento, voltas de van por quadra, voltas a pé (recomeça a cada vez que desce da van)
+  let man = null, vanLaps = new Map(), footLaps = new Map(), prevFoot = null;
 
   return {
     get progress() { return progress; },
@@ -189,7 +227,8 @@ export function createCareer() {
     startMatch(l) {
       level = l; active = l >= 0; pending = new Set(); hintUsed = false;
       legs = new Map(); barHits = new Map(); barHitN = 0; offRoute = new Set();
-      deliveries = 0; fueled = false; lastDelT = null; rev = null; look = null; stopAt = null; lookSet = new Set(); prevPos = null;
+      deliveries = 0; fueled = false; fuelStops = 0; lastDelT = null; rev = null; look = null; stopAt = null; lookSet = new Set(); prevPos = null;
+      man = null; vanLaps = new Map(); footLaps = new Map(); prevFoot = null;
       lapBins = { n: new Array(LAP_BINS).fill(false), s: new Array(LAP_BINS).fill(false), w: new Array(LAP_BINS).fill(false), e: new Array(LAP_BINS).fill(false) };
     },
     /** Fim do acompanhamento (saiu da partida): descarta o que estava pendente. */
@@ -260,7 +299,29 @@ export function createCareer() {
           else if (t - stopAt.t0 >= 3) look = { ...a, inside: false };
         }
       }
-      prevPos = { x, z };
+      if (level === 4) {
+        // Curva de ré / Meia-volta: o que a van fez dentro de um cruzamento (do momento em que entra até sair)
+        const zj = Math.round((x - roadCenter(0)) / STEP()), zi = Math.round((z - roadCenter(0)) / STEP());
+        const inZone = !jump && zj >= 0 && zi >= 0 && zj <= GRID && zi <= GRID && Math.abs(x - roadCenter(zj)) <= TURN_HALF && Math.abs(z - roadCenter(zi)) <= TURN_HALF;
+        const zk = inZone ? zj + ',' + zi : null;
+        if (man && man.k !== zk) {                                        // saiu do cruzamento: avalia a manobra
+          if (!jump) {
+            const out = armOf(man.j, man.i, x, z), V = a => a === 'N' || a === 'S';
+            if (man.bwd <= 0.3 && Math.abs(angDiff(heading, man.h0)) >= 150 * Math.PI / 180) pending.add('uTurn');   // só para a frente
+            if (V(out) !== V(man.arm) && man.bwd >= 3 && Math.abs(man.bwdTurn) >= 50 * Math.PI / 180 && man.last < 0) pending.add('revTurn');
+          }
+          man = null;
+        }
+        if (zk && !man) man = { k: zk, j: zj, i: zi, arm: armOf(zj, zi, prevPos ? prevPos.x : x, prevPos ? prevPos.z : z), h0: prevPos ? prevPos.h : heading, bwd: 0, bwdTurn: 0, last: 0 };
+        else if (man && prevPos) {
+          const along = (x - prevPos.x) * Math.cos(heading) + (z - prevPos.z) * Math.sin(heading), dh = angDiff(heading, prevPos.h);
+          if (along < -0.002 && (ctx.speed || 0) < 0) { man.bwd += -along; man.bwdTurn += dh; man.last = -1; }   // de ré de verdade
+          else if (along > 0.002) man.last = 1;
+        }
+        // Cinco voltas: 5 circuitos da van em volta da MESMA quadra (em qualquer sentido, não precisam ser seguidos)
+        for (const q of lapStep(vanLaps, x, z, 0.5, jump)) if (vanLaps.get(q).laps >= 5) pending.add('fiveLaps');
+      }
+      prevPos = { x, z, h: heading };
       if (level === 0 && !pending.has('lap')) {                          // Volta no bairro: as 4 ruas externas
         const a = roadCenter(0), b = roadCenter(GRID), near = c => (v => Math.abs(v - c) < ROAD / 2 + 1.5);
         const bin = v => Math.floor((v - a) / (b - a) * LAP_BINS);
@@ -270,9 +331,15 @@ export function createCareer() {
         if (lapDone()) pending.add('lap');
       }
     },
-    /** A pé (Carreira): Bairro 2, "Conheça a praça". */
+    /** A pé (Carreira): Bairro 2, "Conheça a praça"; Bairro 5, "Uma volta a pé" (contornar uma quadra inteira). */
     walk(x, z, plaza) {
-      if (!active || level !== 1 || !plaza) return;
+      if (!active) return;
+      if (level === 4) {
+        const jump = prevFoot && Math.hypot(x - prevFoot.x, z - prevFoot.z) > 4;
+        if (lapStep(footLaps, x, z, 1.2, jump).length) pending.add('walkLap');
+        prevFoot = { x, z };
+      }
+      if (level !== 1 || !plaza) return;
       if (x > plaza.x0 + 1 && x < plaza.x1 - 1 && z > plaza.z0 + 1 && z < plaza.z1 - 1) pending.add('plaza');
     },
 
@@ -283,12 +350,15 @@ export function createCareer() {
       if (level === 2 && !success && !indicated) {                        // Fora da rota: 2 casas diferentes fora da indicação
         offRoute.add(h); if (offRoute.size >= 2) pending.add('offRoute');
       }
+      if (fueled) { fuelStops++; fueled = false; }                         // abasteceu entre a entrega anterior e esta (1× por intervalo)
+      deliveries++;
       if (level === 3) {
         const t = ctx.time || 0;
-        if (fueled) pending.add('fuelStop');                              // Parada para abastecer: entrega → posto → entrega
+        if (fuelStops >= 1) pending.add('fuelStop');                      // Parada para abastecer: entrega → posto → entrega
         if (lastDelT !== null && t - lastDelT <= 45) pending.add('quick'); // Entrega próxima: até 45 s desde a anterior
-        lastDelT = t; deliveries++;
+        lastDelT = t;
       }
+      if (level === 4 && fuelStops >= 2) pending.add('twoStops');         // Duas paradas: em 2 intervalos diferentes
       if (level === 0) {
         pending.add('firstDelivery');                                    // Primeira entrega: qualquer entrega (certa ou falsa)
         if (!success && !indicated) pending.add('wrongAddress');         // Endereço errado: numa casa diferente da indicada
@@ -309,8 +379,9 @@ export function createCareer() {
       active = false; pending = new Set();
     },
 
-    /** A van abasteceu no posto (não é uma entrega). Bairro 4: depois de uma entrega, prepara a "Parada para abastecer". */
-    refuel() { if (active && level === 3 && deliveries > 0) fueled = true; },
+    /** A van abasteceu no posto (não é uma entrega). Depois da 1ª entrega, marca o intervalo atual (Bairros 4 e 5): conta
+     *  quando a próxima entrega acontecer; abastecer de novo no mesmo intervalo não conta outra vez. */
+    refuel() { if (active && deliveries > 0) fueled = true; },
 
     /** Batida contada pelo contador (uma por contato; main.js). Bairro 3: batidas nas barreiras (b.bar = índice). */
     bump(b, total) {
@@ -324,7 +395,9 @@ export function createCareer() {
     /** O motorista desceu da van (L). Bairro 4, "Estacione de ré": parada diante da entrada de um prédio comercial, com a
      *  traseira voltada para ela. shops = [{ x (porta), z (frente do lote) }]; as fachadas dão para o sul (+Z). */
     exitVan(x, z, heading, speed, shops = []) {
-      if (!active || level !== 3 || Math.abs(speed) > 0.5) return;
+      if (!active) return;
+      footLaps = new Map(); prevFoot = null;                             // Bairro 5: cada descida é uma tentativa nova da volta a pé
+      if (level !== 3 || Math.abs(speed) > 0.5) return;
       if (Math.sin(heading) < Math.cos(40 * Math.PI / 180)) return;     // frente para o sul (±40°): traseira para a fachada
       if (shops.some(p => Math.abs(x - p.x) <= 4.5 && z - p.z >= 1.2 && z - p.z <= ROAD - 1.2)) pending.add('reversePark');
     },

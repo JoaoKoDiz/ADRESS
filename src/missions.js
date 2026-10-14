@@ -5,7 +5,7 @@
 // Missões por fase (nível). id liga a missão à regra em career.js; goal = quanto precisa para concluir.
 // Fases sem missões definidas usam o modelo (sem id: não avançam ainda).
 const PLACEHOLDER = () => Array.from({ length: 5 }, () => ({ id: null, name: 'MISSÃO', desc: 'Descrição breve da missão.', goal: 5 }));
-export const LEVEL_NAMES = ['Raízes', 'Horizontes', 'Constância', 'Veredas', '', '', '', '', 'Veneza', '', '', '', '', '', '', '', '', '', '', '', '', '', '', ''];
+export const LEVEL_NAMES = ['Raízes', 'Horizontes', 'Constância', 'Veredas', 'Ofício', '', '', '', 'Veneza', '', '', '', '', '', '', '', '', '', '', '', '', '', '', ''];
 /** Bairro 18: espaço reservado para níveis futuros (não dá para jogar; não travam o desbloqueio do 20). */
 export const RESERVED = [];   // (18 = Modernista, 21 = Operário, 22 = Bosque, 23 = Cachoeira; nenhum reservado agora)   // (o 17 é Jardins, o 19 é o Penumbra)
 export const MISSIONS = [
@@ -39,7 +39,13 @@ export const MISSIONS = [
     { id: 'lookStop', name: 'Olhe antes de seguir', desc: 'Pare por 3 segundos antes de atravessar três cruzamentos diferentes.', goal: 1 },
     { id: 'quick', name: 'Entrega próxima', desc: 'Faça duas entregas consecutivas com até 45 segundos entre elas.', goal: 1 },
   ],
-  PLACEHOLDER(),   // Bairro 5
+  [
+    { id: 'twoStops', name: 'Duas paradas', desc: 'Abasteça entre entregas em dois momentos diferentes da mesma partida.', goal: 1 },
+    { id: 'revTurn', name: 'Curva de ré', desc: 'Faça uma curva em um cruzamento dirigindo de ré.', goal: 1 },
+    { id: 'uTurn', name: 'Meia-volta', desc: 'Faça um retorno de 180° em um cruzamento, sem usar a marcha à ré.', goal: 1 },
+    { id: 'walkLap', name: 'Uma volta a pé', desc: 'Saia da van e contorne uma quadra inteira a pé antes de concluir a partida.', goal: 1 },
+    { id: 'fiveLaps', name: 'Cinco voltas', desc: 'Dê cinco voltas completas ao redor da mesma quadra, na mesma partida.', goal: 1 },
+  ],
   PLACEHOLDER(),   // Bairro 6 (a cidade)
   PLACEHOLDER(),   // Bairro 7 (a cidade com caminhões e engarrafamentos)
   PLACEHOLDER(),   // Bairro 8 (como o 7, em 8×8)
