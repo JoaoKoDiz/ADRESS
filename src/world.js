@@ -217,6 +217,7 @@ function buildOutskirts(ground) {
     if (z > MAP && z < MAP + 9 + r) return false;         // ao sul: não pode cobrir a sebe vista pela câmera
     if (Math.abs(x - cx) < ROAD / 2 + 2 + r && z < 0) return false; // estrada de acesso livre
     if (FAVELA && FAVELA.outside.busy(x, z, r)) return false;       // Morro: fora do casario e dos terraços do entorno
+    if (MEDV && MEDV.extra && x > MEDV.extra.area.x0 - r && x < MEDV.extra.area.x1 + r && z > MEDV.extra.area.z0 - r && z < MEDV.extra.area.z1 + r) return false;   // Medieval: igreja, oficina e casas fora da muralha
     if (CANAL && CANAL.canyon && x > CANAL.x0 - 8 - r && x < CANAL.x1 + 8 + r) return false;   // Cachoeira: desfiladeiro
     if (CANAL && CANAL.canyon && CANAL.rock.some(b => x > b.x0 - r - 2 && x < b.x1 + r + 2 && z > b.z0 - r - 2 && z < b.z1 + r + 2)) return false;   // e o maciço da cachoeira (com os degraus dos lados)
     return true;

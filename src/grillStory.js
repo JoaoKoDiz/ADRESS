@@ -63,7 +63,11 @@ const LINES3 = [
   'Espero que se lembre desta noite.',
   'Principalmente se, algum dia, [...] o medo fizer você esquecer do que é capaz.',
   'Bom, [...] já está na hora de eu ir.',
-  'Se quiser conversar de novo, [...] você sabe onde me encontrar.',
+  'Vou passar naquele lugar onde costumávamos conversar.',
+  'Dessa vez, [...] ele está em outro lugar. Entre casas, ruas e pessoas seguindo suas próprias vidas.',
+  'Você vai reconhecer. [...] A mesma entrada, as mesmas torres.',
+  'Há uma pequena oficina logo ao lado. [...] Quero tentar fazer alguma coisa por lá.',
+  'Se quiser conversar de novo, [...] procure por mim.',
   '**Estarei lá.**',
 ].map(L);
 export const _LINES = { LINES1, LINES2, LINES3 };
@@ -318,7 +322,7 @@ export function createGrillStory(ctx) {
         lookFrom(c, x, y, z, S.t < DUR ? yaw : v.yaw, S.t < DUR ? -0.06 : v.pitch);
         if (S.t > DUR + 0.8) { S.phase = 'talk3'; talkBox.show(LINES3, () => {
           S.phase = 'note';
-          talkBox.note('AVISO DO JOGO', ['Use o ', { b: 'Modo Livre' }, ' no ', { b: 'Bairro 1' }, ', a qualquer momento, caso tenha interesse.'], () => { S.phase = 'end'; toTitle(true); });
+          talkBox.note('AVISO DO JOGO', ['Use o ', { b: 'Modo Livre no Bairro 24' }, ', a qualquer momento, caso tenha interesse.'], () => { S.phase = 'end'; toTitle(true); });
         }, { auto: true }); }
         break;
       }

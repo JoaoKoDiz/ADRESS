@@ -6,6 +6,8 @@
 // R1) e da praça sobe até o castelo pela ladeira longa R3. Alternativas: ladeiras R2 (oeste) e R4 (leste).
 // Mesmo formato dos planos com pontos (SPOTS): spots[s] = { px, pz, ry, fx, fz, y, box, walkBox, cx, cz, door, res, … }.
 
+import { CHURCH_SOLIDS, CHURCH_CAM } from './models/church.js';
+
 export const MED = { RW: 8, STRIP: 1.3, MIDH: 1.4, HIGHH: 5.0, LW: 9.6, LD: 12, SW: 14, SD: 15 };
 
 export function planMedieval(MAP, HEDGE) {
@@ -316,6 +318,29 @@ export function planMedieval(MAP, HEDGE) {
   for (const st of stalls) { const along = Math.abs(Math.sin(st.ry)) > 0.5; st.box = along ? { x0: st.x - 1.3, x1: st.x + 1.3, z0: st.z - st.w / 2, z1: st.z + st.w / 2 } : { x0: st.x - st.w / 2, x1: st.x + st.w / 2, z0: st.z - 1.3, z1: st.z + 1.3 }; solids.push({ ...st.box }); }
   solids.push({ x0: castle.x0, x1: castle.x1, z0: castle.z0, z1: castle.z1 });                       // castelo
   solids.push({ x0: depot.x0, x1: depot.x1, z0: depot.z0, z1: depot.z1 });                           // depósito
+  // ---- fora da muralha, junto à estrada do portão norte (história secundária): a mesma igreja do Bairro 1, de fachada para a
+  //      estrada, com o adro na frente; a oficina logo ao lado (sul); algumas construções em volta. Nada disso é destino de entrega. ----
+  const GX = N.g0[0], ROADW = 7.6;
+  const church = { cx: GX - ROADW / 2 - 16 - 2.6, cz: -62, ry: Math.PI / 2 };                     // fachada (z local 2,6) em x = GX − 19,8
+  const toWC = (c, x, z) => ({ x: c.cx + z, z: c.cz - x });                                          // giro de 90°: (x, z) local → mundo
+  const rotBox = (c, b) => ({ x0: c.cx + b.z0, x1: c.cx + b.z1, z0: c.cz - b.x1, z1: c.cz - b.x0 });
+  church.solids = CHURCH_SOLIDS.map(b => rotBox(church, b));
+  church.cam = CHURCH_CAM.map(([x0, x1, z0, z1, top]) => { const r = rotBox(church, { x0, x1, z0, z1 }); return [r.x0, r.z0, r.x1, r.z1, top]; });
+  church.door = toWC(church, 0, 6);                                                                   // diante da porta do meio
+  church.yard = { x0: church.cx + 2.6, x1: GX - ROADW / 2, z0: church.cz - 24, z1: church.cz + 24 };   // adro (pavimentado)
+  const shop = { cx: GX - ROADW / 2 - 10 - 7, cz: -27, ry: Math.PI / 2, w: 12, d: 14 };              // oficina: frente (porta) para a estrada
+  const SB = [[-6, 6, -7, -6.6], [5.6, 6, -7, 7], [-6, -5.6, -7, 7], [-6, -1.25, 6.6, 7], [1.25, 6, 6.6, 7], [-4, 3, -6.6, -5.7]];   // paredes (porta no meio da frente) e bancada
+  shop.solids = SB.map(([x0, x1, z0, z1]) => rotBox(shop, { x0, x1, z0, z1 }));
+  shop.box = rotBox(shop, { x0: -6, x1: 6, z0: -7, z1: 7 });
+  shop.door = toWC(shop, 0, 7); shop.front = toWC(shop, 0, 11);                                      // porta e ponto da van em frente
+  shop.yard = { x0: shop.box.x1, x1: GX - ROADW / 2, z0: shop.box.z0 - 2, z1: shop.box.z1 + 2 };
+  for (const [px, pz, kind, w, d] of [[GX + 17, -34, 'barn', 10, 8], [GX + 16, -56, 'cottage', 8, 7], [GX + 15.5, -78, 'stone', 7, 6], [GX - 30, -14, 'shed', 6, 4]]) {
+    const f = { px, pz, ry: px > GX ? -Math.PI / 2 : 0, w, d, kind, k: 0.37 + ((px * 13 + pz * 7) % 50) / 100, y: 0, outside: true };
+    const cs = corners(f); f.box = { x0: Math.min(...cs.map(c => c.x)), x1: Math.max(...cs.map(c => c.x)), z0: Math.min(...cs.map(c => c.z)), z1: Math.max(...cs.map(c => c.z)) };
+    fillers.push(f);
+  }
+  const extra = { church, shop, area: { x0: church.cx - 60, x1: GX + 26, z0: church.cz - 30, z1: -3 } };
+  solids.push(...church.solids, ...shop.solids);
   for (const f of fillers) solids.push({ ...f.box });                                                 // construções de fundo
   for (const al of alleys) for (const [x, z] of [al.a, al.b]) {                                        // frades nas pontas das travessas
     const v = Math.abs(al.b[0] - al.a[0]) < Math.abs(al.b[1] - al.a[1]);
@@ -329,6 +354,6 @@ export function planMedieval(MAP, HEDGE) {
   return {
     medieval: true, N, segs, ramps, MID, HIGH, h, level, spots, houseSpots, shops, trees, lamps, benches, roadDist, free, hw, RW, STRIP,
     F, RING, ISLAND, FOUNT, PL, quads, stalls, plazaBenches, fillers, castle, garden, largos, depot, gateArea, alleys, cartLoops, guard, solids, vanOnly, nodeR: () => hw,
-    walk: { nodes: WN, edges: WE, path: walkPath, nearest: nearestW }, MIDH, HIGHH,
+    walk: { nodes: WN, edges: WE, path: walkPath, nearest: nearestW }, MIDH, HIGHH, extra,
   };
 }

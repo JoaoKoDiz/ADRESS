@@ -18,6 +18,7 @@ import { createSolar } from './solar.js';
 import { buildGrillbyLot } from './models/grillby.js';
 import { createGrillbyInside } from './grillbyInside.js';
 import { createGrillStory, GRILL_TALK_KEY } from './grillStory.js';
+import { createWorkshopStory } from './workshopStory.js';
 import { createNight } from './night.js';
 import { createFarmOutside } from './farmOutside.js';
 import { createReality } from './reality.js';
@@ -985,14 +986,15 @@ const missions = createMissions(career); // Carreira: M perto da maquete abre as
 // Checkpoints de teste da história secundária (no cadeado, depois da senha): grava no progresso salvo as etapas até a
 // escolhida e apaga as posteriores. Cada cena lê esse progresso ao começar (caixa, K no terraço, igreja e sinos, bonde, Veneza).
 const STORY_STEPS = ['Nada', 'Conversa na casa do personagem — completa', 'Conversa no terraço — completa', 'Primeira conversa na igreja — completa',
-  'Trolley Problem — completo', 'Conversa em Veneza — completa', 'Segunda conversa na igreja — completa', "Encontro no Grillby's — completo"];
-const storyKeys = () => [PARCEL_KEY, ROOF_KEY, CHURCH_TALK_KEY, TROLLEY_TALK_KEY, VENICE_TALK_KEY, CHURCH2_KEY, GRILL_TALK_KEY];
+  'Trolley Problem — completo', 'Conversa em Veneza — completa', 'Segunda conversa na igreja — completa', "Encontro no Grillby's — completo", 'Oficina no Bairro 24 — completa'];
+const storyKeys = () => [PARCEL_KEY, ROOF_KEY, CHURCH_TALK_KEY, TROLLEY_TALK_KEY, VENICE_TALK_KEY, CHURCH2_KEY, GRILL_TALK_KEY, 'adress.med.talk1'];
 const STORY_CP = {
   names: STORY_STEPS,
   current() { const k = storyKeys(); let n = 0; while (n < k.length && flagOn(k[n])) n++; return n; },
   apply(n) {
     storyKeys().forEach((k, i) => { try { if (i < n) localStorage.setItem(k, '1'); else localStorage.removeItem(k); } catch (e) { /* */ } });
     parcelDone = n >= 1;                                   // (lido na hora pela caixa e pelo K do terraço)
+    try { if (n >= 8) localStorage.setItem('adress.med.shop', '5'); else localStorage.removeItem('adress.med.shop'); } catch (e) { /* */ }   // oficina do Bairro 24
   },
 };
 // Missões da Carreira no mesmo painel (seção separada): reiniciar todas e escolher os bairros com todas as missões completas.
@@ -1089,7 +1091,7 @@ function startFree(mode = 'free') {
   gameMode = mode;
   if (!COMPOSED.includes(neighborhood)) setupGrid4();   // Bairro 1 tem a casa fixa; o 3 (mesma grade) não
   resetGates();
-  setupChurch(); setupVeniceK();
+  setupChurch(); setupMedStory(); setupVeniceK();
   if (mode === 'career') career.startMatch(careerLevel); else career.stop();
   music.setTrack(LEVEL_TRACKS[neighborhood] || null, true);   // Veneza, Colheita e Nevasca: a faixa do bairro já tocando
   ENTRANCE_WALL.x0 = ENTRANCE.x0; ENTRANCE_WALL.x1 = ENTRANCE.x1;   // a entrada depende do bairro
@@ -1433,7 +1435,7 @@ function setupChurch() {
   rig.setExtraBoxes([]);
   churchSolids.length = 0;
   let pd = parcelDone; try { pd = pd || localStorage.getItem(PARCEL_KEY) === '1'; } catch (e) { /* */ }
-  churchOn = isL1() && gameMode === 'free' && pd && roofDone();   // as duas conversas, lidas do progresso salvo
+  churchOn = isL1() && gameMode === 'free' && pd && roofDone() && !flagOn(GRILL_TALK_KEY);   // as duas conversas, lidas do progresso salvo; depois do Grillby's a igreja está no Bairro 24
   churchT = 0; churchA = 0; churchShown = false;
   endApproachMusic(0.3); approach = { phase: 'idle' };
   if (unwhite && !cine) restoreLook();                 // (aparência branca de uma visita anterior)
@@ -1574,6 +1576,34 @@ const flagOn = k => { try { return localStorage.getItem(k) === '1'; } catch (e) 
 /** 1 = 1ª conversa; 2 = despedida (depois de Veneza); 3 = concluída (ele já foi embora; nada se repete). */
 const churchStage = () => flagOn(GRILL_TALK_KEY) ? 4 : flagOn(CHURCH2_KEY) ? 3 : flagOn(VENICE_TALK_KEY) ? 2 : 1;   // 4: depois do Grillby's (só presença)
 const bellDrop = b => BELL_SPOT.y - b.userData.h - BELL_SPOT.floor;
+// ---------- Bairro 24: a mesma igreja (fora da muralha, junto à estrada do portão) e a oficina do K ----------
+// A igreja fica visível normalmente (sem o sistema de aparição do Bairro 1), com os sinos que já caíram; sem cenas nela por
+// enquanto. A oficina e a história do K (depois do Grillby's, Modo Livre) ficam em workshopStory.js.
+let medChurch = null, medScene = null;
+const wsStory = createWorkshopStory({ walker, van, talkBox, input,
+  storyOn: () => gameMode === 'free' && !!MEDV && flagOn(GRILL_TALK_KEY), getState: () => state, setState: s => setState(s) });
+function setupMedStory() {
+  if (!MEDV || !MEDV.extra) { wsStory.setup(null); return; }
+  const X = MEDV.extra, C = X.church;
+  if (medScene !== world.scene) {
+    medScene = world.scene;
+    if (!medChurch) {
+      medChurch = buildChurch(); setChurchOpacity(medChurch, 1);
+      medChurch.userData.pewK.visible = false;                            // (o K está na oficina; a igreja não tem conversa nesta etapa)
+      const b1 = buildBell(), b2 = buildBell('#00C000', BELL2_X); medChurch.add(b1, b2); medChurch.userData.bells = [b1, b2];
+    }
+    medChurch.position.set(C.cx, 0, C.cz); medChurch.rotation.y = C.ry; world.scene.add(medChurch);
+    const pave = new THREE.MeshStandardMaterial({ color: '#8f8a7c', roughness: 1 });
+    for (const r of [C.yard, X.shop.yard, { x0: X.shop.yard.x0 - 0.5, x1: X.shop.yard.x1, z0: C.yard.z1, z1: X.shop.yard.z0 }]) {
+      const m = new THREE.Mesh(new THREE.PlaneGeometry(r.x1 - r.x0, r.z1 - r.z0), pave); m.rotation.x = -Math.PI / 2; m.position.set((r.x0 + r.x1) / 2, 0.015, (r.z0 + r.z1) / 2); m.receiveShadow = true; world.scene.add(m);
+    }
+    wsStory.setup(world, MEDV, game, doorPoint, HOUSES);
+  } else wsStory.resetTask();
+  const [b1, b2] = medChurch.userData.bells;                              // os sinos que já caíram continuam caídos
+  b1.visible = flagOn(CHURCH_TALK_KEY); b1.userData.bell.position.y = -bellDrop(b1);
+  b2.visible = flagOn(CHURCH2_KEY); b2.userData.bell.position.y = -bellDrop(b2);
+  rig.setExtraBoxes([...C.cam, [X.shop.box.x0, X.shop.box.z0, X.shop.box.x1, X.shop.box.z1, 5.6]]);
+}
 const CHURCH2_LINES = [
   ['Você veio. ', P, 'Que bom.'],
   ['Eu não queria ir embora sem me despedir direito.'],
@@ -1910,7 +1940,7 @@ function startNewRound(newMatch = true) {
   world.hideResident();
   resetVan();
   rig.snap({ x: van.x, z: van.z, heading: van.heading, speed: 0 });
-  resetParcel(); setupChurch(); setupVeniceK();
+  resetParcel(); setupChurch(); setupMedStory(); setupVeniceK();
   dialog = null; pending = -1; nearHouse = -1; actionLock = 0;
   nearPump = false; fuelArmed = true; fuelMsgT = 0;
   qualityWarm = 120;                           // a troca de rodada remonta o bairro: não conta como lentidão
@@ -1927,6 +1957,7 @@ function focusOf(h) {
 // ---------- Atualização ----------
 function update(dt, t) {
   stateT += dt;
+  wsStory.update(dt);                                // Bairro 24: a oficina (cenas e rotina)
   if (matchTimer.armed && TIMER_PLAY.includes(state)) matchTimer.begin();
   if (!TIMER_OFF.includes(state) && !menu.isOpen && !missions.isOpen) matchTimer.tick(dt);   // (pausado com o MENU ou as missões abertas)
   if (state !== 'title' && state !== 'levelSelect' && state !== 'levelFly' && state !== 'shop' && !(state === 'fadeOut' && endToMap) && input.toggleCamera()) rig.toggle();
@@ -1984,7 +2015,7 @@ function update(dt, t) {
       if (free && menu.unstoppable && !heli.flying) wreck(dt);
       nearHouse = heli.flying ? -1 : findNearHouse();
       nearGate = heli.flying || Math.abs(van.speed) > DELIVERY_MAX_SPEED ? -1 : findNearGate(van.x + Math.cos(van.heading) * 2, van.z + Math.sin(van.heading) * 2, 6.5);   // Colheita: porteira fechada à frente
-      if (nearGate >= 0) nearHouse = -1;
+      if (nearGate >= 0 || wsStory.busy) nearHouse = -1;               // (durante uma atividade da oficina, sem entrega normal)
       if (gameMode === 'career') career.tick(van.x, van.z, van.heading, { speed: van.speed, time: matchTimer.time, bars: barriers.list, jams: barriers.jamRects, entrance: { x: VAN_START.x, z: VAN_START.z } });   // ruas, barreiras, ré e cruzamentos (missões)
       if (input.hint()) requestHint();
       if (free && !MOONV && input.fire()) { van.stop(); nearHouse = -1; boom.fire(van, game.slotOf); setState('missile'); break; }
@@ -1998,6 +2029,7 @@ function update(dt, t) {
         break;
       }
       if (nearGate >= 0 && actionLock <= 0 && input.action()) { openGate(nearGate); nearGate = -1; actionLock = 0.4; break; }
+      if (actionLock <= 0 && wsStory.driveAction()) break;          // Bairro 24 (história): buscar/entregar material da oficina
       if (nearHouse >= 0 && actionLock <= 0 && input.action()) {
         pending = nearHouse; nearHouse = -1;
         van.stop();
@@ -2074,6 +2106,7 @@ function update(dt, t) {
       nearGate = findNearGate(walker.x, walker.z, 2.8);
       if (nearGate >= 0) nearHouse = -1;
       if (actionLock > 0 || !input.action()) break;
+      if (wsStory.walkAction()) break;                 // Bairro 24 (história): conversar com o K / ajudar na oficina
       if (nearGate >= 0) { openGate(nearGate); nearGate = -1; actionLock = 0.4; break; }
       if (nearVenK()) { startVeniceTalk(); break; }   // Veneza: falar com o K tem prioridade
       { const npc = medTalkTarget(); if (npc) { startChat(npc); break; } }   // Medieval: conversar com um morador (quando ele está mais perto que a porta)
@@ -2100,6 +2133,9 @@ function update(dt, t) {
       }
       break;
     }
+    case 'wstory':                                   // Bairro 24: cenas da oficina (o K conserta; falas automáticas)
+      van.stop();
+      break;
     case 'gstory':                                   // Grillby's: o encontro com o K e o resgate (1ª pessoa)
       van.stop();
       if (insideOn) grillIn.update(dt, walker.x, walker.z);
@@ -2253,6 +2289,7 @@ function update(dt, t) {
   if (!insideOn && state === 'gstory') { rig.update(dt, { x: walker.x, z: walker.z, y: walker.floor, heading: walker.heading, speed: 0, focus: null }); grillStory.camOut(rig.camera); }
   else if (!insideOn) rig.update(dt, onFoot ? { x: walker.x, z: walker.z, y: walker.floor, heading: walker.heading, speed: walker.speed, focus: null } : { x: van.x, z: van.z, y: heli.altitude, heading: van.heading, speed: van.speed, focus: null });   // sem câmera automática: quem controla é o jogador
   if (state === 'talk') { rig.camera.position.copy(talkCam.pos); rig.camera.lookAt(talkCam.look); }   // enquadramento fixo da conversa
+  if (state === 'wstory') wsStory.applyCam(rig.camera);
   if (state === 'laser') fxCine.applyCamera(rig.camera);
   if (state === 'cine' && cine) { rig.camera.position.copy(cine.camPos); rig.camera.lookAt(cine.camLook); }
   // névoa só na câmera atrás da van (suaviza o horizonte); a visão geral fica nítida
@@ -2333,12 +2370,13 @@ function updateHUD() {
       : rig.mode === 'chase'
       ? 'W / ↑: acelerar  ·  S / ↓: frear e ré  ·  A D / ← →: virar  ·  E: entregar  ·  C: bairro  ·  T: dica' + extraKeys
       : 'WASD / Setas: dirigir  ·  E: entregar  ·  C: câmera  ·  T: dica' + extraKeys, 'muted');
-    if (state === 'drive' && hint.active && !hint.landed) hud.setMain('Olha a dica caindo do céu!', 'ring');
+    if ((state === 'drive' || state === 'walk') && wsStory.objective()) hud.setMain(wsStory.objective(), 'clue');   // atividade da oficina no lugar da pista
+    else if (state === 'drive' && hint.active && !hint.landed) hud.setMain('Olha a dica caindo do céu!', 'ring');
     else if (state === 'ring') hud.setMain('Ding-dong… 🔔', 'ring');
     else if (state === 'boss') hud.setMain(monster.phase === 'driveOut' ? 'Todas as casas foram destruídas… algo despertou!' : 'O DEVORADOR DE BAIRROS acordou!', 'dialog');
     else if (state === 'missile') hud.setMain('Míssil disparado!', 'ring');
     else if (state === 'fuel') hud.setMain('⛽ Abastecendo… glub, glub, glub…', 'ring');
-    else if (state === 'talk' || state === 'cine' || state === 'trolley' || state === 'trolleyBlack' || state === 'laser') hud.setMain('', 'clue');
+    else if (state === 'talk' || state === 'cine' || state === 'wstory' || state === 'trolley' || state === 'trolleyBlack' || state === 'laser') hud.setMain('', 'clue');
     else if (state === 'walk' && carrying) hud.setMain(walker.nearVan(van) ? 'Entrar na van devolve a caixa ao lugar dela.' : 'Carregando uma caixa… de quem será?', 'clue');
     else if (state === 'walk') hud.setMain(walker.nearVan(van) && !nearLounger() && !nearVenK() ? 'Perto da van — aperte E para entrar.' : SPOTS ? game.mainText() : 'Passeando a pé… (não dá para entregar andando)', 'clue');   // Morro: a pé continua valendo a pista
     else if (state === 'drive' && fuelMsgT > 0) hud.setMain(fuelMsg, 'dialog');
@@ -2348,7 +2386,8 @@ function updateHUD() {
 
   const walkNear = state === 'walk' && walker.nearVan(van) && !nearLounger() && !nearChurchK() && !nearVenK() && !missions.isOpen;
   // a pé no Bairro 1: pegar a caixa / entregar ao K / conversar (balão em cima do personagem)
-  const walkAct = state === 'walk' && medTalkTarget() && !missions.isOpen ? 'Conversar' : nearGrillDoor() && !missions.isOpen ? "Entrar no Grillby's" : state === 'walk' && nearGate >= 0 && !missions.isOpen ? 'Abrir porteira' : state === 'walk' && nearVenK() && !missions.isOpen ? 'Conversar' : state === 'walk' && nearHouse >= 0 && !missions.isOpen ? 'Entregar' : state === 'walk' && !walkNear && !missions.isOpen ? (nearParcel() ? 'Pegar a caixa' : nearK() ? (carrying ? 'Entregar a caixa' : 'Conversar') : nearLounger() || nearChurchK() ? 'Conversar' : '') : '';
+  const wsWalk = state === 'walk' && !missions.isOpen ? wsStory.walkPrompt() : '';
+  const walkAct = wsWalk ? wsWalk : state === 'walk' && medTalkTarget() && !missions.isOpen ? 'Conversar' : nearGrillDoor() && !missions.isOpen ? "Entrar no Grillby's" : state === 'walk' && nearGate >= 0 && !missions.isOpen ? 'Abrir porteira' : state === 'walk' && nearVenK() && !missions.isOpen ? 'Conversar' : state === 'walk' && nearHouse >= 0 && !missions.isOpen ? 'Entregar' : state === 'walk' && !walkNear && !missions.isOpen ? (nearParcel() ? 'Pegar a caixa' : nearK() ? (carrying ? 'Entregar a caixa' : 'Conversar') : nearLounger() || nearChurchK() ? 'Conversar' : '') : '';
   if (walkAct) {
     rig.camera.updateMatrixWorld();
     promptPos.set(walker.x, walker.floor + 2.7, walker.z).project(rig.camera);
@@ -2356,8 +2395,9 @@ function updateHUD() {
     hud.setFade(fade);
     return;
   }
-  const promptLabel = walkNear ? (VENICE ? 'Entrar na lancha' : 'Entrar na van') : state === 'drive' && nearGate >= 0 ? 'Abrir porteira' : nearHouse >= 0 ? 'Entregar' : 'Abastecer';
-  if ((state === 'drive' && (nearHouse >= 0 || nearPump || nearGate >= 0)) || walkNear) {
+  const wsDrive = state === 'drive' ? wsStory.drivePrompt() : '';
+  const promptLabel = wsDrive ? wsDrive : walkNear ? (VENICE ? 'Entrar na lancha' : 'Entrar na van') : state === 'drive' && nearGate >= 0 ? 'Abrir porteira' : nearHouse >= 0 ? 'Entregar' : 'Abastecer';
+  if ((state === 'drive' && (nearHouse >= 0 || nearPump || nearGate >= 0 || wsDrive)) || walkNear) {
     // Balão AO LADO da van, sobre a rua: acima dela ele cobriria o quintal da frente da casa (onde estão as pistas).
     const w = stage.clientWidth, h = stage.clientHeight;
     const c = Math.abs(Math.cos(van.heading)), s = Math.abs(Math.sin(van.heading));
@@ -2482,7 +2522,7 @@ window.ADRESS = {
   get careerLevel() { return careerLevel; },
   setCareerLevel(l) { careerLevel = l; },
   setFreeLevel(l) { freeLevel = l; },
-  walker, jamSound, cityAmb, train, walkSolids, trolley, get tseq() { return tseq; }, get FAVELA() { return FAVELA; }, traffic, tractors, chickens, plow, workTraffic, banks, get SNOWV() { return SNOWV; }, get MEDV() { return MEDV; }, medLife, get chatNpc() { return chatNpc; }, night, get grillIn() { return grillIn; }, get insideOn() { return insideOn; }, grillStory, grillDoor: o => grillDoorWorld(o), get churchPewK() { return church && church.userData.pewK.visible; }, churchStage, get FARMLAND() { return FARMLAND; }, get GARDV() { return GARDV; }, gardGate, gateOpen, openGate,
+  walker, jamSound, cityAmb, train, walkSolids, trolley, get tseq() { return tseq; }, get FAVELA() { return FAVELA; }, traffic, tractors, chickens, plow, workTraffic, banks, get SNOWV() { return SNOWV; }, get MEDV() { return MEDV; }, medLife, get chatNpc() { return chatNpc; }, night, get grillIn() { return grillIn; }, get insideOn() { return insideOn; }, grillStory, wsStory, get medChurch() { return medChurch; }, grillDoor: o => grillDoorWorld(o), get churchPewK() { return church && church.userData.pewK.visible; }, churchStage, get FARMLAND() { return FARMLAND; }, get GARDV() { return GARDV; }, gardGate, gateOpen, openGate,
   get levelSelect() { return levelSelect; }, matchTimer, get bumps() { return bumps; }, HOUSES, shopFronts,
   shop,
   startGame: m => startFree(m), newRound: () => startNewRound(),
