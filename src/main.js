@@ -224,6 +224,28 @@ function ensureL6(g, avail) {
   if (ci >= 0) g.clues[ci] = makeClueWith(route[ci], g.pool, 'roof:' + HOUSES[route[ci]].roof);
   if (!route.some(h => !house(h))) swapIn(avail.filter(h => !house(h)), [ci]);
 }
+// Bairro 7: as 2 casas com fonte livres de engarrafamento e um destino com os 4 vizinhos (pelos lados) entregáveis;
+// a rota sempre passa por uma casa com fonte (pista que fala da fonte) e por esse destino de "vizinhos".
+const hasFountain = h => HOUSES[h].kind === 'house' && HOUSES[h].tags.includes('fountain');
+const sideNbrs = s => { const r = Math.floor(s / GRID), c = s % GRID; return r > 0 && r < GRID - 1 && c > 0 && c < GRID - 1 ? [s - 1, s + 1, s - GRID, s + GRID] : null; };
+const deliverable = s => s >= 0 && game.layout[s] >= 0 && !HOUSES[game.layout[s]].noDelivery && !barriers.jammedSlots.includes(s);
+const nbrHub = h => { const s = game.slotOf[h], n = sideNbrs(s); return deliverable(s) && !!n && n.every(deliverable); };
+function l7Ok() {
+  return game.pool.filter(h => hasFountain(h) && deliverable(game.slotOf[h])).length >= 2 && game.pool.some(nbrHub)
+    && barriers.list.some(b => b.type === 'truck') && barriers.jammedSlots.length > 0;
+}
+function ensureL7(g, avail) {
+  const route = g.route, rnd = a => a[Math.floor(Math.random() * a.length)];
+  const swapIn = (cands, keep) => {
+    const c = cands.filter(h => !route.includes(h)), idx = route.map((_, i) => i).filter(i => !keep.includes(i));
+    if (!c.length || !idx.length) return -1;
+    const i = rnd(idx); route[i] = rnd(c); g.clues[i] = makeClue(route[i], g.pool); return i;
+  };
+  let fi = route.findIndex(hasFountain);
+  if (fi < 0) fi = swapIn(avail.filter(hasFountain), []);
+  if (fi >= 0) g.clues[fi] = makeClueWith(route[fi], g.pool, 'fountain');
+  if (!route.some(h => nbrHub(h))) swapIn(avail.filter(h => nbrHub(h) && !hasFountain(h)), [fi]);
+}
 function composeRound() {
   const city = neighborhood === 'city6', city7 = neighborhood === 'city7', city8 = neighborhood === 'city8';
   const shuffled = a => { a = a.slice(); for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; };
@@ -322,7 +344,10 @@ function composeRound() {
   } else if (city7) {                           // Bairro 7: 4–5 prédios comerciais, 4 casas e o resto de prédios residenciais
     const nShops = 4 + Math.floor(Math.random() * 2), nHouses = 4;
     const apts = [...Array(28).keys()].map(k => 38 + k);
-    pool = shuffled(apts).slice(0, HOUSE_SLOTS.length - nShops - nHouses).concat(shuffled(allHouses).slice(0, nHouses), shuffled(SHOPS).slice(0, nShops));
+    // sempre 2 casas com fonte pequena entre as 4 (missão "Fonte errada")
+    const fnt = shuffled(allHouses.filter(hasFountain)).slice(0, 2), others = shuffled(allHouses.filter(h => !fnt.includes(h))).slice(0, nHouses - 2);
+    pool = shuffled(apts).slice(0, HOUSE_SLOTS.length - nShops - nHouses).concat(fnt, others, shuffled(SHOPS).slice(0, nShops));
+    game.ensure = ensureL7;
   } else if (city) {
     const apts = [...Array(28).keys()].map(k => 38 + k);
     const fixed = Object.values(L6_FIXED);                 // Bairro 6: o prédio fixo da quadra C5 + 28 residenciais + casas no resto
@@ -364,7 +389,10 @@ function refreshBarriers() {
   const topo = roadTopology();   // paredes das encostas, canal e galpões: trechos que já não passam
   if (lv === 2) barriers.randomize(world.scene, { min: 3, max: 5, types: ['barrier'], topo });
   else if (lv === 3) barriers.randomize(world.scene, { min: 4, max: 6, types: ['barrier', 'truck', 'hole'], topo });
-  else if (lv === 6 || lv === 7) barriers.randomize(world.scene, { min: 4, max: 6, types: ['truck'], jams: { min: 3, max: 4 }, topo });
+  else if (lv === 6) {                          // Bairro 7: sorteia de novo até sobrar o que as missões precisam (fontes, vizinhos, caminhão e engarrafamento)
+    for (let k = 0; k < 40; k++) { barriers.randomize(world.scene, { min: 4, max: 6, types: ['truck'], jams: { min: 3, max: 4 }, topo }); if (l7Ok()) break; }
+  }
+  else if (lv === 7) barriers.randomize(world.scene, { min: 4, max: 6, types: ['truck'], jams: { min: 3, max: 4 }, topo });
   else if (lv === 11) barriers.randomize(world.scene, { min: 1, max: 2, types: ['truck'], topo });   // Nível 12 (Trilhos): só caminhões (fora dos trilhos)
   else if (lv === 8 || lv === 10) barriers.randomize(world.scene, { min: 1, max: 2, types: ['truck'], jams: { min: 1, max: 2 }, topo });   // Bairros 9 (Encostas) e 11 (Travessia): poucos   // Bairro 7: caminhões + engarrafamentos
   else barriers.clear();
@@ -987,11 +1015,11 @@ const matchTimer = createMatchTimer(stage);
 // novo depois que a van se afasta dele (folga > 1) e bate outra vez.
 let bumps = 0;
 const bumpHold = new Set();
-const bumpLevel = () => { const lv = gameMode === 'career' ? careerLevel : freeLevel; return lv === 1 || lv === 2; };
-const bumpShown = () => (gameMode === 'career' ? careerLevel : freeLevel) === 2;
-const bumpTarget = b => { const i = SOLIDS.indexOf(b); return (i >= 0 && i < HOUSE_SLOTS.length) || (world.extraSolids && world.extraSolids.includes(b)) || !!b.post || b.bar != null; };   // lotes (casas), troncos das árvores, postes, barreiras
+const bumpLevel = () => { const lv = gameMode === 'career' ? careerLevel : freeLevel; return lv === 1 || lv === 2 || lv === 6; };
+const bumpShown = () => [2, 6].includes(gameMode === 'career' ? careerLevel : freeLevel);   // Bairros 3 e 7
+const bumpTarget = b => { const i = SOLIDS.indexOf(b); return (i >= 0 && i < HOUSE_SLOTS.length) || (world.extraSolids && world.extraSolids.includes(b)) || !!b.post || b.bar != null || !!b.jam; };   // lotes (casas), troncos das árvores, postes, barreiras
 function countBumps() {
-  for (const b of van.touched) if (!bumpHold.has(b) && bumpTarget(b)) { bumps++; bumpHold.add(b); if (gameMode === 'career') career.bump(b, barriers.list.length); }
+  for (const b of van.touched) if (!bumpHold.has(b) && bumpTarget(b)) { bumps++; bumpHold.add(b); if (gameMode === 'career') career.bump(b, barriers.list.length, b.jam || (b.bar != null && barriers.list[b.bar] && barriers.list[b.bar].type === 'truck')); }
   for (const b of bumpHold) if (!van.touched.has(b) && van.gapTo(b) > 1) bumpHold.delete(b);
 }
 const resetBumps = () => { bumps = 0; bumpHold.clear(); };
@@ -1923,7 +1951,7 @@ function update(dt, t) {
       nearHouse = heli.flying ? -1 : findNearHouse();
       nearGate = heli.flying || Math.abs(van.speed) > DELIVERY_MAX_SPEED ? -1 : findNearGate(van.x + Math.cos(van.heading) * 2, van.z + Math.sin(van.heading) * 2, 6.5);   // Colheita: porteira fechada à frente
       if (nearGate >= 0) nearHouse = -1;
-      if (gameMode === 'career') career.tick(van.x, van.z, van.heading, { speed: van.speed, time: matchTimer.time, bars: barriers.list, entrance: { x: VAN_START.x, z: VAN_START.z } });   // ruas, barreiras, ré e cruzamentos (missões)
+      if (gameMode === 'career') career.tick(van.x, van.z, van.heading, { speed: van.speed, time: matchTimer.time, bars: barriers.list, jams: barriers.jamRects, entrance: { x: VAN_START.x, z: VAN_START.z } });   // ruas, barreiras, ré e cruzamentos (missões)
       if (input.hint()) requestHint();
       if (free && !MOONV && input.fire()) { van.stop(); nearHouse = -1; boom.fire(van, game.slotOf); setState('missile'); break; }
       actionLock = Math.max(0, actionLock - dt);

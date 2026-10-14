@@ -243,6 +243,7 @@ export function createBarriers() {
       const x0 = roadCenter(j) + ROAD / 2 + 0.2, x1 = roadCenter(j + 1) - ROAD / 2 - 0.2, z = roadCenter(i);
       b.position.set((x0 + x1) / 2, TOPO.heightAt((x0 + x1) / 2, z), z);
       const s = { x0, x1, z0: z - ROAD / 2 - 0.1, z1: z + ROAD / 2 + 0.1 };
+      s.jam = true;                                // (contador de batidas: carro do engarrafamento)
       SOLIDS.push(s); solids.push(s); jamRects.push(s);
       jammed.push((i - 1) * N + j);                // o lote ao norte do trecho (sua porta dá para este trecho)
     });

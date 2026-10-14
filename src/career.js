@@ -191,6 +191,8 @@ export function createCareer() {
   let man = null, vanLaps = new Map(), footLaps = new Map(), prevFoot = null;
   // Bairro 6: passagens por trecho de rua, voltas para o oito, retorno à entrada depois de uma entrega falsa
   let lastNode = null, streets = new Map(), eightLaps = new Map(), lastLap = null, needEntrance = false;
+  // Bairro 7: batidas em veículos, espera atrás do engarrafamento, recuo diante do caminhão
+  let vehHits = 0, jamWait = null, jamArmed = null, backOff = null;
 
   return {
     get progress() { return progress; },
@@ -233,6 +235,7 @@ export function createCareer() {
       deliveries = 0; fueled = false; fuelStops = 0; lastDelT = null; rev = null; look = null; stopAt = null; lookSet = new Set(); prevPos = null;
       man = null; vanLaps = new Map(); footLaps = new Map(); prevFoot = null;
       lastNode = null; streets = new Map(); eightLaps = new Map(); lastLap = null; needEntrance = false;
+      vehHits = 0; jamWait = null; jamArmed = null; backOff = null;
       lapBins = { n: new Array(LAP_BINS).fill(false), s: new Array(LAP_BINS).fill(false), w: new Array(LAP_BINS).fill(false), e: new Array(LAP_BINS).fill(false) };
     },
     /** Fim do acompanhamento (saiu da partida): descarta o que estava pendente. */
@@ -347,6 +350,38 @@ export function createCareer() {
         const e = ctx.entrance;
         if (needEntrance && e && Math.abs(x - e.x) <= ROAD && z <= roadCenter(0) + ROAD / 2 + 1.5) { pending.add('forgot'); needEntrance = false; }
       }
+      if (level === 6 && !jump) {
+        const t = ctx.time || 0, sp = Math.abs(ctx.speed || 0), c = Math.cos(heading), s = Math.sin(heading);
+        // Preso no trânsito: 15 s parada atrás de um engarrafamento, de frente para ele; depois chega ao outro lado por um desvio
+        const behind = r => {                                             // lado (−1 oeste / +1 leste) em que a van espera, ou 0
+          const zc = (r.z0 + r.z1) / 2; if (Math.abs(z - zc) > ROAD / 2 + 0.6) return 0;
+          if (x > r.x1 && x < r.x1 + 10 && c < -0.7) return 1;
+          if (x < r.x0 && x > r.x0 - 10 && c > 0.7) return -1;
+          return 0;
+        };
+        const otherSide = (r, side) => { const zc = (r.z0 + r.z1) / 2; return Math.abs(z - zc) <= ROAD / 2 + 0.6 && (side > 0 ? x < r.x0 && x > r.x0 - 12 : x > r.x1 && x < r.x1 + 12); };
+        const jams = ctx.jams || [];
+        if (jamArmed && otherSide(jamArmed.r, jamArmed.side)) { pending.add('stuck'); jamArmed = null; }
+        let w = null; for (const r of jams) { const sd = behind(r); if (sd) { w = { r, side: sd }; break; } }
+        if (!w || sp >= 0.5 || (jamWait && Math.hypot(x - jamWait.x, z - jamWait.z) > 0.5)) jamWait = null;   // mexeu: a espera recomeça
+        if (w && sp < 0.5 && (!jamWait || jamWait.r !== w.r || jamWait.side !== w.side)) jamWait = { ...w, t0: t, x, z };
+        else if (jamWait && t - jamWait.t0 >= 15) jamArmed = { r: w.r, side: w.side };
+        // Melhor recuar: de frente para um caminhão na rua dele, recua (de ré, sem virar) até o cruzamento anterior
+        const trucks = (ctx.bars || []).filter(b => b.type === 'truck');
+        const near = b => {                                               // van na rua do caminhão, de frente para ele: { dir para o caminhão, âncora }
+          const H = b.kind === 'H', lat = H ? z - roadCenter(b.i) : x - roadCenter(b.j), u = H ? x - b.x : z - b.z;
+          if (Math.abs(lat) > ROAD / 2 + 0.6 || Math.abs(u) < 2 || Math.abs(u) > STEP()) return null;
+          const dx = H ? -Math.sign(u) : 0, dz = H ? 0 : -Math.sign(u);
+          return { b, dx, dz, u: Math.abs(u), anchor: barAnchor(b, u < 0 ? 'A' : 'B'), facing: c * dx + s * dz };
+        };
+        if (backOff) {
+          const n = near(backOff.b), node = nodeAt(x, z), along = prevPos ? (x - prevPos.x) * c + (z - prevPos.z) * s : 0;
+          if (along < 0) backOff.bwd += -along; else backOff.fwd += along;
+          if (node && node.k === backOff.anchor && backOff.bwd >= 1.5) { if (c * backOff.dx + s * backOff.dz >= 0.8) pending.add('backOff'); backOff = null; }
+          else if (!n || n.facing < 0.8 || backOff.fwd > 1.2) backOff = null;   // virou, saiu da rua ou andou para a frente
+        }
+        if (!backOff) for (const b of trucks) { const n = near(b); if (n && n.u <= 10 && n.facing >= 0.8) { backOff = { b, dx: n.dx, dz: n.dz, anchor: n.anchor, bwd: 0, fwd: 0 }; break; } }
+      }
       prevPos = { x, z, h: heading };
       if (level === 0 && !pending.has('lap')) {                          // Volta no bairro: as 4 ruas externas
         const a = roadCenter(0), b = roadCenter(GRID), near = c => (v => Math.abs(v - c) < ROAD / 2 + 1.5);
@@ -375,6 +410,15 @@ export function createCareer() {
       if (!active) return;
       if (level === 2 && !success && !indicated) {                        // Fora da rota: 2 casas diferentes fora da indicação
         offRoute.add(h); if (offRoute.size >= 2) pending.add('offRoute');
+      }
+      if (level === 6 && game) {
+        const H = HOUSES[h], target = game.route && game.route[stepBefore];
+        if (target != null && h !== target && H.kind === 'house' && H.tags.includes('fountain') && HOUSES[target].tags.includes('fountain')) pending.add('wrongFountain');   // Fonte errada
+        if (target != null && game.slotOf) {                              // Não era aqui?: lote vizinho pelos lados do indicado
+          const a = game.slotOf[target], b = game.slotOf[h], ra = Math.floor(a / GRID), rb = Math.floor(b / GRID);
+          if (Math.abs(ra - rb) + Math.abs(a % GRID - b % GRID) === 1) pending.add('nextDoor');
+        }
+        if (success && vehHits === 0) pending.add('noTouch');            // Sem encostar
       }
       if (level === 5 && game) {
         const H = HOUSES[h], clue = (game.clues && game.clues[stepBefore]) || [], target = game.route && game.route[stepBefore];
@@ -417,7 +461,8 @@ export function createCareer() {
     refuel() { if (active && deliveries > 0) fueled = true; },
 
     /** Batida contada pelo contador (uma por contato; main.js). Bairro 3: batidas nas barreiras (b.bar = índice). */
-    bump(b, total) {
+    bump(b, total, vehicle = false) {
+      if (active && level === 6 && vehicle) vehHits++;                  // Bairro 7: carro de engarrafamento ou caminhão
       if (!active || level !== 2 || !b || b.bar == null) return;
       barHitN++;
       const n = (barHits.get(b.bar) || 0) + 1; barHits.set(b.bar, n);

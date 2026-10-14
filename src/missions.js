@@ -5,7 +5,7 @@
 // Missões por fase (nível). id liga a missão à regra em career.js; goal = quanto precisa para concluir.
 // Fases sem missões definidas usam o modelo (sem id: não avançam ainda).
 const PLACEHOLDER = () => Array.from({ length: 5 }, () => ({ id: null, name: 'MISSÃO', desc: 'Descrição breve da missão.', goal: 5 }));
-export const LEVEL_NAMES = ['Raízes', 'Horizontes', 'Constância', 'Veredas', 'Ofício', 'Mirante', '', '', 'Veneza', '', '', '', '', '', '', '', '', '', '', '', '', '', '', ''];
+export const LEVEL_NAMES = ['Raízes', 'Horizontes', 'Constância', 'Veredas', 'Ofício', 'Mirante', 'Altitude', '', 'Veneza', '', '', '', '', '', '', '', '', '', '', '', '', '', '', ''];
 /** Bairro 18: espaço reservado para níveis futuros (não dá para jogar; não travam o desbloqueio do 20). */
 export const RESERVED = [];   // (18 = Modernista, 21 = Operário, 22 = Bosque, 23 = Cachoeira; nenhum reservado agora)   // (o 17 é Jardins, o 19 é o Penumbra)
 export const MISSIONS = [
@@ -53,7 +53,13 @@ export const MISSIONS = [
     { id: 'eight', name: 'Oito no asfalto', desc: 'Contorne duas quadras diagonalmente vizinhas, formando um oito com a van.', goal: 1 },
     { id: 'forgot', name: 'Esqueci uma coisa', desc: 'Após uma entrega falsa, volte à entrada do bairro antes de fazer outra entrega.', goal: 1 },
   ],
-  PLACEHOLDER(),   // Bairro 7 (a cidade com caminhões e engarrafamentos)
+  [
+    { id: 'wrongFountain', name: 'Fonte errada', desc: 'Quando a dica indicar uma casa com fonte pequena, entregue propositalmente em outra casa que também tenha uma fonte.', goal: 1 },
+    { id: 'nextDoor', name: 'Não era aqui?', desc: 'Faça uma entrega em uma das 4 casas imediatamente ao lado daquela indicada pela dica.', goal: 1 },
+    { id: 'stuck', name: 'Preso no trânsito', desc: 'Fique parado por 15 segundos atrás de um pequeno trânsito antes de pegar o desvio.', goal: 1 },
+    { id: 'backOff', name: 'Melhor recuar', desc: 'Diante de um caminhão bloqueando a rua, recue até o cruzamento anterior sem virar a van.', goal: 1 },
+    { id: 'noTouch', name: 'Sem encostar', desc: 'Conclua uma partida sem encostar nos carros dos pequenos trânsitos nem nos caminhões.', goal: 1 },
+  ],
   PLACEHOLDER(),   // Bairro 8 (como o 7, em 8×8)
   PLACEHOLDER(),   // Bairro 9 (Encostas)
   PLACEHOLDER(),   // Nível 10 (Veneza)
