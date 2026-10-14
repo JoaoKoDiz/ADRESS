@@ -8,11 +8,13 @@ import * as THREE from 'three';
 import { box, cyl, sphere, at, mat, torus } from './models/kit.js';
 import { SHIRTS, HAIRS } from './data.js';
 import { WINTER } from './models/resident.js';
+import { buildPewReader } from './models/reader.js';
 
 const W = 13, D = 10, WALL_H = 4.6;                       // sala: x −13…13, z −10…10
 const FLOOR = '#9a5a2c', FLOOR2 = '#87491f', WALL = '#6e3a1e', WALL2 = '#5a2d16', TRIM = '#d9782c', WOOD = '#8a4a22', WOOD_D = '#5e3017';
 const RED = '#b0402e', RED2 = '#8e2e22', SKIN = '#f0c49a', PANTS = ['#3d4a66', '#4a3a2a', '#2f3b2f', '#5a4a6a'], EYES = '#2a1d14', CHEEK = '#f29a8a';
-export const GRILL_DOOR = { x: 0, z: 9.2 };                // onde o jogador aparece / sai (porta da frente, por dentro)
+export const GRILL_DOOR = { x: 0, z: 9.2 };
+export const COAT = '#4f6a3e';                             // casaco emprestado (verde-musgo)                // onde o jogador aparece / sai (porta da frente, por dentro)
 
 function neonTexture() {
   const c = document.createElement('canvas'); c.width = 512; c.height = 200; const g = c.getContext('2d');
@@ -30,7 +32,7 @@ function glowTexture() {
 }
 
 /** Morador no estilo do jogo (cabeção, olhos, bochechas, camisa cilíndrica); sentado (seatY) ou em pé; avental opcional. */
-function buildNPC({ shirt, hair, pants, seatY = 0, apron = false, k = 0, winter = null }) {
+export function buildNPC({ shirt, hair, pants, seatY = 0, apron = false, k = 0, winter = null }) {
   const BOOT = winter ? winter.boots : '#2b2522', HAND = winter ? winter.glove : SKIN;
   const root = new THREE.Group(), body = new THREE.Group(); root.add(body);
   const hip = seatY ? seatY + 0.04 : 0.62;                    // altura do quadril
@@ -70,7 +72,13 @@ function buildNPC({ shirt, hair, pants, seatY = 0, apron = false, k = 0, winter 
   };
   const armL = arm(-1), armR = arm(1);
   root.traverse(o => { if (o.isMesh) { o.castShadow = false; o.receiveShadow = false; } });
-  return { root, body, head, armL, armR, mouth, k };
+  // casaco emprestado (história do Grillby's): por cima de tudo, escondido até ser vestido
+  const coat = new THREE.Group(); coat.visible = false; body.add(coat);
+  coat.add(at(cyl(0.47, 0.53, seatY ? 0.66 : 0.86, COAT, 12), 0, seatY ? 0.92 : 0.82, 0));
+  coat.add(at(torus(0.34, 0.1, COAT, 6, 14), 0, 1.2, 0, Math.PI / 2, 0, 0));
+  for (const a of [armL, armR]) { const s = at(cyl(0.135, 0.125, 0.48, COAT, 8), 0, -0.24, 0); a.add(s); s.visible = false; a.userData.coat = s; }
+  const wear = on => { coat.visible = on; for (const a of [armL, armR]) a.userData.coat.visible = on; };
+  return { root, body, head, armL, armR, mouth, k, wear };
 }
 
 export function createGrillbyInside() {
@@ -93,10 +101,20 @@ export function createGrillbyInside() {
   for (let i = 0; i < 2 * D / 1.0; i++) add(box(2 * W, 0.1, 0.98, i % 2 ? FLOOR : FLOOR2), 0, -0.05, -D + 0.5 + i);
   for (let i = 0; i < 9; i++) add(box(0.04, 0.02, 2 * D, '#6e3818'), -W + 2.9 * i + 1.3, 0.01, 0);   // juntas
   add(box(2 * W + 0.6, WALL_H, 0.3, WALL), 0, WALL_H / 2, -D - 0.15);                               // fundo
-  for (const sx of [-1, 1]) add(box(0.3, WALL_H, 2 * D + 0.6, WALL), sx * (W + 0.15), WALL_H / 2, 0);   // laterais
+  add(box(0.3, WALL_H, 2 * D + 0.6, WALL), -(W + 0.15), WALL_H / 2, 0);                            // lateral oeste
+  // lateral leste com a JANELA (z 4…7.9, altura 1…2.8), ao lado da mesa do canto: dá para a rua e a quadra ao lado
+  const WZ0 = 4.0, WZ1 = 7.9, WY0 = 1.0, WY1 = 2.8;
+  add(box(0.3, WALL_H, WZ0 + D + 0.3, WALL), W + 0.15, WALL_H / 2, (-D - 0.3 + WZ0) / 2);
+  add(box(0.3, WALL_H, D + 0.3 - WZ1, WALL), W + 0.15, WALL_H / 2, (WZ1 + D + 0.3) / 2);
+  add(box(0.3, WY0, WZ1 - WZ0, WALL), W + 0.15, WY0 / 2, (WZ0 + WZ1) / 2);
+  add(box(0.3, WALL_H - WY1, WZ1 - WZ0, WALL), W + 0.15, (WALL_H + WY1) / 2, (WZ0 + WZ1) / 2);
+  for (const [y, h] of [[WY0, 0.14], [WY1, 0.14]]) add(box(0.42, h, WZ1 - WZ0 + 0.3, TRIM), W + 0.05, y, (WZ0 + WZ1) / 2);
+  for (const z of [WZ0, WZ1]) add(box(0.42, WY1 - WY0, 0.14, TRIM), W + 0.05, (WY0 + WY1) / 2, z);
+  add(box(0.12, WY1 - WY0, 0.08, TRIM), W + 0.1, (WY0 + WY1) / 2, (WZ0 + WZ1) / 2); add(box(0.12, 0.08, WZ1 - WZ0, TRIM), W + 0.1, (WY0 + WY1) / 2, (WZ0 + WZ1) / 2);
+  add(box(0.04, WY1 - WY0, WZ1 - WZ0, '#9fb6c8', { transparent: true, opacity: 0.12, depthWrite: false }), W + 0.2, (WY0 + WY1) / 2, (WZ0 + WZ1) / 2);
   for (let x = -W + 1; x < W; x += 1.2) add(box(0.06, WALL_H - 0.2, 0.05, WALL2), x, WALL_H / 2, -D + 0.02);   // tábuas verticais
   add(box(2 * W, 0.25, 0.1, TRIM), 0, 0.12, -D + 0.05); add(box(2 * W, 0.18, 0.1, TRIM), 0, WALL_H - 0.3, -D + 0.05);
-  for (const sx of [-1, 1]) { add(box(0.1, 0.25, 2 * D, TRIM), sx * (W - 0.05), 0.12, 0); for (const z of [-6, 0, 6]) lamp(sx * (W - 0.25), 2.6, z, 1.4); }
+  for (const sx of [-1, 1]) { add(box(0.1, 0.25, 2 * D, TRIM), sx * (W - 0.05), 0.12, 0); for (const z of [-6, 0, 6]) if (!(sx > 0 && z === 6)) lamp(sx * (W - 0.25), 2.6, z, 1.4); }   // (a leste, a janela fica no lugar da 3ª arandela)
   // frente baixa (não esconde nada da câmera) com a porta de entrada no meio
   for (const sx of [-1, 1]) add(box(W - 1.4, 0.8, 0.3, WALL), sx * (W + 1.4) / 2, 0.4, D + 0.15);
   add(box(2.8, 0.08, 0.6, '#3a1d0c'), 0, 0.02, D - 0.1);                                             // capacho
@@ -192,7 +210,7 @@ export function createGrillbyInside() {
 
   // ---- moradores ----
   const npcs = [];
-  const P = (o, x, z, ry, anim) => { const n = buildNPC(o); n.root.position.set(x, 0, z); n.root.rotation.y = ry; g.add(n.root); npcs.push({ ...n, anim, ry }); return n; };
+  const P = (o, x, z, ry, anim) => { const n = buildNPC(o); n.root.position.set(x, 0, z); n.root.rotation.y = ry; g.add(n.root); const e = { ...n, anim, ry }; npcs.push(e); return e; };
   const WN = WINTER, col = i => ({ shirt: WN.coats[(i * 3) % WN.coats.length], hair: HAIRS[(i * 3 + 1) % HAIRS.length], pants: PANTS[i % PANTS.length], k: i,   // clientes de inverno
     winter: { hat: WN.hats[(i * 5) % WN.hats.length], scarf: WN.scarves[(i * 7 + 1) % WN.scarves.length], glove: WN.gloves[(i * 3) % WN.gloves.length], boots: WN.boots[i % WN.boots.length], hatOn: i % 2 === 1 } });
   P({ ...col(0), winter: null, apron: true, shirt: '#2b2b2b' }, -0.8, CZ - 1.2, 0, 'wipe');                      // atendente atrás do balcão
@@ -205,10 +223,12 @@ export function createGrillbyInside() {
   P({ ...col(7), seatY: 0.66 }, TX - 3.4, TZ, Math.PI / 2, 'talkL');
   P({ ...col(8), seatY: 0.74 }, BX - 0.4, BOOTHS[0] - 1.35, 0, 'drink');                          // estofados
   P({ ...col(9), seatY: 0.74 }, BX + 0.6, BOOTHS[0] + 1.35, Math.PI, 'talkR');
-  P({ ...col(10), seatY: 0.74 }, BX - 0.2, BOOTHS[2] - 1.35, 0, 'listen');
   P({ ...col(11) }, 3.6, 1.6, -2.2, 'talkR'); solid(3.2, 1.2, 4.0, 2.0);                          // conversando em pé
   P({ ...col(12) }, 4.8, 0.9, 1.0, 'listen'); solid(4.4, 0.5, 5.2, 1.3);
   P({ ...col(13), seatY: 0.66 }, -11.4, 6.8, Math.PI / 2, 'drink');                                // mesinha
+
+  // ---- história (Nevasca): K na mesa do canto, dono do casaco atrás, lareira, janela para a nevasca ----
+  const story = buildStory(g, add, solid, P, col, BX, BOOTHS, W, D, WALL_H, WOOD, WOOD_D, TRIM, glowMat);
 
   let t = 0;
   function animNPC(n, dt) {
@@ -238,8 +258,115 @@ export function createGrillbyInside() {
     camera.position.copy(camPos); camera.lookAt(look.x, 0, look.z - 0.5);
   }
   return {
-    scene, camera, solids, door: GRILL_DOOR,
+    scene, camera, solids, door: GRILL_DOOR, story, setFP: on => story.setFP(on),
     nearDoor: (x, z) => Math.hypot(x - GRILL_DOOR.x, z - GRILL_DOOR.z) < 1.9,
-    update(dt, px, pz, snap = false) { t += dt; for (const n of npcs) animNPC(n, dt); updateCamera(px, pz, dt, snap); },
+    update(dt, px, pz, snap = false) { t += dt; for (const n of npcs) if (!n.still) animNPC(n, dt); story.tick(dt); if (!story.fp) updateCamera(px, pz, dt, snap); },
   };
+}
+
+// ---------- história do Grillby's (Nevasca) ----------
+// Mesa do canto inferior direito (a do fundo das 3 da parede leste): K no banco junto à parede da frente, olhando para o
+// norte; o jogador senta no banco oposto (olhando para o sul, para ele); a janela fica à esquerda do jogador, na parede leste.
+// Lá fora (só aparece pela janela): calçada, rua, a quadra ao lado com o poste aceso e a nevasca.
+function buildStory(g, add, solid, P, col, BX, BOOTHS, W, D, WALL_H, WOOD, WOOD_D, TRIM, glowMat) {
+  const TZ = BOOTHS[2], seatZ = TZ - 1.35, kZ = TZ + 1.35, SX = 11.0;
+  // K (mesmo modelo da igreja), sentado de frente para o jogador
+  const k = buildPewReader(0.8); k.position.set(SX, 0, kZ + 0.05); k.rotation.y = Math.PI / 2; k.visible = false; g.add(k);
+  k.updateMatrixWorld(true);
+  const kTop = new THREE.Box3().setFromObject(k).max.y;
+  // dono do casaco: na mesa atrás do jogador (a do meio), de costas para ele; o casaco no encosto
+  const owner = P({ ...col(10), seatY: 0.74 }, BX + 0.6, BOOTHS[1] + 1.35, Math.PI, 'drink');
+  const coatOnChair = new THREE.Group(); g.add(coatOnChair);
+  coatOnChair.add(at(box(1.1, 0.95, 0.16, COAT), BX - 1.0, 1.25, BOOTHS[1] + 2.08, 0.12, 0, 0));
+  coatOnChair.add(at(box(1.15, 0.2, 0.42, COAT), BX - 1.0, 1.78, BOOTHS[1] + 1.95));
+  for (const dx of [-0.42, 0.42]) coatOnChair.add(at(box(0.24, 0.7, 0.14, COAT), BX - 1.0 + dx, 1.05, BOOTHS[1] + 2.2, 0.2, 0, 0));
+  // lareira (parede oeste)
+  const FZ = 1.8, stone = '#857a6c', stone2 = '#6a6056';
+  add(box(1.3, 1.7, 2.8, stone), -W + 0.65, 0.85, FZ); add(box(1.0, 3.0, 2.2, stone2), -W + 0.5, 3.1, FZ);
+  add(box(0.5, 0.95, 1.6, '#1b120c'), -W + 1.1, 0.6, FZ); add(box(1.6, 0.16, 3.2, '#6e4426'), -W + 0.8, 1.75, FZ);
+  add(box(0.7, 0.1, 3.0, '#5d5249'), -W + 1.5, 0.05, FZ);
+  const fire = new THREE.Group(); fire.position.set(-W + 1.15, 0.2, FZ); g.add(fire);
+  const flames = [];
+  for (const [dz, h, c] of [[-0.35, 0.55, '#ff7a1a'], [0.05, 0.75, '#ffb03a'], [0.4, 0.5, '#ff5a1a'], [0, 0.4, '#ffe08a']]) {
+    const f = new THREE.Mesh(new THREE.ConeGeometry(0.18, 1, 6), new THREE.MeshBasicMaterial({ color: c, toneMapped: false })); f.position.set(0, h / 2, dz); f.scale.y = h; fire.add(f); flames.push({ f, h, ph: dz * 7 });
+  }
+  for (const dz of [-0.3, 0.3]) fire.add(at(cyl(0.08, 0.08, 0.9, '#4a2a14', 6), 0, 0.05, dz * 0.4, Math.PI / 2, 0.4, 0));
+  const fl = new THREE.PointLight('#ff8a3a', 14, 9, 1.6); fl.position.set(-W + 1.9, 1.0, FZ); g.add(fl);
+  const fsp = new THREE.Sprite(glowMat); fsp.scale.setScalar(2.4); fsp.position.set(-W + 1.3, 0.7, FZ); g.add(fsp);
+  solid(-W, FZ - 1.45, -W + 1.35, FZ + 1.45);
+  add(box(0.9, 0.42, 0.9, WOOD), -W + 2.6, 0.21, FZ); solid(-W + 2.15, FZ - 0.45, -W + 3.05, FZ + 0.45);   // banquinho perto do fogo
+  // quem foi resgatado: sentado no banquinho de frente para o fogo (escondido até o fim do resgate)
+  const look = col(15);                                            // o vizinho resgatado (o mesmo pela janela, lá fora e aqui dentro)
+  const guest = P({ ...look, seatY: 0.45 }, -W + 2.6, FZ, -Math.PI / 2, 'listen'); guest.root.visible = false; guest.wear(true);
+  const guestWalk = P({ ...look }, 0, 8, Math.PI, 'still'); guestWalk.still = true; guestWalk.root.visible = false; guestWalk.wear(true);
+  // ---- paredes de verdade só em primeira pessoa (vista de cima a frente é baixa e não há teto) ----
+  const fp = new THREE.Group(); fp.visible = false; g.add(fp);
+  for (const sx of [-1, 1]) fp.add(at(box(W - 1.4, WALL_H - 0.8, 0.3, '#6e3a1e'), sx * (W + 1.4) / 2, 0.8 + (WALL_H - 0.8) / 2, D + 0.15));
+  fp.add(at(box(3, WALL_H - 2.95, 0.3, '#6e3a1e'), 0, 2.95 + (WALL_H - 2.95) / 2, D + 0.15));
+  fp.add(at(box(2 * W + 0.6, 0.2, 2 * D + 0.6, '#3e2212'), 0, WALL_H + 0.1, 0));
+  for (let z = -D + 2; z < D; z += 3) fp.add(at(box(2 * W, 0.22, 0.3, '#2c170b'), 0, WALL_H - 0.1, z));
+  // ---- lá fora, visto pela janela ----
+  const out = new THREE.Group(); g.add(out);
+  const basic = (c, o = {}) => new THREE.MeshBasicMaterial({ color: c, ...o });
+  const plane = (w, h, m) => new THREE.Mesh(new THREE.PlaneGeometry(w, h), m);
+  const ground = plane(90, 100, basic('#7c858f')); ground.rotation.x = -Math.PI / 2; ground.position.set(W + 45, 0.01, 10); out.add(ground);
+  const road = plane(8, 100, basic('#565d66')); road.rotation.x = -Math.PI / 2; road.position.set(W + 7, 0.02, 10); out.add(road);
+  for (let z = -30; z < 50; z += 6) { const s = plane(0.25, 2.4, basic('#9aa2ac')); s.rotation.x = -Math.PI / 2; s.position.set(W + 7, 0.03, z); out.add(s); }
+  for (const [z0, z1, h] of [[-40, -14, 8], [-12, 2, 6.5], [16, 30, 9], [32, 50, 7]]) {   // a quadra ao lado (do outro lado da rua)
+    const b = new THREE.Mesh(new THREE.BoxGeometry(12, h, z1 - z0), basic('#2a3038')); b.position.set(W + 19, h / 2, (z0 + z1) / 2); out.add(b);
+    for (let z = z0 + 1.5; z < z1 - 1; z += 3) for (let y = 1.6; y < h - 1; y += 2.4) if ((z * 7 + y * 3) % 5 > 2) { const w = plane(1.1, 1.2, basic('#e8b860')); w.rotation.y = -Math.PI / 2; w.position.set(W + 12.95, y, z); out.add(w); }
+  }
+  const PX = W + 11.6, PZ = 9.6;                                   // o poste: na calçada da quadra ao lado, à esquerda de quem sai
+  out.add(at(cyl(0.09, 0.12, 4.4, '#20242a', 8), PX, 2.2, PZ)); out.add(at(box(0.9, 0.08, 0.08, '#20242a'), PX - 0.4, 4.35, PZ));
+  out.add(at(sphere(0.2, '#fff1c0', 8, 6), PX - 0.8, 4.2, PZ));
+  const pg = new THREE.Sprite(new THREE.SpriteMaterial({ map: glowMat.map, color: '#ffd9a0', blending: THREE.AdditiveBlending, transparent: true, depthWrite: false, toneMapped: false }));
+  pg.scale.setScalar(5.5); pg.position.set(PX - 0.8, 4.1, PZ); pg.renderOrder = 10; out.add(pg);
+  const pool = plane(6, 6, new THREE.MeshBasicMaterial({ map: glowMat.map, color: '#ffcf8a', transparent: true, opacity: 0.55, depthWrite: false, blending: THREE.AdditiveBlending }));
+  pool.rotation.x = -Math.PI / 2; pool.position.set(PX - 0.6, 0.05, PZ); pool.renderOrder = 9; out.add(pool);
+  const pl = new THREE.PointLight('#ffd08a', 18, 10, 1.6); pl.position.set(PX - 0.9, 3.8, PZ); out.add(pl);
+  // o vizinho de passagem (morador do Nevasca, com roupa de inverno): chega do norte pela calçada e para no poste
+  const walker = P({ ...look }, PX - 0.6, -24, 0, 'still'); walker.still = true; walker.root.visible = false; out.add(walker.root);
+  // névoa de neve em camadas (a rua some) e flocos voando com o vento
+  const veil = new THREE.MeshBasicMaterial({ color: '#cfd6de', transparent: true, opacity: 0.17, depthWrite: false });
+  for (const x of [1.6, 3.4, 5.2, 7.0, 9.0, 11.0, 14, 18, 24]) { const v = plane(120, 26, veil); v.rotation.y = -Math.PI / 2; v.position.set(W + x, 10, 10); out.add(v); }
+  const N = 2600, pos = new Float32Array(N * 3);
+  for (let i = 0; i < N; i++) { pos[i * 3] = W + 0.6 + Math.random() * 26; pos[i * 3 + 1] = Math.random() * 11; pos[i * 3 + 2] = -25 + Math.random() * 60; }
+  const pg2 = new THREE.BufferGeometry(); pg2.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+  const flakes = new THREE.Points(pg2, new THREE.PointsMaterial({ color: '#f4f8ff', size: 0.09, transparent: true, opacity: 0.95, depthWrite: false }));
+  out.add(flakes);
+  let t = 0, walkT = -1;
+  const st = {
+    k, kHead: { x: SX, y: kTop - 0.28, z: kZ }, seat: { x: SX, y: 1.6, z: seatZ }, owner, coatOnChair, guest, guestWalk, look, walkerNPC: walker,
+    coatPoint: { x: BX - 2.3, z: BOOTHS[1] + 1.4 }, kPoint: { x: BX - 2.3, z: TZ }, fire: { x: -W + 2.6, z: FZ }, window: { x: W, z: 5.95 },
+    fp: false,
+    setFP(on) { st.fp = on; fp.visible = on; },
+    /** O vizinho começa a chegar (cena da janela). */
+    startWalker() { walkT = 0; walker.root.visible = true; },
+    resetWalker() { walkT = -1; walker.root.visible = false; },
+    tick(dt) {
+      t += dt;
+      for (const { f, h, ph } of flames) { f.scale.y = h * (0.8 + 0.25 * Math.sin(t * 11 + ph) + 0.1 * Math.sin(t * 23 + ph)); }
+      fl.intensity = 13 + 3 * Math.sin(t * 9) + 2 * Math.sin(t * 17);
+      const p = flakes.geometry.attributes.position.array;
+      for (let i = 0; i < N; i++) {
+        p[i * 3 + 2] += dt * (11 + (i % 7)); p[i * 3 + 1] -= dt * (2 + (i % 5) * 0.4); p[i * 3] += Math.sin(t * 2 + i) * dt * 0.8;
+        if (p[i * 3 + 2] > 35 || p[i * 3 + 1] < 0) { p[i * 3 + 2] = -25 + Math.random() * 10; p[i * 3 + 1] = Math.random() * 11; }
+      }
+      flakes.geometry.attributes.position.needsUpdate = true;
+      if (walkT >= 0) {                                              // anda com dificuldade até o poste e se segura ali
+        walkT += dt;
+        const n = walker, arrive = 7.5, z0 = -24, z1 = PZ - 0.7, k2 = Math.min(1, walkT / arrive);
+        const z = z0 + (z1 - z0) * (1 - Math.pow(1 - k2, 1.6));
+        n.root.position.set(PX - 0.6 + 0.15 * Math.sin(walkT * 1.7), 0, z);
+        n.root.rotation.y = k2 < 1 ? 0.15 * Math.sin(walkT * 1.3) : -0.6 + 0.08 * Math.sin(walkT * 0.8);
+        n.body.rotation.x = 0.28 + 0.05 * Math.sin(walkT * 3);         // curvado contra o vento
+        n.body.rotation.z = 0.06 * Math.sin(walkT * (k2 < 1 ? 3.2 : 1.1));
+        n.body.position.y = n.body.position.y;                          // (altura fixa)
+        n.armR.rotation.set(-2.2, 0, 0.5);                               // braço protegendo o rosto
+        n.armL.rotation.set(k2 < 1 ? -0.4 + 0.3 * Math.sin(walkT * 3.2) : -1.2, 0, k2 < 1 ? -0.3 : -0.9);   // no poste: a mão se apoia nele
+        n.head.rotation.set(0.25, 0, 0);
+      }
+    },
+  };
+  return st;
 }

@@ -17,6 +17,7 @@ import { createUrsa } from './ursa.js';
 import { createSolar } from './solar.js';
 import { buildGrillbyLot } from './models/grillby.js';
 import { createGrillbyInside } from './grillbyInside.js';
+import { createGrillStory, GRILL_TALK_KEY } from './grillStory.js';
 import { createNight } from './night.js';
 import { createFarmOutside } from './farmOutside.js';
 import { createReality } from './reality.js';
@@ -984,8 +985,8 @@ const missions = createMissions(career); // Carreira: M perto da maquete abre as
 // Checkpoints de teste da história secundária (no cadeado, depois da senha): grava no progresso salvo as etapas até a
 // escolhida e apaga as posteriores. Cada cena lê esse progresso ao começar (caixa, K no terraço, igreja e sinos, bonde, Veneza).
 const STORY_STEPS = ['Nada', 'Conversa na casa do personagem — completa', 'Conversa no terraço — completa', 'Primeira conversa na igreja — completa',
-  'Trolley Problem — completo', 'Conversa em Veneza — completa', 'Segunda conversa na igreja — completa'];
-const storyKeys = () => [PARCEL_KEY, ROOF_KEY, CHURCH_TALK_KEY, TROLLEY_TALK_KEY, VENICE_TALK_KEY, CHURCH2_KEY];
+  'Trolley Problem — completo', 'Conversa em Veneza — completa', 'Segunda conversa na igreja — completa', "Encontro no Grillby's — completo"];
+const storyKeys = () => [PARCEL_KEY, ROOF_KEY, CHURCH_TALK_KEY, TROLLEY_TALK_KEY, VENICE_TALK_KEY, CHURCH2_KEY, GRILL_TALK_KEY];
 const STORY_CP = {
   names: STORY_STEPS,
   current() { const k = storyKeys(); let n = 0; while (n < k.length && flagOn(k[n])) n++; return n; },
@@ -1453,7 +1454,7 @@ function setupChurch() {
   // só aparecem na cena de saída (fora do quadro, antes de a câmera subir); depois da 1ª conversa (já na 2ª etapa), o azul fica caído
   if (churchTalkDone()) { churchBell.visible = true; churchBell.userData.bell.position.y = -bellDrop(churchBell); }   // 1ª conversa feita: o azul já está caído
   if (st >= 3) { greenBell.visible = true; greenBell.userData.bell.position.y = -bellDrop(greenBell); }
-  church.userData.pewK.visible = st < 3;                // depois da despedida ele já foi embora
+  church.userData.pewK.visible = st < 3 || st >= 4;     // depois da despedida ele já foi embora; depois do Grillby's está de volta (sem conversa por enquanto)
   church.position.set(MAP_W() / 2, 0, MAP_W() + CHURCH_Z); church.rotation.y = Math.PI;   // fachada virada para o bairro (norte)
   church.visible = false;
   world.scene.add(church);
@@ -1571,7 +1572,7 @@ const P = { p: 0.65 };                                  // pausa dentro da fala 
 const CHURCH2_KEY = 'adress.church.talk2', VENICE_TALK_KEY = 'adress.venice.talk1';
 const flagOn = k => { try { return localStorage.getItem(k) === '1'; } catch (e) { return false; } };
 /** 1 = 1ª conversa; 2 = despedida (depois de Veneza); 3 = concluída (ele já foi embora; nada se repete). */
-const churchStage = () => flagOn(CHURCH2_KEY) ? 3 : flagOn(VENICE_TALK_KEY) ? 2 : 1;
+const churchStage = () => flagOn(GRILL_TALK_KEY) ? 4 : flagOn(CHURCH2_KEY) ? 3 : flagOn(VENICE_TALK_KEY) ? 2 : 1;   // 4: depois do Grillby's (só presença)
 const bellDrop = b => BELL_SPOT.y - b.userData.h - BELL_SPOT.floor;
 const CHURCH2_LINES = [
   ['Você veio. ', P, 'Que bom.'],
@@ -1817,6 +1818,7 @@ let grillIn = null, insideOn = false, grill = null;
 // do mesmo ponto; ao sair ela acaba e a do bairro volta como estava (suspend não muda a preferência salva)
 const GRILL_OVERRIDE = { get on() { return grillMusic.playing; }, toggle() { if (grillMusic.playing) grillMusic.pause(); else grillMusic.resume(); } };          // grill: transição { dir: 'in' | 'out', t, swapped }
 const GRILL_FAR_VAN = { x: 1e6, z: 1e6 };
+const nearGrillK = () => !!grillIn && grillIn.story.k.visible && Math.hypot(walker.x - grillIn.story.kPoint.x, walker.z - grillIn.story.kPoint.z) < 1.9;
 /** Ponto da porta do Grillby's no bairro (local (3,3; 3,6) do lote, girado como o ponto). */
 function grillDoorWorld(out = 0) {
   const sp = SPOTS.spots[game.slotOf[GRILLBY]], ry = Math.atan2(sp.fx, sp.fz), c = Math.cos(ry), sn = Math.sin(ry), lx = 3.3, lz = 3.6 + out;
@@ -1826,18 +1828,49 @@ const nearGrillDoor = () => state === 'walk' && SNOWV && !roofWalk && game.layou
   (() => { const d = grillDoorWorld(0.9); return Math.hypot(walker.x - d.x, walker.z - d.z) < 1.9; })();
 function startGrill(dir) { if (dir === 'in') grillMusic.load().catch(() => {}); grill = { dir, t: 0, swapped: false }; walker.update(0, { x: 0, z: 0 }, 'screen', [], GRILL_FAR_VAN); setState('grill'); }
 function swapGrill() {
-  if (grill.dir === 'in') {
-    if (!grillIn) grillIn = createGrillbyInside();
-    grillIn.scene.add(walker.object); walker.setFloor(0);
-    walker.pose(grillIn.door.x, grillIn.door.z, -Math.PI / 2);      // junto à entrada, olhando para o salão
-    grillIn.camera.aspect = rig.camera.aspect; grillIn.camera.updateProjectionMatrix();
-    grillIn.update(0, walker.x, walker.z, true); insideOn = true;
-    renderer.compile(grillIn.scene, grillIn.camera);
-    music.suspend(true); grillMusic.stop(); music.setOverride(GRILL_OVERRIDE);
-    grillMusic.load().then(() => { if (insideOn) { grillMusic.play(0.4); music.refresh(); } }).catch(() => {});
-  } else leaveGrill();
+  if (grill.dir === 'in') { enterGrillScene(); grillIn.story.k.visible = grillStory.available(); }   // K na mesa do canto (história)
+  else leaveGrill();
 }
 /** Volta ao bairro, ao lado da entrada (a van fica onde estava). */
+function enterGrillScene() {
+  if (!grillIn) grillIn = createGrillbyInside();
+  grillIn.scene.add(walker.object); walker.setFloor(0);
+  walker.pose(grillIn.door.x, grillIn.door.z, -Math.PI / 2);      // junto à entrada, olhando para o salão
+  grillIn.camera.aspect = rig.camera.aspect; grillIn.camera.updateProjectionMatrix();
+  grillIn.update(0, walker.x, walker.z, true); insideOn = true;
+  renderer.compile(grillIn.scene, grillIn.camera);
+  music.suspend(true); grillMusic.stop(); music.setOverride(GRILL_OVERRIDE);
+  grillMusic.load().then(() => { if (insideOn) { grillMusic.play(0.4); music.refresh(); } }).catch(() => {});
+}
+// ---------- Grillby's: o encontro com o K (história; depois da 2ª conversa na igreja) ----------
+let storyPrompt = null;
+/** Poste do resgate: à esquerda de quem sai (out = ponto/rumo da saída), do outro lado da rua; livre, no mesmo nível e
+ *  com caminho reto livre até a porta. */
+function findPole(out) {
+  const boxes = walkSolids(), h0 = TERRAIN.h(out.x, out.z), c = Math.cos(out.heading), s = Math.sin(out.heading);
+  const inside = (x, z, m) => boxes.some(b => b.r ? Math.hypot(x - b.cx, z - b.cz) < b.r + m : x > b.x0 - m && x < b.x1 + m && z > b.z0 - m && z < b.z1 + m);
+  const okPt = (x, z) => !inside(x, z, 1.2) && Math.abs(TERRAIN.h(x, z) - h0) < 0.15 && x > 3 && z > 3 && x < MAP - 3 && z < MAP - 3;
+  const clear = (x, z) => { const n = Math.ceil(Math.hypot(x - out.x, z - out.z) / 0.6); for (let i = 1; i < n; i++) { const px = out.x + (x - out.x) * i / n, pz = out.z + (z - out.z) * i / n; if (inside(px, pz, 0.6) || Math.abs(TERRAIN.h(px, pz) - h0) > 0.15) return false; } return true; };
+  let best = null, bs = Infinity;
+  for (let a = 6; a <= 22; a += 2) for (let b = 8; b <= 26; b += 2) {
+    const x = out.x + c * a + s * b, z = out.z + s * a - c * b;          // (s, −c) = esquerda de quem sai
+    if (!okPt(x, z) || !clear(x, z)) continue;
+    const sc = Math.abs(Math.hypot(a, b) - 24) + (a < 9 ? 3 : 0);
+    if (sc < bs) { bs = sc; best = { x, z }; }
+  }
+  return best || { x: out.x + c * 8 + s * 10, z: out.z + s * 8 - c * 10 };
+}
+const grillStory = createGrillStory({
+  walker, rig, audio, talkBox, input, menu, grillMusic, stage,
+  get grillIn() { return grillIn; }, get world() { return world; },
+  flag: flagOn, doorWorld: grillDoorWorld, walkSolids: () => walkSolids(), groundH: (x, z) => TERRAIN.h(x, z), findPole,
+  prompt: t => { storyPrompt = t; },
+  setState: s => setState(s),
+  goOutside() { leaveGrill(); music.suspend(true); },
+  goInside() { enterGrillScene(); },
+  exitNormal() { leaveGrill(); walker.show(true); fade = 0; actionLock = 0.5; setState('walk'); },
+  toTitle() { endRoofScene(); },
+});
 function leaveGrill() {
   if (!insideOn) return;
   insideOn = false; world.scene.add(walker.object);
@@ -1855,6 +1888,7 @@ function updateGrill(dt) {
 
 function startNewRound(newMatch = true) {
   if (newMatch) { matchTimer.reset(); resetBumps(); }   // nova partida: cronômetro em 00:00 (começa no 1º quadro jogável) e batidas em 0
+  if (grillStory.active) grillStory.reset();
   if (insideOn) leaveGrill();
   grill = null;
   footDelivery = false; unmoor();
@@ -2060,9 +2094,17 @@ function update(dt, t) {
       walker.update(dt, input.axis(), 'screen', grillIn.solids, GRILL_FAR_VAN);
       grillIn.update(dt, walker.x, walker.z);
       actionLock = Math.max(0, actionLock - dt);
-      if (actionLock <= 0 && input.action() && grillIn.nearDoor(walker.x, walker.z)) startGrill('out');
+      if (actionLock <= 0 && input.action()) {
+        if (grillIn.nearDoor(walker.x, walker.z)) startGrill('out');
+        else if (nearGrillK()) grillStory.start();                   // história: sentar diante do K
+      }
       break;
     }
+    case 'gstory':                                   // Grillby's: o encontro com o K e o resgate (1ª pessoa)
+      van.stop();
+      if (insideOn) grillIn.update(dt, walker.x, walker.z);
+      grillStory.update(dt);
+      break;
     case 'laser':                                    // laser orbital: sem controles nem entregas até o fim da sequência
       van.stop();
       if (walker.visible) walker.update(dt, { x: 0, z: 0 }, 'car', [], van);
@@ -2208,7 +2250,8 @@ function update(dt, t) {
   const focusH = (state === 'ring' || state === 'dialog') ? pending : state === 'drive' ? nearHouse : -1;
   const onFoot = state === 'walk' || state === 'chat' || state === 'grill' || (footDelivery && (state === 'ring' || state === 'dialog'));   // (Grillby's: na transição a câmera fica no personagem)              // a câmera segue o personagem a pé
   moonUpdate(dt);                                 // Órbita: a lua gira por baixo de quem o jogador controla
-  if (!insideOn) rig.update(dt, onFoot ? { x: walker.x, z: walker.z, y: walker.floor, heading: walker.heading, speed: walker.speed, focus: null } : { x: van.x, z: van.z, y: heli.altitude, heading: van.heading, speed: van.speed, focus: null });   // sem câmera automática: quem controla é o jogador
+  if (!insideOn && state === 'gstory') { rig.update(dt, { x: walker.x, z: walker.z, y: walker.floor, heading: walker.heading, speed: 0, focus: null }); grillStory.camOut(rig.camera); }
+  else if (!insideOn) rig.update(dt, onFoot ? { x: walker.x, z: walker.z, y: walker.floor, heading: walker.heading, speed: walker.speed, focus: null } : { x: van.x, z: van.z, y: heli.altitude, heading: van.heading, speed: van.speed, focus: null });   // sem câmera automática: quem controla é o jogador
   if (state === 'talk') { rig.camera.position.copy(talkCam.pos); rig.camera.lookAt(talkCam.look); }   // enquadramento fixo da conversa
   if (state === 'laser') fxCine.applyCamera(rig.camera);
   if (state === 'cine' && cine) { rig.camera.position.copy(cine.camPos); rig.camera.lookAt(cine.camLook); }
@@ -2217,6 +2260,7 @@ function update(dt, t) {
   // ao sul do Bairro 1, a caminho da igreja, a névoa se afasta aos poucos (a igreja aparece de longe)
   const fs = churchOn ? THREE.MathUtils.smoothstep(van.z - MAP_W(), 40, 220) : 0, fn = 130 + 200 * fs, ff = 430 + 700 * fs;
   if (fog) { fog.near = 3000 + (fn - 3000) * fb; fog.far = 3200 + (ff - 3200) * fb; }
+  if (fog && state === 'gstory' && !insideOn && grillStory.ext) { fog.near = 1; fog.far = 22; }   // resgate: nevasca fechada (mal se vê o outro lado da rua)
   if (!sunSprite || sunSprite.parent !== world.scene) grabSun();
   if (sunSprite) sunSprite.position.set(rig.camera.position.x, 0, rig.camera.position.z).add(SUN_OFS);   // sol acompanha a câmera (fica sempre no mesmo lugar do céu, por mais longe que se dirija)
   const shake = Math.max(hint.shake, boom.shake);
@@ -2255,12 +2299,18 @@ function updateHUD() {
     return;
   }
   lock.set(false);
+  if (state === 'gstory') {                          // encontro com o K / resgate: só o aviso da ação
+    hud.setSub('', 'muted'); hud.setMain('', 'clue'); hintBtn.set('hidden');
+    hud.setPrompt(!!storyPrompt, stage.clientWidth / 2, stage.clientHeight * 0.66, 'up', storyPrompt || '');
+    hud.setFade(fade);
+    return;
+  }
   if (state === 'grill' || state === 'inside') {   // Grillby's: sem pista nem botões da partida
     hud.setSub(insideOn ? "GRILLBY'S  ·  WASD / setas: andar  ·  E na porta: sair" : '', 'muted');
     hud.setMain(insideOn ? "Grillby's" : '', 'clue');
     hintBtn.set('hidden');
-    const near = state === 'inside' && grillIn.nearDoor(walker.x, walker.z);
-    if (near) { grillIn.camera.updateMatrixWorld(); promptPos.set(walker.x, 2.7, walker.z).project(grillIn.camera); hud.setPrompt(true, (promptPos.x + 1) / 2 * stage.clientWidth, (1 - promptPos.y) / 2 * stage.clientHeight, 'up', 'Sair'); }
+    const near = state === 'inside' && grillIn.nearDoor(walker.x, walker.z), nk = state === 'inside' && nearGrillK();
+    if (near || nk) { grillIn.camera.updateMatrixWorld(); promptPos.set(walker.x, 2.7, walker.z).project(grillIn.camera); hud.setPrompt(true, (promptPos.x + 1) / 2 * stage.clientWidth, (1 - promptPos.y) / 2 * stage.clientHeight, 'up', near ? 'Sair' : 'Conversar'); }
     else hud.setPrompt(false);
     hud.setFade(fade);
     return;
@@ -2432,7 +2482,7 @@ window.ADRESS = {
   get careerLevel() { return careerLevel; },
   setCareerLevel(l) { careerLevel = l; },
   setFreeLevel(l) { freeLevel = l; },
-  walker, jamSound, cityAmb, train, walkSolids, trolley, get tseq() { return tseq; }, get FAVELA() { return FAVELA; }, traffic, tractors, chickens, plow, workTraffic, banks, get SNOWV() { return SNOWV; }, get MEDV() { return MEDV; }, medLife, get chatNpc() { return chatNpc; }, night, get grillIn() { return grillIn; }, get insideOn() { return insideOn; }, get FARMLAND() { return FARMLAND; }, get GARDV() { return GARDV; }, gardGate, gateOpen, openGate,
+  walker, jamSound, cityAmb, train, walkSolids, trolley, get tseq() { return tseq; }, get FAVELA() { return FAVELA; }, traffic, tractors, chickens, plow, workTraffic, banks, get SNOWV() { return SNOWV; }, get MEDV() { return MEDV; }, medLife, get chatNpc() { return chatNpc; }, night, get grillIn() { return grillIn; }, get insideOn() { return insideOn; }, grillStory, grillDoor: o => grillDoorWorld(o), get churchPewK() { return church && church.userData.pewK.visible; }, churchStage, get FARMLAND() { return FARMLAND; }, get GARDV() { return GARDV; }, gardGate, gateOpen, openGate,
   get levelSelect() { return levelSelect; }, matchTimer, get bumps() { return bumps; }, HOUSES, shopFronts,
   shop,
   startGame: m => startFree(m), newRound: () => startNewRound(),

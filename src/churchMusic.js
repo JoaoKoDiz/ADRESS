@@ -13,7 +13,7 @@ function decodeDataUrl(url) {
 
 /** `url`: faixa embutida (padrão: a da aproximação); `VOLUME`: volume máximo; `onEnd`: chamada quando a faixa termina sozinha. */
 export function createChurchMusic(audio, url = trackUrl, VOLUME = 0.8, onEnd = null, loop = false, sfx = false) {   // sfx: é efeito, não música
-  let buffer = null, loading = null, src = null, gain = null, t0 = 0, offset = 0, paused = false, fadeEnd = 0;
+  let buffer = null, loading = null, src = null, gain = null, t0 = 0, offset = 0, paused = false, fadeEnd = 0, lvl = 1;   // lvl: volume relativo (setLevel)
   function startAt(off, fade) {                        // toca a partir de `off` segundos, subindo o volume em `fade`
     const ac = audio.ctx;
     if (ac.state === 'suspended') ac.resume();
@@ -21,7 +21,7 @@ export function createChurchMusic(audio, url = trackUrl, VOLUME = 0.8, onEnd = n
     src = ac.createBufferSource(); src.buffer = buffer; src.loop = loop; src.connect(gain);
     const at = ac.currentTime + 0.02;
     t0 = at - off;
-    gain.gain.setValueAtTime(0, at); gain.gain.linearRampToValueAtTime(VOLUME, at + fade);
+    gain.gain.setValueAtTime(0, at); gain.gain.linearRampToValueAtTime(VOLUME * lvl, at + fade);
     src.start(at, off);
     const me = src; src.onended = () => { if (src === me) { src = null; if (onEnd) onEnd(); } };
   }
@@ -62,6 +62,11 @@ export function createChurchMusic(audio, url = trackUrl, VOLUME = 0.8, onEnd = n
       this.stop(); fadeEnd = 0;
       startAt(0, fade);
       return true;
+    },
+    /** Volume relativo (0..1) com transição de `t` s (ex.: abaixar a música durante uma cena). */
+    setLevel(k, t = 1.5) {
+      lvl = k; if (!gain || !audio.ctx) return;
+      const now = audio.ctx.currentTime; gain.gain.cancelScheduledValues(now); gain.gain.setValueAtTime(gain.gain.value, now); gain.gain.linearRampToValueAtTime(VOLUME * lvl, now + t);
     },
     /** Pausa guardando a posição. */
     pause() {

@@ -18,6 +18,7 @@ export function createWalker(scene) {
   root.traverse(o => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = false; } });
 
   const st = { x: 0, z: 0, heading: 0, speed: 0 };
+  let speedMul = 1;
   let phase = 0;
 
   let area = null;                             // Veneza: onde dá para pisar (ilhas, praças, pontes); fora disso é água
@@ -82,6 +83,8 @@ export function createWalker(scene) {
     setLowGravity(on) { lowG = !!on; yAbs = floorY; vy = 0; apply(); },
     /** Põe o personagem num ponto, olhando para `heading` (Shop). */
     pose(x, z, heading) { st.x = x; st.z = z; st.heading = heading; yAbs = floorY; vy = 0; apply(); },
+    /** Multiplica a velocidade a pé (ex.: vento da nevasca). */
+    setSpeedMul(k) { speedMul = k; },
     show(on) { root.visible = on; if (!on) st.speed = 0; },
     /** Põe o personagem ao lado da porta do motorista (tenta os dois lados da van; sem espaço, afasta mais). */
     /** strict (Veneza): sem lugar livre ao lado (só água), não desce e retorna false. */
@@ -108,14 +111,14 @@ export function createWalker(scene) {
       let move = 0;
       if (mode === 'car') {
         st.heading += axis.x * TURN * dt;
-        move = axis.z < 0 ? SPEED : axis.z > 0 ? -BACK_SPEED : 0;
+        move = (axis.z < 0 ? SPEED : axis.z > 0 ? -BACK_SPEED : 0) * speedMul;
       } else if (axis.x || axis.z) {
         const want = Math.atan2(axis.z, axis.x);
         let d = want - st.heading;
         while (d > Math.PI) d -= 2 * Math.PI;
         while (d < -Math.PI) d += 2 * Math.PI;
         st.heading += d * Math.min(1, dt * 14);
-        move = SPEED;
+        move = SPEED * speedMul;
       }
       st.speed = move;
       const dx = Math.cos(st.heading) * move * dt, dz = Math.sin(st.heading) * move * dt;
