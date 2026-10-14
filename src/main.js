@@ -638,7 +638,7 @@ function useNeighborhood(kind) {
   configureGrid(kind);
   let w = worlds[kind];
   if (!w) {                                     // primeira vez: constrói (escondido pelo fade)
-    w = worlds[kind] = createWorld({ renderer, buildLot: buildAnyLot, buildResident: kind === 'snow8' ? h => buildResident(h, { winter: true }) : buildResident, yardBuilders: kind === 'snow8' ? YARD_BUILDERS_SNOW() : YARD_BUILDERS, pool: POOLS[kind], dry: kind === 'city6' || kind === 'city7' || kind === 'city8', venice: kind === 'venice8', snow: kind === 'snow8', moon: kind === 'moon8', farm: kind === 'farm10' });
+    w = worlds[kind] = createWorld({ renderer, buildLot: buildAnyLot, buildResident: kind === 'snow8' ? h => buildResident(h, { winter: true }) : buildResident, yardBuilders: kind === 'snow8' ? YARD_BUILDERS_SNOW() : YARD_BUILDERS, pool: POOLS[kind], dry: kind === 'city6' || kind === 'city7' || kind === 'city8' || kind === 'forest8', venice: kind === 'venice8', snow: kind === 'snow8', moon: kind === 'moon8', farm: kind === 'farm10' });
     if (kind === 'night10') night.setup(w);     // Penumbra: noite, asfalto molhado
     if (kind === 'forest8') forestFx.setup(w, FORESTV, MAP);   // Bosque: tarde de outono, folhas
     if (kind === 'farm10') farmOut.build(w.scene, MAP, VAN_START.x);   // Colheita: hectares de plantação em volta, tratores e colheitadeiras
@@ -1977,7 +1977,10 @@ function update(dt, t) {
     const playing = IN_GAME.includes(state) || state === 'walk', me = walker.visible ? walker : van;
     forestCars.update(dt, obs, playing ? me : null);
     if (!playing) forestCars.silence();
-    if (neighborhood === 'forest8') forestFx.update(dt, { x: me.x, z: me.z });
+    if (neighborhood === 'forest8') {               // copas transparentes quando escondem quem joga ou a casa do destino
+      const hd = playing && game.route ? game.route[game.step] : -1, sp = hd >= 0 && game.slotOf[hd] != null ? FORESTV.spots[game.slotOf[hd]] : null;
+      forestFx.update(dt, { x: me.x, y: TERRAIN.h(me.x, me.z), z: me.z }, rig.camera.position, sp ? { x: sp.cx, y: sp.y + 2.5, z: sp.cz } : null);
+    }
   }
   if (neighborhood === 'snow8') {                 // Nevasca: limpa-neve e atalhos
     const c = Math.cos(van.heading), s2 = Math.sin(van.heading), obs = [];

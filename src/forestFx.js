@@ -1,62 +1,122 @@
-// Nível 22 (Bosque): clima de outono. setup = céu levemente nublado, luz dourada suave, árvores de fora com copas de outono;
-// folhas no chão (InstancedMesh: gramados, calçadas e beiras de rua) e algumas folhas caindo devagar perto do jogador
-// (só visual: sem colisão, não mexem na van).
+// Nível 22 (Bosque): clima de outono acolhedor.
+//  - setup: céu claro levemente nublado, luz quente e suave (sem filtro: as cores das casas continuam as mesmas);
+//    o bosque inteiro instanciado (árvores do plano + floresta densa em volta do bairro), tapetes de folhas sob as árvores,
+//    folhas soltas no chão e nas margens das ruas;
+//  - update: copas que escondem quem joga ou a casa do destino ficam transparentes; folhas caindo devagar perto do jogador.
+// Folhas são só visuais (sem colisão). Troncos do bosque de fora perto do bairro entram em SOLIDS.
 import * as THREE from 'three';
 import { AUTUMN } from './models/forest.js';
+import { SOLIDS } from './layout.js';
 
-const LEAF_COLS = ['#e8822a', '#d9701c', '#e8c23a', '#c63a24', '#9a6232', '#d24a2c', '#f0963a'];
+const LEAF_COLS = ['#ec7f22', '#de6c18', '#eaa82a', '#f2bb3a', '#c63a24', '#9a6232', '#d24a2c', '#f39236'];
+const OUT_COLS = ['orange', 'orange', 'orange', 'gold', 'gold', 'gold', 'red', 'brown', 'yellow', 'orange', 'gold', 'green'];
 
 export function createForestFx() {
   const root = new THREE.Group(); root.name = 'forest-fx';
-  let fall = null, built = false, t = 0;
-  const geo = new THREE.PlaneGeometry(0.34, 0.24); geo.rotateX(-Math.PI / 2);
+  let fall = null, built = false, t = 0, crowns = null, ghostT = 0;
   return {
     object: root,
     /** Uma vez, na criação do mundo do Bosque. */
     setup(w, V, MAP) {
       const sc = w.scene;
-      sc.background = new THREE.Color('#d8cdb8'); if (sc.fog) { sc.fog.color.set('#d8cdb8'); sc.fog.near = 260; sc.fog.far = 900; }   // nublado claro, quente
-      if (w.sunLight) { w.sunLight.intensity *= 0.85; w.sunLight.color.set('#ffd9a0'); }        // tarde dourada (sombras suaves)
-      const hemi = sc.children.find(o => o.isHemisphereLight); if (hemi) { hemi.color.set('#fff0d8'); hemi.groundColor.set('#9a8a5a'); }
-      // árvores de fora: copas verdes viram outono (cada cor original → uma cor de outono)
-      const OUT = { '4f9a45': AUTUMN.orange[0], '5ea84e': AUTUMN.yellow[0], '3f8a3c': AUTUMN.red[0], '6db256': AUTUMN.yellow[1] };   // LEAVES de world.js
+      sc.background = new THREE.Color('#e3d6bc'); if (sc.fog) { sc.fog.color.set('#e3d6bc'); sc.fog.near = 240; sc.fog.far = 820; }
+      if (w.sunLight) { w.sunLight.intensity *= 0.9; w.sunLight.color.set('#ffdcaa'); }          // tarde quente e suave
+      const hemi = sc.children.find(o => o.isHemisphereLight); if (hemi) { hemi.color.set('#fff2de'); hemi.groundColor.set('#a08a58'); }
+      // árvores de fora que já existiam: copas verdes viram outono
+      const OUT = { '4f9a45': AUTUMN.orange[0], '5ea84e': AUTUMN.gold[0], '3f8a3c': AUTUMN.red[0], '6db256': AUTUMN.gold[1], '2f7a45': AUTUMN.brown[0], '3a8a50': AUTUMN.orange[1] };
       sc.traverse(o => {
         if (!o.isMesh || !o.material || Array.isArray(o.material) || !o.material.color || o.parent?.name === 'neighborhood') return;
         const to = OUT[o.material.color.getHexString()]; if (!to) return;
-        o.material = o.material.clone(); o.material.color.set(to);           // (cópia: o material é compartilhado com os outros bairros)
+        o.material = o.material.clone(); o.material.color.set(to);
       });
-      // folhas no chão: espalhadas fora das casas (na grama, nas calçadas e na beira das ruas); nada no meio da pista
       let s = 77; const rnd = () => (s = (s * 16807) % 2147483647) / 2147483647;
+      const inLot = (x, z, m = 0) => V.spots.some(sp => x > sp.box.x0 - m && x < sp.box.x1 + m && z > sp.box.z0 - m && z < sp.box.z1 + m);
+      // ---- floresta densa em volta do bairro (fora da sebe; a estrada de acesso fica livre) ----
+      const outTrees = [];
+      for (let z = -230; z < MAP + 230; z += 6.5) for (let x = -230; x < MAP + 230; x += 6.5) {
+        const px = x + (rnd() - 0.5) * 4, pz = z + (rnd() - 0.5) * 4;
+        if (px > -4 && px < MAP + 4 && pz > -4 && pz < MAP + 4) continue;
+        if (Math.abs(px - 104.6) < 9 && pz < 0) continue;
+        const d = Math.max(-px, px - MAP, -pz, pz - MAP);
+        if (rnd() < 0.12 + Math.max(0, d - 150) / 300) continue;
+        const r = rnd();
+        outTrees.push({ x: px, z: pz, y: 0, s: 1.0 + rnd() * 0.9, type: r < 0.55 ? 'round' : r < 0.78 ? 'wide' : 'tall', color: OUT_COLS[Math.floor(rnd() * OUT_COLS.length)], k: rnd(), out: true });
+        if (d < 70) { const b = { x0: px - 0.5, x1: px + 0.5, z0: pz - 0.5, z1: pz + 0.5 }; SOLIDS.push(b); w.extraSolids.push(b); }   // troncos perto: a van bate
+      }
+      // ---- partes das árvores (tronco + 2–3 copas), como autumnTree em models/forest.js ----
+      const trunks = [], cr = [];
+      for (const T of V.trees.concat(outTrees)) {
+        const { x, y, z, s } = T, C = AUTUMN[T.color] || AUTUMN.orange, c = i => C[(i + Math.floor(T.k * 3)) % 3];
+        if (T.type === 'tall') {
+          trunks.push([x, y + 1.7 * s, z, 0.2 * s, 3.4 * s, '#e6dfcf']);
+          cr.push([x, y + 4.4 * s, z, 1.35 * s, 2.1 * s, 1.35 * s, c(0), T.out], [x + 0.5 * s, y + 3.6 * s, z + 0.3 * s, 0.85 * s, 0.85 * s, 0.85 * s, c(1), T.out]);
+        } else if (T.type === 'wide') {
+          trunks.push([x, y + 1.0 * s, z, 0.38 * s, 2.0 * s, '#6b4526']);
+          cr.push([x, y + 2.9 * s, z, 2.6 * s, 1.35 * s, 2.3 * s, c(0), T.out], [x - 1.2 * s, y + 3.3 * s, z + 0.7 * s, 1.35 * s, 1.35 * s, 1.35 * s, c(1), T.out], [x + 1.3 * s, y + 3.2 * s, z - 0.5 * s, 1.25 * s, 1.25 * s, 1.25 * s, c(2), T.out]);
+        } else {
+          trunks.push([x, y + 1.2 * s, z, 0.32 * s, 2.4 * s, '#6b4526']);
+          cr.push([x, y + 3.2 * s, z, 1.9 * s, 1.9 * s, 1.9 * s, c(0), T.out], [x + 1.0 * s, y + 2.8 * s, z + 0.4 * s, 1.25 * s, 1.25 * s, 1.25 * s, c(1), T.out], [x - 0.8 * s, y + 4.0 * s, z - 0.3 * s, 1.15 * s, 1.15 * s, 1.15 * s, c(2), T.out]);
+        }
+      }
+      const m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), e = new THREE.Euler(), v = new THREE.Vector3(), sv = new THREE.Vector3(), col = new THREE.Color();
+      const tm = new THREE.InstancedMesh(new THREE.CylinderGeometry(0.75, 1, 1, 6), new THREE.MeshStandardMaterial({ roughness: 0.9, flatShading: true }), trunks.length);
+      trunks.forEach(([x, y, z, r, hh, c], i) => { tm.setMatrixAt(i, m4.compose(v.set(x, y, z), q.identity(), sv.set(r, hh, r))); tm.setColorAt(i, col.set(c)); });
+      tm.castShadow = true; tm.receiveShadow = true; root.add(tm);
+      const blob = new THREE.IcosahedronGeometry(1, 0), N = cr.length;
+      const op = new THREE.InstancedMesh(blob, new THREE.MeshStandardMaterial({ roughness: 0.85, flatShading: true }), N);
+      const gh = new THREE.InstancedMesh(blob, new THREE.MeshStandardMaterial({ roughness: 0.85, flatShading: true, transparent: true, opacity: 0.22, depthWrite: false }), N);
+      const mats = [], zero = new THREE.Matrix4().makeScale(0, 0, 0);
+      cr.forEach(([x, y, z, a, b, c2, cc], i) => {
+        e.set(rnd() * 0.6, rnd() * 6.3, rnd() * 0.6); q.setFromEuler(e);
+        const M = new THREE.Matrix4().compose(v.set(x, y, z), q, sv.set(a, b * 0.92, c2)); mats.push(M);
+        op.setMatrixAt(i, M); gh.setMatrixAt(i, zero); col.set(cc); op.setColorAt(i, col); gh.setColorAt(i, col);
+      });
+      op.castShadow = true; op.receiveShadow = true; gh.frustumCulled = false; root.add(op, gh);
+      crowns = { op, gh, mats, data: cr, ghost: new Set(), zero };
+      // ---- tapetes de folhas sob as árvores (manchas laranja/terrosas no chão; nunca na pista nem nos lotes) ----
+      const disc = new THREE.CircleGeometry(1, 9); disc.rotateX(-Math.PI / 2);
+      const carp = [];
+      for (const T of V.trees.concat(outTrees)) {
+        let r = (T.type === 'wide' ? 3.0 : 2.4) * T.s;
+        if (!T.out) { r = Math.min(r, V.roadDist(T.x, T.z) - 4.3); if (r < 0.8 || inLot(T.x, T.z, r)) continue; }
+        carp.push([T.x + (rnd() - 0.5), T.y + 0.1 + rnd() * 0.01, T.z + (rnd() - 0.5), r, ['#c9762a', '#b8692a', '#a8743e', '#d08a34', '#9a6a3a'][Math.floor(rnd() * 5)]]);
+      }
+      const cm = new THREE.InstancedMesh(disc, new THREE.MeshLambertMaterial(), carp.length);
+      carp.forEach(([x, y, z, r, c], i) => { cm.setMatrixAt(i, m4.compose(v.set(x, y, z), q.setFromEuler(e.set(0, rnd() * 6, 0)), sv.set(r, 1, r * (0.75 + rnd() * 0.3)))); cm.setColorAt(i, col.set(c)); });
+      cm.receiveShadow = true; root.add(cm);
+      // ---- folhas soltas: sob as árvores, nas margens das ruas e espalhadas (nada no meio da pista nem dentro dos lotes) ----
+      const geo = new THREE.PlaneGeometry(0.36, 0.26); geo.rotateX(-Math.PI / 2);
       const pts = [];
-      for (let k = 0; pts.length < 2600 && k < 40000; k++) {
-        const x = 2 + rnd() * (MAP - 4), z = 2 + rnd() * (MAP - 4), d = V.roadDist(x, z);
-        if (d < 2.6 || V.spots.some(sp => Math.hypot(sp.px - x, sp.pz - z) < 6.5)) continue;
-        if (d < 5.2 && rnd() < 0.3) continue;
+      for (let k = 0; pts.length < 7000 && k < 90000; k++) {
+        let x, z; const r0 = rnd();
+        if (r0 < 0.5) { const T = V.trees[Math.floor(rnd() * V.trees.length)], a = rnd() * 6.3, d = rnd() * 3.4 * T.s; x = T.x + Math.cos(a) * d; z = T.z + Math.sin(a) * d; }
+        else { x = 2 + rnd() * (MAP - 4); z = 2 + rnd() * (MAP - 4); }
+        const d = V.roadDist(x, z);
+        if (d < 2.8 || inLot(x, z)) continue;
+        if (r0 >= 0.5 && d > 6.5 && rnd() < 0.5) continue;                     // mais nas margens das ruas
         pts.push([x, z]);
-        if (rnd() < 0.5) for (let j = 0; j < 3; j++) pts.push([x + (rnd() - 0.5) * 1.6, z + (rnd() - 0.5) * 1.6]);   // montinhos
       }
       const im = new THREE.InstancedMesh(geo, new THREE.MeshLambertMaterial({ side: THREE.DoubleSide }), pts.length);
-      const m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), e = new THREE.Euler(), col = new THREE.Color();
       pts.forEach(([x, z], i) => {
         e.set((rnd() - 0.5) * 0.3, rnd() * 6.3, (rnd() - 0.5) * 0.3); q.setFromEuler(e);
-        const sc2 = 0.8 + rnd() * 0.9; m4.compose(new THREE.Vector3(x, V.h(x, z) + 0.13 + rnd() * 0.02, z), q, new THREE.Vector3(sc2, 1, sc2));
-        im.setMatrixAt(i, m4); im.setColorAt(i, col.set(LEAF_COLS[Math.floor(rnd() * LEAF_COLS.length)]));
+        const k = 0.8 + rnd() * 0.9; im.setMatrixAt(i, m4.compose(v.set(x, V.h(x, z) + 0.13 + rnd() * 0.02, z), q, sv.set(k, 1, k)));
+        im.setColorAt(i, col.set(LEAF_COLS[Math.floor(rnd() * LEAF_COLS.length)]));
       });
       im.receiveShadow = true; im.frustumCulled = false; root.add(im);
-      // folhas caindo: poucas, perto de quem joga
-      const N = 60, fg = new THREE.PlaneGeometry(0.3, 0.22);
-      fall = new THREE.InstancedMesh(fg, new THREE.MeshLambertMaterial({ side: THREE.DoubleSide }), N); fall.frustumCulled = false;
-      fall.userData.p = Array.from({ length: N }, () => ({ x: 0, z: 0, y: -1, sp: 0.6 + Math.random() * 0.5, ph: Math.random() * 6, rs: 1 + Math.random() * 2 }));
-      for (let i = 0; i < N; i++) fall.setColorAt(i, col.set(LEAF_COLS[i % LEAF_COLS.length]));
+      // ---- folhas caindo: poucas, perto de quem joga ----
+      const NF = 70, fg = new THREE.PlaneGeometry(0.3, 0.22);
+      fall = new THREE.InstancedMesh(fg, new THREE.MeshLambertMaterial({ side: THREE.DoubleSide }), NF); fall.frustumCulled = false;
+      fall.userData.p = Array.from({ length: NF }, () => ({ x: 0, z: 0, y: -1, sp: 0.6 + Math.random() * 0.5, ph: Math.random() * 6, rs: 1 + Math.random() * 2 }));
+      for (let i = 0; i < NF; i++) fall.setColorAt(i, col.set(LEAF_COLS[i % LEAF_COLS.length]));
       root.add(fall); sc.add(root); built = true;
     },
-    /** p: posição de quem joga (van ou personagem). */
-    update(dt, p) {
+    /** p: quem joga (x, y, z); cam: posição da câmera; dest: centro da casa do destino ({x, y, z}) ou null. */
+    update(dt, p, cam, dest) {
       if (!built || !fall) return;
       t += dt;
       const m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), e = new THREE.Euler(), v = new THREE.Vector3(), one = new THREE.Vector3(1, 1, 1);
       fall.userData.p.forEach((l, i) => {
-        if (l.y < 0 || !p || Math.hypot(l.x - p.x, l.z - p.z) > 45) {   // renasce numa copa perto (acima de quem joga)
+        if (l.y < 0 || !p || Math.hypot(l.x - p.x, l.z - p.z) > 45) {
           if (!p) { l.y = -1; m4.makeScale(0, 0, 0); fall.setMatrixAt(i, m4); return; }
           const a = Math.random() * 6.3, r = 6 + Math.random() * 34; l.x = p.x + Math.cos(a) * r; l.z = p.z + Math.sin(a) * r; l.y = 4 + Math.random() * 6;
         }
@@ -66,6 +126,27 @@ export function createForestFx() {
         fall.setMatrixAt(i, m4.compose(v.set(l.x, l.y, l.z), q, one));
       });
       fall.instanceMatrix.needsUpdate = true;
+      // copas entre a câmera e quem joga (ou a casa do destino) ficam transparentes
+      ghostT -= dt;
+      if (!crowns || !cam || ghostT > 0) return;
+      ghostT = 0.08;
+      const segs = [];
+      if (p) segs.push([cam, { x: p.x, y: (p.y || 0) + 1.2, z: p.z }]);
+      if (dest) segs.push([cam, dest]);
+      const now = new Set(), D = crowns.data;
+      for (let i = 0; i < D.length; i++) {
+        const c = D[i], r = Math.max(c[3], c[4], c[5]) * 0.95;
+        for (const [A, B] of segs) {
+          const dx = B.x - A.x, dy = B.y - A.y, dz = B.z - A.z, L2 = dx * dx + dy * dy + dz * dz || 1;
+          const u = Math.max(0, Math.min(1, ((c[0] - A.x) * dx + (c[1] - A.y) * dy + (c[2] - A.z) * dz) / L2));
+          if (Math.hypot(A.x + dx * u - c[0], A.y + dy * u - c[1], A.z + dz * u - c[2]) < r) { now.add(i); break; }
+        }
+      }
+      let ch = false;
+      for (const i of crowns.ghost) if (!now.has(i)) { crowns.op.setMatrixAt(i, crowns.mats[i]); crowns.gh.setMatrixAt(i, crowns.zero); ch = true; }
+      for (const i of now) if (!crowns.ghost.has(i)) { crowns.op.setMatrixAt(i, crowns.zero); crowns.gh.setMatrixAt(i, crowns.mats[i]); ch = true; }
+      crowns.ghost = now;
+      if (ch) { crowns.op.instanceMatrix.needsUpdate = true; crowns.gh.instanceMatrix.needsUpdate = true; }
     },
   };
 }

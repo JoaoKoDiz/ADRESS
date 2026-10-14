@@ -7,7 +7,7 @@ import { FOREST } from '../forestPlan.js';
 
 const ASPH = '#5d6470', GRASS = '#93a256', EARTH = '#8a7152', STONE = '#9c8f7a';
 export const AUTUMN = {
-  orange: ['#e8822a', '#d9701c', '#f0963a'], yellow: ['#e8c23a', '#f2d24e', '#d8ae2a'], red: ['#c63a24', '#b3301e', '#d24a2c'],
+  orange: ['#ec7f22', '#de6c18', '#f39236'], gold: ['#eaa82a', '#f2bb3a', '#d99424'], yellow: ['#e8c23a', '#f2d24e', '#d8ae2a'], red: ['#c63a24', '#b3301e', '#d24a2c'],
   brown: ['#9a6232', '#8a552a', '#a8703e'], green: ['#5e8f3a', '#6c9a40', '#4f7f34'], pine: ['#2f5f3a', '#3a6b42', '#2f5f3a'],
 };
 const leafMat = c => mat(c, { flatShading: true });
@@ -69,7 +69,7 @@ export function buildForestScene(g, V, MAP, HEDGE) {
     if (r.axis === 'z') { add(box(r.x1 - r.x0, 0.3, len, ASPH), cx, ym - 0.12, cz, -ang, 0, 0); for (const x of [r.x0 - 0.3, r.x1 + 0.3]) add(box(0.6, r.h1 + 0.6, r.z1 - r.z0, STONE), x, (r.h1 + 0.6) / 2 - 0.3, cz); }
     else { add(box(len, 0.3, r.z1 - r.z0, ASPH), cx, ym - 0.12, cz, 0, 0, ang); for (const z of [r.z0 - 0.3, r.z1 + 0.3]) add(box(r.x1 - r.x0, r.h1 + 0.6, 0.6, STONE), cx, (r.h1 + 0.6) / 2 - 0.3, z); }
   }
-  for (const t of V.trees) autumnTree(g, t.x, t.y, t.z, t.s, t.type, t.color, t.k);
+  // (as árvores do bosque são instanciadas em forestFx.js: copas que ficam transparentes quando escondem a van ou o destino)
   // postes antigos (verde-escuro, luz quente) e bancos de madeira à beira das ruas do mato
   const bulb = mat('#fff1c8', { emissive: '#ffcf7a', emissiveIntensity: 0.9 });
   for (const l of V.lamps) { add(cyl(0.11, 0.15, 4.6, '#2f3d32', 6), l.x, l.y + 2.3, l.z); add(box(0.5, 0.5, 0.5, '#2f3d32'), l.x, l.y + 4.75, l.z); add(new THREE.Mesh(new THREE.SphereGeometry(0.22, 8, 6), bulb), l.x, l.y + 4.6, l.z); }

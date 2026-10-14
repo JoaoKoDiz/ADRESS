@@ -82,23 +82,24 @@ export function planForest(MAP, HEDGE) {
   const free = (x, z, r, road = hw + r + 0.3) => x > HEDGE + r + 1 && z > HEDGE + r + 1 && x < MAP - HEDGE - r - 1 && z < MAP - HEDGE - r - 1 &&
     roadDist(x, z) >= road && !nearEdge(x, z, r) && !rampBoxes.some(q => inR(q, x, z, r + 1)) && !spots.some(o => inR(o.box, x, z, r + 0.4)) && !blocksAccess(x, z, r + 1.2) &&
     !(Math.abs(x - 104.6) < 14 && z < 30);
-  // ---- árvores do bosque: copas de outono (laranja, amarelo, vermelho, marrom) e poucas verdes; formatos e alturas variados.
-  //      Tronco a pelo menos ~hw + 3,2 do eixo da rua (a copa não cobre a pista) ----
+  // ---- árvores do bosque (densas): copas laranja e douradas predominando, com vermelho, amarelo, marrom e poucas verdes;
+  //      tamanhos bem variados (algumas grandes, de copa larga). Tronco fora das pistas, lotes, portas e caminhos de entrega;
+  //      as copas podem avançar um pouco sobre a rua (sensação de cobertura) e ficam transparentes quando escondem algo (forestFx) ----
   let seed = 2207; const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
   const trees = [];
-  const COLS = ['orange', 'orange', 'yellow', 'yellow', 'red', 'red', 'brown', 'green'];
-  for (let z = HEDGE + 6; z < MAP - 5; z += 8.2) for (let x = HEDGE + 6; x < MAP - 5; x += 8.2) {
-    const px = x + (rnd() - 0.5) * 4.5, pz = z + (rnd() - 0.5) * 4.5;
-    if (rnd() < 0.22 || !free(px, pz, 1.0, hw + 3.4)) continue;
-    const r = rnd(), type = r < 0.55 ? 'round' : r < 0.8 ? 'tall' : r < 0.9 ? 'pine' : 'wide';
-    trees.push({ x: px, z: pz, y: h(px, pz), s: 0.85 + rnd() * 0.5, type, color: type === 'pine' ? 'pine' : COLS[Math.floor(rnd() * COLS.length)], k: rnd() });
+  const COLS = ['orange', 'orange', 'orange', 'orange', 'gold', 'gold', 'gold', 'yellow', 'red', 'red', 'brown', 'brown', 'orange', 'gold', 'green'];
+  for (let z = HEDGE + 4; z < MAP - 3; z += 5.4) for (let x = HEDGE + 4; x < MAP - 3; x += 5.4) {
+    const px = x + (rnd() - 0.5) * 3.2, pz = z + (rnd() - 0.5) * 3.2;
+    if (rnd() < 0.1 || !free(px, pz, 0.8, hw + 2.1) || trees.some(t => Math.hypot(t.x - px, t.z - pz) < 3.6)) continue;
+    const r = rnd(), type = r < 0.55 ? 'round' : r < 0.75 ? 'wide' : 'tall', big = rnd() < 0.3;
+    trees.push({ x: px, z: pz, y: h(px, pz), s: big ? 1.4 + rnd() * 0.5 : 0.85 + rnd() * 0.5, type, color: COLS[Math.floor(rnd() * COLS.length)], k: rnd() });
   }
   // ---- postes (um por cruzamento, na margem) e bancos públicos de madeira em alguns cantos ----
   const lamps = [];
   for (const [x, z] of Object.values(N).slice(1)) {
     for (let k = 0; k < 16; k++) {
       const a = 0.4 + k * Math.PI / 8, px = x + Math.cos(a) * (hw + 1.4), pz = z + Math.sin(a) * (hw + 1.4);
-      if (free(px, pz, 0.35) && !trees.some(p => Math.hypot(p.x - px, p.z - pz) < 2.4) && !lamps.some(l => Math.hypot(l.x - px, l.z - pz) < 4)) { lamps.push({ x: px, z: pz, y: h(px, pz), box: { x0: px - 0.3, x1: px + 0.3, z0: pz - 0.3, z1: pz + 0.3 } }); break; }
+      if (free(px, pz, 0.35) && !trees.some(p => Math.hypot(p.x - px, p.z - pz) < 1.6) && !lamps.some(l => Math.hypot(l.x - px, l.z - pz) < 4)) { lamps.push({ x: px, z: pz, y: h(px, pz), box: { x0: px - 0.3, x1: px + 0.3, z0: pz - 0.3, z1: pz + 0.3 } }); break; }
     }
   }
   const benches = [];
@@ -106,7 +107,7 @@ export function planForest(MAP, HEDGE) {
     const [ax, az] = s.a, [bx, bz] = s.b, len = Math.hypot(bx - ax, bz - az), ry = Math.atan2(bx - ax, bz - az), nx = Math.cos(ry), nz = -Math.sin(ry);
     for (const sd of [1, -1]) {
       const px = (ax + bx) / 2 + nx * sd * (hw + 1.6), pz = (az + bz) / 2 + nz * sd * (hw + 1.6);
-      if (len > 20 && free(px, pz, 1.2) && !trees.some(p => Math.hypot(p.x - px, p.z - pz) < 2.6) && !lamps.some(l => Math.hypot(l.x - px, l.z - pz) < 2.5)) { benches.push({ x: px, z: pz, y: h(px, pz), ry: ry + (sd > 0 ? Math.PI / 2 : -Math.PI / 2) }); break; }
+      if (len > 20 && free(px, pz, 1.2) && !trees.some(p => Math.hypot(p.x - px, p.z - pz) < 1.8) && !lamps.some(l => Math.hypot(l.x - px, l.z - pz) < 2.5)) { benches.push({ x: px, z: pz, y: h(px, pz), ry: ry + (sd > 0 ? Math.PI / 2 : -Math.PI / 2) }); break; }
     }
   }
   // ---- carros circulando devagar: 2 laços pelas ruas da parte baixa ----
