@@ -1,5 +1,5 @@
 // Cadeado no mapa da Carreira (canto inferior direito, no lugar do botão DICA): pede uma senha e, se ela
-// estiver certa, desbloqueia todos os bairros (liberação de desenvolvimento) e abre o PAINEL DE DESENVOLVIMENTO, com duas
+// estiver certa, abre o PAINEL DE DESENVOLVIMENTO (a liberação de teste de todos os bairros é a caixa do painel), com duas
 // seções separadas: "História secundária" (checkpoints) e "Missões do Modo Carreira" (reiniciar todas / escolher os bairros
 // com todas as missões completas). Não rouba o foco do teclado enquanto fechado.
 const CSS = `
@@ -169,10 +169,15 @@ export function createLockButton(stageEl, onUnlock, isUnlockedAll, cp = null, de
     }
     if (k === 'reset' && confirmBox) { confirmBox.classList.add('on'); return; }
     if (k === 'no' && confirmBox) { confirmBox.classList.remove('on'); return; }
-    if (k === 'yes' && dev) { dev.resetAll(); confirmBox.classList.remove('on'); refreshChecks(); say(missMsg, 'Missões de todos os bairros reiniciadas.'); return; }
+    if (k === 'yes' && dev) {
+      dev.resetAll(); confirmBox.classList.remove('on'); refreshChecks();
+      const all = card.querySelector('[data-k="devall"]'); if (all) all.checked = dev.devOpen();
+      paint(); paintNote();
+      say(missMsg, 'Missões de todos os bairros reiniciadas: só o Bairro 1 está desbloqueado.'); return;
+    }
     if (k === 'apply' && dev) {
       const sel = new Set([...card.querySelectorAll('[data-lv]')].filter(x => x.checked && !x.disabled).map(x => +x.dataset.lv));
-      dev.apply(sel); refreshChecks();
+      dev.apply(sel); refreshChecks(); paint(); paintNote();
       say(missMsg, sel.size ? `Seleção aplicada: ${sel.size} bairro${sel.size > 1 ? 's' : ''} com todas as missões completas.` : 'Seleção aplicada: nenhum bairro com missões completas.');
       return;
     }

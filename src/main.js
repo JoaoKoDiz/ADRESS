@@ -955,7 +955,7 @@ const DEV_MISSIONS = {
   devOpen: () => career.allUnlocked,
   setDevOpen(on) { career.setAllOpen(on); refreshCareerMap(); },
 };
-const lock = createLockButton(stage, () => { career.unlockAll(false); refreshCareerMap(); }, () => career.allUnlocked, STORY_CP, DEV_MISSIONS);   // (o painel já avisa)
+const lock = createLockButton(stage, () => refreshCareerMap(), () => career.allUnlocked, STORY_CP, DEV_MISSIONS);   // (a senha só abre o painel)
 // botão MISSÕES no canto superior direito durante a partida da Carreira (missões do bairro jogado)
 // Cronômetro da partida (canto superior esquerdo): começa em 00:00 no 1º quadro jogável, pausa com o MENU ou as missões
 // abertas, some nos menus e nas cenas (continua contando nelas), não zera na entrega certa do Livre; na Carreira congela na entrega certa.

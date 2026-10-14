@@ -1,5 +1,5 @@
 // Carreira: progresso das missões (salvo no navegador), regras de cada missão e desbloqueio das fases.
-// Uma fase é liberada quando as 5 missões da fase anterior estão concluídas (ou já foi liberada antes: KEY.unlocks); a 1 começa liberada.
+// Uma fase é liberada só quando as 5 missões da fase anterior estão concluídas e salvas; a 1 começa liberada.
 // Objetivo cumprido durante a partida = missão PENDENTE; só é salva quando a mesma partida termina com a entrega certa.
 import { MISSIONS, RESERVED } from './missions.js';
 import { GRID, ROAD, roadCenter } from './layout.js';
@@ -60,30 +60,30 @@ export function createCareer() {
   } catch (e) { /* ignora */ }
 
   // Missões dos Níveis 1 e 2 trocadas (e as dos Níveis 3 e 4 removidas): zera só o progresso dessas 4 linhas, uma vez.
-  // Antes, guarda os bairros que já estavam desbloqueados pelas regras antigas (metas antigas abaixo), para não trancá-los de novo.
-  const UNLOCKS_KEY = KEY + '.unlocks';
-  let unlocks = new Set();
-  try { const u = JSON.parse(localStorage.getItem(UNLOCKS_KEY) || '[]'); if (Array.isArray(u)) u.forEach(l => unlocks.add(+l)); } catch (e) { /* ignora */ }
-  const saveUnlocks = () => { try { localStorage.setItem(UNLOCKS_KEY, JSON.stringify([...unlocks].sort((a, b) => a - b))); } catch (e) { /* ignora */ } };
   try {
     if (!localStorage.getItem(KEY + '.m2')) {
-      const OLD_GOALS = [[1, 5, 1, 1, 1], [3, 1, 2, 4, 3], [10, 10, 1, 1, 5], [1, 2, 1, 2, 2]];
-      for (let l = 1; l <= 4; l++) if (OLD_GOALS[l - 1].every((g, i) => (progress[l - 1][i] || 0) >= g)) unlocks.add(l);
       for (let l = 0; l < 4; l++) progress[l] = progress[l].map(() => 0);
-      save(); saveUnlocks(); localStorage.setItem(KEY + '.m2', '1');
+      save(); localStorage.setItem(KEY + '.m2', '1');
+    }
+  } catch (e) { /* ignora */ }
+  // Desbloqueio estrito (uma vez): apaga os desbloqueios guardados antes (KEY.unlocks) e a liberação de teste ligada pela senha
+  // antiga (KEY.all); a partir daqui o acesso vem só das missões salvas.
+  try {
+    if (!localStorage.getItem(KEY + '.m3')) {
+      localStorage.removeItem(KEY + '.unlocks'); localStorage.removeItem(KEY + '.all'); localStorage.setItem(KEY + '.m3', '1');
     }
   } catch (e) { /* ignora */ }
 
   const done = (l, i) => progress[l][i] >= MISSIONS[l][i].goal;
-  const levelDone = l => MISSIONS[l].every((m, i) => done(l, i));
-  // senha do cadeado no mapa: todos os bairros abertos, mesmo sem as missões (fica salvo)
+  const levelDone = l => MISSIONS[l].some(m => m.id) && MISSIONS[l].every((m, i) => done(l, i));   // sem missões cadastradas = nunca
+  // liberação de desenvolvimento (caixa no painel do cadeado): todos os bairros abertos, mesmo sem as missões (fica salvo)
   let allOpen = false;
   try { allOpen = localStorage.getItem(KEY + '.all') === '1'; } catch (e) { /* ignora */ }
   const prevLevel = l => { let p = l - 1; while (p > 0 && RESERVED.includes(p)) p--; return p; };   // os reservados não contam
-  const unlocked = l => !RESERVED.includes(l) && (allOpen || l === 0 || unlocks.has(l) || levelDone(prevLevel(l)));
+  const unlocked = l => !RESERVED.includes(l) && (allOpen || l === 0 || levelDone(prevLevel(l)));
 
   /** Confirma as missões cumpridas na partida que acabou de terminar com a entrega certa: salva (só aumenta; o que já estava
-   *  concluído não conta de novo), avisa e, com as 5 do bairro salvas, desbloqueia o próximo (e guarda o desbloqueio). */
+   *  concluído não conta de novo), avisa e, com as 5 do bairro salvas, o próximo fica desbloqueado (vem do progresso salvo). */
   function confirm(l, ids) {
     const wasDone = levelDone(l), names = [];
     MISSIONS[l].forEach((m, i) => { if (m.id && ids.has(m.id) && progress[l][i] < m.goal) { progress[l][i] = m.goal; names.push(m.name); } });
@@ -91,11 +91,7 @@ export function createCareer() {
     save();
     toast(names.length === 1 ? `✔ Missão concluída: ${names[0]}` : `✔ Missões concluídas: ${names.join(', ')}`);
     let nx = l + 1; while (RESERVED.includes(nx)) nx++;
-    if (!wasDone && levelDone(l) && nx < LEVELS && !unlocks.has(nx)) {
-      const wasOpen = allOpen;                                            // (já aberto pelo cadeado: guarda, mas sem aviso)
-      unlocks.add(nx); saveUnlocks();
-      if (!wasOpen) setTimeout(() => toast(`🔓 Bairro ${nx + 1} desbloqueado!`), 3400);
-    }
+    if (!wasDone && levelDone(l) && nx < LEVELS && !allOpen) setTimeout(() => toast(`🔓 Bairro ${nx + 1} desbloqueado!`), 3400);
   }
 
   // tentativa atual (Carreira): o que foi cumprido fica PENDENTE e só é salvo se esta partida terminar com a entrega certa
@@ -112,17 +108,11 @@ export function createCareer() {
     /** Missão k do nível l cumprida nesta partida, ainda sem a entrega certa (tela de missões). */
     isPending: (l, k) => active && l === level && !!MISSIONS[l][k] && pending.has(MISSIONS[l][k].id),
     get allUnlocked() { return allOpen; },
-    /** Senha certa no cadeado: desbloqueia todos os bairros. */
-    unlockAll(notify = true) {
-      allOpen = true;
-      try { localStorage.setItem(KEY + '.all', '1'); } catch (e) { /* ignora */ }
-      if (notify) toast('🔓 Todos os bairros desbloqueados!');
-    },
     completedCount: l => MISSIONS[l].filter((m, i) => done(l, i)).length,
     /** O bairro l tem missões cadastradas? (os modelos vazios não têm id) */
     hasMissions: l => MISSIONS[l].some(m => m.id),
     /** Bairro l com todas as missões concluídas (sem missões cadastradas = não). */
-    levelComplete: l => MISSIONS[l].some(m => m.id) && levelDone(l),
+    levelComplete: l => levelDone(l),
 
     // ---- painel de desenvolvimento (cadeado): só missões e progressão da Carreira ----
     /** Liberação de desenvolvimento (todos os bairros abertos), independente das missões. */
@@ -130,15 +120,19 @@ export function createCareer() {
       allOpen = !!on;
       try { if (allOpen) localStorage.setItem(KEY + '.all', '1'); else localStorage.removeItem(KEY + '.all'); } catch (e) { /* ignora */ }
     },
-    /** Todas as missões de todos os bairros voltam a ficar incompletas (inclusive o que estava pendente nesta partida). */
-    resetAll() { this.setCompleted(new Set()); },
-    /** Os bairros em sel ficam com todas as missões concluídas; os outros (com missões), todas incompletas. Os desbloqueios
-     *  normais são refeitos pela regra de sempre (5 missões de um bairro liberam o próximo). */
+    /** Todas as missões de todos os bairros voltam a ficar incompletas (inclusive o que estava pendente nesta partida) e a
+     *  liberação de teste é desligada: só o Bairro 1 fica aberto. */
+    resetAll() {
+      this.setCompleted(new Set()); this.setAllOpen(false);
+      try { localStorage.removeItem(KEY + '.unlocks'); } catch (e) { /* ignora */ }
+    },
+    /** Os bairros em sel ficam com todas as missões concluídas; os outros (com missões), todas incompletas; sem missões
+     *  cadastradas nunca contam como concluídos. Os desbloqueios saem daí pela regra de sempre (5 missões salvas de um bairro
+     *  liberam o próximo). */
     setCompleted(sel) {
       progress = MISSIONS.map((ms, l) => ms.map(m => (m.id && sel.has(l) ? m.goal : 0)));
       pending = new Set();
-      unlocks = new Set(); for (let l = 1; l < LEVELS; l++) if (!RESERVED.includes(l) && levelDone(prevLevel(l))) unlocks.add(l);
-      save(); saveUnlocks();
+      save();
     },
 
     /** Nova partida da Carreira na fase l: tudo que foi cumprido na tentativa anterior (e não salvo) é descartado. */
