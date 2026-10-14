@@ -966,6 +966,7 @@ const matchTimer = createMatchTimer(stage);
 let bumps = 0;
 const bumpHold = new Set();
 const bumpLevel = () => { const lv = gameMode === 'career' ? careerLevel : freeLevel; return lv === 1 || lv === 2; };
+const bumpShown = () => (gameMode === 'career' ? careerLevel : freeLevel) === 2;
 const bumpTarget = b => { const i = SOLIDS.indexOf(b); return (i >= 0 && i < HOUSE_SLOTS.length) || (world.extraSolids && world.extraSolids.includes(b)) || !!b.post || b.bar != null; };   // lotes (casas), troncos das árvores, postes, barreiras
 function countBumps() {
   for (const b of van.touched) if (!bumpHold.has(b) && bumpTarget(b)) { bumps++; bumpHold.add(b); if (gameMode === 'career') career.bump(b, barriers.list.length); }
@@ -2186,7 +2187,7 @@ function update(dt, t) {
 // ---------- HUD ----------
 const promptPos = new THREE.Vector3();
 function updateHUD() {
-  matchTimer.setBumps(bumpLevel() ? bumps : null);
+  matchTimer.setBumps(bumpShown() ? bumps : null);   // visível só no Bairro 3 (no 2 conta por dentro: "Sem esbarrar")
   matchTimer.show((TIMER_PLAY.includes(state) && !approachLock()) || (state === 'fadeOut' && endToMap));   // cenas e aproximação da igreja: escondido
   music.setNowPlaying(nowPlaying());              // nome da faixa ao lado do botão de música
   music.setLift(talkBox.open);
