@@ -49,7 +49,7 @@ function roadGeometry(curve, samples) {
 //   canal    — canal no meio, pontes e um galpão (Bairro 10, Travessia)
 //   rail     — trilhos em L com curva, trem e estação (Bairro 11, Trilhos)
 //   venice   — canais, fachadas venezianas coloridas e a Ponte de Rialto (Nível 12, Veneza)
-export const MINI_KINDS = ['houses', 'plaza', 'barriers', 'trucks', 'gas', 'city', 'jam', 'jam8', 'hill', 'venice', 'canal', 'rail', 'favela', 'flux', 'farm', 'snow', 'garden', null, 'night', 'moon', null, 'forest', 'canyon'];   // 21 reservado, 22 = Bosque, 23 = Cachoeira   // 17–19 reservados (null), 20 = Lua   // 13 = Morro, 14 = Fluxo, 15 = Colheita, 16 = Nevasca, 17 = Órbita   // 10 = Veneza, 11 = Travessia, 12 = Trilhos
+export const MINI_KINDS = ['houses', 'plaza', 'barriers', 'trucks', 'gas', 'city', 'jam', 'jam8', 'hill', 'venice', 'canal', 'rail', 'favela', 'flux', 'farm', 'snow', 'garden', 'modern', 'night', 'moon', null, 'forest', 'canyon'];   // 21 reservado, 22 = Bosque, 23 = Cachoeira   // 17–19 reservados (null), 20 = Lua   // 13 = Morro, 14 = Fluxo, 15 = Colheita, 16 = Nevasca, 17 = Órbita   // 10 = Veneza, 11 = Travessia, 12 = Trilhos
 
 /** Bairro em miniatura do tipo `kind`: base de grama, sebe, ruas e o que caracteriza o bairro. gray = fase bloqueada. */
 function miniNeighborhood(kind, colors, gray = false) {
@@ -192,6 +192,32 @@ function miniNeighborhood(kind, colors, gray = false) {
     const spots = [[-5.8, -6.0], [-1.6, -6.2], [3.2, -6.0], [6.2, -2.2], [-6.2, -0.4], [-0.4, -0.8], [-0.2, 1.6], [2.4, 1.6], [-5.8, 2.6], [-2.2, 6.2], [3.2, 6.4], [6.2, 0.8], [-4.2, -3.4], [6.4, 5.9], [-1.0, 4.6]];
     spots.forEach(([x, z], i) => tree(x, z, i % 7 === 6 ? 4 : i % 4, 0.5 + (i % 3) * 0.12));
     for (const [x, z, c] of [[-2, -1.5, '#e8822a'], [2.5, 2.6, '#c63a24'], [-4, 3.4, '#e8c23a'], [0.8, -3.6, '#d9701c'], [-5.4, -2.6, '#c63a24'], [5.6, -3.2, '#e8c23a']]) add(box(0.5, 0.03, 0.4, G(c, '#9a9a9a')), x, Y + 0.02, z, 0, x, 0);   // folhas no chão
+    return bakeStatic(g);
+  }
+  if (kind === 'modern') {                       // Nível 18 (Modernista): ruas curvas largas, rotatória, casas geométricas de laje plana e jardins
+    const Y = 0.4, SWC = G('#d6d3cc', '#c4c4c4');
+    const road = (pts, w = 1.5) => {
+      for (let k = 0; k < pts.length - 1; k++) { const [ax, az] = pts[k], [bx, bz] = pts[k + 1], len = Math.hypot(bx - ax, bz - az), ry = Math.atan2(bx - ax, bz - az);
+        add(box(w + 0.5, 0.05, len, SWC), (ax + bx) / 2, Y + 0.02, (az + bz) / 2, 0, ry, 0); add(box(w, 0.06, len, ROADC), (ax + bx) / 2, Y + 0.04, (az + bz) / 2, 0, ry, 0); }
+      for (const [x, z] of pts) { add(cyl(w / 2 + 0.25, w / 2 + 0.25, 0.05, SWC, 14), x, Y + 0.021, z); add(cyl(w / 2, w / 2, 0.06, ROADC, 14), x, Y + 0.041, z); }
+    };
+    road([[0.6, -7], [0.4, -3.4]]); road([[0.4, -3.4], [-3.0, -1.8], [-4.6, 1.6], [-3.2, 5.0], [0.4, 6.4]]); road([[0.4, -3.4], [3.6, -1.6], [4.6, 1.8], [3.4, 5.0], [0.4, 6.4]]);
+    road([[-4.6, 1.6], [-6.4, 1.2]], 1.2);
+    add(cyl(1.6, 1.6, 0.06, ROADC, 20), 0.4, Y + 0.05, -3.4); add(cyl(0.7, 0.7, 0.2, G('#7fc45c', '#a0a0a0'), 16), 0.4, Y + 0.12, -3.4);   // rotatória
+    add(box(0.2, 0.9, 0.2, G('#ec7a26', '#9a9a9a')), 0.4, Y + 0.6, -3.4);
+    const W = c => G(c, '#cfcfcf'), mod = (x, z, ry, fac, two, door) => {   // casa modernista: 2 volumes deslocados, laje plana, vidro azul
+      const gg = new THREE.Group(); gg.position.set(x, Y, z); gg.rotation.y = ry; g.add(gg);
+      const a = (m, px, py, pz) => gg.add(at(m, px, py, pz));
+      a(box(2.6, 0.06, 2.6, G('#7fc45c', '#a3a3a3')), 0, 0.03, 0);
+      a(box(1.9, 0.9, 1.3, W(fac)), -0.25, 0.48, -0.4); a(box(2.1, 0.08, 1.5, W('#ecebe6')), -0.25, 0.96, -0.4);
+      if (two) { a(box(1.4, 0.8, 1.4, W('#d9dadc')), 0.2, 1.4, -0.2); a(box(1.6, 0.08, 1.6, W('#ecebe6')), 0.2, 1.84, -0.2); a(box(1.2, 0.4, 0.05, G('#8cc2e8', '#9a9a9a')), 0.2, 1.4, 0.52); }
+      a(box(1.0, 0.5, 0.05, G('#8cc2e8', '#9a9a9a')), -0.6, 0.5, 0.26); a(box(0.3, 0.6, 0.05, G(door, '#777777')), 0.3, 0.33, 0.26);
+      a(box(0.9, 0.7, 1.0, W('#bfc3c8')), 0.95, 0.38, -0.55); a(box(0.3, 0.06, 0.4, G('#b07a44', '#888888')), 0.55, 0.85, 0.15);
+    };
+    mod(-4.6, -5.0, 0.4, '#f4f3ef', true, '#2f6fb0'); mod(4.8, -5.0, -0.4, '#e3d4b8', false, '#c8402f'); mod(-1.4, 1.4, 0, '#bfc3c8', true, '#e8b02a');
+    mod(2.0, 1.6, 0, '#f4f3ef', false, '#3f8a4a'); mod(-5.4, 5.0, 0.6, '#e3d4b8', false, '#ec7a26'); mod(4.8, 5.4, -0.5, '#f4f3ef', true, '#2b2d33');
+    for (const [x, z] of [[-6.2, -1.8], [6.4, -1.2], [-0.4, 4.0], [6.2, 2.6], [-2.4, -6.2], [2.6, -6.4]]) tinyTree(x, z, 0.45);
+    add(box(0.9, 0.04, 0.7, G('#5aa9d6', '#9a9a9a')), 1.0, Y + 0.08, 3.6);
     return bakeStatic(g);
   }
   if (kind === 'canyon') {                       // Nível 23 (Cachoeira): duas margens, desfiladeiro fundo, ponte alta e a cachoeira gigante no fundo
@@ -508,7 +534,7 @@ function boardTexture(gray = false) {
 }
 
 const PALETTES = [['red', 'blue', 'yellow', 'green'], ['purple', 'red', 'gray', 'yellow', 'blue', 'green', 'red', 'yellow'], ['blue', 'green', 'red', 'purple'],
-  ['yellow', 'gray', 'blue', 'red'], ['green', 'purple', 'yellow', 'blue'], ['red'], ['blue'], ['green'], ['red', 'blue', 'yellow', 'purple'], ['red'], ['blue', 'green', 'red'], ['green', 'yellow', 'purple'], ['red'], ['blue', 'red', 'yellow', 'green'], ['red', 'blue'], ['red', 'blue', 'green', 'yellow'], ['red', 'blue', 'gray', 'green'], [], ['red'], ['blue'], [], ['red', 'blue', 'yellow', 'green', 'purple'], ['red', 'blue', 'yellow', 'green', 'purple']];
+  ['yellow', 'gray', 'blue', 'red'], ['green', 'purple', 'yellow', 'blue'], ['red'], ['blue'], ['green'], ['red', 'blue', 'yellow', 'purple'], ['red'], ['blue', 'green', 'red'], ['green', 'yellow', 'purple'], ['red'], ['blue', 'red', 'yellow', 'green'], ['red', 'blue'], ['red', 'blue', 'green', 'yellow'], ['red', 'blue', 'gray', 'green'], ['blue', 'red', 'yellow', 'green'], ['red'], ['blue'], [], ['red', 'blue', 'yellow', 'green', 'purple'], ['red', 'blue', 'yellow', 'green', 'purple']];
 
 /** Miniatura da lua: fundo preto, poucas estrelas pequenas e a lua por cima. */
 function spaceShot(src, w, h) {

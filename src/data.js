@@ -312,6 +312,36 @@ export const GARD_FIRST = HOUSES.length;
 }
 export const GARDS = [...Array(40).keys()].map(k => GARD_FIRST + k);            // ponto 5 do plano: parte baixa, perto da entrada, de frente para a rua
 
+// ---- Modernista (Nível 18): casas geométricas (1 ou 2 andares; volumes deslocados, laje plana, vidro azulado) e lojas
+// de arquitetura parecida. Índices a partir de MDH_FIRST (40 casas) e MDS_FIRST (6 lojas).
+export const MDH_COL = {
+  fac: { white: '#f4f3ef', gray: '#bfc3c8', beige: '#e3d4b8' },
+  door: { blue: '#2f6fb0', red: '#c8402f', yellow: '#e8b02a', green: '#3f8a4a', black: '#2b2d33', orange: '#ec7a26' },
+  gar: { roll: '#9aa0a8', wood: '#a8743e', black: '#2b2d33' },
+};
+export const MDH_FIRST = HOUSES.length;
+{
+  const names = ['Seu Lúcio', 'Dona Lina', 'Seu Oscar', 'Dona Lina Bo', 'Seu Rino', 'Dona Zélia', 'Seu Paulo', 'Dona Carmen', 'Seu Affonso', 'Dona Ruth', 'Seu Joaquim', 'Dona Iris'];
+  const C = MDH_COL, K = o => Object.keys(o);
+  let seed = 1818; const rnd = n => { seed = (seed * 16807) % 2147483647; return seed % n; };
+  const seen = [], sub = (x, y) => x.every(k => y.includes(k));
+  while (HOUSES.length < MDH_FIRST + 40) {
+    const v = { fac: K(C.fac)[rnd(3)], doorc: K(C.door)[rnd(6)], floors: 1 + rnd(2), shape: rnd(4), gar: rnd(3) ? K(C.gar)[rnd(3)] : null,
+      wood: rnd(2) === 0, stone: rnd(3) === 0, vase: rnd(3) === 0, perg: rnd(3) === 0, bench: rnd(3) === 0, pool: rnd(4) === 0 };
+    const t = ['mdfac:' + v.fac, 'mddoor:' + v.doorc, 'mdfl:' + v.floors].concat(v.gar ? ['mdgar:' + v.gar] : [], v.wood ? ['mdwood'] : [], v.stone ? ['mdstone'] : [],
+      v.vase ? ['mdvase'] : [], v.perg ? ['mdperg'] : [], v.bench ? ['mdbench'] : [], v.pool ? ['mdpool'] : []);
+    if (seen.some(o => sub(o, t) || sub(t, o))) continue;
+    seen.push(t);
+    HOUSES.push({ name: names[(HOUSES.length - MDH_FIRST) % names.length], kind: 'mdh', ...v, ftags: t });
+  }
+}
+export const MDHS = [...Array(40).keys()].map(k => MDH_FIRST + k);
+export const MDS_FIRST = HOUSES.length;
+[['cafe', 'CAFÉ', '#c8642a', 'white'], ['bakery', 'PADARIA', '#e8b02a', 'beige'], ['flowers', 'FLORES', '#d24a8a', 'white'], ['books', 'LIVROS', '#2f6fb0', 'gray'],
+  ['optic', 'ÓTICA', '#3f8a4a', 'beige'], ['market', 'MERCADO', '#c8402f', 'gray']].forEach(([k, label, accent, fac]) =>
+  HOUSES.push({ name: 'Loja ' + label, kind: 'mds', shopKey: k, label, accent, fac, ftags: ['mdsh:' + k, 'mdfac:' + fac] }));
+export const MDSS = [...Array(6).keys()].map(k => MDS_FIRST + k);
+
 export const ROOF_ITEMS = ['chimney', 'dish', 'solar', 'tank', 'rooster', 'kite', 'patch'];
 export const YARD_ITEMS = ['fruit', 'bare', 'cactus', 'sunflowers', 'ballbush', 'doghouse', 'pool', 'trampoline',
   'swing', 'bike', 'flamingo', 'gnome', 'clothesline', 'tires', 'fountain'];
@@ -341,7 +371,7 @@ HOUSES.forEach((h, i) => {
     h.roofItems = []; h.yardItems = [];
     return;
   }
-  if (h.kind === 'gard') {
+  if (h.kind === 'gard' || h.kind === 'mdh' || h.kind === 'mds') {
     h.f = []; h.tags = h.ftags.slice();
     h.roofItems = []; h.yardItems = [];
     return;
@@ -422,6 +452,14 @@ export const PHRASE = {
   'fo:wood': 'lenha sob uma pequena cobertura', 'fo:wreath': 'uma guirlanda de folhas na porta', 'fo:bench': 'um banco de madeira na frente',
   'fo:porch': 'uma varanda de madeira', 'fo:tree:red': 'uma árvore de folhas vermelhas na entrada', 'fo:tree:yellow': 'uma árvore de folhas amarelas na entrada',
   'fo:tree:orange': 'uma árvore de folhas laranja na entrada',
+  // Modernista (Nível 18)
+  'mdfac:white': 'fachada branca', 'mdfac:gray': 'fachada cinza', 'mdfac:beige': 'fachada bege', 'mdfl:1': 'um andar', 'mdfl:2': 'dois andares',
+  'mddoor:blue': 'porta azul', 'mddoor:red': 'porta vermelha', 'mddoor:yellow': 'porta amarela', 'mddoor:green': 'porta verde', 'mddoor:black': 'porta preta', 'mddoor:orange': 'porta laranja',
+  'mdgar:roll': 'garagem com portão de enrolar cinza', 'mdgar:wood': 'garagem com portão de madeira', 'mdgar:black': 'garagem com portão preto',
+  mdwood: 'painel de madeira na fachada', mdstone: 'jardim de pedras claras', mdvase: 'dois vasos grandes ao lado da porta', mdperg: 'pergolado com plantas',
+  mdbench: 'um banco no jardim', mdpool: 'um espelho-d\'água no jardim',
+  'mdsh:cafe': 'letreiro de café', 'mdsh:bakery': 'letreiro de padaria', 'mdsh:flowers': 'letreiro de floricultura', 'mdsh:books': 'letreiro de livraria',
+  'mdsh:optic': 'letreiro de ótica', 'mdsh:market': 'letreiro de mercado',
   // Cachoeira (Nível 23)
   'loc:bridge': 'perto da ponte', 'cy:balcony': 'sacada de madeira virada para o desfiladeiro', 'cy:garden': 'um jardinzinho na frente',
   'cy:vases': 'vasos de flores na porta', 'cy:canopy': 'cobertura de madeira na porta',
@@ -484,6 +522,7 @@ export const PHRASE = {
 export const REF = {
   house: { a: 'a casa', da: 'da casa', na: 'na casa', n: 'casa' },
   shop: { a: 'o prédio', da: 'do prédio', na: 'no prédio', n: 'prédio' },
+  store: { a: 'a loja', da: 'da loja', na: 'na loja', n: 'loja' },
   ware: { a: 'o galpão', da: 'do galpão', na: 'no galpão', n: 'galpão' },
   module: { a: 'o módulo', da: 'do módulo', na: 'no módulo', n: 'módulo' },
   barn: { a: 'o celeiro', da: 'do celeiro', na: 'no celeiro', n: 'celeiro' },

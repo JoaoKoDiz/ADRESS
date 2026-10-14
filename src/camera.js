@@ -122,7 +122,7 @@ function buildCamBoxes() {
     for (const p of SNOWV.pines) CAM_BOXES.push([p.x - 1.4, p.z - 1.4, p.x + 1.4, p.z + 1.4, p.y + 5.5]);
   }
   if (FORESTV) {                                               // Bosque: patamar, casas e copas (o braço encurta antes de entrar numa árvore)
-    CAM_BOXES.push([FORESTV.MID.x0, FORESTV.MID.z0, MAP, MAP, FORESTV.MID ? 2.9 : 0]);
+    if (FORESTV.MID) CAM_BOXES.push([FORESTV.MID.x0, FORESTV.MID.z0, MAP, MAP, 2.9]);
     for (const sp of FORESTV.spots) CAM_BOXES.push([sp.walkBox.x0 - 0.8, sp.walkBox.z0 - 0.8, sp.walkBox.x1 + 0.8, sp.walkBox.z1 + 0.8, sp.y + 7.8]);
     for (const t of FORESTV.trees) { const r = (t.type === 'wide' ? 2.2 : 1.6) * t.s; CAM_BOXES.push([t.x - r, t.z - r, t.x + r, t.z + r, t.y + (t.type === 'tall' ? 6 : 5) * t.s]); }
   }
