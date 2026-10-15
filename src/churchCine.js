@@ -103,7 +103,6 @@ function beamBetween(a, b, r0, r1, mat) {                                   // c
 }
 
 const at = (m, y) => { m.position.y = y; return m; };
-const at = (m, y) => { m.position.y = y; return m; };
 export function createChurchCine(renderer) {
   let S = null;                                     // estado preparado (cena, igreja, objetos, materiais salvos)
   let mode = null;
