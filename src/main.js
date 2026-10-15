@@ -1815,6 +1815,9 @@ EXTRA_CSS.textContent = ['.ahud', '.hint-btn', '.menu-btn', '.menu-panel', '.mus
 document.head.appendChild(EXTRA_CSS);
 const voidMusic = createVoidMusic(audio, justUsUrl, justUsLoopUrl);   // extra 1: "just us" (original → loop), do começo do deslocamento até a tela inicial
 const extra = createExtraStory({ walker, input, audio, renderer, talkBox, onTravel: () => voidMusic.start(), onShatter: (snap, rect) => { syncNoVan(); endExtra('shatter'); screenShatter(snap, rect); } });   // (o extra 1 já foi salvo na quebra)
+// Extra 1: qualquer tecla/toque (ex.: avançar o diálogo 2) retoma o áudio se o navegador o tiver suspendido e garante as faixas
+// decodificadas antes do deslocamento — sem tocar nada antes da hora.
+for (const ev of ['keydown', 'pointerdown']) addEventListener(ev, () => { if (state === 'extra') { audio.unlock(); voidMusic.load(); } }, true);
 function startExtra() {
   if (state !== 'levelSelect') return;
   document.body.classList.add('extra-on'); menu.close();   // já antes do fade: nada da interface pisca ao carregar
