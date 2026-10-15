@@ -1007,22 +1007,21 @@ const missions = createMissions(career); // Carreira: M perto da maquete abre as
 // Checkpoints de teste da história secundária (no cadeado, depois da senha): grava no progresso salvo as etapas até a
 // escolhida e apaga as posteriores. Cada cena lê esse progresso ao começar (caixa, K no terraço, igreja e sinos, bonde, Veneza).
 const STORY_STEPS = ['Nada', 'Conversa na casa do personagem — completa', 'Conversa no terraço — completa', 'Primeira conversa na igreja — completa',
-  'Trolley Problem — completo', 'Conversa em Veneza — completa', 'Segunda conversa na igreja — completa', "Encontro no Grillby's — completo", 'Oficina no Bairro 24 — completa',
-  'Apresentação da igreja (Bairro 24) — vista', 'Missa e temporal — completos', 'Oficina — Entregar a última peça'];
-const WS_LAST_CP = 11;   // checkpoint especial (fora da contagem de chaves): Grillby's feito, oficina na 3ª tarefa com a travessa buscada
+  'Trolley Problem — completo', 'Conversa em Veneza — completa', 'Segunda conversa na igreja — completa', "Encontro no Grillby's — completo",
+  'Oficina — Entregar a última peça', 'Oficina no Bairro 24 — completa', 'Apresentação da igreja (Bairro 24) — vista', 'Missa e temporal — completos'];
+const WS_LAST_CP = 8;    // checkpoint especial (fora da contagem de chaves): Grillby's feito, oficina na 3ª tarefa com a travessa buscada
+const WS_CP_KEY = 'adress.dev.wsLast';   // 'start' = ainda vai pôr o jogador a pé diante da oficina (1× por seleção); 'held' = só mantém a travessa até a entrega
 const storyKeys = () => [PARCEL_KEY, ROOF_KEY, CHURCH_TALK_KEY, TROLLEY_TALK_KEY, VENICE_TALK_KEY, CHURCH2_KEY, GRILL_TALK_KEY, 'adress.med.talk1', INTRO_KEY, MASS_KEY];
-let devWsLast = false;
-/** Começa o Bairro 24 (Livre) a pé na frente da oficina, com a travessa no inventário da atividade. */
-function startWsCheckpoint() {
-  if (!devWsLast) return;
-  if (state === 'map') { missions.close(); careerMap.leave(); }
-  else if (state !== 'title' && state !== 'levelSelect') { devWsLast = false; return; }   // (só a partir dos menus)
-  if (titleDriver) titleDriver.stop();
-  levelSelect.close(); title.hide();
-  freeLevel = 23; startFree('free');
-  devWsLast = false;
+/** Ao entrar no Bairro 24 (Livre) com o checkpoint da oficina pendente: travessa já buscada; na 1ª vez depois da seleção, a pé diante da oficina. */
+function applyWsCheckpoint() {
+  let v = null; try { v = localStorage.getItem(WS_CP_KEY); } catch (e) { /* */ }
+  if (!v || gameMode !== 'free' || neighborhood !== 'med10') return;
+  let st = null; try { st = localStorage.getItem('adress.med.shop'); } catch (e) { /* */ }
+  if (st !== '3') { try { localStorage.removeItem(WS_CP_KEY); } catch (e) { /* */ } return; }   // (já entregue: acabou)
   const P = wsStory.points; if (!P) return;
   wsStory.devTask({ step: 3, picked: true });
+  if (v !== 'start') return;
+  try { localStorage.setItem(WS_CP_KEY, 'held'); } catch (e) { /* */ }
   van.stop(); van.teleport(P.front.x + 2, P.front.z, Math.PI);
   walker.pose(P.door.x + 1.5, P.door.z, Math.PI); walker.setFloor(0); walker.show(true);
   wsFoot = true;                                        // no fim do fade-in, fica a pé (não na van)
@@ -1030,14 +1029,20 @@ function startWsCheckpoint() {
 let wsFoot = false;
 const STORY_CP = {
   names: STORY_STEPS,
-  current() { const k = storyKeys(); let n = 0; while (n < k.length && flagOn(k[n])) n++; return n; },
+  current() {
+    const k = storyKeys(); let n = 0; while (n < k.length && flagOn(k[n])) n++;
+    if (n === 7 && localStorage.getItem(WS_CP_KEY) && localStorage.getItem('adress.med.shop') === '3') return WS_LAST_CP;
+    return n >= 8 ? n + 1 : n;                          // (o da oficina ocupa a posição 9)
+  },
   apply(n) {
+    try { localStorage.removeItem(WS_CP_KEY); } catch (e) { /* */ }
     if (n === WS_LAST_CP) {                                // "Oficina — Entregar a última peça": tudo até o Grillby's, oficina etapa 3, nada depois
       this.apply(7);
-      try { localStorage.setItem('adress.med.shop', '3'); for (const k of [EXTRA1_KEY, EXTRA2_KEY, EXTRA_DONE_KEY, NOVAN_KEY]) localStorage.removeItem(k); } catch (e) { /* */ }
-      devWsLast = true; setTimeout(startWsCheckpoint, 0);   // já começa a cena (Livre, Bairro 24, a pé diante da oficina)
-      return;
+      try { localStorage.setItem('adress.med.shop', '3'); localStorage.setItem(WS_CP_KEY, 'start'); for (const k of [EXTRA1_KEY, EXTRA2_KEY, EXTRA_DONE_KEY, NOVAN_KEY]) localStorage.removeItem(k); } catch (e) { /* */ }
+      syncNoVan();
+      return;                                              // (só prepara: vale ao entrar no Bairro 24 pelo Livre)
     }
+    if (n > WS_LAST_CP) n--;                               // posições 10–12 = etapas de chaves 8–10
     storyKeys().forEach((k, i) => { try { if (i < n) localStorage.setItem(k, '1'); else localStorage.removeItem(k); } catch (e) { /* */ } });
     parcelDone = n >= 1;                                   // (lido na hora pela caixa e pelo K do terraço)
     try { if (n >= 8) localStorage.setItem('adress.med.shop', '5'); else localStorage.removeItem('adress.med.shop'); } catch (e) { /* */ }   // oficina do Bairro 24
@@ -1674,8 +1679,9 @@ function setupMedStory() {
       const m = new THREE.Mesh(new THREE.PlaneGeometry(r.x1 - r.x0, r.z1 - r.z0), pave); m.rotation.x = -Math.PI / 2; m.position.set((r.x0 + r.x1) / 2, 0.015, (r.z0 + r.z1) / 2); m.receiveShadow = true; world.scene.add(m);
     }
     wsStory.setup(world, MEDV, game, doorPoint, HOUSES);
-  } else if (!flagOn(MASS_KEY) && wsStory._ws && wsStory._ws.ruined) wsStory.setup(world, MEDV, game, doorPoint, HOUSES);   // checkpoint anterior ao temporal: a oficina volta intacta
+  } else if (!wsStory._ws || (!flagOn(MASS_KEY) && wsStory._ws.ruined)) wsStory.setup(world, MEDV, game, doorPoint, HOUSES);   // (de volta de outro bairro a atividade tinha sido desligada; antes do temporal a oficina volta intacta)   // checkpoint anterior ao temporal: a oficina volta intacta
   else wsStory.resetTask();
+  applyWsCheckpoint();                                   // checkpoint da oficina (cadeado): travessa na mão até a entrega
   const [b1, b2] = medChurch.userData.bells;                              // os sinos que já caíram continuam caídos
   b1.visible = flagOn(CHURCH_TALK_KEY); b1.userData.bell.position.y = -bellDrop(b1);
   b2.visible = flagOn(CHURCH2_KEY); b2.userData.bell.position.y = -bellDrop(b2);
@@ -2874,7 +2880,7 @@ window.ADRESS = {
   moonPlace(p, f) { van.teleport(0, 0, 0); FRAME.reset(new THREE.Vector3(...p).normalize(), new THREE.Vector3(...f), 0, 0); moonAnchor.x = moonAnchor.z = 0; FRAME.toSphere(0, 0, vanSph.p); moonUpdate(0, true); },
   get moonVan() { return { p: vanSph.p.toArray().map(v => +v.toFixed(3)), f: vanSph.f.toArray().map(v => +v.toFixed(3)), y: +van.simY.toFixed(2) }; },
   FRAME, MOONV: () => MOONV,
-  massStory, MASS_KEY, extra, startExtra, screenShatter, voidMusic, rainFx, rainAudio, menuBg, get menuNight() { return !!nightSaved; }, get rainOn() { return rainOn(); }, menuWorld, lockCP: n => STORY_CP.apply(n), devMissions: DEV_MISSIONS, get parcelVisible() { return !!parcel.parent; },
+  massStory, MASS_KEY, extra, startExtra, screenShatter, voidMusic, rainFx, rainAudio, menuBg, get menuNight() { return !!nightSaved; }, get rainOn() { return rainOn(); }, menuWorld, lockCP: n => STORY_CP.apply(n), lockCPcur: () => STORY_CP.current(), devMissions: DEV_MISSIONS, get parcelVisible() { return !!parcel.parent; },
   laser, ursa, solar, reality, startLaser,
   get church() { return church; }, get venK() { return venK; }, startVeniceTalk, churchStage, get greenBell() { return greenBell; }, get churchBell() { return churchBell; },
   churchReveal() { if (churchOn && !churchShown) { approach.phase = 'revealed'; revealChurch(true); } },
