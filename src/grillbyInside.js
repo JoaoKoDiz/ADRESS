@@ -264,7 +264,7 @@ export function createGrillbyInside() {
     camera.position.copy(camPos); camera.lookAt(look.x, 0, look.z - 0.5);
   }
   return {
-    scene, camera, solids, door: GRILL_DOOR, story, setFP: on => story.setFP(on),
+    scene, camera, solids, npcs, door: GRILL_DOOR, story, setFP: on => story.setFP(on),
     nearDoor: (x, z) => Math.hypot(x - GRILL_DOOR.x, z - GRILL_DOOR.z) < 1.9,
     update(dt, px, pz, snap = false) { t += dt; for (const n of npcs) if (!n.still) animNPC(n, dt); story.tick(dt); if (!story.fp) updateCamera(px, pz, dt, snap); },
   };

@@ -1589,7 +1589,7 @@ const bellDrop = b => BELL_SPOT.y - b.userData.h - BELL_SPOT.floor;
 // enquanto. A oficina e a história do K (depois do Grillby's, Modo Livre) ficam em workshopStory.js.
 let medChurch = null, medScene = null;
 const wsStory = createWorkshopStory({ walker, van, talkBox, input,
-  storyOn: () => gameMode === 'free' && !!MEDV && flagOn(GRILL_TALK_KEY), getState: () => state, setState: s => setState(s) });
+  storyOn: () => gameMode === 'free' && !!MEDV && flagOn(GRILL_TALK_KEY), getState: () => state, setState: s => { setState(s); if (s !== 'wstory') actionLock = 0.4; } });   // (o E que fecha a fala não aciona outra coisa)
 function setupMedStory() {
   if (!MEDV || !MEDV.extra) { wsStory.setup(null); return; }
   const X = MEDV.extra, C = X.church;

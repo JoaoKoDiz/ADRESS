@@ -343,14 +343,16 @@ export function buildStandingReader() {
   const torso = new THREE.Group(); torso.position.set(-0.04, HY + 0.06, 0); torso.rotation.z = 0; g.add(torso);
   torso.add(shirtTorso(M.white));
   const jacket = shirtTorso(JACKET, 0.32); jacket.scale.multiplyScalar(1.05); jacket.position.y = -0.03; torso.add(jacket);
+  const arms = [];                                                                   // (braços: para alcançar algo, reachArm)
   for (const s of [-1, 1]) {
     torso.add(at(box(0.05, 0.62, 0.04, M.white), 0.235, 0.32, s * 0.1, 0, 0, 0.05));
     torso.add(at(box(0.12, 0.2, 0.1, M.red), 0.17, 0.63, s * 0.14, s * 0.5, 0, -0.5));
     // braços descansando: mãos em cima das coxas, mangas dobradas
     const sh = new THREE.Group(); sh.position.set(0, 0.56, s * 0.31); sh.rotation.set(-s * 0.1, 0, 0.04); torso.add(sh);
+    arms.push({ s, sh, rest: sh.quaternion.clone() });
     sh.add(limb(0.14, 0.12, 0.27, M.red));
     sh.add(limb(0.085, 0.075, 0.28, M.skin));
-    const elbow = new THREE.Group(); elbow.position.y = -0.28; elbow.rotation.set(s * 0.05, 0, 0.25); sh.add(elbow);
+    const elbow = new THREE.Group(); elbow.position.y = -0.28; elbow.rotation.set(s * 0.05, 0, 0.25); sh.add(elbow); arms[arms.length - 1].elbow = elbow; arms[arms.length - 1].erest = elbow.quaternion.clone();
     elbow.add(limb(0.12, 0.11, 0.06, M.red));
     elbow.add(at(mesh(new THREE.TorusGeometry(0.1, 0.04, 5, 10), M.red), 0, -0.08, 0, Math.PI / 2, 0, 0));
     elbow.add(limb(0.072, 0.06, 0.2, M.skin));
@@ -361,6 +363,28 @@ export function buildStandingReader() {
   head.add(at(limb(0.095, 0.1, 0.12, M.skin), 0, 0.12, 0));
   const face = readerHead(0.42); face.position.y = 0.44; head.add(face);           // óculos redondos normais (sem lente escura)
   head.rotation.z = 0;
+  root.userData.arms = arms; root.userData.torso = torso;
   root.traverse(o => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = false; } });
   return root;
+}
+
+/** Leva a mão do braço (s = 1 direito, −1 esquerdo) até um ponto do mundo (k = 0..1 mistura com o braço solto).
+ *  IK de 2 ossos (ombro + cotovelo); o cotovelo dobra para fora e para baixo. */
+const _t = new THREE.Vector3(), _d = new THREE.Vector3(), _n = new THREE.Vector3(), _q = new THREE.Quaternion(), _q2 = new THREE.Quaternion(), _qi = new THREE.Quaternion();
+const DOWN = new THREE.Vector3(0, -1, 0);
+export function reachArm(root, s, world, k = 1) {
+  const a = root.userData.arms && root.userData.arms.find(x => x.s === s); if (!a) return;
+  if (k <= 0.001) { a.sh.quaternion.copy(a.rest); a.elbow.quaternion.copy(a.erest); return; }
+  root.updateMatrixWorld(true);
+  const torso = root.userData.torso; _t.copy(world); torso.worldToLocal(_t);
+  _d.copy(_t).sub(a.sh.position);
+  const A = 0.28, B = 0.32, dist = Math.min(A + B - 0.01, Math.max(0.12, _d.length())); _d.normalize();
+  const alpha = Math.acos(Math.min(1, Math.max(-1, (A * A + dist * dist - B * B) / (2 * A * dist))));
+  const inner = Math.acos(Math.min(1, Math.max(-1, (A * A + B * B - dist * dist) / (2 * A * B))));
+  _n.set(0, 0, s).cross(_d); if (_n.lengthSq() < 1e-4) _n.set(1, 0, 0); _n.normalize();   // eixo de dobra: o cotovelo vai para fora/baixo
+  _q.setFromUnitVectors(DOWN, _d); _q2.setFromAxisAngle(_n, alpha); _q.premultiply(_q2);
+  a.sh.quaternion.copy(a.rest).slerp(_q, k);
+  _qi.copy(_q).invert(); _n.applyQuaternion(_qi);                                     // eixo no espaço do braço
+  _q2.setFromAxisAngle(_n, -(Math.PI - inner));
+  a.elbow.quaternion.copy(a.erest).slerp(_q2, k);
 }

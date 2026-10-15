@@ -196,6 +196,41 @@ export function createGrillStory(ctx) {
   }
   const seatView = () => { const s = ST().seat, k = ST().kHead; return { x: s.x, y: s.y, z: s.z, yaw: Math.atan2(k.z - s.z, k.x - s.x), pitch: Math.atan2(k.y - s.y, Math.hypot(k.x - s.x, k.z - s.z)) }; };
 
+  // ---------- percurso dentro do salão (grade 0,25 com folga do tamanho do personagem; A* + atalhos em linha reta) ----------
+  function findPath(x0, z0, x1, z1, extra) {
+    const gi = ctx.grillIn, R = 0.42, C = 0.25, X0 = -13, Z0 = -10, NX = 105, NZ = 81;
+    const obs = gi.solids.map(b => ({ x0: b.x0 - R, z0: b.z0 - R, x1: b.x1 + R, z1: b.z1 + R }));
+    const st = ST(), people = gi.npcs.filter(n => n !== st.guest && n !== st.guestWalk && n.root.visible).map(n => ({ x: n.root.position.x, z: n.root.position.z, r: 0.5 + R }));
+    people.push({ x: st.kPoint.x, z: st.kPoint.z, r: 0.2 });
+    if (extra) people.push({ x: extra.x, z: extra.z, r: 0.45 + R });
+    const freeP = (x, z) => x > -12.6 && x < 12.6 && z > -9.6 && z < 9.6 && !obs.some(b => x > b.x0 && x < b.x1 && z > b.z0 && z < b.z1) && !people.some(p => Math.hypot(x - p.x, z - p.z) < p.r);
+    const grid = new Uint8Array(NX * NZ); for (let j = 0; j < NZ; j++) for (let i = 0; i < NX; i++) grid[j * NX + i] = freeP(X0 + i * C, Z0 + j * C) ? 1 : 0;
+    const cell = (x, z) => { let i = Math.round((x - X0) / C), j = Math.round((z - Z0) / C), best = -1, bd = 1e9;   // a célula livre mais perto
+      for (let dj = -6; dj <= 6; dj++) for (let di = -6; di <= 6; di++) { const a = i + di, b = j + dj; if (a < 0 || b < 0 || a >= NX || b >= NZ || !grid[b * NX + a]) continue; const dd = di * di + dj * dj; if (dd < bd) { bd = dd; best = b * NX + a; } }
+      return best; };
+    const s0 = cell(x0, z0), s1 = cell(x1, z1); if (s0 < 0 || s1 < 0) return [{ x: x1, z: z1 }];
+    const gS = new Float32Array(NX * NZ).fill(1e9), from = new Int32Array(NX * NZ).fill(-1), open = [s0]; gS[s0] = 0;
+    const H = c => Math.hypot((c % NX) - (s1 % NX), Math.floor(c / NX) - Math.floor(s1 / NX));
+    const closed = new Uint8Array(NX * NZ);
+    while (open.length) {
+      let bi = 0; for (let q = 1; q < open.length; q++) if (gS[open[q]] + H(open[q]) < gS[open[bi]] + H(open[bi])) bi = q;
+      const c = open.splice(bi, 1)[0]; if (c === s1) break; if (closed[c]) continue; closed[c] = 1;
+      const ci = c % NX, cj = Math.floor(c / NX);
+      for (let dj = -1; dj <= 1; dj++) for (let di = -1; di <= 1; di++) {
+        if (!di && !dj) continue; const a = ci + di, b = cj + dj; if (a < 0 || b < 0 || a >= NX || b >= NZ) continue;
+        const n = b * NX + a; if (!grid[n] || closed[n] || (di && dj && (!grid[cj * NX + a] || !grid[b * NX + ci]))) continue;
+        const ng = gS[c] + (di && dj ? 1.414 : 1); if (ng < gS[n]) { gS[n] = ng; from[n] = c; open.push(n); }
+      }
+    }
+    if (from[s1] < 0 && s1 !== s0) return [{ x: x1, z: z1 }];
+    const pts = []; for (let c = s1; c >= 0; c = c === s0 ? -1 : from[c]) pts.unshift({ x: X0 + (c % NX) * C, z: Z0 + Math.floor(c / NX) * C });
+    const los = (a, b) => { const n = Math.ceil(Math.hypot(b.x - a.x, b.z - a.z) / 0.1); for (let q = 1; q < n; q++) if (!freeP(a.x + (b.x - a.x) * q / n, a.z + (b.z - a.z) * q / n)) return false; return true; };
+    const out = []; let a = { x: x0, z: z0 }, q = 0;                 // atalhos: pula pontos enquanto a linha reta continua livre
+    while (q < pts.length) { let far = q; for (let r = pts.length - 1; r > q; r--) if (los(a, pts[r])) { far = r; break; } a = pts[far]; out.push(a); q = far + 1; }
+    out.push({ x: x1, z: z1 });
+    return out;
+  }
+
   // ---------- lá fora: nevasca, escuro, poste, vizinho ----------
   let ext = null;
   function setupOutside() {
@@ -394,10 +429,19 @@ export function createGrillStory(ctx) {
         walker.update(dt, input.axis(), 'car', ctx.grillIn.solids, FAR);
         view(c, walker.x, EYE, walker.z, walker.heading, -0.08);
         const st = ST(), G = st.guestWalk, g = S.g;
-        if (!g.seated) {                                             // segue depressa até o banquinho perto do fogo e senta
-          const tx = st.fire.x + 1.25, tz = st.fire.z, dx = tx - g.x, dz = tz - g.z, d = Math.hypot(dx, dz);
-          if (d > 0.15) {
-            const sp = Math.min(d, 2.4 * dt); g.x += dx / d * sp; g.z += dz / d * sp; g.ph += sp / 0.42 * Math.PI;
+        if (!g.seated) {                                             // segue pelos corredores livres até o banquinho perto do fogo e senta
+          if (!g.path) g.path = findPath(g.x, g.z, st.fire.x + 1.25, st.fire.z, null);
+          const wp = g.path[0] || { x: st.fire.x + 1.25, z: st.fire.z }, last = g.path.length <= 1;
+          const dx = wp.x - g.x, dz = wp.z - g.z, d = Math.hypot(dx, dz);
+          // alguém no caminho logo à frente (o jogador ou um cliente andando): espera um pouco; se continuar, procura outra rota
+          const ax = g.x + dx / (d || 1) * 0.7, az = g.z + dz / (d || 1) * 0.7;
+          const blocker = Math.hypot(walker.x - ax, walker.z - az) < 0.75 ? { x: walker.x, z: walker.z } : null;
+          if (blocker) { g.wait = (g.wait || 0) + dt; if (g.wait > 1.2) { g.path = findPath(g.x, g.z, st.fire.x + 1.25, st.fire.z, blocker); g.wait = 0; } }
+          else g.wait = 0;
+          if (blocker) { G.root.position.set(g.x, 0, g.z); if (G.legL) { G.legL.rotation.x = 0; G.legR.rotation.x = 0; } }
+          else if (d > (last ? 0.15 : 0.25) || !last) {
+            if (d <= 0.25 && !last) g.path.shift();
+            const sp = Math.min(d, 2.0 * dt); g.x += dx / (d || 1) * sp; g.z += dz / (d || 1) * sp; g.ph += sp / 0.42 * Math.PI;
             G.root.visible = true; G.root.position.set(g.x, 0, g.z); G.root.rotation.y = Math.atan2(dx, dz);
             const sw = Math.sin(g.ph) * 0.5; if (G.legL) { G.legL.rotation.x = sw; G.legR.rotation.x = -sw; }
             G.body.rotation.set(0.08, 0, 0); G.armL.rotation.set(-sw * 0.6, 0, -0.1); G.armR.rotation.set(sw * 0.6, 0, 0.1);

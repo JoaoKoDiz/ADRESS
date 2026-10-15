@@ -55,7 +55,9 @@ export function buildWorkshop() {
   for (let i = 0; i < 5; i++) leaf.add(at(box(0.48, 2.75, 0.1, i % 2 ? WOOD : '#7e5230'), 0.25 + i * 0.5, 1.4, 0));
   for (const y of [0.5, 2.3]) leaf.add(at(box(2.45, 0.16, 0.14, TIMBER), 1.25, y, 0));
   leaf.add(at(box(2.3, 0.14, 0.14, TIMBER), 1.25, 1.4, 0, 0, 0, 0.75));                // travessa em diagonal
-  leaf.add(at(sphere(0.07, IRON, 6, 4), 2.25, 1.3, 0.1));                                // puxador
+  leaf.add(at(sphere(0.07, IRON, 6, 4), 2.3, 1.3, 0.1));                                 // puxador (fora)
+  leaf.add(at(box(0.06, 0.26, 0.05, IRON), 2.3, 1.3, -0.1)); leaf.add(at(box(0.05, 0.05, 0.1, IRON), 2.3, 1.42, -0.07)); leaf.add(at(box(0.05, 0.05, 0.1, IRON), 2.3, 1.18, -0.07));   // alça (dentro)
+  const grip = new THREE.Object3D(); grip.position.set(2.3, 1.3, -0.19); leaf.add(grip);   // onde a mão do K segura (por dentro)
   const oldHinges = new THREE.Group(), newHinges = new THREE.Group(); leaf.add(oldHinges, newHinges);
   for (const y of [0.55, 2.25]) { oldHinges.add(at(box(0.55, 0.1, 0.16, '#6b4a3a'), 0.25, y, 0, 0, 0, 0.08)); newHinges.add(at(box(0.7, 0.12, 0.17, BRASS), 0.33, y, 0)); }
   const bolt = at(box(0.35, 0.08, 0.06, BRASS), 2.2, 1.6, 0.1); newHinges.add(bolt);
@@ -95,7 +97,7 @@ export function buildWorkshop() {
 
   root.traverse(o => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
   const api = {
-    root, roof, doorPivot, chair, newHinges, oldHinges,
+    root, roof, doorPivot, grip, chair, newHinges, oldHinges,
     /** Mostra o que já foi feito (não volta ao estado inicial). */
     setStage(n) {
       oldHinges.visible = n < 2; newHinges.visible = n >= 2;
@@ -104,7 +106,7 @@ export function buildWorkshop() {
       oldPlank.visible = n < 3 || n === 3; oldPlank.position.set(n === 3 ? 4.0 : 0, 0, 0); oldPlank.rotation.set(0, 0, 0);
       if (n === 3) { oldPlank.position.set(5.8, -0.5, 1.2); oldPlank.rotation.set(0, Math.PI / 2, 1.3); }   // encostada na parede, de lado
       if (n < 3) { topNew.visible = true; topNew.children.forEach((c, i) => { c.material = c.material; }); }
-      lastPlank.visible = n >= 4; tools.visible = n >= 4; chair.visible = n >= 4;
+      lastPlank.visible = n >= 4; tools.visible = n >= 4; chair.visible = false;   // (sem o pedido da cadeira)
       // antes do conserto da bancada, o tampo é o antigo (as "novas" tábuas aparecem com a cor velha)
       for (const c of topNew.children) c.material = n >= 3 ? mat(WOOD_NEW) : mat(WOOD_OLD);
     },
