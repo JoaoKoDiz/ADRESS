@@ -34,8 +34,8 @@ export function buildWorkshop() {
   add(box(2.5, 0.3, 0.4, TIMBER), 0, 3.0, 6.8);                                        // verga da porta
   add(box(2.5, 0.4, 0.4, PLASTER), 0, 3.35, 6.8);
   // janelinhas da frente com luz quente
-  const warm = mat('#ffc874', { emissive: '#ff9a3a', emissiveIntensity: 0.8 });
-  for (const x of [-3.6, 3.6]) { add(box(1.3, 0.9, 0.08, TIMBER), x, 2.2, 7.03); const w = new THREE.Mesh(new THREE.BoxGeometry(1.0, 0.65, 0.05), warm); add(w, x, 2.2, 7.06); }
+  const warm = mat('#ffc874', { emissive: '#ff9a3a', emissiveIntensity: 0.8 }), wins = [], lamps = [];
+  for (const x of [-3.6, 3.6]) { add(box(1.3, 0.9, 0.08, TIMBER), x, 2.2, 7.03); const w = new THREE.Mesh(new THREE.BoxGeometry(1.0, 0.65, 0.05), warm); add(w, x, 2.2, 7.06); wins.push(w); }
   // placa pintada à mão
   add(box(2.2, 0.55, 0.08, '#4a3020'), 0, 3.85, 7.05); add(box(1.9, 0.08, 0.04, '#d9c08a'), 0, 3.85, 7.1);
   // telhado de duas águas (cumeeira ao longo de z); some quando o jogador entra
@@ -44,9 +44,9 @@ export function buildWorkshop() {
   for (const z of [-7, 7]) { const tri = new THREE.Shape([new THREE.Vector2(-6, 0), new THREE.Vector2(6, 0), new THREE.Vector2(0, 2.6)]); const m = new THREE.Mesh(new THREE.ExtrudeGeometry(tri, { depth: 0.3, bevelEnabled: false }), mat(PLASTER)); m.position.set(0, 3.45, z - 0.15); roof.add(m); }
   add(box(0.25, 1.6, 0.25, STONE2), 4.2, 5.3, -3.5, 0, 0, 0, roof);                   // chaminé
   // lanterna acesa (dentro) e na porta
-  const gt = glowTex(), glow = (x, y, z, s) => { const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: gt, color: '#ffd9a0', blending: THREE.AdditiveBlending, transparent: true, depthWrite: false })); sp.scale.setScalar(s); sp.position.set(x, y, z); root.add(sp); };
-  add(sphere(0.16, '#ffe2a0', 8, 6, { emissive: '#ffb050', emissiveIntensity: 1.6 }), 0, 3.1, -1); glow(0, 3.1, -1, 1.8);
-  add(box(0.06, 0.6, 0.06, IRON), 1.6, 3.2, 7.3); add(sphere(0.14, '#ffe2a0', 8, 6, { emissive: '#ffb050', emissiveIntensity: 1.6 }), 1.6, 2.85, 7.35); glow(1.6, 2.85, 7.4, 1.4);
+  const gt = glowTex(), glow = (x, y, z, s) => { const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: gt, color: '#ffd9a0', blending: THREE.AdditiveBlending, transparent: true, depthWrite: false })); sp.scale.setScalar(s); sp.position.set(x, y, z); root.add(sp); lamps.push(sp); };
+  lamps.push(add(sphere(0.16, '#ffe2a0', 8, 6, { emissive: '#ffb050', emissiveIntensity: 1.6 }), 0, 3.1, -1)); glow(0, 3.1, -1, 1.8);
+  add(box(0.06, 0.6, 0.06, IRON), 1.6, 3.2, 7.3); lamps.push(add(sphere(0.14, '#ffe2a0', 8, 6, { emissive: '#ffb050', emissiveIntensity: 1.6 }), 1.6, 2.85, 7.35)); glow(1.6, 2.85, 7.4, 1.4);
   const light = new THREE.PointLight('#ffc27a', 9, 13, 1.5); light.position.set(0, 3, -1); root.add(light);
 
   // ---- porta de madeira (dobradiça em x = −1,25): ângulo 0 fechada, + abre para dentro ----
@@ -129,7 +129,72 @@ export function buildWorkshop() {
     placeLast(k) { lastPlank.visible = true; lastPlank.position.y = 0.6 * (1 - k); },
     showTools(on) { tools.visible = on; },
     world: o => root.localToWorld(o),
+    /** Temporal (história): estragos localizados que continuam acontecendo. t = segundos da cena (ou Infinity = estado final). */
+    ruin(t) { if (!R) R = buildRuin(); R.update(t); },
   };
+  // ---------- estragos do temporal ----------
+  // O telhado vira painéis (5 por água): alguns já foram embora, outros se soltam durante a cena; a porta pende de uma
+  // dobradiça e bate com o vento; a luz apaga; tábuas encostadas tombam; a travessa nova escorrega da bancada e as
+  // ferramentas se espalham; a chuva entra pelos buracos (a chuva em si fica com a cena).
+  let R = null;
+  function buildRuin() {
+    roof.visible = false; light.intensity = 0; for (const l of lamps) l.visible = false;
+    const dark = new THREE.MeshStandardMaterial({ color: '#2a2622', roughness: 1 });
+    for (const w of wins) w.material = dark;
+    const g = new THREE.Group(); root.add(g);
+    const rm = mat(ROOF), pl = mat(PLASTER), tm = mat(TIMBER);
+    for (const z of [-7, 7]) { const tri = new THREE.Shape([new THREE.Vector2(-6, 0), new THREE.Vector2(6, 0), new THREE.Vector2(-1.6, 2.0)]); const m = new THREE.Mesh(new THREE.ExtrudeGeometry(tri, { depth: 0.3, bevelEnabled: false }), pl); m.position.set(0, 3.45, z - 0.15); g.add(m); }   // oitões quebrados
+    g.add(at(box(0.25, 1.1, 0.25, STONE2), 4.2, 4.9, -3.5, 0, 0, 0.35));                 // chaminé torta
+    g.add(at(box(0.18, 0.18, 14.2, TIMBER), 0, 5.6, 0, 0.02, 0, 0));                    // a cumeeira ficou (os painéis caem dela)
+    const pieces = [];                                                                   // { m, x0.. pose inicial, t0 (quando cede), kind }
+    for (const s of [-1, 1]) for (let i = 0; i < 5; i++) {
+      const z = -5.6 + i * 2.8, m = box(6.9, 0.22, 2.7, ROOF); m.material = rm;
+      m.position.set(s * 3.1, 4.55, z); m.rotation.set(0, 0, -s * 0.42); g.add(m);
+      const id = (s < 0 ? 0 : 5) + i;
+      // já foram (antes da cena): 1, 3, 6 · soltam-se na cena: 8 (cai para dentro, 2,2 s), 4 (o vento leva, 6,3 s), 7 (pende e cai, 9,6 s)
+      const gone = [1, 3, 6].includes(id), t0 = { 8: 2.2, 4: 6.3, 7: 9.6 }[id];
+      if (gone) m.visible = false;
+      if (id === 7) m.rotation.x = 0.25;                                                 // já pendurado, torto
+      pieces.push({ m, s, z, t0, id, p0: m.position.clone(), r0: m.rotation.clone() });
+    }
+    // caibros expostos onde o telhado foi embora
+    for (const z of [-4.2, -1.4, 1.4, 4.2]) for (const s of [-1, 1]) g.add(at(box(0.14, 0.14, 7.3, TIMBER), s * 3.0, 4.6, z, 0, Math.PI / 2, -s * 0.42));
+    // destroços já no chão (lá dentro e na frente)
+    for (const [x, z, ry, rz] of [[-2.4, -1.6, 0.4, 0.15], [2.6, 3.4, -0.7, 0.2], [-1.2, 9.4, 1.1, 0.05]]) { const d = box(2.6, 0.16, 1.4, ROOF); d.material = rm; d.position.set(x, 0.2, z); d.rotation.set(0.1, ry, rz); g.add(d); }
+    for (const [x, z, ry] of [[3.4, 8.6, 0.6], [-3.6, 10.2, -0.3], [1.0, -2.6, 1.3]]) g.add(at(box(0.16, 0.12, 2.4, TIMBER), x, 0.1, z, 0, ry, 0));
+    // tábuas encostadas que tombam (10 s) e a travessa nova que escorrega (7,6 s)
+    const boards = g.children.length;
+    const lean = new THREE.Group(); lean.position.set(-5.2, 0, 1.0); g.add(lean); lean.add(at(box(0.22, 2.6, 0.12, WOOD_NEW), 0, 1.3, 0)); lean.rotation.z = -0.18;
+    void boards;
+    const st = { pieces, lean, door: doorPivot, leaf: doorPivot.children[0] };
+    R = {
+      update(t) {
+        const T = Number.isFinite(t) ? t : 99;
+        // porta: presa só pela dobradiça de baixo, entreaberta e batendo com as rajadas
+        st.door.rotation.y = 0.75 + 0.18 * Math.sin(T * 1.7) * Math.sin(T * 0.6 + 1) + (Number.isFinite(t) ? 0 : 0);
+        st.leaf.rotation.z = -0.07; st.leaf.position.y = -0.05;
+        for (const p of pieces) {
+          if (p.t0 == null) { if (p.id === 7 && T < 9.6) p.m.rotation.x = 0.25 + 0.05 * Math.sin(T * 3.1); continue; }
+          const u = T - p.t0;
+          if (u <= 0) { p.m.rotation.z = p.r0.z + 0.03 * Math.sin(T * 7 + p.id); continue; }   // tremendo antes de soltar
+          if (p.id === 4) {                                                              // o vento arranca e leva para longe
+            p.m.position.set(p.p0.x - 6 * u, p.p0.y + 3.5 * u - 4.9 * u * u * 0.35, p.p0.z + 2.5 * u); p.m.rotation.set(p.r0.x + 2.2 * u, p.r0.y + 1.1 * u, p.r0.z + 1.6 * u);
+            if (u > 3) p.m.visible = false;
+          } else {                                                                       // cai para dentro e fica torto no chão
+            const fall = Math.min(1, u / 0.85), y = p.p0.y + (0.35 - p.p0.y) * fall * fall;
+            p.m.position.set(p.p0.x * (1 - 0.5 * fall), y, p.p0.z); p.m.rotation.set(p.r0.x + 0.3 * fall, p.r0.y, p.r0.z * (1 - fall) + 0.2 * fall);
+          }
+        }
+        lean.rotation.z = T < 10 ? -0.18 : -0.18 - Math.min(1.35, (T - 10) * (T - 10) * 6);
+        lean.position.y = T < 10 ? 0 : Math.min(1, (T - 10) * 2) * 0.1;
+        // a travessa nova escorrega da bancada; as ferramentas se espalham
+        const v = Math.max(0, Math.min(1, (T - 7.6) / 0.6));
+        lastPlank.position.set(0, 0.6 * 0 - 0.85 * v * v, 0.55 * v); lastPlank.rotation.set(-0.5 * v, 0, 0.12 * v);
+        tools.position.set(0.2 * v, -0.9 * v * v, 0.5 * v); tools.rotation.set(0, 0.3 * v, 0.6 * v);
+      },
+    };
+    return R;
+  }
   api.setStage(0);
   return api;
 }

@@ -30,7 +30,12 @@ const CSS = `
   width: clamp(28px, 2.4vw, 38px); height: clamp(28px, 2.4vw, 38px); border-radius: 50%; border: 3px solid #ff7a1a; background: #fff3d6; color: #c2570c;
   font: italic 900 clamp(15px, 1.35vw, 21px)/1 Georgia,"Times New Roman",serif; padding: 0; cursor: pointer;
   display: none; align-items: center; justify-content: center; box-shadow: 0 3px 0 rgba(168,72,11,.55), 0 5px 12px rgba(0,0,0,.25); transition: transform .12s; }
-.lsel-nextwrap.locked .lsel-info { display: flex; }
+.lsel-nextwrap.info .lsel-info { display: flex; }
+.lsel-nextwrap.gone { visibility: hidden; }
+/* página dos 4 níveis extras (história secundária): 4 cartões altos = a altura das 2 fileiras da página anterior */
+.lsel-grid.extra .lsel-card.xtra { box-sizing: border-box; background: #ffffff; border: 3px solid rgba(201,167,106,.75); cursor: default; box-shadow: 0 4px 12px rgba(0,0,0,.18), inset 0 0 0 6px #fffaf0; }
+.lsel-grid.extra .lsel-card.xtra::after { content: ''; position: absolute; inset: 12px; border-radius: clamp(6px, .8vw, 12px); border: 2px dashed rgba(201,167,106,.45); }
+.lsel-play.gone { visibility: hidden; }
 .lsel-info:hover { transform: translateX(-50%) scale(1.1); }
 .lsel-modal { position: absolute; inset: 0; z-index: 2; display: none; align-items: center; justify-content: center; background: rgba(30,22,14,.38); }
 .lsel-modal.on { display: flex; }
@@ -92,7 +97,24 @@ export function createLevelSelect(onPick) {
   addEventListener('keydown', e => {                       // Esc fecha só a janela (sem abrir o menu de opções)
     if (e.code === 'Escape' && modal.classList.contains('on')) { e.stopImmediatePropagation(); closeInfo(); }
   }, true);
-  let cards = null, sel = 0, page = 0, COUNT = 0;
+  let cards = null, sel = 0, page = 0, COUNT = 0, extra = false, onExtra = false;
+  const INFO0 = modal.querySelector('.lsel-modal-box').innerHTML;
+  const INFO_EXTRA = '<h3 id="lsel-modal-title">Além das entregas</h3><p>Se você completou as cinco missões de cada um dos 24 bairros, sua jornada de entregador está completa.</p>' +
+    '<p>Os quatro níveis seguintes pertencem exclusivamente à história secundária e agora estão disponíveis para você.</p>' +
+    '<p>Eles são extras opcionais e não são necessários para concluir o jogo principal. São a continuação do caminho que você escolheu acompanhar além das entregas.</p>' +
+    '<button type="button" class="lsel-modal-ok">Entendi</button>';
+  function setInfo() {
+    const box = modal.querySelector('.lsel-modal-box'); box.innerHTML = extra ? INFO_EXTRA : INFO0;
+    const ok = box.querySelector('.lsel-modal-ok'); ok.tabIndex = -1; ok.addEventListener('mousedown', e => e.preventDefault()); ok.addEventListener('click', closeInfo);
+  }
+  /** Página dos 4 níveis extras (posições 25–28): 4 cartões brancos e altos, ainda sem conteúdo (clicar não inicia nada). */
+  function showExtra() {
+    const h = grid.getBoundingClientRect().height;               // a altura das 2 fileiras (com o espaço entre elas)
+    onExtra = true; page = pages(); grid.textContent = ''; grid.classList.add('extra');
+    for (let k = 0; k < 4; k++) { const c = document.createElement('div'); c.className = 'lsel-card xtra'; c.dataset.level = String(24 + k); if (h > 0) c.style.height = h + 'px'; grid.appendChild(c); }
+    prevBtn.classList.remove('off'); nextWrap.classList.add('gone'); playBtn.classList.add('gone');
+  }
+  function leaveExtra() { onExtra = false; grid.classList.remove('extra'); nextWrap.classList.remove('gone'); playBtn.classList.remove('gone'); }
   const pages = () => Math.ceil(COUNT / PER);
 
   function paint() {
@@ -101,6 +123,7 @@ export function createLevelSelect(onPick) {
   }
   /** Mostra os 8 espaços da página p: bairros disponíveis e, no resto, cartões "Em breve" (não selecionáveis). */
   function showPage(p) {
+    if (onExtra) leaveExtra();
     page = p; grid.textContent = '';
     for (let k = 0; k < PER; k++) {
       const i = p * PER + k;
@@ -112,10 +135,12 @@ export function createLevelSelect(onPick) {
     }
     prevBtn.classList.toggle('off', page === 0);
     const last = page >= pages() - 1;                        // última página: seta cinza e desativada (mais bairros virão), com o "i"
-    nextBtn.classList.toggle('locked', last); nextBtn.disabled = last; nextBtn.setAttribute('aria-disabled', String(last));
-    nextWrap.classList.toggle('locked', last);
+    const lock = last && !extra;                             // depois do temporal, a seta leva aos 4 níveis extras
+    nextBtn.classList.toggle('locked', lock); nextBtn.disabled = lock; nextBtn.setAttribute('aria-disabled', String(lock));
+    nextWrap.classList.toggle('locked', lock); nextWrap.classList.toggle('info', last);
   }
   function goPage(p, row = 0) {
+    if (extra && p === pages() && !onExtra) { showExtra(); return; }
     if (p < 0 || p >= pages()) return;
     sel = Math.min(COUNT - 1, p * PER + row * COLS);         // mesma fila, se houver bairro nela; senão o último disponível
     if (Math.floor(sel / PER) !== p) sel = p * PER;
@@ -137,15 +162,19 @@ export function createLevelSelect(onPick) {
     showPage(0);
   }
   return {
-    open(level = 0) { if (!cards) build(); sel = Math.min(level, COUNT - 1); while (sel > 0 && !cards[sel]) sel--; showPage(Math.floor(sel / PER)); paint(); el.classList.add('on'); document.body.classList.add('lsel-on'); },
+    /** Libera (ou não) a página dos 4 níveis extras e o texto novo do "i". */
+    setExtra(on) { if (extra !== !!on) { extra = !!on; setInfo(); } },
+    get onExtra() { return onExtra; },
+    open(level = 0) { if (!cards) build(); if (onExtra) leaveExtra(); sel = Math.min(level, COUNT - 1); while (sel > 0 && !cards[sel]) sel--; showPage(Math.floor(sel / PER)); paint(); el.classList.add('on'); document.body.classList.add('lsel-on'); },
     close() { closeInfo(); el.classList.remove('on'); document.body.classList.remove('lsel-on'); },
     get isOpen() { return el.classList.contains('on'); },
     /** Janela "Além das entregas" aberta (o teclado da seleção fica parado; E/Enter fecha). */
     get infoOpen() { return modal.classList.contains('on'); },
     openInfo, closeInfo,
-    get selected() { return sel; },
+    get selected() { return onExtra ? -1 : sel; },
     /** dx/dy: um passo de seta dentro da página (ignora os "Em breve"); nas bordas laterais, troca de página. */
     move(dx, dy) {
+      if (onExtra) { if (dx < 0) { goPage(pages() - 1, 0); } return; }   // página extra: só volta
       const k = sel % PER, c = k % COLS + dx, r = Math.floor(k / COLS) + dy;
       if (r < 0 || r >= PER / COLS) return;
       if (c < 0) return goPage(page - 1, r);

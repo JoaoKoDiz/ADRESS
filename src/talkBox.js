@@ -124,6 +124,7 @@ export function createTalkBox(stage) {
     pressNote() { if (!noteCb) return; const cb = noteCb; noteCb = null; note.style.display = 'none'; cb(); },
     /** Tela preta: vai até `to` (0..1) em `ms` milissegundos; cb ao terminar. */
     fadeBlack(to, ms, cb) {
+      if (ms <= 0) { black.style.transitionDuration = '0ms'; black.style.opacity = String(to); if (cb) setTimeout(cb, 0); return; }   // corte seco
       black.style.transitionDuration = ms + 'ms';
       requestAnimationFrame(() => { black.style.opacity = String(to); });
       setTimeout(() => cb && cb(), ms + 30);

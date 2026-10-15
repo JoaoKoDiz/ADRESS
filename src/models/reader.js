@@ -318,6 +318,7 @@ export function buildPewReader(seatY = 0.62) {
   const face = readerHead(0.42); face.position.y = 0.44; head.add(face);           // óculos redondos normais (sem lente escura)
   head.rotation.z = -0.1;                                                           // olha para a frente (para o altar)
   root.traverse(o => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = false; } });
+  root.userData.head = head; root.userData.torso = torso;           // (olhares e gestos nas conversas)
   return root;
 }
 
@@ -327,12 +328,12 @@ export function buildStandingReader() {
   const root = new THREE.Group();
   root.name = 'standing-reader';
   const S = 0.9, g = new THREE.Group(); g.scale.setScalar(S); root.add(g);
-  const HY = 0.32 + 0.42 + 0.17;                                                    // quadril: coxa + canela + pé
+  const HY = 0.32 + 0.42 + 0.17, legs = [];                                                    // quadril: coxa + canela + pé
   g.add(at(lowBall(0.27, M.pants, 1.05, 0.62, 1.15), 0.02, HY, 0));
   for (const s of [-1, 1]) {
-    const thigh = new THREE.Group(); thigh.position.set(0.02, HY, s * 0.14); thigh.rotation.z = 0; g.add(thigh);
+    const thigh = new THREE.Group(); thigh.position.set(0.02, HY, s * 0.14); thigh.rotation.z = 0; g.add(thigh); legs.push(thigh);
     thigh.add(limb(0.15, 0.13, 0.32, M.pants));
-    const knee = new THREE.Group(); knee.position.y = -0.32; knee.rotation.z = 0; thigh.add(knee);
+    const knee = new THREE.Group(); knee.position.y = -0.32; knee.rotation.z = 0; thigh.add(knee); thigh.userData.knee = knee;
     const shin = 0.42;
     knee.add(limb(0.13, 0.11, shin, M.pants));
     const foot = new THREE.Group(); foot.position.y = -shin; foot.rotation.z = 0; knee.add(foot);
@@ -359,12 +360,13 @@ export function buildStandingReader() {
     const wrist = new THREE.Group(); wrist.position.y = -0.2; elbow.add(wrist);
     wrist.add(flatHand(M.skin));
   }
-  const head = new THREE.Group(); head.position.y = 0.7; torso.add(head);
+  const head = new THREE.Group(); head.position.y = 0.7; torso.add(head); head.name = 'k-head';
   head.add(at(limb(0.095, 0.1, 0.12, M.skin), 0, 0.12, 0));
   const face = readerHead(0.42); face.position.y = 0.44; head.add(face);           // óculos redondos normais (sem lente escura)
   head.rotation.z = 0;
   root.userData.arms = arms; root.userData.torso = torso;
   root.traverse(o => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = false; } });
+  root.userData.legs = legs; if (!root.userData.head) root.userData.head = root.getObjectByName('k-head');
   return root;
 }
 

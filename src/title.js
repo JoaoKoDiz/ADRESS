@@ -59,6 +59,11 @@ body.title-on .menu-btn, body.title-on .hint-btn, body.title-on .music-btn { vis
 .title-fade { position: absolute; inset: 0; background: #1b2418; opacity: 0; transition: opacity .5s; pointer-events: none; z-index: 5; }
 .title-bye { color: #fff3d6; font: 800 clamp(22px, 2.4vw, 36px) "Trebuchet MS","Segoe UI",system-ui,sans-serif;
   text-shadow: 0 3px 0 rgba(0,0,0,.4); text-align: center; }
+.title-note { position: absolute; right: clamp(14px, 2.4vw, 40px); bottom: clamp(14px, 3vh, 40px); z-index: 6; max-width: min(380px, 80vw);
+  background: #fff3d6; border: 3px solid #ff7a1a; border-radius: 14px; padding: .8em 1.1em; color: #2e1d10;
+  font: 700 clamp(14px, min(1.15vw, 2.2vh), 18px)/1.45 "Trebuchet MS","Segoe UI",system-ui,sans-serif;
+  box-shadow: 0 5px 0 rgba(168,72,11,.35), 0 10px 26px rgba(0,0,0,.3); opacity: 0; transform: translateY(10px); transition: opacity .6s, transform .6s; pointer-events: none; }
+.title-note.on { opacity: 1; transform: none; }
 `;
 
 // ícones (desenhados em SVG, cores chapadas)
@@ -133,6 +138,12 @@ export function createTitle({ onFree, onCareer, onPlay, onShop, onBack, onSettin
       starting = false;
     },
     get screen() { return el.classList.contains('playing') ? 'play' : 'home'; },
+    /** Aviso discreto no canto (some sozinho depois de ms). */
+    notify(text, ms = 9000) {
+      let n = el.querySelector('.title-note'); if (!n) { n = document.createElement('div'); n.className = 'title-note'; el.appendChild(n); }
+      n.textContent = text; n.classList.remove('on'); void n.offsetWidth;
+      setTimeout(() => n.classList.add('on'), 600); clearTimeout(n._h); n._h = setTimeout(() => n.classList.remove('on'), 600 + ms);
+    },
     get starting() { return starting; },
   };
 }

@@ -20,6 +20,7 @@ import { createGrillbyInside } from './grillbyInside.js';
 import { createGrillStory, GRILL_TALK_KEY, createCrowd } from './grillStory.js';
 import { createWorkshopStory, INTRO_KEY } from './workshopStory.js';
 import { createChurchCine } from './churchCine.js';
+import { createMassStory, MASS_KEY, BELL3_KEY, NOTICE_KEY } from './massStory.js';
 import { createNight } from './night.js';
 import { createFarmOutside } from './farmOutside.js';
 import { createReality } from './reality.js';
@@ -944,7 +945,8 @@ const title = createTitle({
   onFree: () => { if (state === 'title' && !title.starting) openLevelSelect(); },   // Livre: primeiro escolhe o bairro
   onCareer: () => titleDriver.drive(() => title.fadeOut(enterMap)),     // dá a partida e vai para o mapa da Carreira
   onShop: () => { if (state === 'title') openShop(); },       // Shop: layout inicial (cores grátis; itens em breve)
-  onPlay: el => { titleDriver = titleDriver || createTitleDriver(el, audio); titleDriver.start(); },
+  onPlay: el => { titleDriver = titleDriver || createTitleDriver(el, audio); titleDriver.start();
+    if (flagOn(MASS_KEY) && !flagOn(NOTICE_KEY)) { try { localStorage.setItem(NOTICE_KEY, '1'); } catch (e) { /* */ } title.notify('A história continua. Quatro novos lugares estão disponíveis no Modo Livre.'); } },   // uma vez, depois do temporal
   onBack: () => goBack(),                                      // Voltar do próprio painel (fica embaixo do logo)
   onSettings: () => { if (state === 'title') settings.open(); },   // Configurações (volume, tela cheia, controles)
 });
@@ -953,9 +955,9 @@ const shop = createShop();
 function openShop() { shop.open(); setState('shop'); }
 // Livre: seleção do bairro (todas as miniaturas na tela; setas escolhem, E joga). Depois o helicóptero decola.
 const levelSelect = createLevelSelect(l => confirmLevel(l));
-function openLevelSelect() { levelSelect.open(freeLevel); setState('levelSelect'); }
+function openLevelSelect() { levelSelect.setExtra(flagOn(MASS_KEY)); levelSelect.open(freeLevel); setState('levelSelect'); }   // (página dos 4 níveis extras: só depois do temporal)
 function confirmLevel(l) {
-  if (state !== 'levelSelect' || RESERVED.includes(l)) return;   // 17–19: reservados
+  if (state !== 'levelSelect' || l < 0 || RESERVED.includes(l)) return;   // (−1: página dos níveis extras, ainda sem fases)   // 17–19: reservados
   freeLevel = l;
   levelSelect.close();
   setState('levelFly');
@@ -989,8 +991,9 @@ const missions = createMissions(career); // Carreira: M perto da maquete abre as
 // Checkpoints de teste da história secundária (no cadeado, depois da senha): grava no progresso salvo as etapas até a
 // escolhida e apaga as posteriores. Cada cena lê esse progresso ao começar (caixa, K no terraço, igreja e sinos, bonde, Veneza).
 const STORY_STEPS = ['Nada', 'Conversa na casa do personagem — completa', 'Conversa no terraço — completa', 'Primeira conversa na igreja — completa',
-  'Trolley Problem — completo', 'Conversa em Veneza — completa', 'Segunda conversa na igreja — completa', "Encontro no Grillby's — completo", 'Oficina no Bairro 24 — completa'];
-const storyKeys = () => [PARCEL_KEY, ROOF_KEY, CHURCH_TALK_KEY, TROLLEY_TALK_KEY, VENICE_TALK_KEY, CHURCH2_KEY, GRILL_TALK_KEY, 'adress.med.talk1'];
+  'Trolley Problem — completo', 'Conversa em Veneza — completa', 'Segunda conversa na igreja — completa', "Encontro no Grillby's — completo", 'Oficina no Bairro 24 — completa',
+  'Apresentação da igreja (Bairro 24) — vista', 'Missa e temporal — completos'];
+const storyKeys = () => [PARCEL_KEY, ROOF_KEY, CHURCH_TALK_KEY, TROLLEY_TALK_KEY, VENICE_TALK_KEY, CHURCH2_KEY, GRILL_TALK_KEY, 'adress.med.talk1', INTRO_KEY, MASS_KEY];
 const STORY_CP = {
   names: STORY_STEPS,
   current() { const k = storyKeys(); let n = 0; while (n < k.length && flagOn(k[n])) n++; return n; },
@@ -998,6 +1001,7 @@ const STORY_CP = {
     storyKeys().forEach((k, i) => { try { if (i < n) localStorage.setItem(k, '1'); else localStorage.removeItem(k); } catch (e) { /* */ } });
     parcelDone = n >= 1;                                   // (lido na hora pela caixa e pelo K do terraço)
     try { if (n >= 8) localStorage.setItem('adress.med.shop', '5'); else localStorage.removeItem('adress.med.shop'); } catch (e) { /* */ }   // oficina do Bairro 24
+    try { if (n >= 9) localStorage.setItem(BELL3_KEY, '1'); else localStorage.removeItem(BELL3_KEY); if (n < 10) localStorage.removeItem(NOTICE_KEY); } catch (e) { /* */ }   // sino laranja; aviso dos níveis extras
   },
 };
 // Missões da Carreira no mesmo painel (seção separada): reiniciar todas e escolher os bairros com todas as missões completas.
@@ -1629,7 +1633,11 @@ function setupMedStory() {
   b1.visible = flagOn(CHURCH_TALK_KEY); b1.userData.bell.position.y = -bellDrop(b1);
   b2.visible = flagOn(CHURCH2_KEY); b2.userData.bell.position.y = -bellDrop(b2);
   for (const b of medChurch.userData.newBells) b.visible = flagOn(INTRO_KEY);   // os sinos laranja e roxo, depois da montagem
-  medChurch.userData.pewK.visible = flagOn(INTRO_KEY) && gameMode === 'free';    // o K no banco de sempre
+  { const [b3, b4] = medChurch.userData.newBells;                                // laranja caiu na montagem; roxo, no temporal
+    b3.userData.bell.position.y = flagOn(INTRO_KEY) || flagOn(BELL3_KEY) ? -bellDrop(b3) : 0; b4.userData.bell.position.y = flagOn(MASS_KEY) ? -bellDrop(b4) : 0; b4.userData.bell.rotation.set(0, 0, 0); }
+  if (massStory.active) massStory.reset();
+  medChurch.userData.pewK.visible = flagOn(INTRO_KEY) && !flagOn(MASS_KEY) && gameMode === 'free';    // o K no banco de sempre (depois do temporal, não)
+  if (flagOn(MASS_KEY) && wsStory._ws) wsStory._ws.ruin(Infinity);               // a oficina fica como o temporal deixou
   if (chseq) endChurchSeqAbort();
   churchCine.release();                                        // (troca de partida, tela preta: tira o acabamento da montagem da cena)
   rig.setExtraBoxes([...C.cam, [X.shop.box.x0, X.shop.box.z0, X.shop.box.x1, X.shop.box.z1, 5.6]]);
@@ -1638,10 +1646,21 @@ function setupMedStory() {
 // Tempo zero = a chamada no celular do K = início de "The Third Sanctuary". Uma linha de tempo só, pela posição REAL da
 // música (pausa junto com ela); cortes secos em 9, 13, 16, 19, 22 e 25 s. Igreja vazia nas tomadas de dentro; os sinos
 // laranja e roxo só na 2ª tomada da fachada; nenhum sino cai. Em 25 s: a pé na entrada, K no banco, música a 50%.
-const thirdMusic = createChurchMusic(audio, thirdUrl, 0.6, () => { if (state !== 'chseq') { music.setOverride(null); music.suspend(false); } });
+const thirdMusic = createChurchMusic(audio, thirdUrl, 0.6, () => { if (state !== 'chseq' && !massStory.active) { music.setOverride(null); music.suspend(false); } });
 const THIRD_OVR = { get on() { return thirdMusic.playing; }, toggle() { if (thirdMusic.playing) thirdMusic.pause(); else thirdMusic.resume(); } };
 const SEQ_CUTS = [9, 13, 16, 19, 22, 25];
-const churchCine = createChurchCine(renderer);              // acabamento especial da igreja só nas tomadas 9–25 s (churchCine.js)
+const churchCine = createChurchCine(renderer);
+// Música da missa: o MP3 ainda vai chegar. Quando chegar: import massUrl from '../assets/mass.mp3'; e troque null por
+// createChurchMusic(audio, massUrl, 0.5). Até lá a missa fica sem música (nunca com "The Third Sanctuary" por baixo).
+const massMusic = null;
+const massStory = createMassStory({ walker, input, talkBox, audio, thirdMusic, massMusic, INTRO_KEY,
+  storyOn: () => gameMode === 'free' && !!MEDV && flagOn(GRILL_TALK_KEY), church: () => medChurch,
+  setState: s => { if (s === 'mstory') music.suspend(true); setState(s); if (s !== 'mstory') actionLock = 0.4; }, getState: () => state,
+  paused: () => menu.isOpen || document.hidden, world: () => world, camera: () => rig.camera,
+  wsRoot: () => wsStory._ws && wsStory._ws.root, wsRuin: t => wsStory._ws && wsStory._ws.ruin(t), wsLocal: (x, y, z) => wsStory.local(x, y, z),
+  snapCam: (x, z, h) => rig.snap({ x, z, heading: h, speed: 0 }),
+  toTitle: () => { music.setOverride(null); thirdMusic.stop(); endRoofScene(); music.suspend(false); },   // corte seco para a tela inicial
+});              // acabamento especial da igreja só nas tomadas 9–25 s (churchCine.js)
 let chseq = null;
 const _cl = new THREE.Vector3(), _cl2 = new THREE.Vector3();
 const chW = (x, y, z, out = new THREE.Vector3()) => medChurch.localToWorld(out.set(x, y, z));
@@ -1680,6 +1699,9 @@ function updateChurchSeq(dt) {
   if (q.line === 1) { talkBox.update(dt); if (T >= 8.9 && talkBox.open) talkBox.hide(); }
   walker.show(false);
   for (const b of medChurch.userData.newBells) b.visible = T >= 22;               // só na 2ª tomada da fachada
+  { const b3 = medChurch.userData.newBells[0], bb = b3.userData.bell, ft = T - 23.1;   // a corda gasta cede: o laranja cai, sem som, no 3º vão
+    if (ft <= 0) { bb.position.y = 0; bb.rotation.z = 0.17 + 0.03 * Math.sin(T * 5) * (T > 22.4 ? 1 : 0); }
+    else { const drop = bellDrop(b3), y = Math.min(drop, 11 * ft * ft); bb.position.y = -y; if (y >= drop && !q.b3) { q.b3 = true; try { localStorage.setItem(BELL3_KEY, '1'); } catch (e) { /* */ } } } }
   if (T < 25) churchCine.set(T >= 9 && T < 13 || T >= 22 ? 'ext' : T >= 13 ? 'int' : null, dt);   // acabamento especial junto com cada corte
   if (T >= 25) {                                                                   // controle de volta: a pé na entrada; K no banco
     q.ended = true; chseq = null; talkBox.hide(); churchCine.off();                // visual normal junto com a troca de câmera
@@ -2068,6 +2090,7 @@ function focusOf(h) {
 function update(dt, t) {
   stateT += dt;
   wsStory.update(dt);                                // Bairro 24: a oficina (cenas e rotina)
+  massStory.update(dt);                              // Bairro 24: a conversa da oficina, a missa e o temporal
   grillCrowd.update(dt, document.hidden);
   if (matchTimer.armed && TIMER_PLAY.includes(state)) matchTimer.begin();
   if (!TIMER_OFF.includes(state) && !menu.isOpen && !missions.isOpen) matchTimer.tick(dt);   // (pausado com o MENU ou as missões abertas)
@@ -2217,6 +2240,7 @@ function update(dt, t) {
       nearGate = findNearGate(walker.x, walker.z, 2.8);
       if (nearGate >= 0) nearHouse = -1;
       if (actionLock > 0 || !input.action()) break;
+      if (massStory.walkAction()) break;               // Bairro 24 (história): conversar com o K no banco da igreja
       if (wsStory.walkAction()) break;                 // Bairro 24 (história): conversar com o K / ajudar na oficina
       if (nearGate >= 0) { openGate(nearGate); nearGate = -1; actionLock = 0.4; break; }
       if (nearVenK()) { startVeniceTalk(); break; }   // Veneza: falar com o K tem prioridade
@@ -2244,6 +2268,9 @@ function update(dt, t) {
       }
       break;
     }
+    case 'mstory':                                   // Bairro 24: conversa sobre a oficina, missa, temporal (controles parados)
+      van.stop();
+      break;
     case 'chseq':                                    // Bairro 24: a montagem da igreja (controles parados)
       van.stop();
       updateChurchSeq(dt);
@@ -2405,6 +2432,7 @@ function update(dt, t) {
   else if (!insideOn) rig.update(dt, onFoot ? { x: walker.x, z: walker.z, y: walker.floor, heading: walker.heading, speed: walker.speed, focus: null } : { x: van.x, z: van.z, y: heli.altitude, heading: van.heading, speed: van.speed, focus: null });   // sem câmera automática: quem controla é o jogador
   if (state === 'talk') { rig.camera.position.copy(talkCam.pos); rig.camera.lookAt(talkCam.look); }   // enquadramento fixo da conversa
   if (state === 'wstory') wsStory.applyCam(rig.camera);
+  if (state === 'mstory') massStory.applyCam(rig.camera);
   if (state === 'chseq' && chseq) churchSeqCam(rig.camera);
   if (state === 'laser') fxCine.applyCamera(rig.camera);
   if (state === 'cine' && cine) { rig.camera.position.copy(cine.camPos); rig.camera.lookAt(cine.camLook); }
@@ -2413,7 +2441,8 @@ function update(dt, t) {
   // ao sul do Bairro 1, a caminho da igreja, a névoa se afasta aos poucos (a igreja aparece de longe)
   const fs = churchOn ? THREE.MathUtils.smoothstep(van.z - MAP_W(), 40, 220) : 0, fn = 130 + 200 * fs, ff = 430 + 700 * fs;
   if (fog) { fog.near = 3000 + (fn - 3000) * fb; fog.far = 3200 + (ff - 3200) * fb; }
-  if (fog && state === 'gstory' && !insideOn && grillStory.ext) { fog.near = 1; fog.far = 22; }   // resgate: nevasca fechada (mal se vê o outro lado da rua)
+  if (fog && state === 'gstory' && !insideOn && grillStory.ext) { fog.near = 1; fog.far = 22; }
+  if (fog && massStory.fog) { fog.near = massStory.fog[0]; fog.far = massStory.fog[1]; }   // temporal: lá fora quase não se vê nada   // resgate: nevasca fechada (mal se vê o outro lado da rua)
   if (!sunSprite || sunSprite.parent !== world.scene) grabSun();
   if (sunSprite) sunSprite.position.set(rig.camera.position.x, 0, rig.camera.position.z).add(SUN_OFS);   // sol acompanha a câmera (fica sempre no mesmo lugar do céu, por mais longe que se dirija)
   const shake = Math.max(hint.shake, boom.shake);
@@ -2492,7 +2521,7 @@ function updateHUD() {
     else if (state === 'boss') hud.setMain(monster.phase === 'driveOut' ? 'Todas as casas foram destruídas… algo despertou!' : 'O DEVORADOR DE BAIRROS acordou!', 'dialog');
     else if (state === 'missile') hud.setMain('Míssil disparado!', 'ring');
     else if (state === 'fuel') hud.setMain('⛽ Abastecendo… glub, glub, glub…', 'ring');
-    else if (state === 'talk' || state === 'cine' || state === 'wstory' || state === 'chseq' || state === 'trolley' || state === 'trolleyBlack' || state === 'laser') hud.setMain('', 'clue');
+    else if (state === 'talk' || state === 'cine' || state === 'wstory' || state === 'chseq' || state === 'mstory' || state === 'trolley' || state === 'trolleyBlack' || state === 'laser') hud.setMain('', 'clue');
     else if (state === 'walk' && carrying) hud.setMain(walker.nearVan(van) ? 'Entrar na van devolve a caixa ao lugar dela.' : 'Carregando uma caixa… de quem será?', 'clue');
     else if (state === 'walk') hud.setMain(walker.nearVan(van) && !nearLounger() && !nearVenK() ? 'Perto da van — aperte E para entrar.' : SPOTS ? game.mainText() : 'Passeando a pé… (não dá para entregar andando)', 'clue');   // Morro: a pé continua valendo a pista
     else if (state === 'drive' && fuelMsgT > 0) hud.setMain(fuelMsg, 'dialog');
@@ -2502,7 +2531,7 @@ function updateHUD() {
 
   const walkNear = state === 'walk' && walker.nearVan(van) && !nearLounger() && !nearChurchK() && !nearVenK() && !missions.isOpen;
   // a pé no Bairro 1: pegar a caixa / entregar ao K / conversar (balão em cima do personagem)
-  const wsWalk = state === 'walk' && !missions.isOpen ? wsStory.walkPrompt() : '';
+  const wsWalk = state === 'walk' && !missions.isOpen ? massStory.walkPrompt() || wsStory.walkPrompt() : '';
   const walkAct = wsWalk ? wsWalk : state === 'walk' && medTalkTarget() && !missions.isOpen ? 'Conversar' : nearGrillDoor() && !missions.isOpen ? "Entrar no Grillby's" : state === 'walk' && nearGate >= 0 && !missions.isOpen ? 'Abrir porteira' : state === 'walk' && nearVenK() && !missions.isOpen ? 'Conversar' : state === 'walk' && nearHouse >= 0 && !missions.isOpen ? 'Entregar' : state === 'walk' && !walkNear && !missions.isOpen ? (nearParcel() ? 'Pegar a caixa' : nearK() ? (carrying ? 'Entregar a caixa' : 'Conversar') : nearLounger() || nearChurchK() ? 'Conversar' : '') : '';
   if (walkAct) {
     rig.camera.updateMatrixWorld();
@@ -2625,7 +2654,7 @@ window.ADRESS = {
   moonPlace(p, f) { van.teleport(0, 0, 0); FRAME.reset(new THREE.Vector3(...p).normalize(), new THREE.Vector3(...f), 0, 0); moonAnchor.x = moonAnchor.z = 0; FRAME.toSphere(0, 0, vanSph.p); moonUpdate(0, true); },
   get moonVan() { return { p: vanSph.p.toArray().map(v => +v.toFixed(3)), f: vanSph.f.toArray().map(v => +v.toFixed(3)), y: +van.simY.toFixed(2) }; },
   FRAME, MOONV: () => MOONV,
-  lockCP: n => STORY_CP.apply(n), devMissions: DEV_MISSIONS, get parcelVisible() { return !!parcel.parent; },
+  massStory, MASS_KEY, lockCP: n => STORY_CP.apply(n), devMissions: DEV_MISSIONS, get parcelVisible() { return !!parcel.parent; },
   laser, ursa, solar, reality, startLaser,
   get church() { return church; }, get venK() { return venK; }, startVeniceTalk, churchStage, get greenBell() { return greenBell; }, get churchBell() { return churchBell; },
   churchReveal() { if (churchOn && !churchShown) { approach.phase = 'revealed'; revealChurch(true); } },
