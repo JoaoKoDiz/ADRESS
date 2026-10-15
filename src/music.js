@@ -37,7 +37,7 @@ export function createMusic(stageEl, src = 'assets/musica-fundo.mp3') {
 
   let wanted = true;                     // o jogador quer música tocando?
   try { const v = localStorage.getItem('adress.music'); if (v !== null) wanted = v === '1'; } catch (e) { /* ignora */ }
-  let started = false, suspended = false, override = null;   // override: cena com faixa própria controla o botão
+  let started = false, suspended = false, override = null, blocked = false;   // blocked: menus da fase de terror (outra faixa no lugar)   // override: cena com faixa própria controla o botão
   // Faixa do bairro (Níveis 10, 15 e 16): começa sozinha ao entrar, mesmo com o botão desligado; o botão pausa/continua
   // do mesmo ponto (sem mudar a preferência salva da música padrão). Trocar de faixa encerra a anterior.
   let track = src, special = false, specialOn = false;
@@ -55,7 +55,7 @@ export function createMusic(stageEl, src = 'assets/musica-fundo.mp3') {
     btn.title = on ? 'Pausar a música' : 'Continuar a música';
     btn.setAttribute('aria-label', btn.title);
   };
-  const play = () => { const p = audio.play(); if (p && p.catch) p.catch(() => {}); };
+  const play = () => { if (blocked) return; const p = audio.play(); if (p && p.catch) p.catch(() => {}); };
   function toggle() {
     if (special) { specialOn = !specialOn; started = true; specialOn && !suspended ? play() : audio.pause(); paint(); return; }
     wanted = !wanted;
@@ -99,6 +99,10 @@ export function createMusic(stageEl, src = 'assets/musica-fundo.mp3') {
       if (on) audio.pause(); else if (isOn() && started) play();
     },
     get playing() { return !audio.paused; },
+    /** Menus da fase de terror: a faixa padrão fica parada (sem mexer em suspend nem na preferência); false volta como estava. */
+    block(on) { if (on === blocked) return; blocked = on; if (on) audio.pause(); else if (isOn() && started && !suspended) play(); },
+    /** Preferência salva do jogador (música padrão ligada?). */
+    get wanted() { return wanted; },
     /** Cena: o botão passa a controlar outra faixa ({ on, toggle() }); null devolve. A preferência salva não muda. */
     setOverride(o) { override = o; paint(); },
     /** Faixa de fundo atual (src). */

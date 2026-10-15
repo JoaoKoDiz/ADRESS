@@ -87,6 +87,8 @@ import innocentTimeUrl from '../assets/innocent-time.mp3';
 import thirdUrl from '../assets/third-sanctuary.mp3';
 import justUsUrl from '../assets/just-us.mp3';
 import justUsLoopUrl from '../assets/just-us-loop.mp3';
+import { createMenuMusic } from './menuMusic.js';
+import { SNOW_LOOP_URL, SNOW_LOOP_SECS } from './menuTrackUrl.js';
 import { createVoidMusic } from './voidMusic.js';
 import sansUrl from '../assets/sans.mp3';
 import rainUrl from '../assets/raining-somewhere-else.mp3';
@@ -1794,6 +1796,17 @@ function drawVeil(dt) {
     g.strokeStyle = `rgba(215,225,238,${d.a})`; g.beginPath(); g.moveTo(d.x * w, d.y * h); g.lineTo(d.x * w - d.l * h * 0.12, d.y * h - d.l * h); g.stroke();
   }
 }
+// Fase de terror (do 4º sino até o fim do 4º extra; mesma condição da chuva, salva no progresso): nos menus (tela inicial,
+// painel Jogar, Shop, seleção do Livre e mapa da Carreira) toca "snow" no lugar da música padrão. Uma reprodução só,
+// contínua entre menus; num nível para (guardando a posição) e volta ao retornar. Respeita o volume e a preferência de música.
+const menuMusic = createMenuMusic(audio, SNOW_LOOP_URL, '"104. snow (1)-loop.wav" (assets/snow-loop.mp3)', SNOW_LOOP_SECS);
+let menuFadeIn = 0.6;
+function updateMenuMusic() {
+  const menus = rainOn() && (MENU_STATES.includes(state) || inMap());
+  music.block(menus);
+  if (menus && music.wanted) { if (!menuMusic.playing && menuMusic.play(menuFadeIn)) menuFadeIn = 0.6; }
+  else if (menuMusic.playing) menuMusic.stop(0.8);
+}
 function updateRain(dt) {
   const on = rainOn() && !extra.active && !massStory.active;
   const menuS = MENU_STATES.includes(state) || inMap();
@@ -1835,6 +1848,7 @@ function startExtra() {
 function endExtra(toTitle) {
   extra.stop();
   voidMusic.fadeOut(3);                                  // (com a tela inicial já aparecendo; sem corte seco)
+  if (toTitle) menuFadeIn = 3;                           // "snow" entra nos mesmos 3 s em que "just us" sai
   document.body.classList.remove('extra-on');
   world.scene.add(walker.object); walker.show(false); walker.setFloor(0);
   music.suspend(false);
@@ -2278,6 +2292,7 @@ function update(dt, t) {
   stateT += dt;
   wsStory.update(dt);                                // Bairro 24: a oficina (cenas e rotina)
   massStory.update(dt);                              // Bairro 24: a conversa da oficina, a missa e o temporal
+  updateMenuMusic();
   updateRain(dt);                                    // depois do 4º sino: chuva em todos os bairros e nos menus
   grillCrowd.update(dt, document.hidden);
   if (matchTimer.armed && TIMER_PLAY.includes(state)) matchTimer.begin();
@@ -2883,7 +2898,7 @@ window.ADRESS = {
   moonPlace(p, f) { van.teleport(0, 0, 0); FRAME.reset(new THREE.Vector3(...p).normalize(), new THREE.Vector3(...f), 0, 0); moonAnchor.x = moonAnchor.z = 0; FRAME.toSphere(0, 0, vanSph.p); moonUpdate(0, true); },
   get moonVan() { return { p: vanSph.p.toArray().map(v => +v.toFixed(3)), f: vanSph.f.toArray().map(v => +v.toFixed(3)), y: +van.simY.toFixed(2) }; },
   FRAME, MOONV: () => MOONV,
-  massStory, MASS_KEY, extra, startExtra, screenShatter, voidMusic, rainFx, rainAudio, menuBg, get menuNight() { return !!nightSaved; }, get rainOn() { return rainOn(); }, menuWorld, lockCP: n => STORY_CP.apply(n), lockCPcur: () => STORY_CP.current(), devMissions: DEV_MISSIONS, get parcelVisible() { return !!parcel.parent; },
+  massStory, MASS_KEY, extra, startExtra, screenShatter, voidMusic, menuMusic, rainFx, rainAudio, menuBg, get menuNight() { return !!nightSaved; }, get rainOn() { return rainOn(); }, menuWorld, lockCP: n => STORY_CP.apply(n), lockCPcur: () => STORY_CP.current(), devMissions: DEV_MISSIONS, get parcelVisible() { return !!parcel.parent; },
   laser, ursa, solar, reality, startLaser,
   get church() { return church; }, get venK() { return venK; }, startVeniceTalk, churchStage, get greenBell() { return greenBell; }, get churchBell() { return churchBell; },
   churchReveal() { if (churchOn && !churchShown) { approach.phase = 'revealed'; revealChurch(true); } },

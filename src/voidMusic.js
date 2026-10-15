@@ -17,7 +17,7 @@ function bytesOf(url) {
   return bytes.buffer;
 }
 /** Falha de carregamento: no console e num aviso visível (não substitui por outra música). */
-function report(msg) {
+export function report(msg) {
   console.error('[voidMusic] ' + msg);
   try {
     let el = document.querySelector('.voidmusic-err');
