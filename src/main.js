@@ -81,6 +81,7 @@ import talkTrackUrl from '../assets/church-talk.mp3';
 import secondSanctuaryUrl from '../assets/second-sanctuary.mp3';
 import innocentTimeUrl from '../assets/innocent-time.mp3';
 import sansUrl from '../assets/sans.mp3';
+import rainUrl from '../assets/raining-somewhere-else.mp3';
 import tarantellaUrl from '../assets/tarantella.mp3';
 import sunnyUrl from '../assets/sunnyside-farm.mp3';
 import snowyUrl from '../assets/snowy.mp3';
@@ -1146,12 +1147,14 @@ const TRACK_INFO = {
   church2: { title: 'The Second Sanctuary', author: 'Woop' },
   bell2: { title: 'Once Upon An Innocent Time', author: 'Undertale Green' },
   sans: { title: 'sans.', author: 'Toby Fox' },
+  rain: { title: "It's Raining Somewhere Else", author: 'Toby Fox' },
   churchTalk: { title: 'Once Upon A Terrible Time', author: 'UTB Team' },
   train: { title: 'The Train Problem', author: 'MasterSwordRemix' },
 };
 /** O que está tocando agora (cenas especiais primeiro). */
 function nowPlaying() {
   if (state === 'title' || state === 'levelSelect' || state === 'shop') return null;   // telas de menu: sem créditos
+  if (rainMusic.audible) return TRACK_INFO.rain;                // conversa com o K no Grillby's
   if (grillMusic.audible) return TRACK_INFO.sans;               // Grillby's (Nevasca)
   if (sTrainProblem.audible) return TRACK_INFO.train;          // (audible: inclui o fade-out final)
   if (bellMusic.audible) return TRACK_INFO.bell2;
@@ -1436,7 +1439,7 @@ function setupChurch() {
   churchSolids.length = 0;
   let pd = parcelDone; try { pd = pd || localStorage.getItem(PARCEL_KEY) === '1'; } catch (e) { /* */ }
   churchOn = isL1() && gameMode === 'free' && pd && roofDone() && !flagOn(GRILL_TALK_KEY);   // as duas conversas, lidas do progresso salvo; depois do Grillby's a igreja está no Bairro 24
-  churchT = 0; churchA = 0; churchShown = false;
+  churchT = 0; churchA = 0; churchShown = false; earlyFade = false;
   endApproachMusic(0.3); approach = { phase: 'idle' };
   if (unwhite && !cine) restoreLook();                 // (aparência branca de uma visita anterior)
   churchMusic = churchOn && churchStage() === 2 ? churchMusic2 : churchMusic1;
@@ -1474,6 +1477,7 @@ let churchMusic = churchMusic1;
 // 2ª visita: música da cena do sino verde (assets/innocent-time.mp3), do início ao fim; depois a música de fundo volta
 const bellMusic = createChurchMusic(audio, innocentTimeUrl, 0.3, () => music.suspend(false));
 const grillMusic = createChurchMusic(audio, sansUrl, 0.5, null, true);   // Grillby's: "sans." em loop
+const rainMusic = createChurchMusic(audio, rainUrl, 0.5, null, true);   // conversa com o K no Grillby's (diálogos 1–2), em loop
 // Música da conversa com o K na igreja (assets/church-talk.mp3): começa 10 s depois da 1ª fala aparecer, fade-in de 8 s até
 // 50%, toca mesmo com o botão ♪ desligado (sem mudar a preferência) e vai até o fim sem fade-out nem loop, inclusive de
 // volta à vila. Enquanto toca, a música de fundo fica suspensa; ao terminar, volta como o jogador deixou.
@@ -1527,13 +1531,13 @@ function approachAxis() {
 }
 function revealChurch(fast) {
   const M = MAP_W();
-  churchShown = true; church.visible = true; setChurchOpacity(church, 0); churchFade = fast ? 1.2 : 3.5;
+  churchShown = true; church.visible = true; if (!earlyFade) { setChurchOpacity(church, 0); churchFade = fast ? 1.2 : 3.5; }   // (2ª visita: o fade já começou)
   const z0 = M + CHURCH_Z, cx = M / 2;
   for (const b of CHURCH_SOLIDS) churchSolids.push({ x0: cx - b.x1, x1: cx - b.x0, z0: z0 - b.z1, z1: z0 - b.z0 });   // igreja girada 180°: (x, z) → (cx − x, z0 − z)
   rig.setExtraBoxes(CHURCH_CAM.map(([x0, x1, a, b, top]) => [cx - x1, z0 - b, cx - x0, z0 - a, top]));          // a câmera não atravessa as paredes
   SOLIDS.push(...churchSolids);
 }
-let churchFade = 3.5;
+let churchFade = 3.5, earlyFade = false;
 function updateChurch(dt) {
   if (!churchOn) return;
   if (churchMusic === churchMusic2 && unwhite && !cine && state === 'drive' && approach.phase !== 'auto' && van.z < MAP_W()) restoreLook();   // voltou ao bairro sem conversar: cores de volta
@@ -1552,6 +1556,10 @@ function updateChurch(dt) {
       churchMusic.load().then(() => { if (approach.phase === 'loading' && churchOn) startApproach(); }, () => { approach.phase = 'idle'; churchT = 0; });
     }
     if (approach.phase === 'auto' && churchMusic === churchMusic2) updateWhiteVan();
+    if (approach.phase === 'auto' && churchMusic === churchMusic2 && !earlyFade && churchMusic.time >= revealAt() - 1.5) {   // 2ª visita: o fade-in da igreja começa 1,5 s antes
+      earlyFade = true; church.visible = true; setChurchOpacity(church, 0); churchFade = 1.2; churchA = 0;
+    }
+    if (earlyFade && churchA < 1) { churchA = Math.min(1, churchA + dt / churchFade); setChurchOpacity(church, churchA * churchA * (3 - 2 * churchA)); }
        // 2ª visita: a van fica branca aos poucos
     if (approach.phase === 'auto' && churchMusic.time >= revealAt()) {   // segundo 14 da música: a igreja surge e o jogador volta a dirigir
       van.setForceSpeed(null); approach.phase = 'revealed';
@@ -1876,24 +1884,32 @@ function enterGrillScene() {
 }
 // ---------- Grillby's: o encontro com o K (história; depois da 2ª conversa na igreja) ----------
 let storyPrompt = null;
-/** Poste do resgate: à esquerda de quem sai (out = ponto/rumo da saída), do outro lado da rua; livre, no mesmo nível e
- *  com caminho reto livre até a porta. */
+/** Poste do resgate: logo à esquerda de quem sai (= à direita do Grillby's visto da rua), do outro lado da rua, na calçada
+ *  (fora da pista: distância ao eixo entre hw + 0,9 e hw + 2,4), livre e no mesmo nível. Devolve também o rumo da rua (t)
+ *  e o lado da pista (ax, az: do poste para a rua). */
 function findPole(out) {
   const boxes = walkSolids(), h0 = TERRAIN.h(out.x, out.z), c = Math.cos(out.heading), s = Math.sin(out.heading);
+  const RD = SNOWV ? SNOWV.roadDist : null, hw = 4;
   const inside = (x, z, m) => boxes.some(b => b.r ? Math.hypot(x - b.cx, z - b.cz) < b.r + m : x > b.x0 - m && x < b.x1 + m && z > b.z0 - m && z < b.z1 + m);
-  const okPt = (x, z) => !inside(x, z, 1.2) && Math.abs(TERRAIN.h(x, z) - h0) < 0.15 && x > 3 && z > 3 && x < MAP - 3 && z < MAP - 3;
-  const clear = (x, z) => { const n = Math.ceil(Math.hypot(x - out.x, z - out.z) / 0.6); for (let i = 1; i < n; i++) { const px = out.x + (x - out.x) * i / n, pz = out.z + (z - out.z) * i / n; if (inside(px, pz, 0.6) || Math.abs(TERRAIN.h(px, pz) - h0) > 0.15) return false; } return true; };
+  const okPt = (x, z) => !inside(x, z, 0.9) && Math.abs(TERRAIN.h(x, z) - h0) < 0.15 && x > 3 && z > 3 && x < MAP - 3 && z < MAP - 3;
+  // o eixo da rua em frente à porta
+  let a0 = 1; if (RD) { let m = 1e9; for (let a = 0; a <= 16; a += 0.25) { const d = RD(out.x + c * a, out.z + s * a); if (d < m) { m = d; a0 = a; } } }
   let best = null, bs = Infinity;
-  for (let a = 6; a <= 22; a += 2) for (let b = 8; b <= 26; b += 2) {
+  for (let a = a0 + hw; a <= a0 + hw + 4; a += 0.25) for (let b = 2; b <= 14; b += 0.5) {
     const x = out.x + c * a + s * b, z = out.z + s * a - c * b;          // (s, −c) = esquerda de quem sai
-    if (!okPt(x, z) || !clear(x, z)) continue;
-    const sc = Math.abs(Math.hypot(a, b) - 24) + (a < 9 ? 3 : 0);
+    const d = RD ? RD(x, z) : hw + 1.5;
+    if (d < hw + 0.9 || d > hw + 2.4 || !okPt(x, z)) continue;
+    const sc = Math.abs(b - 6.5) + Math.abs(d - (hw + 1.4)) * 2 + (a - a0 - hw) * 0.3;
     if (sc < bs) { bs = sc; best = { x, z }; }
   }
-  return best || { x: out.x + c * 8 + s * 10, z: out.z + s * 8 - c * 10 };
+  if (!best) best = { x: out.x + c * (a0 + hw + 1.4) + s * 6.5, z: out.z + s * (a0 + hw + 1.4) - c * 6.5 };
+  // rumo da rua e lado da pista no ponto escolhido
+  let ax = -c, az = -s;
+  if (RD) { const e = 0.3, gx = RD(best.x + e, best.z) - RD(best.x - e, best.z), gz = RD(best.x, best.z + e) - RD(best.x, best.z - e), L = Math.hypot(gx, gz) || 1; ax = -gx / L; az = -gz / L; }
+  return { x: best.x, z: best.z, ax, az, tx: -az, tz: ax };
 }
 const grillStory = createGrillStory({
-  walker, rig, audio, talkBox, input, menu, grillMusic, stage, crowd: grillCrowd,
+  walker, rig, audio, talkBox, input, menu, grillMusic, stage, crowd: grillCrowd, rainMusic, music, grillOverride: GRILL_OVERRIDE, insideOn: () => insideOn,
   get grillIn() { return grillIn; }, get world() { return world; },
   flag: flagOn, doorWorld: grillDoorWorld, walkSolids: () => walkSolids(), groundH: (x, z) => TERRAIN.h(x, z), findPole,
   prompt: t => { storyPrompt = t; },
@@ -2525,7 +2541,7 @@ window.ADRESS = {
   get careerLevel() { return careerLevel; },
   setCareerLevel(l) { careerLevel = l; },
   setFreeLevel(l) { freeLevel = l; },
-  walker, jamSound, cityAmb, train, walkSolids, trolley, get tseq() { return tseq; }, get FAVELA() { return FAVELA; }, traffic, tractors, chickens, plow, workTraffic, banks, get SNOWV() { return SNOWV; }, get MEDV() { return MEDV; }, medLife, get chatNpc() { return chatNpc; }, night, get grillIn() { return grillIn; }, get insideOn() { return insideOn; }, grillStory, wsStory, get medChurch() { return medChurch; }, grillDoor: o => grillDoorWorld(o), get churchPewK() { return church && church.userData.pewK.visible; }, churchStage, get FARMLAND() { return FARMLAND; }, get GARDV() { return GARDV; }, gardGate, gateOpen, openGate,
+  walker, jamSound, cityAmb, train, walkSolids, trolley, get tseq() { return tseq; }, get FAVELA() { return FAVELA; }, traffic, tractors, chickens, plow, workTraffic, banks, get SNOWV() { return SNOWV; }, get MEDV() { return MEDV; }, medLife, get chatNpc() { return chatNpc; }, night, get grillIn() { return grillIn; }, get insideOn() { return insideOn; }, grillStory, wsStory, grillMusic, rainMusic, nowPlaying, churchDbg: () => ({ t: churchMusic.time, two: churchMusic === churchMusic2, vis: !!church && church.visible, a: churchA, shown: churchShown, phase: approach.phase }), get medChurch() { return medChurch; }, grillDoor: o => grillDoorWorld(o), get churchPewK() { return church && church.userData.pewK.visible; }, churchStage, get FARMLAND() { return FARMLAND; }, get GARDV() { return GARDV; }, gardGate, gateOpen, openGate,
   get levelSelect() { return levelSelect; }, matchTimer, get bumps() { return bumps; }, HOUSES, shopFronts,
   shop,
   startGame: m => startFree(m), newRound: () => startNewRound(),
