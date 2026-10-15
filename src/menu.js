@@ -58,7 +58,7 @@ export function createMenu(stageEl) {
   });
   paint();
 
-  const toggle = () => panel.classList.toggle('open');
+  const toggle = () => { if (document.body.classList.contains('extra-on')) { panel.classList.remove('open'); return; } panel.classList.toggle('open'); };   // nos níveis extras o MENU não existe
   for (const el of [btn, panel]) el.addEventListener('mousedown', e => e.preventDefault()); // não rouba o foco do teclado
   btn.addEventListener('click', () => { btn.blur(); toggle(); });
   row.addEventListener('click', () => {
@@ -69,5 +69,5 @@ export function createMenu(stageEl) {
   stageEl.appendChild(btn);
   stageEl.appendChild(panel);
 
-  return { get isOpen() { return panel.classList.contains('open'); }, get explodeWrong() { return explodeWrong; }, get unstoppable() { return unstoppable; }, get wrongFx() { return wrongFx; } };
+  return { close() { panel.classList.remove('open'); }, get isOpen() { return panel.classList.contains('open'); }, get explodeWrong() { return explodeWrong; }, get unstoppable() { return unstoppable; }, get wrongFx() { return wrongFx; } };
 }

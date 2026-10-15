@@ -1805,12 +1805,13 @@ function updateRain(dt) {
   if (veil) drawVeil(dt);
 }
 const EXTRA_CSS = document.createElement('style');
-EXTRA_CSS.textContent = 'body.extra-on .ahud, body.extra-on .hint-btn { display: none !important; }';   // sem pista, contador nem dica (MENU, música e Voltar ficam)
+EXTRA_CSS.textContent = ['.ahud', '.hint-btn', '.menu-btn', '.menu-panel', '.music-btn', '.music-now', '.match-hud'].map(c => 'body.extra-on ' + c).join(', ') + ' { display: none !important; pointer-events: none !important; }';   // níveis extras: sem barra/dicas do topo, DICA, MENU, música (botão e créditos), cronômetro e batidas (a música continua tocando; Voltar, diálogos e toque ficam)
 document.head.appendChild(EXTRA_CSS);
 const voidMusic = createVoidMusic(audio, justUsUrl, justUsLoopUrl);   // extra 1: "just us" (original → loop), do começo do deslocamento até a tela inicial
 const extra = createExtraStory({ walker, input, audio, renderer, talkBox, onTravel: () => voidMusic.start(), onShatter: (snap, rect) => { syncNoVan(); endExtra('shatter'); screenShatter(snap, rect); } });   // (o extra 1 já foi salvo na quebra)
 function startExtra() {
   if (state !== 'levelSelect') return;
+  document.body.classList.add('extra-on'); menu.close();   // já antes do fade: nada da interface pisca ao carregar
   levelSelect.close(); setState('levelFly');
   title.fadeOut(() => {
     if (titleDriver) titleDriver.stop();
