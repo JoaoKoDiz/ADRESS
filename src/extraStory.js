@@ -15,7 +15,69 @@ const BG = new THREE.Color('#0b0b0e');                  // o vazio
 const E = 6.3, HALF = E / 2, CZ = -14, FRONT = CZ + HALF, BACK = CZ - HALF;   // cubo: aresta ≈ 3× a altura do jogador
 const K0 = new THREE.Vector3(-1.1, 0, -12.3), R0 = new THREE.Vector3(1.0, 0, -14.7);
 const FAR_VAN = { x: 1e9, z: 1e9 };
-const T = { hold: 5, kWalk: 5.2, kAfter: 1.1, crack: 0.75, fall: 3.0, empty: 1.4, rise: 3.0, dlg1: 5, travel: 2, dlg2: 5, pull: 1.0 };
+const T = { hold: 5, kWalk: 5.2, kAfter: 1.1, crack: 0.75, fall: 3.0, empty: 1.4, rise: 3.0, ease: 5, travel: 2, pull: 1.0 };
+// Falas da figura (avanço manual: E/Espaço ou toque no balão; "[…]" = pausa curta na digitação, não aparece).
+const P_ = s => { const out = []; for (const part of s.split(/(\[…\])/)) { if (!part) continue; if (part === '[…]') out.push({ p: 0.6 }); else out.push(out.length && out[out.length - 1].p ? part.replace(/^\s+/, '') : part); } return out; };
+const TALK2 = [   // diálogo 2: depois que o cubo se quebra e a figura aparece
+  'Você está aqui.',
+  'Já se foram. […] Ele está longe. […] E você ficou.',
+  'Esperando que alguma coisa fosse dita para você também?',
+  'Eu vi o que você fez.',
+  'A caixa. […] A neve. […] A oficina.',
+  'Você fez questão de chegar até o fim.',
+  'Agora me diga.',
+  'Se ninguém se lembrasse de nenhuma dessas coisas… […] você ainda faria tudo outra vez?',
+  'Não responda tão depressa.',
+  'Essa é a resposta que você aprendeu a dar.',
+  'Eu quero aquela que veio antes.',
+  'Aquela que você teve vergonha de pensar.',
+  '[…] Você queria fazer o bem.',
+  'E queria que alguém olhasse.',
+  'Eu estou olhando agora.',
+  '[…] E não vejo bem algum.',
+  'Ao menos, […] nenhum que seja verdadeiro.',
+].map(P_);
+const TALK3 = [   // diálogo 3: durante o deslocamento, depois que ela reaparece à frente
+  'Você ainda acha que existe alguma coisa boa aí dentro.',
+  'Algo que eu não vi.',
+  '[…] Eu vi.',
+  'Você teve um pensamento do qual se envergonhou.',
+  'Engoliu uma resposta.',
+  'Fez a coisa certa […] querendo não ter que fazer.',
+  'E achou que ninguém perceberia a diferença.',
+  'É isso que você chama de integridade?',
+  'O que mostra […] ou o que precisa esconder para conseguir mostrar?',
+  '[…] Não precisa responder.',
+  'Você vai escolher as palavras com cuidado.',
+  'Sempre esse cuidado.',
+  'Não para ser honesto.',
+  'Para sair parecendo alguém que foi.',
+  'Até agora, […] está procurando uma maneira de ouvir tudo isso e continuar sendo a pessoa boa da história.',
+  'Patético.',
+  'Você não suporta a possibilidade de ter feito tudo certo […] e ainda assim não ser quem gostaria.',
+  'Então vai procurar outra coisa para fazer.',
+  'Outra pessoa para ajudar.',
+  'Mais uma oportunidade de não ter que olhar para si.',
+  'Mas nenhuma delas vai mudar o que você pensou.',
+  'Nem o alívio que sentiu quando deixou de ser sua obrigação.',
+  '[…] Essa parte você não conta.',
+  'Conta que ficou.',
+  'Que ajudou.',
+  'Que voltou.',
+  'Precisa contar nessa ordem, não é?',
+  'Senão, por um instante, […] talvez você escute outra coisa.',
+  'Talvez perceba que passou esse tempo inteiro defendendo alguém […] que nem você acredita que existe.',
+  'E não há mais ninguém aqui para discordar de mim.',
+  '[…] Mas você ainda imagina que alguém discordaria.',
+  'Alguém que ficaria do seu lado.',
+  'É porque, nessa sua versão, […] eles nunca sabem de tudo.',
+  'Se soubessem o que você esconde…',
+  'Se ouvissem aquilo que você não teve coragem de dizer…',
+  '[…] Não seria você contra mim.',
+  'Seria você contra todos.',
+  'Eu só fui o primeiro a dizer.',
+].map(P_);
+const HINT = 'E / Espaço — Continuar';
 const VMAX = 240;                                       // velocidade do deslocamento (cenário relativo)
 
 const SKY_V = `varying vec3 vW; void main(){ vec4 w = modelMatrix * vec4(position, 1.0); vW = w.xyz; gl_Position = projectionMatrix * viewMatrix * w; }`;
@@ -50,7 +112,7 @@ const FACES = [
 ];
 
 export function createExtraStory(ctx) {
-  const { walker, input, audio } = ctx;
+  const { walker, input, audio, talkBox } = ctx;
   const scene = new THREE.Scene(); scene.background = BG.clone();
   const camera = new THREE.PerspectiveCamera(50, 16 / 9, 0.05, 400);
   scene.add(new THREE.HemisphereLight('#dfe9ff', '#2a3020', 1.1));
@@ -198,6 +260,7 @@ export function createExtraStory(ctx) {
     if (!S) return;
     if (S.white) S.white.restore();                     // a customização nunca foi tocada: só devolve os materiais
     walker.setSpeedMul(1); walker.setFloor(0); stopWhoosh();
+    if (S.phase === 'talk2' || S.phase === 'talk3') talkBox.hide();
     S = null; ctx.renderer.localClippingEnabled = false;
   }
   const go = (p) => { S.phase = p; S.t = 0; };
@@ -219,6 +282,9 @@ export function createExtraStory(ctx) {
     if (!S.white && Math.hypot(walker.x, walker.z) > 0.05) S.white = whitenFade(walker.object);
     if (S.white && !S.white.done) { S.wk = Math.min(1, S.wk + dt / 1.6); S.white.step(S.wk * S.wk * (3 - 2 * S.wk)); }
     // R: respira; K: parado olhando para fora, depois sai andando
+    if (talkBox.open && (S.phase === 'talk2' || S.phase === 'talk3')) {   // E/Espaço (ou toque no balão): completa a fala; com ela completa, avança
+      talkBox.update(dt); if (S.t > 0.2 && input.action()) talkBox.press();
+    }
     const t = S.t;
     RB.torso.scale.y = 1 + 0.01 * Math.sin(performance.now() * 0.002);
     switch (S.phase) {
@@ -268,21 +334,20 @@ export function createExtraStory(ctx) {
         if (t >= T.empty) { fig.visible = true; go('rise'); }
         break;
       case 'rise':                                         // a figura aparece (sem brilho, só um preto mais fundo que o vazio)
-      case 'dlg1': {                                       // (espaço reservado para o 1º diálogo: 5 s só de enquadramento)
+      case 'talk2': {                                      // diálogo 2 (manual); o movimento só começa depois da última fala
         const k = S.phase === 'rise' ? Math.min(1, t / T.rise) : 1;
         figMat.color.copy(BG).lerp(BLACK, k * k * (3 - 2 * k));
-        const u = S.phase === 'rise' ? t / (T.rise + T.dlg1) : (T.rise + t) / (T.rise + T.dlg1);
+        const u = Math.min(1, S.phase === 'rise' ? t / (T.rise + T.ease) : (T.rise + t) / (T.rise + T.ease));
         const ue = u * u * (3 - 2 * u);
-        shot([-4.6 + 0.9 * ue, 1.3 + 0.2 * ue, -1.8 + 0.6 * ue], [0.2, 5.6, -16]);
-        if (fh && S.phase === 'dlg1') fh.rotation.y = -0.18 * Math.min(1, t / 2.5);   // a cabeça se inclina de leve para o jogador
-        if (S.phase === 'rise' && t >= T.rise) go('dlg1');
-        if (S.phase === 'dlg1' && t >= T.dlg1) startTravel();
+        shot([-4.6 + 0.9 * ue, 1.3 + 0.2 * ue, -1.8 + 0.6 * ue], [0.2, 3.7, -16]);   // (a figura fica acima da caixa de fala)
+        if (fh && S.phase === 'talk2') fh.rotation.y = -0.18 * Math.min(1, t / 2.5);   // a cabeça se inclina de leve para o jogador
+        if (S.phase === 'rise' && t >= T.rise) { go('talk2'); talkBox.show(TALK2, () => { if (S && S.phase === 'talk2') startTravel(); }, { hint: HINT }); }
         break;
       }
       case 'travel':                                       // levado para trás por uma força de fora; a figura fica para trás
-      case 'dlg2':                                         // (2º diálogo reservado: 5 s, o deslocamento continua)
+      case 'talk3':                                        // diálogo 3 (manual): o deslocamento continua o tempo que for
       case 'pull': {
-        const tt = S.phase === 'travel' ? t : S.phase === 'dlg2' ? T.travel + t : T.travel + T.dlg2 + t;
+        const tt = (S.tt += dt);
         const a = Math.min(1, tt / 1.6), v = VMAX * a * a * (3 - 2 * a);      // aceleração inicial perceptível
         S.dist += v * dt;
         walker.update(dt, { x: 0, z: 0 }, 'car', [], FAR_VAN);                // parado na pose (só a respiração)
@@ -294,9 +359,10 @@ export function createExtraStory(ctx) {
           if (t >= T.travel) {                             // exatamente 2 s depois: ela já está ali, à frente
             fig.position.set(P.x + F.x * 14, 0, P.z + F.z * 14); fig.rotation.y = -Math.atan2(-F.z, -F.x); figMat.color.copy(BLACK);
             if (fh) fh.rotation.y = 0;
-            go('dlg2');
+            go('talk3');
+            talkBox.show(TALK3, () => { if (S && S.phase === 'talk3') { go('pull'); S.pullFrom = { x: walker.x, z: walker.z }; } }, { hint: HINT });   // a última fala → o puxão
           }
-        } else if (S.phase === 'dlg2') { if (t >= T.dlg2) { go('pull'); S.pullFrom = { x: walker.x, z: walker.z }; } }
+        }
         // câmera atrás do jogador (costas), olhando para onde ele está virado; tremor leve com a velocidade
         const sh = 0.025 * (v / VMAX) * (S.phase === 'pull' ? 3 : 1), C0 = S.cam;
         camera.position.set(C0.x + (Math.random() - 0.5) * sh, C0.y + (Math.random() - 0.5) * sh, C0.z + (Math.random() - 0.5) * sh);
@@ -338,7 +404,7 @@ export function createExtraStory(ctx) {
   }
   function startTravel() {
     const h = walker.heading, F = new THREE.Vector3(Math.cos(h), 0, Math.sin(h));
-    S.f = F; S.h = h; S.p = { x: walker.x, z: walker.z }; S.dist = 0;
+    S.f = F; S.h = h; S.p = { x: walker.x, z: walker.z }; S.dist = 0; S.tt = 0;
     S.cam = new THREE.Vector3(walker.x - F.x * 5.6, 2.15, walker.z - F.z * 5.6);
     S.fig0 = fig.position.clone();
     for (let i = 0; i < SN; i++) seedStreak(i, -40 + Math.random() * 300);

@@ -1776,7 +1776,7 @@ function updateRain(dt) {
 const EXTRA_CSS = document.createElement('style');
 EXTRA_CSS.textContent = 'body.extra-on .ahud, body.extra-on .hint-btn { display: none !important; }';   // sem pista, contador nem dica (MENU, música e Voltar ficam)
 document.head.appendChild(EXTRA_CSS);
-const extra = createExtraStory({ walker, input, audio, renderer, onShatter: (snap, rect) => { syncNoVan(); endExtra('shatter'); screenShatter(snap, rect); } });   // (o extra 1 já foi salvo na quebra)
+const extra = createExtraStory({ walker, input, audio, renderer, talkBox, onShatter: (snap, rect) => { syncNoVan(); endExtra('shatter'); screenShatter(snap, rect); } });   // (o extra 1 já foi salvo na quebra)
 function startExtra() {
   if (state !== 'levelSelect') return;
   levelSelect.close(); setState('levelFly');
