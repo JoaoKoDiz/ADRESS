@@ -52,6 +52,10 @@ body.title-on .menu-btn, body.title-on .hint-btn, body.title-on .music-btn { vis
 .title-driver { position: absolute; right: 1vw; top: 6vh; bottom: 4vh; left: calc(clamp(16px, 4vw, 72px) + min(40vw, 640px) + 2vw); display: none; pointer-events: none; }
 .title.playing .title-driver { display: block; }
 .title-driver canvas { width: 100%; height: 100%; display: block; }
+/* depois do extra 1: sem a van no painel Jogar (o espaço fica vazio); na tela inicial os 3 botões ficam no centro */
+body.menu-novan .title-driver { display: none !important; }
+body.menu-novan .title-main { margin-left: auto; margin-right: auto; align-self: center; }
+body.menu-novan .title-buttons { align-self: center; }
 @media (max-aspect-ratio: 1/1) {             /* tela em pé: botões em cima, van embaixo */
   .title-play { width: auto; right: clamp(16px, 4vw, 72px); bottom: 42vh; justify-content: flex-start; }
   .title-driver { left: 2vw; top: 58vh; }

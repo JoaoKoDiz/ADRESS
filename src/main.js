@@ -944,11 +944,19 @@ rig.snap({ x: van.x, z: van.z, heading: van.heading, speed: 0 });
 rig.toggle();
 rig.snap({ x: van.x, z: van.z, heading: van.heading, speed: 0 });
 let titleDriver = null;   // motorista curtindo a música (painel "Jogar")
+// Depois do extra 1 (salvo à parte em NOVAN_KEY, para não voltar com mudanças futuras de fundo): o painel Jogar fica sem a van
+// e o motorista (o espaço fica vazio, mostrando o fundo); o Shop e as partidas continuam com a van.
+const NOVAN_KEY = 'adress.menu.noVan';
+const noVan = () => { try { return localStorage.getItem(NOVAN_KEY) === '1'; } catch (e) { return false; } };
+function syncNoVan() {
+  try { if (!noVan() && localStorage.getItem('adress.extra.1') === '1') localStorage.setItem(NOVAN_KEY, '1'); } catch (e) { /* */ }
+  document.body.classList.toggle('menu-novan', noVan());
+}
 const title = createTitle({
   onFree: () => { if (state === 'title' && !title.starting) openLevelSelect(); },   // Livre: primeiro escolhe o bairro
-  onCareer: () => titleDriver.drive(() => title.fadeOut(enterMap)),     // dá a partida e vai para o mapa da Carreira
+  onCareer: () => noVan() ? title.fadeOut(enterMap) : titleDriver.drive(() => title.fadeOut(enterMap)),     // dá a partida e vai para o mapa da Carreira (sem a van no menu: só o fade)
   onShop: () => { if (state === 'title') openShop(); },       // Shop: layout inicial (cores grátis; itens em breve)
-  onPlay: el => { titleDriver = titleDriver || createTitleDriver(el, audio); titleDriver.start();
+  onPlay: el => { syncNoVan(); if (noVan()) { if (titleDriver) titleDriver.stop(); } else { titleDriver = titleDriver || createTitleDriver(el, audio); titleDriver.start(); }
     if (flagOn(MASS_KEY) && !flagOn(NOTICE_KEY)) { try { localStorage.setItem(NOTICE_KEY, '1'); } catch (e) { /* */ } title.notify('A história continua. Quatro novos lugares estão disponíveis no Modo Livre.'); } },   // uma vez, depois do temporal
   onBack: () => goBack(),                                      // Voltar do próprio painel (fica embaixo do logo)
   onSettings: () => { if (state === 'title') settings.open(); },   // Configurações (volume, tela cheia, controles)
@@ -965,7 +973,8 @@ function confirmLevel(l) {
   freeLevel = l;
   levelSelect.close();
   setState('levelFly');
-  titleDriver.fly(() => title.fadeOut(() => startFree('free')));   // vira helicóptero e decola
+  if (noVan() || !titleDriver) title.fadeOut(() => startFree('free'));   // (sem a van no menu: só o fade)
+  else titleDriver.fly(() => title.fadeOut(() => startFree('free')));   // vira helicóptero e decola
 }
 // Carreira: mapa de seleção de fases (A/D na estrada, E joga — por enquanto, sempre a mesma partida)
 let careerMap = null;
@@ -1053,7 +1062,7 @@ function showPlayPanel() {
   rig.snap({ x: van.x, z: van.z, heading: van.heading, speed: 0 });
   fade = 0;
   title.show('play');
-  if (titleDriver) { titleDriver.reset(); titleDriver.start(); }
+  if (titleDriver && !noVan()) { titleDriver.reset(); titleDriver.start(); }   // (sem a van no menu depois do extra 1)
   setState('title');
 }
 // Carreira: a entrega certa encerra a partida. Fade-out de ~1 s (controles parados) e, com a tela preta, a partida acaba e
@@ -1767,7 +1776,7 @@ function updateRain(dt) {
 const EXTRA_CSS = document.createElement('style');
 EXTRA_CSS.textContent = 'body.extra-on .ahud, body.extra-on .hint-btn { display: none !important; }';   // sem pista, contador nem dica (MENU, música e Voltar ficam)
 document.head.appendChild(EXTRA_CSS);
-const extra = createExtraStory({ walker, input, audio, renderer, onShatter: (snap, rect) => { endExtra('shatter'); screenShatter(snap, rect); } });   // (o extra 1 já foi salvo na quebra)
+const extra = createExtraStory({ walker, input, audio, renderer, onShatter: (snap, rect) => { syncNoVan(); endExtra('shatter'); screenShatter(snap, rect); } });   // (o extra 1 já foi salvo na quebra)
 function startExtra() {
   if (state !== 'levelSelect') return;
   levelSelect.close(); setState('levelFly');
@@ -2861,4 +2870,4 @@ window.ADRESS = {
   step(n = 1, dt = 1 / 60) { for (let i = 0; i < n; i++) { elapsed += dt; update(dt, elapsed); updateHUD(); } if (inMap()) renderer.render(careerMap.scene, careerMap.camera); else if (state === 'extra' && extra.active) renderer.render(extra.scene, extra.camera); else if (insideOn) renderer.render(grillIn.scene, grillIn.camera); else if (state === 'trolley') renderer.render(trolley.scene, trolley.camera); else if (state === 'laser' && fxCine.inSpace) renderer.render(fxCine.scene, fxCine.camera); else if (churchCine.active) churchCine.render(world.scene, rig.camera); else renderer.render(world.scene, rig.camera); },
 };
 // depois do 4º sino o fundo dos menus já começa no Bairro 24 (na chuva)
-menuWorld();
+menuWorld(); syncNoVan();
