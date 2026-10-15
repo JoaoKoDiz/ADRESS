@@ -87,6 +87,7 @@ export function createTalkBox(stage) {
     /** Mostra as falas (lista de listas de trechos); cb quando a última termina. */
     show(ls, cb, opts = {}) {
       lines = ls; idx = 0; onDone = cb; open = true; auto = !!opts.auto; onAdvance = opts.onAdvance || null;
+      el.querySelector('.talkbox-next').textContent = opts.hint || 'E ▸';
       el.classList.toggle('auto', auto); el.style.display = 'block'; startLine();
     },
     get index() { return idx; },

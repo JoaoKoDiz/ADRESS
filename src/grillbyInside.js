@@ -44,7 +44,12 @@ export function buildNPC({ shirt, hair, pants, seatY = 0, apron = false, k = 0, 
       root.add(at(box(0.2, shin, 0.22, pants), s * 0.14, shin / 2 + 0.1, 0.5));
       root.add(at(box(0.26, 0.12, 0.34, BOOT), s * 0.14, 0.06, 0.56));
     }
-  } else for (const s of [-1, 1]) { body.add(at(box(0.22, 0.5, 0.24, pants), s * 0.14, 0.33, 0)); body.add(at(box(0.26, 0.12, 0.34, BOOT), s * 0.14, 0.06, 0.04)); }
+  }
+  const legs = [];                                           // de pé: pernas que giram no quadril (passos)
+  if (!seatY) for (const s of [-1, 1]) {
+    const lg = new THREE.Group(); lg.position.set(s * 0.14, 0.58, 0); body.add(lg);
+    lg.add(at(box(0.22, 0.5, 0.24, pants), 0, -0.25, 0)); lg.add(at(box(0.26, 0.12, 0.34, BOOT), 0, -0.52, 0.04)); legs.push(lg);
+  }
   body.add(at(cyl(0.34, 0.37, 0.62, shirt, 10), 0, 0.88, 0));
   body.add(at(cyl(0.375, 0.375, 0.08, pants, 10), 0, 0.6, 0));
   if (winter) {                                               // cliente de inverno: casaco grosso, cachecol (e gorro em alguns)
@@ -78,7 +83,7 @@ export function buildNPC({ shirt, hair, pants, seatY = 0, apron = false, k = 0, 
   coat.add(at(torus(0.34, 0.1, COAT, 6, 14), 0, 1.2, 0, Math.PI / 2, 0, 0));
   for (const a of [armL, armR]) { const s = at(cyl(0.135, 0.125, 0.48, COAT, 8), 0, -0.24, 0); a.add(s); s.visible = false; a.userData.coat = s; }
   const wear = on => { coat.visible = on; for (const a of [armL, armR]) a.userData.coat.visible = on; };
-  return { root, body, head, armL, armR, mouth, k, wear };
+  return { root, body, head, armL, armR, mouth, k, wear, legL: legs[0] || null, legR: legs[1] || null };
 }
 
 export function createGrillbyInside() {
@@ -229,6 +234,7 @@ export function createGrillbyInside() {
 
   // ---- história (Nevasca): K na mesa do canto, dono do casaco atrás, lareira, janela para a nevasca ----
   const story = buildStory(g, add, solid, P, col, BX, BOOTHS, W, D, WALL_H, WOOD, WOOD_D, TRIM, glowMat);
+  story.patrons = npcs.filter(n => n.anim !== 'wipe' && !n.still && n !== story.guest);   // (o atendente do balcão não)
 
   let t = 0;
   function animNPC(n, dt) {
@@ -276,7 +282,7 @@ function buildStory(g, add, solid, P, col, BX, BOOTHS, W, D, WALL_H, WOOD, WOOD_
   const kTop = new THREE.Box3().setFromObject(k).max.y;
   // dono do casaco: na mesa atrás do jogador (a do meio), de costas para ele; o casaco no encosto
   const owner = P({ ...col(10), seatY: 0.74 }, BX + 0.6, BOOTHS[1] + 1.35, Math.PI, 'drink');
-  const coatOnChair = new THREE.Group(); g.add(coatOnChair);
+  const coatOnChair = new THREE.Group(); coatOnChair.visible = false; g.add(coatOnChair);   // (não usado: qualquer cliente empresta)
   coatOnChair.add(at(box(1.1, 0.95, 0.16, COAT), BX - 1.0, 1.25, BOOTHS[1] + 2.08, 0.12, 0, 0));
   coatOnChair.add(at(box(1.15, 0.2, 0.42, COAT), BX - 1.0, 1.78, BOOTHS[1] + 1.95));
   for (const dx of [-0.42, 0.42]) coatOnChair.add(at(box(0.24, 0.7, 0.14, COAT), BX - 1.0 + dx, 1.05, BOOTHS[1] + 2.2, 0.2, 0, 0));
@@ -323,7 +329,8 @@ function buildStory(g, add, solid, P, col, BX, BOOTHS, W, D, WALL_H, WOOD, WOOD_
   pg.scale.setScalar(5.5); pg.position.set(PX - 0.8, 4.1, PZ); pg.renderOrder = 10; out.add(pg);
   const pool = plane(6, 6, new THREE.MeshBasicMaterial({ map: glowMat.map, color: '#ffcf8a', transparent: true, opacity: 0.55, depthWrite: false, blending: THREE.AdditiveBlending }));
   pool.rotation.x = -Math.PI / 2; pool.position.set(PX - 0.6, 0.05, PZ); pool.renderOrder = 9; out.add(pool);
-  const pl = new THREE.PointLight('#ffd08a', 18, 10, 1.6); pl.position.set(PX - 0.9, 3.8, PZ); out.add(pl);
+  const pl = new THREE.PointLight('#ffd08a', 34, 11, 1.4); pl.position.set(PX - 0.9, 3.8, PZ); out.add(pl);
+  const pl2 = new THREE.PointLight('#ffe2b0', 10, 4, 1.2); pl2.position.set(PX + 0.6, 2.2, PZ - 1.4); out.add(pl2);   // contorno do vizinho
   // o vizinho de passagem (morador do Nevasca, com roupa de inverno): chega do norte pela calçada e para no poste
   const walker = P({ ...look }, PX - 0.6, -24, 0, 'still'); walker.still = true; walker.root.visible = false; out.add(walker.root);
   // névoa de neve em camadas (a rua some) e flocos voando com o vento
@@ -334,14 +341,14 @@ function buildStory(g, add, solid, P, col, BX, BOOTHS, W, D, WALL_H, WOOD, WOOD_
   const pg2 = new THREE.BufferGeometry(); pg2.setAttribute('position', new THREE.BufferAttribute(pos, 3));
   const flakes = new THREE.Points(pg2, new THREE.PointsMaterial({ color: '#f4f8ff', size: 0.09, transparent: true, opacity: 0.95, depthWrite: false }));
   out.add(flakes);
-  let t = 0, walkT = -1;
+  let t = 0, walkT = -1; const W2 = { z: -24, ph: 0 };
   const st = {
-    k, kHead: { x: SX, y: kTop - 0.28, z: kZ }, seat: { x: SX, y: 1.6, z: seatZ }, owner, coatOnChair, guest, guestWalk, look, walkerNPC: walker,
+    patrons: [], k, kHead: { x: SX, y: kTop - 0.28, z: kZ }, seat: { x: SX, y: 1.6, z: seatZ }, owner, coatOnChair, guest, guestWalk, look, walkerNPC: walker,
     coatPoint: { x: BX - 2.3, z: BOOTHS[1] + 1.4 }, kPoint: { x: BX - 2.3, z: TZ }, fire: { x: -W + 2.6, z: FZ }, window: { x: W, z: 5.95 },
     fp: false,
     setFP(on) { st.fp = on; fp.visible = on; },
     /** O vizinho começa a chegar (cena da janela). */
-    startWalker() { walkT = 0; walker.root.visible = true; },
+    startWalker() { walkT = 0; W2.z = -24; W2.ph = 0; walker.root.visible = true; },
     resetWalker() { walkT = -1; walker.root.visible = false; },
     tick(dt) {
       t += dt;
@@ -355,16 +362,28 @@ function buildStory(g, add, solid, P, col, BX, BOOTHS, W, D, WALL_H, WOOD, WOOD_
       flakes.geometry.attributes.position.needsUpdate = true;
       if (walkT >= 0) {                                              // anda com dificuldade até o poste e se segura ali
         walkT += dt;
-        const n = walker, arrive = 7.5, z0 = -24, z1 = PZ - 0.7, k2 = Math.min(1, walkT / arrive);
-        const z = z0 + (z1 - z0) * (1 - Math.pow(1 - k2, 1.6));
-        n.root.position.set(PX - 0.6 + 0.15 * Math.sin(walkT * 1.7), 0, z);
-        n.root.rotation.y = k2 < 1 ? 0.15 * Math.sin(walkT * 1.3) : -0.6 + 0.08 * Math.sin(walkT * 0.8);
-        n.body.rotation.x = 0.28 + 0.05 * Math.sin(walkT * 3);         // curvado contra o vento
-        n.body.rotation.z = 0.06 * Math.sin(walkT * (k2 < 1 ? 3.2 : 1.1));
-        n.body.position.y = n.body.position.y;                          // (altura fixa)
-        n.armR.rotation.set(-2.2, 0, 0.5);                               // braço protegendo o rosto
-        n.armL.rotation.set(k2 < 1 ? -0.4 + 0.3 * Math.sin(walkT * 3.2) : -1.2, 0, k2 < 1 ? -0.3 : -0.9);   // no poste: a mão se apoia nele
-        n.head.rotation.set(0.25, 0, 0);
+        const n = walker, z1 = PZ - 0.75, left = z1 - W2.z;
+        if (left > 0.01) {
+          // ritmo irregular; perto do poste, mais devagar; 2 tropeços leves (perde o equilíbrio e se recupera)
+          let rate = 1.25 * (0.8 + 0.22 * Math.sin(walkT * 0.9) + 0.14 * Math.sin(walkT * 2.3 + 1)) * Math.min(1, 0.35 + left / 3);
+          const stum = [3.0, 6.4].map(s => walkT - s).find(d => d > 0 && d < 0.9);
+          if (stum !== undefined) rate *= 0.15;
+          W2.ph += rate * dt * Math.PI * 2;
+          W2.z = Math.min(z1, W2.z + rate * 0.62 * dt * (0.55 + 0.9 * Math.abs(Math.sin(W2.ph))));   // avança junto com o passo (pés não deslizam)
+          const sw = Math.sin(W2.ph) * 0.42;
+          n.legL.rotation.x = sw; n.legR.rotation.x = -sw;                                        // passos curtos
+          n.body.position.y = -0.03 * Math.abs(Math.cos(W2.ph));
+          n.body.rotation.x = 0.3 + 0.04 * Math.sin(W2.ph * 2);                                   // inclinado contra o vento
+          n.body.rotation.z = 0.05 * Math.sin(W2.ph) + (stum !== undefined ? 0.16 * Math.sin(stum / 0.9 * Math.PI) : 0);
+          n.root.position.set(PX - 0.6 + 0.12 * Math.sin(walkT * 0.7), 0, W2.z); n.root.rotation.y = 0.08 * Math.sin(walkT * 0.5);
+          n.armR.rotation.set(-2.25, 0, 0.55); n.armL.rotation.set(-1.0 + 0.25 * Math.sin(W2.ph), 0, -0.35);   // um braço no rosto, o outro equilibrando
+          n.head.rotation.set(0.32, 0, 0);
+        } else {                                                      // no poste: para, se segura e treme
+          n.legL.rotation.x = n.legR.rotation.x = 0; n.body.position.y = 0;
+          n.root.rotation.y = -0.55;
+          n.body.rotation.set(0.24 + 0.03 * Math.sin(walkT * 1.1), 0, 0.025 * Math.sin(walkT * 23) + 0.03 * Math.sin(walkT * 0.9));
+          n.armL.rotation.set(-1.3, 0, -0.95); n.armR.rotation.set(-2.25 + 0.04 * Math.sin(walkT * 19), 0, 0.55); n.head.rotation.set(0.3, 0.08 * Math.sin(walkT * 0.6), 0);
+        }
       }
     },
   };

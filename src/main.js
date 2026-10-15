@@ -17,7 +17,7 @@ import { createUrsa } from './ursa.js';
 import { createSolar } from './solar.js';
 import { buildGrillbyLot } from './models/grillby.js';
 import { createGrillbyInside } from './grillbyInside.js';
-import { createGrillStory, GRILL_TALK_KEY } from './grillStory.js';
+import { createGrillStory, GRILL_TALK_KEY, createCrowd } from './grillStory.js';
 import { createWorkshopStory } from './workshopStory.js';
 import { createNight } from './night.js';
 import { createFarmOutside } from './farmOutside.js';
@@ -1848,6 +1848,7 @@ let grillIn = null, insideOn = false, grill = null;
 // do mesmo ponto; ao sair ela acaba e a do bairro volta como estava (suspend não muda a preferência salva)
 const GRILL_OVERRIDE = { get on() { return grillMusic.playing; }, toggle() { if (grillMusic.playing) grillMusic.pause(); else grillMusic.resume(); } };          // grill: transição { dir: 'in' | 'out', t, swapped }
 const GRILL_FAR_VAN = { x: 1e6, z: 1e6 };
+const grillCrowd = createCrowd(audio);                  // murmúrio do bar (efeitos; uma cópia só)
 const nearGrillK = () => !!grillIn && grillIn.story.k.visible && Math.hypot(walker.x - grillIn.story.kPoint.x, walker.z - grillIn.story.kPoint.z) < 1.9;
 /** Ponto da porta do Grillby's no bairro (local (3,3; 3,6) do lote, girado como o ponto). */
 function grillDoorWorld(out = 0) {
@@ -1871,6 +1872,7 @@ function enterGrillScene() {
   renderer.compile(grillIn.scene, grillIn.camera);
   music.suspend(true); grillMusic.stop(); music.setOverride(GRILL_OVERRIDE);
   grillMusic.load().then(() => { if (insideOn) { grillMusic.play(0.4); music.refresh(); } }).catch(() => {});
+  grillCrowd.start();                                   // bar cheio: murmúrio ao fundo (só aqui dentro)
 }
 // ---------- Grillby's: o encontro com o K (história; depois da 2ª conversa na igreja) ----------
 let storyPrompt = null;
@@ -1891,7 +1893,7 @@ function findPole(out) {
   return best || { x: out.x + c * 8 + s * 10, z: out.z + s * 8 - c * 10 };
 }
 const grillStory = createGrillStory({
-  walker, rig, audio, talkBox, input, menu, grillMusic, stage,
+  walker, rig, audio, talkBox, input, menu, grillMusic, stage, crowd: grillCrowd,
   get grillIn() { return grillIn; }, get world() { return world; },
   flag: flagOn, doorWorld: grillDoorWorld, walkSolids: () => walkSolids(), groundH: (x, z) => TERRAIN.h(x, z), findPole,
   prompt: t => { storyPrompt = t; },
@@ -1903,7 +1905,7 @@ const grillStory = createGrillStory({
 });
 function leaveGrill() {
   if (!insideOn) return;
-  insideOn = false; world.scene.add(walker.object);
+  insideOn = false; world.scene.add(walker.object); grillCrowd.stop();
   grillMusic.stop(); music.setOverride(null); music.suspend(false);   // a do bairro volta como estava antes de entrar
   const d = grillDoorWorld(2.2); walker.pose(d.x, d.z, d.heading);
   rig.snap({ x: walker.x, z: walker.z, y: walker.floor, heading: walker.heading });   // tela preta: a câmera já começa no personagem, junto à porta
@@ -1958,6 +1960,7 @@ function focusOf(h) {
 function update(dt, t) {
   stateT += dt;
   wsStory.update(dt);                                // Bairro 24: a oficina (cenas e rotina)
+  grillCrowd.update(dt, document.hidden);
   if (matchTimer.armed && TIMER_PLAY.includes(state)) matchTimer.begin();
   if (!TIMER_OFF.includes(state) && !menu.isOpen && !missions.isOpen) matchTimer.tick(dt);   // (pausado com o MENU ou as missões abertas)
   if (state !== 'title' && state !== 'levelSelect' && state !== 'levelFly' && state !== 'shop' && !(state === 'fadeOut' && endToMap) && input.toggleCamera()) rig.toggle();

@@ -6,6 +6,7 @@
 // (adress.grill.talk1) → fade 3 s → tela inicial (fade 1,5 s). Tempo esgotado: fade → tela inicial, nada salvo.
 import * as THREE from 'three';
 import { buildNPC } from './grillbyInside.js';
+import { CHAR_MATS } from './models/driver.js';
 
 export const GRILL_TALK_KEY = 'adress.grill.talk1';
 const EYE = 1.6, FAR = { x: 1e6, z: 1e6 };
@@ -39,7 +40,7 @@ const LINES2 = [
   'Deve estar usando a luz do poste para se orientar. [...] Mas mal consegue ficar de pé.',
   'Da janela, parece perto.',
   'Para quem está naquele frio, [...] talvez não pareça.',
-  'Um casaco ajudaria. [...] Vi um pendurado na cadeira da mesa atrás de você. Talvez o dono possa emprestá-lo.',
+  'Um casaco ajudaria. [...] Talvez alguém aqui possa emprestar um.',
   'Mas ele também precisa de alguém que caminhe com ele.',
   'Se decidir ir, [...] procure a luz.',
   'E, quando chegar até ele, [...] deixe que se apoie em você.',
@@ -107,8 +108,60 @@ function createStorm(audio) {
   };
 }
 
+/** Ruído de bar cheio (WebAudio, sem arquivo): conversas sobrepostas e murmúrios ao fundo, sem frases. Uma cópia só. */
+export function createCrowd(audio) {
+  let N = null, want = 0, cur = 0, lvl = 1, t = 0;
+  function build() {
+    const ac = audio.ctx; if (!ac) return null;
+    const len = ac.sampleRate * 4, buf = ac.createBuffer(1, len, ac.sampleRate), d = buf.getChannelData(0);
+    let b0 = 0, b1 = 0, b2 = 0; for (let i = 0; i < len; i++) { const w = Math.random() * 2 - 1; b0 = 0.997 * b0 + w * 0.03; b1 = 0.985 * b1 + w * 0.06; b2 = 0.9 * b2 + w * 0.15; d[i] = (b0 + b1 + b2) * 0.5; }   // ruído rosado
+    for (let i = 0; i < 2000; i++) { const k = i / 2000; d[i] = d[i] * k + d[len - 2000 + i] * (1 - k); }   // emenda sem clique
+    const out = ac.createGain(); out.gain.value = 0;
+    const lp = ac.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 1700; lp.connect(out); out.connect(audio.out);
+    const voices = [320, 470, 610, 820, 1050, 1300].map((f, i) => {
+      const s = ac.createBufferSource(); s.buffer = buf; s.loop = true;
+      const bp = ac.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = f; bp.Q.value = 5;
+      const g = ac.createGain(); g.gain.value = 0; s.connect(bp); bp.connect(g); g.connect(lp); s.start(0, i * 0.61);
+      return { s, bp, g, f, ph: i * 1.7, sp: 0.6 + i * 0.23 };
+    });
+    return { out, voices };
+  }
+  return {
+    start() { want = 1; if (!N) N = build(); },
+    stop() { want = 0; },
+    /** Nível relativo (ex.: mais baixo durante as conversas com o K). */
+    level(k) { lvl = k; },
+    update(dt, mute) {
+      if (!N) return;
+      t += dt; cur += ((mute ? 0 : want * lvl) - cur) * (1 - Math.exp(-dt * 1.4));
+      try {
+        N.out.gain.value = cur * 0.55;
+        for (const v of N.voices) {                                  // cada "voz" sobe e desce devagar (sílabas borradas, sem palavras)
+          const a = 0.5 + 0.5 * Math.sin(t * v.sp + v.ph) * Math.sin(t * v.sp * 2.7 + v.ph * 2);
+          v.g.gain.value = 0.25 + 0.75 * Math.max(0, a); v.bp.frequency.value = v.f * (1 + 0.08 * Math.sin(t * v.sp * 1.9 + v.ph));
+        }
+      } catch (e) { /* */ }
+      if (!want && cur < 0.002) { try { N.voices.forEach(v => v.s.stop()); N.out.disconnect(); } catch (e) { /* */ } N = null; cur = 0; }
+    },
+    get on() { return !!N; },
+  };
+}
+
 export function createGrillStory(ctx) {
-  const { walker, rig, audio, talkBox, input, menu, grillMusic } = ctx;
+  const { walker, rig, audio, talkBox, input, menu, grillMusic, crowd } = ctx;
+  // olhar com o botão direito (também em 1ª pessoa): giro a partir dos olhos, com limite vertical
+  let drag = null;
+  const lookOn = () => S && !['look', 'sit', 'leaving', 'enter', 'fail', 'end'].includes(S.phase);
+  addEventListener('mousedown', e => { if (e.button === 2 && lookOn()) drag = { x: e.clientX, y: e.clientY }; });
+  addEventListener('mousemove', e => {
+    if (!drag || !lookOn()) return;
+    S.ly += (e.clientX - drag.x) * 0.0045; S.lp = Math.max(-1.15, Math.min(1.0, S.lp - (e.clientY - drag.y) * 0.0045));
+    drag.x = e.clientX; drag.y = e.clientY;
+  });
+  addEventListener('mouseup', e => { if (e.button === 2) drag = null; });
+  addEventListener('contextmenu', e => { if (S) e.preventDefault(); });
+  const HINT = { hint: 'E / Espaço — Continuar' };
+  const view = (c, x, y, z, yaw, pitch) => lookFrom(c, x, y, z, yaw + S.ly, Math.max(-1.25, Math.min(1.1, pitch + S.lp)));
   const storm = createStorm(audio);
   // cronômetro do resgate (vermelho, separado do cronômetro da partida)
   const css = document.createElement('style');
@@ -176,10 +229,10 @@ export function createGrillStory(ctx) {
   // ---------- controle ----------
   function reset(full = true) {
     if (S) talkBox.hide();
-    teardownOutside(); storm.stop(); timerEl.classList.remove('on');
+    teardownOutside(); storm.stop(); timerEl.classList.remove('on'); arm = null; crowd.level(1);
     walker.setSpeedMul(1);
     if (ctx.grillIn) {
-      const st = ST(); ctx.grillIn.setFP(false); st.coatOnChair.visible = true; st.guest.root.visible = false; st.resetWalker();
+      const st = ST(); ctx.grillIn.setFP(false); st.coatOnChair.visible = false; st.guest.root.visible = false; st.resetWalker();
       st.k.visible = available();
     }
     try { grillMusic.setLevel(1, 0.5); } catch (e) { /* */ }
@@ -188,7 +241,8 @@ export function createGrillStory(ctx) {
   }
 
   function start() {
-    S = { phase: 'sit', t: 0, coat: false, timer: 120, escort: false };
+    S = { phase: 'sit', t: 0, coat: false, timer: 120, escort: false, ly: 0, lp: 0 };
+    crowd.level(0.35);
     ctx.prompt(null);
     talkBox.fadeBlack(1, 350, () => {
       ctx.grillIn.setFP(true); walker.show(false);
@@ -216,35 +270,37 @@ export function createGrillStory(ctx) {
     switch (S.phase) {
       case 'sit': break;                                             // (fade para sentar)
       case 'pre1':
-        if (S.t > 0.9) { S.phase = 'talk1'; talkBox.show(LINES1, () => { S.phase = 'look'; S.t = 0; }, { auto: true }); }
+        if (S.t > 0.9) { S.phase = 'talk1'; talkBox.show(LINES1, () => { S.phase = 'look'; S.t = 0; S.ly = 0; S.lp = 0; }, HINT); }
         break;
-      case 'talk1': case 'talk2': case 'talk3': talkBox.update(dt); break;
+      case 'talk1': case 'talk2': case 'talk3': talkBox.update(dt); if (input.action()) talkBox.press(); break;   // só avança com E / Espaço
       case 'look': {                                                 // vira a cabeça para a janela (esquerda), observa, volta
         const v = seatView(), toWin = 0, TURN = 1.9, WATCH = 9.5;
         if (S.t < dt * 1.5) { ST().startWalker(); storm.set(0.32, 520); grillMusic.setLevel(0.25, 2.5); }
         const k = S.t < TURN ? ease(S.t / TURN) : S.t < TURN + WATCH ? 1 : 1 - ease((S.t - TURN - WATCH) / TURN);
         S.yaw = lerpAng(v.yaw, toWin, k); S.pitch = v.pitch * (1 - k) - 0.02 * k;
         lookFrom(c, v.x, v.y, v.z, S.yaw, S.pitch);
-        if (S.t >= TURN * 2 + WATCH) { S.phase = 'talk2'; talkBox.show(LINES2, () => { S.phase = 'seated'; S.t = 0; }, { auto: true }); }
+        if (S.t >= TURN * 2 + WATCH) { S.phase = 'talk2'; S.ly = 0; S.lp = 0; talkBox.show(LINES2, () => { S.phase = 'seated'; S.t = 0; crowd.level(0.7); }, HINT); }
         break;
       }
       case 'seated': {                                               // controle de volta: pode levantar quando quiser
-        const v = seatView(); lookFrom(c, v.x, v.y, v.z, v.yaw, v.pitch);
+        const v = seatView(); view(c, v.x, v.y, v.z, v.yaw, v.pitch);
         ctx.prompt('Levantar');
         if (S.t > 0.3 && input.action()) {
-          const p = ST().kPoint; walker.pose(p.x, p.z - 1.2, Math.PI); S.phase = 'walkIn'; S.t = 0; ctx.prompt(null);
+          const p = ST().kPoint; walker.pose(p.x, p.z - 1.2, Math.PI); S.phase = 'walkIn'; S.t = 0; S.ly = 0; S.lp = 0; ctx.prompt(null);
         }
         break;
       }
       case 'walkIn': {                                               // a pé dentro do salão, em 1ª pessoa
         walker.update(dt, input.axis(), 'car', ctx.grillIn.solids, FAR);
-        lookFrom(c, walker.x, EYE, walker.z, walker.heading, -0.08);
+        view(c, walker.x, EYE, walker.z, walker.heading, -0.08);
         const st = ST(), near = p => Math.hypot(walker.x - p.x, walker.z - p.z) < 1.9;
-        const act = ctx.grillIn.nearDoor(walker.x, walker.z) ? 'Sair' : !S.coat && near(st.coatPoint) ? 'Pedir casaco emprestado' : near(st.kPoint) ? 'Sentar' : null;
+        // qualquer cliente pode emprestar um casaco (menos o atendente e o K); depois de um, nada de pedir outro
+        const lender = !S.coat && st.patrons.find(n => { n.root.getWorldPosition(_v); return Math.hypot(walker.x - _v.x, walker.z - _v.z) < 2.3; });
+        const act = ctx.grillIn.nearDoor(walker.x, walker.z) ? 'Sair' : lender ? 'Pedir casaco emprestado' : near(st.kPoint) ? 'Sentar' : null;
         ctx.prompt(act);
         if (!act || S.t < 0.3 || !input.action()) break;
         S.t = 0;
-        if (act === 'Pedir casaco emprestado') { S.coat = true; st.coatOnChair.visible = false; talkBox.warn(['Você pegou o casaco emprestado.']); setTimeout(() => talkBox.warn(null), 2200); }
+        if (act === 'Pedir casaco emprestado') { S.coat = true; talkBox.warn(['Emprestaram um casaco para você.']); setTimeout(() => talkBox.warn(null), 2200); }
         else if (act === 'Sentar') { S.phase = 'seated'; ctx.prompt(null); }
         else if (!S.coat) {                                          // sair sem o casaco: o encontro fica para outra vez
           S.phase = 'leaving'; ctx.prompt(null);
@@ -253,7 +309,7 @@ export function createGrillStory(ctx) {
           S.phase = 'leaving'; ctx.prompt(null);
           talkBox.fadeBlack(1, 900, () => {
             ctx.goOutside(); setupOutside();
-            storm.set(0.9, 2600); S.timer = 120; paintTimer(S.timer); timerEl.classList.add('on');
+            storm.set(0.9, 2600); crowd.stop(); S.timer = 120; paintTimer(S.timer); timerEl.classList.add('on'); S.ly = 0; S.lp = 0;
             walker.setSpeedMul(0.42);
             S.phase = 'rescue'; S.t = 0;
             talkBox.fadeBlack(0, 900);
@@ -278,23 +334,27 @@ export function createGrillStory(ctx) {
           const d = Math.hypot(walker.x - n.root.position.x, walker.z - n.root.position.z);
           ctx.prompt(d < 2.4 ? 'Ajudar' : null);
           if (d < 2.4 && input.action()) { S.escort = true; n.wear(true); walker.setSpeedMul(0.3); ctx.prompt(null); }
-        } else {                                                     // apoiado no braço: do lado direito, um passo atrás
-          const r = { x: -f.z, z: f.x }, tx = walker.x + r.x * 0.85 - f.x * 0.25, tz = walker.z + r.z * 0.85 - f.z * 0.25;
-          const k = 1 - Math.exp(-dt * 10);
-          n.root.position.x += (tx - n.root.position.x) * k; n.root.position.z += (tz - n.root.position.z) * k;
-          n.root.position.y = walker.floor;
+        } else {                                                     // apoiado no jogador, do lado ESQUERDO (dá para ver olhando para a esquerda)
+          const lf = { x: f.z, z: -f.x };
+          n.root.position.set(walker.x + lf.x * 0.72 + f.x * 0.05, walker.floor, walker.z + lf.z * 0.72 + f.z * 0.05);   // preso ao lado: vira junto, sem atraso
           n.root.rotation.y = Math.atan2(f.x, f.z);
-          n.body.rotation.set(0.18, 0, 0.05 * Math.sin(e.t * 3.2) - 0.08);   // inclinado para o jogador
-          n.armL.rotation.set(-0.35, 0, -1.25);                          // braço apoiado no ombro do jogador (do lado esquerdo dele)
-          n.armR.rotation.set(-2.0, 0, 0.45);
-          n.head.rotation.set(0.3, 0.15, 0);
+          const moved = S.lastP ? Math.hypot(walker.x - S.lastP.x, walker.z - S.lastP.z) : 0; S.lastP = { x: walker.x, z: walker.z };
+          S.stepPh = (S.stepPh || 0) + moved / 0.34 * Math.PI;         // passos no ritmo do jogador (mais lento, juntos)
+          const sw = Math.sin(S.stepPh) * 0.38 * Math.min(1, moved / (dt * 0.8 + 1e-6));
+          if (n.legL) { n.legL.rotation.x = sw; n.legR.rotation.x = -sw; }
+          n.body.rotation.set(0.14, 0, -0.16 + 0.03 * Math.sin(S.stepPh));   // inclinado para o jogador (à direita dele)
+          n.armL.rotation.set(-0.1, 0, -1.72);                           // o braço do lado do jogador passa por cima do ombro dele
+          n.armR.rotation.set(-2.1, 0, 0.5);                             // o outro protege o rosto
+          n.head.rotation.set(0.32, -0.25, 0);
+          supportArm(n);
           const dd = Math.hypot(walker.x - e.door.x, walker.z - e.door.z);
           if (dd < 2.6) {                                            // chegaram: o tempo para na hora
             timerEl.classList.remove('on'); S.phase = 'enter'; ctx.prompt(null);
             talkBox.fadeBlack(1, 900, () => {
               teardownOutside(); ctx.goInside(); storm.set(0.3, 520); walker.setSpeedMul(1);
-              const st = ST(); ctx.grillIn.setFP(true); st.resetWalker();
-              S.phase = 'return'; S.t = 0; S.guest = { t: 0 };
+              const st = ST(); ctx.grillIn.setFP(true); st.resetWalker(); crowd.start(); crowd.level(1);
+              const d = ctx.grillIn.door; walker.pose(d.x, d.z - 0.4, -Math.PI / 2);   // controle de volta já: olhando para o salão
+              S.phase = 'back'; S.t = 0; S.ly = 0; S.lp = 0; S.g = { x: d.x - 0.2, z: d.z - 2.0, ph: 0, seated: false };
               grillMusic.setLevel(0.3, 0.1); setTimeout(() => grillMusic.setLevel(1, 4), 600);
               talkBox.fadeBlack(0, 900);
             });
@@ -304,33 +364,57 @@ export function createGrillStory(ctx) {
         if (S.timer <= 0) { S.phase = 'fail'; timerEl.classList.remove('on'); ctx.prompt(null); toTitle(false); }
         break;
       }
-      case 'return': {                                               // ele vai para a lareira; o jogador volta à mesa
-        const st = ST(), G = st.guestWalk, T1 = 2.6, door = ctx.grillIn.door;
-        if (S.t < T1) {
-          const k = ease(S.t / T1); G.root.visible = true;
-          const ax = door.x - 0.8, az = door.z - 0.6, bx = st.fire.x + 1.0, bz = st.fire.z;
-          G.root.position.set(ax + (bx - ax) * k, 0, az + (bz - az) * k); G.root.rotation.y = Math.atan2(bx - ax, bz - az);
-          G.body.rotation.set(0.05, 0, 0.05 * Math.sin(S.t * 9));
-        } else if (G.root.visible) { G.root.visible = false; st.guest.root.visible = true; }
-        // câmera: da porta, pelo corredor, até o assento diante do K
-        const v = seatView(), pts = [[door.x, door.z - 0.4], [3.5, 6.6], [8.0, v.z], [v.x, v.z]], DUR = 4.2;
-        const k = ease(Math.min(1, S.t / DUR)), segs = pts.length - 1, u = k * segs, i = Math.min(segs - 1, Math.floor(u)), w = u - i;
-        const x = pts[i][0] + (pts[i + 1][0] - pts[i][0]) * w, z = pts[i][1] + (pts[i + 1][1] - pts[i][1]) * w;
-        const along = Math.atan2(pts[i + 1][1] - pts[i][1], pts[i + 1][0] - pts[i][0]);
-        const yaw = S.t < DUR - 1.2 ? along : lerpAng(along, v.yaw, ease((S.t - (DUR - 1.2)) / 1.2));
-        const y = S.t < DUR ? EYE - 0.1 * Math.max(0, (S.t - (DUR - 1)) / 1) : v.y;
-        lookFrom(c, x, y, z, S.t < DUR ? yaw : v.yaw, S.t < DUR ? -0.06 : v.pitch);
-        if (S.t > DUR + 0.8) { S.phase = 'talk3'; talkBox.show(LINES3, () => {
-          S.phase = 'note';
-          talkBox.note('AVISO DO JOGO', ['Use o ', { b: 'Modo Livre no Bairro 24' }, ', a qualquer momento, caso tenha interesse.'], () => { S.phase = 'end'; toTitle(true); });
-        }, { auto: true }); }
+      case 'back': {                                                 // de volta lá dentro: anda livre; ele vai até a lareira; só o K responde
+        walker.update(dt, input.axis(), 'car', ctx.grillIn.solids, FAR);
+        view(c, walker.x, EYE, walker.z, walker.heading, -0.08);
+        const st = ST(), G = st.guestWalk, g = S.g;
+        if (!g.seated) {                                             // segue depressa até o banquinho perto do fogo e senta
+          const tx = st.fire.x + 1.25, tz = st.fire.z, dx = tx - g.x, dz = tz - g.z, d = Math.hypot(dx, dz);
+          if (d > 0.15) {
+            const sp = Math.min(d, 2.4 * dt); g.x += dx / d * sp; g.z += dz / d * sp; g.ph += sp / 0.42 * Math.PI;
+            G.root.visible = true; G.root.position.set(g.x, 0, g.z); G.root.rotation.y = Math.atan2(dx, dz);
+            const sw = Math.sin(g.ph) * 0.5; if (G.legL) { G.legL.rotation.x = sw; G.legR.rotation.x = -sw; }
+            G.body.rotation.set(0.08, 0, 0); G.armL.rotation.set(-sw * 0.6, 0, -0.1); G.armR.rotation.set(sw * 0.6, 0, 0.1);
+          } else { g.seated = true; G.root.visible = false; st.guest.root.visible = true; }
+        }
+        const nk = Math.hypot(walker.x - st.kPoint.x, walker.z - st.kPoint.z) < 1.9;
+        ctx.prompt(nk ? 'Conversar' : null);                          // sem saída, sem outros pedidos: só o K
+        if (nk && S.t > 0.4 && input.action()) {
+          S.phase = 'sit3'; ctx.prompt(null);
+          talkBox.fadeBlack(1, 350, () => {
+            if (!g.seated) { g.seated = true; G.root.visible = false; st.guest.root.visible = true; }
+            S.ly = 0; S.lp = 0; crowd.level(0.35); talkBox.fadeBlack(0, 450);
+            S.phase = 'pre3'; S.t = 0;
+          });
+        }
         break;
       }
+      case 'pre3':
+        if (S.t > 0.7) { S.phase = 'talk3'; talkBox.show(LINES3, () => {
+          S.phase = 'note';
+          talkBox.note('AVISO DO JOGO', ['Use o ', { b: 'Modo Livre no Bairro 24' }, ', a qualquer momento, caso tenha interesse.'], () => { S.phase = 'end'; toTitle(true); });
+        }, HINT); }
+        break;
       case 'note': if (input.action()) talkBox.pressNote(); break;
       default: break;
     }
-    if (S && (S.phase === 'talk3' || S.phase === 'note')) { const v = seatView(); lookFrom(c, v.x, v.y, v.z, v.yaw, v.pitch); }
-    if (S && (S.phase === 'pre1' || S.phase === 'talk1' || S.phase === 'talk2')) { const v = seatView(); if (S.phase !== 'look') lookFrom(c, v.x, v.y, v.z, v.yaw, v.pitch); }
+    if (S && ['pre1', 'talk1', 'talk2', 'pre3', 'talk3', 'note', 'sit3'].includes(S.phase) && (S.phase !== 'sit3' || S.ly === 0)) { const v = seatView(); view(c, v.x, v.y, v.z, v.yaw, v.pitch); }
+  }
+  let arm = null;
+  function supportArm(n) {
+    if (!ext) return;
+    if (!arm) {
+      arm = new THREE.Group();
+      const up = new THREE.Mesh(new THREE.CylinderGeometry(0.075, 0.07, 1, 8), CHAR_MATS.shirt); up.position.y = 0.5; arm.userData.seg = up; arm.add(up);
+      const hand = new THREE.Mesh(new THREE.SphereGeometry(0.075, 8, 6), CHAR_MATS.skin); hand.position.y = 1; arm.add(hand);
+    }
+    if (arm.parent !== ext.grp) ext.grp.add(arm);
+    const f = { x: Math.cos(walker.heading), z: Math.sin(walker.heading) }, lf = { x: f.z, z: -f.x }, y = walker.floor;
+    const sh = new THREE.Vector3(walker.x + lf.x * 0.24 + f.x * 0.12, y + 1.22, walker.z + lf.z * 0.24 + f.z * 0.12);   // ombro esquerdo (abaixo dos olhos)
+    const to = new THREE.Vector3(n.root.position.x - f.x * 0.12, y + 1.0, n.root.position.z - f.z * 0.12);          // as costas dele, na cintura
+    const dir = to.clone().sub(sh), L = dir.length();
+    arm.position.copy(sh); arm.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), dir.normalize());
+    arm.userData.seg.scale.y = L; arm.userData.seg.position.y = L / 2; arm.children[1].position.y = L;
   }
   function animateFlakes(dt) {
     const e = ext, p = e.flakes.geometry.attributes.position.array, wx = Math.cos(e.wind), wz = Math.sin(e.wind);
@@ -347,7 +431,7 @@ export function createGrillStory(ctx) {
   function camOut(c) {
     if (!S || S.phase !== 'rescue' && S.phase !== 'enter' && S.phase !== 'fail') return;
     const sway = ext ? 0.012 * Math.sin(ext.t * 1.3) : 0;
-    lookFrom(c, walker.x, walker.floor + EYE, walker.z, walker.heading + sway, -0.04);
+    view(c, walker.x, walker.floor + EYE, walker.z, walker.heading + sway, -0.04);
   }
 
   return {
