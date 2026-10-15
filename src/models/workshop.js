@@ -134,63 +134,106 @@ export function buildWorkshop() {
     get ruined() { return !!R; },
   };
   // ---------- estragos do temporal ----------
-  // O telhado vira painéis (5 por água): alguns já foram embora, outros se soltam durante a cena; a porta pende de uma
-  // dobradiça e bate com o vento; a luz apaga; tábuas encostadas tombam; a travessa nova escorrega da bancada e as
-  // ferramentas se espalham; a chuva entra pelos buracos (a chuva em si fica com a cena).
+  // Já no 1º quadro: metade do telhado sem cobertura (caibros e terças à mostra), um painel desabado para dentro
+  // (ponta no chão), cumeeira partida e cedendo, oitões quebrados, reboco caído na fachada, entulho e telhas espalhadas
+  // em volta e lá dentro. Durante a cena (o K olhando): um painel que restava cede (3 s), telhas se soltam e escorregam
+  // pelos lados, o vento arranca outro painel (6,3 s) e um caibro despenca (8,4 s). Nada vai para a frente (onde o K está).
   let R = null;
   function buildRuin() {
     roof.visible = false; light.intensity = 0; for (const l of lamps) l.visible = false;
     const dark = new THREE.MeshStandardMaterial({ color: '#2a2622', roughness: 1 });
     for (const w of wins) w.material = dark;
     const g = new THREE.Group(); root.add(g);
-    const rm = mat(ROOF), pl = mat(PLASTER), tm = mat(TIMBER);
-    for (const z of [-7, 7]) { const tri = new THREE.Shape([new THREE.Vector2(-6, 0), new THREE.Vector2(6, 0), new THREE.Vector2(-1.6, 2.0)]); const m = new THREE.Mesh(new THREE.ExtrudeGeometry(tri, { depth: 0.3, bevelEnabled: false }), pl); m.position.set(0, 3.45, z - 0.15); g.add(m); }   // oitões quebrados
-    g.add(at(box(0.25, 1.1, 0.25, STONE2), 4.2, 4.9, -3.5, 0, 0, 0.35));                 // chaminé torta
-    g.add(at(box(0.18, 0.18, 14.2, TIMBER), 0, 5.6, 0, 0.02, 0, 0));                    // a cumeeira ficou (os painéis caem dela)
-    const pieces = [];                                                                   // { m, x0.. pose inicial, t0 (quando cede), kind }
-    for (const s of [-1, 1]) for (let i = 0; i < 5; i++) {
-      const z = -5.6 + i * 2.8, m = box(6.9, 0.22, 2.7, ROOF); m.material = rm;
-      m.position.set(s * 3.1, 4.55, z); m.rotation.set(0, 0, -s * 0.42); g.add(m);
-      const id = (s < 0 ? 0 : 5) + i;
-      // já foram (antes da cena): 1, 3, 6 · soltam-se na cena: 8 (cai para dentro, 2,2 s), 4 (o vento leva, 6,3 s), 7 (pende e cai, 9,6 s)
-      const gone = [1, 3, 6].includes(id), t0 = { 8: 2.2, 4: 6.3, 7: 9.6 }[id];
-      if (gone) m.visible = false;
-      if (id === 7) m.rotation.x = 0.25;                                                 // já pendurado, torto
-      pieces.push({ m, s, z, t0, id, p0: m.position.clone(), r0: m.rotation.clone() });
+    const rm = mat(ROOF), pl = mat(PLASTER), tm = mat(TIMBER), raw = mat('#4a3f35'), st2 = mat(STONE2);
+    let seed = 7; const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+    // oitões quebrados (a ponta caiu) e chaminé torta
+    for (const [z, pts] of [[-7, [[-6, 0], [6, 0], [4.2, 0.35], [2.1, 1.05], [0.6, 0.55], [-0.9, 1.25], [-3.4, 0.7]]], [7, [[-6, 0], [6, 0], [4.6, 0.2], [2.4, 0.55], [-1.2, 0.3], [-3.6, 0.85]]]]) {   // oitões partidos: só os cacos de baixo
+      const m = new THREE.Mesh(new THREE.ExtrudeGeometry(new THREE.Shape(pts.map(([x, y]) => new THREE.Vector2(x, y))), { depth: 0.3, bevelEnabled: false }), pl); m.position.set(0, 3.45, z - 0.15); g.add(m);
     }
-    // caibros expostos onde o telhado foi embora
-    for (const z of [-4.2, -1.4, 1.4, 4.2]) for (const s of [-1, 1]) g.add(at(box(0.14, 0.14, 7.3, TIMBER), s * 3.0, 4.6, z, 0, Math.PI / 2, -s * 0.42));
-    // destroços já no chão (lá dentro e na frente)
-    for (const [x, z, ry, rz] of [[-2.4, -1.6, 0.4, 0.15], [2.6, 3.4, -0.7, 0.2], [-1.2, 9.4, 1.1, 0.05]]) { const d = box(2.6, 0.16, 1.4, ROOF); d.material = rm; d.position.set(x, 0.2, z); d.rotation.set(0.1, ry, rz); g.add(d); }
-    for (const [x, z, ry] of [[3.4, 8.6, 0.6], [-3.6, 10.2, -0.3], [1.0, -2.6, 1.3]]) g.add(at(box(0.16, 0.12, 2.4, TIMBER), x, 0.1, z, 0, ry, 0));
-    // tábuas encostadas que tombam (10 s) e a travessa nova que escorrega (7,6 s)
-    const boards = g.children.length;
+    g.add(at(box(0.25, 1.1, 0.25, STONE2), 4.2, 4.9, -3.5, 0, 0, 0.35));
+    // cumeeira partida: a metade de trás ficou; a da frente cedeu e pende
+    g.add(at(box(0.2, 0.2, 7.2, TIMBER), 0, 5.6, -3.5));
+    const ridge = at(box(0.2, 0.2, 7.0, TIMBER), 0, 5.05, 3.4, -0.17, 0.04, 0.05); g.add(ridge);
+    // terças (ao longo da oficina) e caibros: o esqueleto do telhado à mostra
+    for (const s of [-1, 1]) for (const f of [0.3, 0.62]) { const x = s * 6 * (1 - f), y = 3.4 + 2.2 * f; g.add(at(box(0.16, 0.16, 14.2, TIMBER), x, y, f > 0.5 && s > 0 ? -1.8 : 0, 0, 0, 0)); }
+    for (const z of [-6.8, -4.2, -1.4, 1.4, 4.2, 6.8]) for (const s of [-1, 1]) {
+      if (s > 0 && z === 1.4) continue;                                                  // (esse cai durante a cena)
+      const broken = (s > 0 && z === 4.2) || (s < 0 && z === -4.2);
+      g.add(at(box(0.14, 0.14, broken ? 4.2 : 7.3, TIMBER), s * (broken ? 4.4 : 3.0), broken ? 3.9 : 4.6, z, 0, Math.PI / 2, -s * (broken ? 0.75 : 0.42)));
+    }
+    const beam = new THREE.Group(); beam.position.set(5.9, 3.38, 1.4); g.add(beam);       // caibro que despenca (pivô no beiral direito)
+    beam.add(at(box(7.3, 0.14, 0.14, TIMBER), -3.4, 0, 0)); beam.rotation.z = 0.42;
+    // painéis do telhado (5 por água), presos no beiral: o pivô gira e a ponta de dentro cai
+    // água esquerda (s −1): 0 foi, 1 fica, 2 foi, 3 (o vento leva, 6,3 s), 4 foi · direita (s +1): 5 fica, 6 cede (3 s),
+    // 7 foi, 8 desabou (ponta no chão), 9 foi
+    const panels = [];
+    for (const s of [-1, 1]) for (let i = 0; i < 5; i++) {
+      const id = (s < 0 ? 0 : 5) + i, z = -5.6 + i * 2.8;
+      if ([0, 2, 4, 7, 9].includes(id)) continue;
+      const pv = new THREE.Group(); pv.position.set(s * 6.15, 3.35, z); g.add(pv);
+      const m = box(6.9, 0.22, 2.7, ROOF); m.material = rm; m.position.set(-s * 3.45, 0, 0); pv.add(m);
+      const kind = id === 8 ? 'down' : id === 6 ? 'cede' : id === 3 ? 'wind' : 'shake';
+      pv.rotation.z = kind === 'down' ? s * 0.46 : -s * 0.42;
+      panels.push({ pv, m, s, id, kind, p0: pv.position.clone() });
+    }
+    // telhas que ainda vão se soltar (escorregam pelas laterais e caem do lado de fora, nunca na frente)
+    const loose = [];
+    for (const [s, z, t0] of [[1, -5.4, 1.2], [-1, -1.6, 2.0], [1, -4.9, 3.6], [-1, -6.2, 4.6], [1, -6.0, 5.4], [-1, -1.0, 7.2], [1, -5.2, 7.9], [-1, -2.2, 9.1], [1, -6.3, 10.4], [-1, -6.0, 11.4]]) {
+      const m = box(0.6, 0.07, 0.42, ROOF); m.material = rm; m.position.set(s * 4.2, 4.15, z); m.rotation.set(0, 0, -s * 0.42); g.add(m);
+      loose.push({ m, s, t0, p0: m.position.clone(), vx: s * (1.6 + rnd()), spin: (rnd() - 0.5) * 9 });
+    }
+    // no chão: telhas, tábuas e caibros espalhados em volta e lá dentro (fora do caminho do K, na frente)
+    const tileGeo = new THREE.BoxGeometry(0.6, 0.06, 0.42);
+    const outside = 46, inside = 22, tiles = new THREE.InstancedMesh(tileGeo, rm, outside + inside), _o = new THREE.Object3D();
+    for (let n = 0; n < outside + inside; n++) {
+      let x, z;
+      if (n < outside) { const side = n % 3; if (side === 0) { x = 6.4 + rnd() * 3.2; z = -8 + rnd() * 15; } else if (side === 1) { x = -6.4 - rnd() * 3.2; z = -8 + rnd() * 15; } else { x = -5.8 + rnd() * 4.6; z = 7.3 + rnd() * 2.6; } }
+      else { x = -5 + rnd() * 10; z = -5.5 + rnd() * 11; }
+      _o.position.set(x, 0.04 + rnd() * 0.05, z); _o.rotation.set((rnd() - 0.5) * 0.4, rnd() * 6.3, (rnd() - 0.5) * 0.4); _o.scale.setScalar(0.6 + rnd() * 0.7); _o.updateMatrix(); tiles.setMatrixAt(n, _o.matrix);
+    }
+    g.add(tiles);
+    for (const [x, z, ry, rz] of [[-2.4, -1.6, 0.4, 0.15], [2.6, 3.4, -0.7, 0.2], [-3.4, 8.3, 1.1, 0.05], [7.6, -2.0, 0.3, 0.1], [-7.8, 3.6, -0.5, 0.12]]) { const d = box(2.6, 0.16, 1.4, ROOF); d.material = rm; d.position.set(x, 0.2, z); d.rotation.set(0.1, ry, rz); g.add(d); }
+    for (const [x, z, ry, rz] of [[-4.4, 8.9, 0.6, 0], [-3.6, 10.0, -0.3, 0], [1.0, -2.6, 1.3, 0], [7.4, 1.5, 0.2, 0.3], [-7.2, -4.0, 1.4, 0.2], [3.0, -4.8, 0.9, 0.4]]) g.add(at(box(0.16, 0.12, 2.6, TIMBER), x, 0.1, z, rz, ry, 0));
+    // fachada: reboco caído (manchas escuras com tijolo à mostra), viga tombada encostada, janela sem veneziana, entulho na quina
+    for (const [x, y, w, h] of [[-3.6, 2.6, 1.6, 1.0], [3.4, 3.0, 1.1, 0.7], [-1.9, 1.7, 0.7, 0.5]]) { const d = box(w, h, 0.05, '#4a3f35'); d.material = raw; d.position.set(x, y, 7.05); g.add(d); }
+    g.add(at(box(0.22, 4.4, 0.22, TIMBER), -4.6, 1.9, 7.5, -0.12, 0, 0.62));
+    g.add(at(box(0.9, 0.06, 1.2, WOOD_OLD), 4.6, 0.05, 8.1, 0, 0.5, 0));
+    for (let n = 0; n < 12; n++) { const r = box(0.3 + rnd() * 0.4, 0.2 + rnd() * 0.3, 0.3 + rnd() * 0.4, STONE2); r.material = st2; r.position.set(-5.8 + rnd() * 1.4, 0.12 + rnd() * 0.25, 6.4 + rnd() * 1.6); r.rotation.set(rnd(), rnd(), rnd()); g.add(r); }
+    // tábuas encostadas que tombam (10 s)
     const lean = new THREE.Group(); lean.position.set(-5.2, 0, 1.0); g.add(lean); lean.add(at(box(0.22, 2.6, 0.12, WOOD_NEW), 0, 1.3, 0)); lean.rotation.z = -0.18;
-    void boards;
-    const st = { pieces, lean, door: doorPivot, leaf: doorPivot.children[0] };
+    const st = { panels, loose, beam, ridge, lean, door: doorPivot, leaf: doorPivot.children[0] };
+    const e3 = u => u * u * u;
     R = {
       update(t) {
         const T = Number.isFinite(t) ? t : 99;
-        // porta: presa só pela dobradiça de baixo, entreaberta e batendo com as rajadas
-        st.door.rotation.y = 0.75 + 0.18 * Math.sin(T * 1.7) * Math.sin(T * 0.6 + 1) + (Number.isFinite(t) ? 0 : 0);
+        st.door.rotation.y = 0.75 + 0.18 * Math.sin(T * 1.7) * Math.sin(T * 0.6 + 1);   // presa só pela dobradiça de baixo, batendo
         st.leaf.rotation.z = -0.07; st.leaf.position.y = -0.05;
-        for (const p of pieces) {
-          if (p.t0 == null) { if (p.id === 7 && T < 9.6) p.m.rotation.x = 0.25 + 0.05 * Math.sin(T * 3.1); continue; }
-          const u = T - p.t0;
-          if (u <= 0) { p.m.rotation.z = p.r0.z + 0.03 * Math.sin(T * 7 + p.id); continue; }   // tremendo antes de soltar
-          if (p.id === 4) {                                                              // o vento arranca e leva para longe
-            p.m.position.set(p.p0.x - 6 * u, p.p0.y + 3.5 * u - 4.9 * u * u * 0.35, p.p0.z + 2.5 * u); p.m.rotation.set(p.r0.x + 2.2 * u, p.r0.y + 1.1 * u, p.r0.z + 1.6 * u);
-            if (u > 3) p.m.visible = false;
-          } else {                                                                       // cai para dentro e fica torto no chão
-            const fall = Math.min(1, u / 0.85), y = p.p0.y + (0.35 - p.p0.y) * fall * fall;
-            p.m.position.set(p.p0.x * (1 - 0.5 * fall), y, p.p0.z); p.m.rotation.set(p.r0.x + 0.3 * fall, p.r0.y, p.r0.z * (1 - fall) + 0.2 * fall);
+        st.ridge.rotation.x = -0.17 - 0.015 * Math.sin(T * 2.3) - (T > 3 ? 0.06 * Math.min(1, (T - 3) / 0.8) : 0);   // cede mais quando o painel cai
+        for (const p of st.panels) {
+          const s = p.s;
+          if (p.kind === 'shake') p.pv.rotation.z = -s * 0.42 + 0.012 * Math.sin(T * 6.5 + p.id);
+          else if (p.kind === 'down') p.pv.rotation.z = s * 0.46 + 0.01 * Math.sin(T * 4 + 1);
+          else if (p.kind === 'cede') {                                                  // treme, cede no beiral e desaba para dentro
+            const u = T - 3.0;
+            p.pv.rotation.z = u <= 0 ? -s * 0.42 + 0.03 * Math.sin(T * 9) : -s * 0.42 + s * 0.88 * Math.min(1, e3(Math.min(1, u / 0.75)) * 1.0);
+          } else if (p.kind === 'wind') {                                                // o vento arranca e leva para o lado (oeste), longe do K
+            const u = T - 6.3;
+            if (u <= 0) p.pv.rotation.z = -s * 0.42 + 0.04 * Math.sin(T * 8);
+            else { p.pv.position.set(p.p0.x - 5.5 * u, p.p0.y + 3.0 * u - 1.6 * u * u, p.p0.z - 1.5 * u); p.pv.rotation.set(1.8 * u, 0.9 * u, -s * 0.42 + 1.4 * u); if (u > 3.2) p.pv.visible = false; }
           }
         }
-        lean.rotation.z = T < 10 ? -0.18 : -0.18 - Math.min(1.35, (T - 10) * (T - 10) * 6);
-        lean.position.y = T < 10 ? 0 : Math.min(1, (T - 10) * 2) * 0.1;
-        // a travessa nova escorrega da bancada; as ferramentas se espalham
-        const v = Math.max(0, Math.min(1, (T - 7.6) / 0.6));
-        lastPlank.position.set(0, 0.6 * 0 - 0.85 * v * v, 0.55 * v); lastPlank.rotation.set(-0.5 * v, 0, 0.12 * v);
+        const b = T - 8.4;                                                               // o caibro despenca para dentro
+        st.beam.rotation.z = b <= 0 ? 0.42 + 0.02 * Math.sin(T * 11) : 0.42 + 0.95 * Math.min(1, e3(Math.min(1, b / 0.6)));
+        for (const L of st.loose) {                                                      // telhas: escorregam pela água e caem do lado de fora
+          const u = T - L.t0; if (u <= 0) continue;
+          const slide = Math.min(u, 0.5), fly = Math.max(0, u - 0.5);
+          const x = L.p0.x + L.s * 2.0 * (slide / 0.5) + L.vx * fly, y = Math.max(0.05, L.p0.y - 1.0 * (slide / 0.5) - 4.9 * fly * fly);
+          L.m.position.set(x, y, L.p0.z); if (y > 0.05) L.m.rotation.set(L.spin * fly, 0, -L.s * 0.42 + L.spin * fly * 0.5);
+        }
+        st.lean.rotation.z = T < 10 ? -0.18 : -0.18 - Math.min(1.35, (T - 10) * (T - 10) * 6);
+        st.lean.position.y = T < 10 ? 0 : Math.min(1, (T - 10) * 2) * 0.1;
+        const v = Math.max(0, Math.min(1, (T - 7.6) / 0.6));                              // a travessa nova escorrega; as ferramentas se espalham
+        lastPlank.position.set(0, -0.85 * v * v, 0.55 * v); lastPlank.rotation.set(-0.5 * v, 0, 0.12 * v);
         tools.position.set(0.2 * v, -0.9 * v * v, 0.5 * v); tools.rotation.set(0, 0.3 * v, 0.6 * v);
       },
     };

@@ -59,6 +59,7 @@ const SHOP_T = 12.5, BELL_FALL = 1.7, BLACK_T = 5;
 /** Chuva e vento (WebAudio, sem arquivo): chiado da água + rumor grave + trovões. Abafado dentro (cutoff baixo). */
 export function createRainAudio(audio) {
   let N = null, lvl = 0, cut = 900, cur = 0, curCut = 900, t = 0, nextThunder = 6;
+  let mul = 1, mulTo = 1, mulRate = 0;                   // redução temporária (ex.: 20% antes do sino roxo), relativa ao nível atual
   function build() {
     const ac = audio.ctx; if (!ac) return null;
     const len = ac.sampleRate * 3, wb = ac.createBuffer(1, len, ac.sampleRate), wd = wb.getChannelData(0), bb = ac.createBuffer(1, len, ac.sampleRate), bd = bb.getChannelData(0);
@@ -89,34 +90,58 @@ export function createRainAudio(audio) {
       t += dt; const k = 1 - Math.exp(-dt * 1.6);
       cur += (lvl - cur) * k; curCut += (cut - curCut) * (1 - Math.exp(-dt * 6));
       const gust = 0.75 + 0.18 * Math.sin(t * 0.7) + 0.1 * Math.sin(t * 1.9 + 1);
-      try { N.out.gain.value = paused ? 0 : cur * 0.9; N.lp.frequency.value = curCut; N.wlp.frequency.value = 220 + 260 * gust * (curCut > 2000 ? 1 : 0.6); N.wg.gain.value = 1.2 * gust; } catch (e) { /* */ }
+      if (mul !== mulTo) mul = mulTo < mul ? Math.max(mulTo, mul - mulRate * dt) : Math.min(mulTo, mul + mulRate * dt);
+      try { N.out.gain.value = paused ? 0 : cur * 0.9 * mul; N.lp.frequency.value = curCut; N.wlp.frequency.value = 220 + 260 * gust * (curCut > 2000 ? 1 : 0.6); N.wg.gain.value = 1.2 * gust; } catch (e) { /* */ }
       let flash = 0;
-      if (cur > 0.55 && !paused && (nextThunder -= dt) <= 0) { nextThunder = 7 + Math.random() * 9; flash = cur; setTimeout(() => thunder(cur), 400 + Math.random() * 900); }
+      if (cur * mul > 0.55 && !paused && (nextThunder -= dt) <= 0) { nextThunder = 7 + Math.random() * 9; flash = cur; setTimeout(() => thunder(cur * mul), 400 + Math.random() * 900); }
       return flash;
     },
-    stop() { if (!N) return; try { N.rain.stop(); N.wind.stop(); N.out.disconnect(); } catch (e) { /* */ } N = null; cur = 0; lvl = 0; },
+    stop() { if (!N) return; try { N.rain.stop(); N.wind.stop(); N.out.disconnect(); } catch (e) { /* */ } N = null; cur = 0; lvl = 0; mul = mulTo = 1; },
+    /** Leva o volume a `to` (fração do atual) em `secs` segundos, sem parar o som. */
+    duck(to, secs) { mulTo = to; mulRate = Math.abs(mul - to) / Math.max(0.01, secs); },
+    /** Já no nível pedido, sem rampa (e sem redução). */
+    snap() { cur = lvl; curCut = cut; mul = mulTo = 1; },
   };
 }
 
-/** O impacto do sino roxo: parciais de sino (inarmônicos) + baque grave, alto mas sem saturar (compressor/limitador). */
+/** O impacto do sino roxo no piso: um sino grande de verdade — golpe metálico, parciais de sino (hum, prime, terça menor,
+ *  quinta, nominal e superiores, com batimento lento), baque grave do bronze no piso e reverberação longa (convolução).
+ *  Compressor/limitador no fim: forte e marcante, sem saturar. Pelo barramento de efeitos (volume das Configurações). */
 function bellImpact(audio) {
   const ac = audio.ctx; if (!ac) return;
   const now = ac.currentTime + 0.005;
-  const comp = ac.createDynamicsCompressor(); comp.threshold.value = -14; comp.knee.value = 6; comp.ratio.value = 14; comp.attack.value = 0.002; comp.release.value = 0.4;
-  const master = ac.createGain(); master.gain.value = 1.0; master.connect(comp); comp.connect(audio.out);
-  const F = 92;
-  for (const [r, a, d] of [[0.5, 0.55, 7], [1, 0.9, 6], [1.19, 0.5, 4.5], [1.5, 0.45, 4], [2, 0.6, 3.6], [2.52, 0.35, 2.8], [3.01, 0.3, 2.2], [4.13, 0.2, 1.6], [5.43, 0.14, 1.1], [6.8, 0.08, 0.7]]) {
-    const o = ac.createOscillator(), g = ac.createGain(); o.type = 'sine'; o.frequency.value = F * r * (1 + (Math.random() - 0.5) * 0.004);
-    g.gain.setValueAtTime(0, now); g.gain.linearRampToValueAtTime(a * 0.55, now + 0.004); g.gain.exponentialRampToValueAtTime(0.0008, now + d);
-    o.connect(g); g.connect(master); o.start(now); o.stop(now + d + 0.1);
+  const comp = ac.createDynamicsCompressor(); comp.threshold.value = -12; comp.knee.value = 8; comp.ratio.value = 12; comp.attack.value = 0.002; comp.release.value = 0.5;
+  const limit = ac.createDynamicsCompressor(); limit.threshold.value = -3; limit.knee.value = 0; limit.ratio.value = 20; limit.attack.value = 0.001; limit.release.value = 0.2;
+  const master = ac.createGain(); master.gain.value = 0.95; master.connect(comp); comp.connect(limit); limit.connect(audio.out);
+  // reverberação: resposta ao impulso de ~5,5 s (ruído decaindo, estéreo), mistura generosa
+  const irLen = Math.floor(ac.sampleRate * 5.5), ir = ac.createBuffer(2, irLen, ac.sampleRate);
+  for (let c = 0; c < 2; c++) { const d = ir.getChannelData(c); for (let i = 0; i < irLen; i++) { const k = i / irLen; d[i] = (Math.random() * 2 - 1) * Math.pow(1 - k, 2.4) * (i < 400 ? i / 400 : 1); } }
+  const verb = ac.createConvolver(); verb.buffer = ir; const wet = ac.createGain(); wet.gain.value = 0.55; const dry = ac.createGain(); dry.gain.value = 0.8;
+  const bus = ac.createGain(); bus.connect(dry); bus.connect(verb); verb.connect(wet); dry.connect(master); wet.connect(master);
+  // parciais de um sino grande (prime ~ 98 Hz): [razão, amplitude, decaimento s]
+  const F = 98;
+  for (const [r, a, d] of [[0.5, 0.55, 11], [1, 0.7, 9], [1.183, 0.5, 7], [1.506, 0.32, 5.5], [2.0, 0.55, 6], [2.51, 0.3, 4], [2.66, 0.22, 3.5], [3.01, 0.22, 3], [4.07, 0.15, 2.2], [5.4, 0.1, 1.5], [6.7, 0.07, 1.1], [8.2, 0.05, 0.7]]) {
+    for (const det of [-0.0018, 0.0018]) {                                                // pares levemente desafinados: o batimento "uóm" do bronze
+      const o = ac.createOscillator(), g = ac.createGain(); o.type = 'sine'; o.frequency.value = F * r * (1 + det);
+      g.gain.setValueAtTime(0, now); g.gain.linearRampToValueAtTime(a * 0.32, now + 0.003); g.gain.exponentialRampToValueAtTime(0.0004, now + d);
+      o.connect(g); g.connect(bus); o.start(now); o.stop(now + d + 0.1);
+    }
   }
-  // batida do metal no piso: ruído curto e grave
-  const len = Math.floor(ac.sampleRate * 0.6), buf = ac.createBuffer(1, len, ac.sampleRate), dd = buf.getChannelData(0);
-  for (let i = 0; i < len; i++) dd[i] = (Math.random() * 2 - 1) * Math.exp(-i / (ac.sampleRate * 0.09));
-  const n = ac.createBufferSource(); n.buffer = buf; const nf = ac.createBiquadFilter(); nf.type = 'lowpass'; nf.frequency.value = 900; const ng = ac.createGain(); ng.gain.value = 1.3;
-  n.connect(nf); nf.connect(ng); ng.connect(master); n.start(now);
-  const sub = ac.createOscillator(), sg = ac.createGain(); sub.frequency.setValueAtTime(70, now); sub.frequency.exponentialRampToValueAtTime(38, now + 0.8);
-  sg.gain.setValueAtTime(0.9, now); sg.gain.exponentialRampToValueAtTime(0.001, now + 1.6); sub.connect(sg); sg.connect(master); sub.start(now); sub.stop(now + 1.7);
+  // golpe metálico (clang): ruído com faixas de metal, curtíssimo
+  const cl = Math.floor(ac.sampleRate * 0.35), cb = ac.createBuffer(1, cl, ac.sampleRate), cd = cb.getChannelData(0);
+  for (let i = 0; i < cl; i++) cd[i] = (Math.random() * 2 - 1) * Math.exp(-i / (ac.sampleRate * 0.045));
+  for (const [fq, q, gn] of [[1250, 9, 0.9], [2650, 12, 0.6], [4100, 14, 0.4]]) {
+    const n = ac.createBufferSource(); n.buffer = cb; const bp = ac.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = fq; bp.Q.value = q; const g = ac.createGain(); g.gain.value = gn;
+    n.connect(bp); bp.connect(g); g.connect(bus); n.start(now);
+  }
+  // o peso do bronze batendo no piso: baque grave
+  const len = Math.floor(ac.sampleRate * 0.7), buf = ac.createBuffer(1, len, ac.sampleRate), dd = buf.getChannelData(0);
+  for (let i = 0; i < len; i++) dd[i] = (Math.random() * 2 - 1) * Math.exp(-i / (ac.sampleRate * 0.08));
+  const n = ac.createBufferSource(); n.buffer = buf; const nf = ac.createBiquadFilter(); nf.type = 'lowpass'; nf.frequency.value = 520; const ng = ac.createGain(); ng.gain.value = 1.1;
+  n.connect(nf); nf.connect(ng); ng.connect(bus); n.start(now);
+  const sub = ac.createOscillator(), sg = ac.createGain(); sub.frequency.setValueAtTime(62, now); sub.frequency.exponentialRampToValueAtTime(34, now + 1.0);
+  sg.gain.setValueAtTime(0.85, now); sg.gain.exponentialRampToValueAtTime(0.001, now + 1.8); sub.connect(sg); sg.connect(bus); sub.start(now); sub.stop(now + 1.9);
+  setTimeout(() => { try { master.disconnect(); limit.disconnect(); } catch (e) { /* */ } }, 13000);
 }
 
 /** Chuva visível: riscos caindo em volta da câmera, inclinados pelo vento; nunca dentro da igreja nem da oficina coberta. */
@@ -262,6 +287,7 @@ export function createMassStory(ctx) {
   let shopK = null;
   function setupShop() {
     const ws = ctx.wsRoot(); if (!ws) return;
+    if (kRun) { kRun.m.parent && kRun.m.parent.remove(kRun.m); kRun = null; }   // (o mesmo lugar: em frente à oficina)
     if (!shopK) { shopK = buildStandingReader(); }
     ws.add(shopK); shopK.position.set(0.9, 0, 12.6); shopK.rotation.set(0, Math.PI / 2 + 0.08, 0); shopK.visible = true;
     ctx.wsRuin(0);
@@ -326,16 +352,20 @@ export function createMassStory(ctx) {
         K.visible = false;
         const m = buildStandingReader(); church().add(m);
         const z = K_SEAT.z - 0.45;
-        kRun = { m, x: K_SEAT.x, z, i: 0, ph: 0, dir: Math.PI, path: [[0.35, z], [0.2, -6], [0, 2.8], [0, 9]], wait: MASS_T.run - MASS_T.stand };
+        // por dentro (o vão entre as fileiras, o corredor central, a porta) e por fora: vira à direita e corre até a oficina
+        const L = (x, z) => { const v = church().worldToLocal(new THREE.Vector3(x, 0, z)); return [v.x, v.z]; };
+        const a = W(0, 0, 9), f = ctx.wsLocal(0.9, 0, 12.6), sg = Math.sign(f.z - a.z) || 1;
+        const outPath = [L(f.x - 0.6, a.z), L(f.x - 0.6, f.z - 2.5 * sg), L(f.x, f.z)];
+        kRun = { m, x: K_SEAT.x, z, i: 0, ph: 0, dir: Math.PI, path: [[0.35, z], [0.2, -6], [0, 2.8], [0, 9], ...outPath], door: 3, wait: MASS_T.run - MASS_T.stand };
         m.position.set(kRun.x, 0, z); m.rotation.y = Math.PI / 2 - 0.6;
       }
       if (kRun) {
         if (kRun.wait > 0) { kRun.wait -= dt; kRun.m.rotation.y = Math.PI / 2 - 0.6 + (Math.PI - (Math.PI / 2 - 0.6)) * ease(1 - kRun.wait / 0.7); }
-        else if (runK(dt)) { church().remove(kRun.m); kRun = null; S.phase = 'free'; S.t = 0; toFree(); }
-        else if (kRun.m.position.z > 3) kRun.m.visible = false;
+        else { runK(dt); if (kRun.i >= kRun.door) { S.phase = 'free'; S.t = 0; toFree(); } }   // passou pela porta: o jogador pode levantar e segui-lo
       }
     } else if (S.phase === 'free') {
       updateCrowd(dt, T + 40);
+      if (kRun && !kRun.done) { if (runK(dt)) { kRun.done = true; kRun.m.rotation.y = Math.PI / 2; kRun.m.position.y = 0; kRun.m.userData.legs.forEach(l => { l.rotation.z = 0; l.userData.knee.rotation.z = 0; }); } }   // chegou: para em frente à oficina, olhando para ela (e espera)
       rainAudio.set(1, insideChurch()); storm(0.85, insideChurch()); flashLight(flash);
       if (streaks) streaks.userData.tex.offset.y -= dt * 0.65;
       const p = church().worldToLocal(new THREE.Vector3(walker.x, 0, walker.z));
@@ -351,6 +381,7 @@ export function createMassStory(ctx) {
       if (T >= SHOP_T) { S.phase = 'bell'; S.t = 0; const b = church().userData.newBells[1]; S.bell = b; b.visible = true; b.userData.bell.position.y = 0; b.userData.bell.rotation.set(0, 0, 0); }   // corte seco
     } else if (S.phase === 'bell') {
       rainAudio.set(1, false); storm(1, false);
+      if (!S.ducked) { S.ducked = true; rainAudio.duck(0.2, 1.2); }   // chuva de 100% a 20% (pronta antes de o sino começar a cair)
       const b = S.bell.userData.bell, ft = T - BELL_FALL;
       if (ft < 0) { b.rotation.z = 0.025 * Math.sin(T * 9) * ease(T / BELL_FALL); b.position.y = -0.06 * ease((T - 0.9) / 0.8); }   // range e cede
       else {

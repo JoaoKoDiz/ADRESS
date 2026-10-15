@@ -1706,7 +1706,7 @@ const massStory = createMassStory({ walker, input, talkBox, audio, thirdMusic, m
   paused: () => menu.isOpen || document.hidden, world: () => world, camera: () => rig.camera,
   wsRoot: () => wsStory._ws && wsStory._ws.root, wsRuin: t => wsStory._ws && wsStory._ws.ruin(t), wsLocal: (x, y, z) => wsStory.local(x, y, z),
   snapCam: (x, z, h) => rig.snap({ x, z, heading: h, speed: 0 }),
-  toTitle: () => { music.setOverride(null); thirdMusic.stop(); endRoofScene(); music.suspend(false); },   // corte seco para a tela inicial
+  toTitle: () => { music.setOverride(null); thirdMusic.stop(); endRoofScene(); music.suspend(false); rainAudio.set(MENU_RAIN, false); rainAudio.snap(); },   // (a chuva do menu volta no volume normal, sem fade-in)   // corte seco para a tela inicial
 });              // acabamento especial da igreja só nas tomadas 9–25 s (churchCine.js)
 // ---------- Depois do 4º sino: chuva contínua e o nível extra 1 ----------
 // Enquanto os 4 níveis extras não terminam (EXTRA_DONE_KEY, ainda nunca gravado), chove em todos os bairros (Livre e Carreira)
@@ -1773,6 +1773,7 @@ function setMenuNight(on) {
   nightCam.p.set(p.x - 13, 11, p.z + 23); nightCam.l.set(p.x - 5, 2.2, p.z - 3);   // de fora da sebe sul, de frente para a casa e o quintal
 }
 const MENU_STATES = ['title', 'levelSelect', 'levelFly', 'shop'];
+const MENU_RAIN = 0.16;                                  // chuva nos menus (fração)
 // nos menus: além da chuva no bairro (que o desfoque apaga), riscos finos por cima do fundo desfocado (canvas 2D, embaixo dos botões)
 const rainVeil = document.createElement('canvas'); rainVeil.className = 'rain-veil';
 rainVeil.style.cssText = 'position:absolute;inset:0;width:100%;height:100%;pointer-events:none;z-index:0;opacity:0;transition:opacity .8s;background:rgba(22,28,38,.22)';
@@ -1795,7 +1796,7 @@ function updateRain(dt) {
   const inChurch = chs.some(c => { c.updateMatrixWorld(); _rl.copy(cam).applyMatrix4(_rinv.copy(c.matrixWorld).invert()); return _rl.x > -24 && _rl.x < 24 && _rl.z > -58 && _rl.z < 2.4 && _rl.y < 72; });
   const menuRain = menuBg() === 'rain';                 // menus: chuva só no fundo do Bairro 24 (na noite do Bairro 1, nada)
   setMenuNight(menuBg() === 'night' && MENU_STATES.includes(state) && neighborhood === 'grid4');
-  rainAudio.set(on && (!menuS || menuRain) ? (menuS ? 0.16 : 0.3) : 0, insideOn || inChurch);
+  rainAudio.set(on && (!menuS || menuRain) ? (menuS ? MENU_RAIN : 0.3) : 0, insideOn || inChurch);
   rainAudio.update(dt, document.hidden);
   if (rainFx.object.parent !== world.scene) world.scene.add(rainFx.object);
   rainFx.update(dt, cam, on && !inMap() && (!MENU_STATES.includes(state) || menuRain) ? 0.55 : 0, chs);
@@ -1870,7 +1871,7 @@ function updateChurchSeq(dt) {
   if (thirdMusic.active && thirdMusic.time >= 0) q.t = thirdMusic.time; else if (!thirdMusic.paused) q.t += dt;   // (♪ pausado: tudo espera)
   const T = q.t;
   wsStory.call(T);
-  if (wsStory._ws) wsStory._ws.roof.visible = T >= 9;
+  if (wsStory._ws) wsStory._ws.roof.visible = T >= 9 && !wsStory._ws.ruined;
   if (q.line === 0 && T >= 3.0) { q.line = 1; talkBox.show([['Enfim, ', { p: 0.65 }, 'nos vemos lá.']], () => {}, { auto: true }); }   // despedida automática
   if (q.line === 1) { talkBox.update(dt); if (T >= 8.9 && talkBox.open) talkBox.hide(); }
   walker.show(false);

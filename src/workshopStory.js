@@ -145,7 +145,7 @@ export function createWorkshopStory(ctx) {
       }, HINT);
     }
   }
-  function done() { if (S && (S.kind === 'meet' || S.kind === 'door')) holdDoor(0); S = null; ws.roof.visible = true; ctx.setState(prevState === 'wstory' ? 'walk' : prevState); }
+  function done() { if (S && (S.kind === 'meet' || S.kind === 'door')) holdDoor(0); S = null; ws.roof.visible = !ws.ruined; ctx.setState(prevState === 'wstory' ? 'walk' : prevState); }
   const cams = {
     door: { pos: [-4.4, 2.9, 2.2], look: [0.6, 1.4, 5.6] },
     open: { pos: [4.0, 2.7, 1.6], look: [0.0, 1.3, 6.0] },          // teste depois do conserto: do lado do trinco (a folha abre para o outro lado)
@@ -160,7 +160,7 @@ export function createWorkshopStory(ctx) {
     if (elder.root.visible) animatePerson(elder, { mode: 'idle', t: t + 3 });
     // telhado some com o jogador dentro (ou numa cena lá dentro)
     const inside = walker.object.visible && walker.x > E.shop.box.x0 && walker.x < E.shop.box.x1 && walker.z > E.shop.box.z0 && walker.z < E.shop.box.z1;
-    ws.roof.visible = !inside && !(S && S.kind !== 'pickup' && S.kind !== 'ask');
+    ws.roof.visible = !ws.ruined && !inside && !(S && S.kind !== 'pickup' && S.kind !== 'ask');   // (destruída: o telhado inteiro nunca volta)
     if (!S) return;
     S.t += dt;
     if (S.kind !== 'call') talkBox.update(dt);                       // (na montagem, main.js conduz a fala pelo tempo da música)
@@ -230,7 +230,7 @@ export function createWorkshopStory(ctx) {
     call(T) { if (!ws) return; ws.setPhone(T < 8.9, T); const u = T < 0.5 ? 0 : T < 1.2 ? (T - 0.5) / 0.7 : T < 2.6 ? 1 : T < 3.2 ? 1 - (T - 2.6) / 0.6 : 0;
       k.rotation.y = K_BENCH.ry - 0.35 * u * u * (3 - 2 * u); },
     /** Fim da montagem: a oficina fica sem o K (ele está na igreja). */
-    endCall() { S = null; if (ws) { ws.setPhone(false); ws.roof.visible = true; } refresh(); },
+    endCall() { S = null; if (ws) { ws.setPhone(false); ws.roof.visible = !ws.ruined; } refresh(); },
     /** Ponto local da oficina → mundo. */
     local: (x, y, z) => W(x, y, z),
     get busy() { return !!task; }, get stage() { return stage(); }, get cine() { return S && S.kind; }, get task() { return task; },
