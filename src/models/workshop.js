@@ -131,6 +131,7 @@ export function buildWorkshop() {
     world: o => root.localToWorld(o),
     /** Temporal (história): estragos localizados que continuam acontecendo. t = segundos da cena (ou Infinity = estado final). */
     ruin(t) { if (!R) R = buildRuin(); R.update(t); },
+    get ruined() { return !!R; },
   };
   // ---------- estragos do temporal ----------
   // O telhado vira painéis (5 por água): alguns já foram embora, outros se soltam durante a cena; a porta pende de uma

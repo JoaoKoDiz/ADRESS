@@ -1005,12 +1005,36 @@ const missions = createMissions(career); // Carreira: M perto da maquete abre as
 // escolhida e apaga as posteriores. Cada cena lê esse progresso ao começar (caixa, K no terraço, igreja e sinos, bonde, Veneza).
 const STORY_STEPS = ['Nada', 'Conversa na casa do personagem — completa', 'Conversa no terraço — completa', 'Primeira conversa na igreja — completa',
   'Trolley Problem — completo', 'Conversa em Veneza — completa', 'Segunda conversa na igreja — completa', "Encontro no Grillby's — completo", 'Oficina no Bairro 24 — completa',
-  'Apresentação da igreja (Bairro 24) — vista', 'Missa e temporal — completos'];
+  'Apresentação da igreja (Bairro 24) — vista', 'Missa e temporal — completos', 'Oficina — Entregar a última peça'];
+const WS_LAST_CP = 11;   // checkpoint especial (fora da contagem de chaves): Grillby's feito, oficina na 3ª tarefa com a travessa buscada
 const storyKeys = () => [PARCEL_KEY, ROOF_KEY, CHURCH_TALK_KEY, TROLLEY_TALK_KEY, VENICE_TALK_KEY, CHURCH2_KEY, GRILL_TALK_KEY, 'adress.med.talk1', INTRO_KEY, MASS_KEY];
+let devWsLast = false;
+/** Começa o Bairro 24 (Livre) a pé na frente da oficina, com a travessa no inventário da atividade. */
+function startWsCheckpoint() {
+  if (!devWsLast) return;
+  if (state === 'map') { missions.close(); careerMap.leave(); }
+  else if (state !== 'title' && state !== 'levelSelect') { devWsLast = false; return; }   // (só a partir dos menus)
+  if (titleDriver) titleDriver.stop();
+  levelSelect.close(); title.hide();
+  freeLevel = 23; startFree('free');
+  devWsLast = false;
+  const P = wsStory.points; if (!P) return;
+  wsStory.devTask({ step: 3, picked: true });
+  van.stop(); van.teleport(P.front.x + 2, P.front.z, Math.PI);
+  walker.pose(P.door.x + 1.5, P.door.z, Math.PI); walker.setFloor(0); walker.show(true);
+  wsFoot = true;                                        // no fim do fade-in, fica a pé (não na van)
+}
+let wsFoot = false;
 const STORY_CP = {
   names: STORY_STEPS,
   current() { const k = storyKeys(); let n = 0; while (n < k.length && flagOn(k[n])) n++; return n; },
   apply(n) {
+    if (n === WS_LAST_CP) {                                // "Oficina — Entregar a última peça": tudo até o Grillby's, oficina etapa 3, nada depois
+      this.apply(7);
+      try { localStorage.setItem('adress.med.shop', '3'); for (const k of [EXTRA1_KEY, EXTRA2_KEY, EXTRA_DONE_KEY, NOVAN_KEY]) localStorage.removeItem(k); } catch (e) { /* */ }
+      devWsLast = true; setTimeout(startWsCheckpoint, 0);   // já começa a cena (Livre, Bairro 24, a pé diante da oficina)
+      return;
+    }
     storyKeys().forEach((k, i) => { try { if (i < n) localStorage.setItem(k, '1'); else localStorage.removeItem(k); } catch (e) { /* */ } });
     parcelDone = n >= 1;                                   // (lido na hora pela caixa e pelo K do terraço)
     try { if (n >= 8) localStorage.setItem('adress.med.shop', '5'); else localStorage.removeItem('adress.med.shop'); } catch (e) { /* */ }   // oficina do Bairro 24
@@ -1645,7 +1669,8 @@ function setupMedStory() {
       const m = new THREE.Mesh(new THREE.PlaneGeometry(r.x1 - r.x0, r.z1 - r.z0), pave); m.rotation.x = -Math.PI / 2; m.position.set((r.x0 + r.x1) / 2, 0.015, (r.z0 + r.z1) / 2); m.receiveShadow = true; world.scene.add(m);
     }
     wsStory.setup(world, MEDV, game, doorPoint, HOUSES);
-  } else wsStory.resetTask();
+  } else if (!flagOn(MASS_KEY) && wsStory._ws && wsStory._ws.ruined) wsStory.setup(world, MEDV, game, doorPoint, HOUSES);   // checkpoint anterior ao temporal: a oficina volta intacta
+  else wsStory.resetTask();
   const [b1, b2] = medChurch.userData.bells;                              // os sinos que já caíram continuam caídos
   b1.visible = flagOn(CHURCH_TALK_KEY); b1.userData.bell.position.y = -bellDrop(b1);
   b2.visible = flagOn(CHURCH2_KEY); b2.userData.bell.position.y = -bellDrop(b2);
@@ -2483,7 +2508,7 @@ function update(dt, t) {
       break;
     case 'fadeIn':
       fade = Math.max(0, 1 - stateT / FADE_TIME);
-      if (fade <= 0) setState('drive');
+      if (fade <= 0) { if (wsFoot) { wsFoot = false; actionLock = 0.4; setState('walk'); } else setState('drive'); }
       break;
   }
 
@@ -2862,7 +2887,7 @@ window.ADRESS = {
   /** Pula o fade inicial e deixa o jogo no modo de direção. */
   skipFade() {
     if (title.visible) { title.hide(); if (rig.mode !== 'chase') rig.toggle(); rig.snap({ x: van.x, z: van.z, heading: van.heading, speed: 0 }); }
-    fade = 0; setState('drive');
+    fade = 0; if (wsFoot) { wsFoot = false; setState('walk'); } else setState('drive');
   },
   /** Coloca a van parada no ponto de entrega da casa h, virada para leste. */
   placeVanAtDoor(h) { const p = doorPoint(game.slotOf[h]); van.teleport(p.x, p.z, 0); },

@@ -41,7 +41,7 @@ const introDone = () => { try { return localStorage.getItem(INTRO_KEY) === '1'; 
 const TASKS = {
   1: { item: 'ferragens', ask: ['O ferreiro, perto da praça, deve ter dobradiças e um ferrolho que sirvam.'], from: 'smith', give: ['Dobradiças e um ferrolho, como ele pediu.', 'Diga que, se faltar alguma coisa, é só voltar.'], obj: ['Busque as ferragens com o ferreiro (perto da praça).', 'Leve as ferragens até a oficina, ao lado da igreja.'] },
   2: { item: 'madeira', ask: ['No depósito perto da praça há tábuas boas. [...] Vamos precisar delas para a bancada.'], from: 'depot', give: ['Tábuas de carvalho, secas há dois invernos.', 'Aguentam bem uma bancada.'], obj: ['Busque a madeira no depósito (perto da praça).', 'Leve a madeira até a oficina.'] },
-  3: { item: 'travessa', ask: ['Falta uma travessa firme para a frente da bancada.', 'A senhora do largo, no oeste do bairro, guarda madeira antiga. [...] Talvez tenha uma.'], from: 'elder', give: ['Uma travessa? [...] Guardei uma no celeiro, do tear da minha mãe.', 'Madeira boa. [...] Só estava esperando alguém precisar dela.'], obj: ['A tábua da frente rachou: busque uma travessa com a senhora do largo oeste.', 'Leve a travessa até a oficina.'] },
+  3: { item: 'travessa', ask: ['Falta uma travessa firme para a frente da bancada.', 'A senhora do largo, no oeste do bairro, guarda madeira antiga. [...] Talvez tenha uma.'], from: 'elder', give: ['Uma travessa? [...] Guardei uma no celeiro, do tear da minha mãe.', 'Madeira boa. [...] Só estava esperando alguém precisar dela.'], obj: ['A tábua da frente rachou: busque uma travessa com a senhora do largo oeste.', 'Entregue a travessa a K.'] },
 };
 const HINT = { hint: 'E / Espaço — Continuar' };   // as conversas da oficina avançam só com E / Espaço
 
@@ -63,6 +63,7 @@ export function createWorkshopStory(ctx) {
 
   /** Monta a oficina, o K e a senhora do largo no mundo do Bairro 24. */
   function setup(world, V, game, doorPoint, HOUSES) {
+    if (ws) ws.root.removeFromParent(); if (elder) elder.root.removeFromParent(); if (crate) crate.removeFromParent();   // (refeita: oficina intacta de novo)
     ws = null; task = null; S = null;
     if (!V || !V.extra) return;
     E = V.extra;
@@ -93,6 +94,7 @@ export function createWorkshopStory(ctx) {
   const footNear = p => Math.hypot(walker.x - p.x, walker.z - p.z) < (p === E.from.elder ? 5.5 : 4);
   function walkPrompt() {
     if (on() && task && !task.picked && footNear(E.from[TASKS[task.step].from])) return 'Buscar ' + TASKS[task.step].item;
+    if (on() && task && task.picked && nearK()) return 'Entregar ' + TASKS[task.step].item;   // a pé também: entregar ao K na oficina
     if (!nearK() || task) return '';
     const st = stage();
     return st === 0 || st === 4 || (st >= 5 && !introDone()) ? 'Conversar' : st >= 1 && st <= 3 ? 'Ajudar na oficina' : '';
@@ -101,6 +103,7 @@ export function createWorkshopStory(ctx) {
     const a = walkPrompt(); if (!a) return false;
     const st = stage();
     if (a.startsWith('Buscar')) startCine('pickup');
+    else if (a.startsWith('Entregar')) startCine(task.step === 1 ? 'door' : task.step === 2 ? 'bench' : 'finish');
     else if (st === 0) startCine('meet');
     else if (st === 4) startCine('end');
     else if (st >= 5) startCine('again');                      // (o jogo fechou durante a montagem: só a última fala e a montagem de novo)
@@ -220,6 +223,8 @@ export function createWorkshopStory(ctx) {
     setup, refresh, update, applyCam, walkPrompt, walkAction, drivePrompt, driveAction, objective,
     /** Nova partida / saiu do bairro: a coleta não entregue se perde (os consertos ficam). */
     resetTask() { task = null; if (S) { talkBox.hide(); S = null; } refresh(); },
+    /** Checkpoint de teste: põe a atividade num ponto (ex.: { step: 3, picked: true } = travessa já buscada). */
+    devTask(t) { task = t; S = null; refresh(); },
     get _ws() { return ws; }, get _k() { return k; },
     /** Montagem: chamada no celular (T = tempo desde o início da chamada). O K olha o aparelho e volta. */
     call(T) { if (!ws) return; ws.setPhone(T < 8.9, T); const u = T < 0.5 ? 0 : T < 1.2 ? (T - 0.5) / 0.7 : T < 2.6 ? 1 : T < 3.2 ? 1 - (T - 2.6) / 0.6 : 0;
