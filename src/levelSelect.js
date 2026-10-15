@@ -100,7 +100,7 @@ export function createLevelSelect(onPick, onExtraPick) {
   addEventListener('keydown', e => {                       // Esc fecha só a janela (sem abrir o menu de opções)
     if (e.code === 'Escape' && modal.classList.contains('on')) { e.stopImmediatePropagation(); closeInfo(); }
   }, true);
-  let cards = null, sel = 0, page = 0, COUNT = 0, extra = false, onExtra = false;
+  let cards = null, sel = 0, page = 0, COUNT = 0, extra = false, onExtra = false, xOpen = 1;
   const INFO0 = modal.querySelector('.lsel-modal-box').innerHTML;
   const INFO_EXTRA = '<h3 id="lsel-modal-title">Além das entregas</h3><p>Se você completou as cinco missões de cada um dos 24 bairros, sua jornada de entregador está completa.</p>' +
     '<p>Os quatro níveis seguintes pertencem exclusivamente à história secundária e agora estão disponíveis para você.</p>' +
@@ -115,7 +115,7 @@ export function createLevelSelect(onPick, onExtraPick) {
     const h = grid.getBoundingClientRect().height;               // a altura das 2 fileiras (com o espaço entre elas)
     onExtra = true; page = pages(); grid.textContent = ''; grid.classList.add('extra');
     for (let k = 0; k < 4; k++) { const c = document.createElement('div'); c.className = 'lsel-card xtra'; c.dataset.level = String(24 + k); if (h > 0) c.style.height = h + 'px'; grid.appendChild(c);
-      if (k === 0) { c.classList.add('x1'); c.addEventListener('click', () => onExtraPick && onExtraPick(0)); } }   // o 1º extra já tem a introdução
+      if (k < xOpen) { c.classList.add('x1'); c.addEventListener('click', () => onExtraPick && onExtraPick(k)); } }   // liberados: o 1º sempre; o 2º depois do 1º (ainda reservado)   // o 1º extra já tem a introdução
     prevBtn.classList.remove('off'); nextWrap.classList.add('gone'); playBtn.classList.add('gone');
   }
   function leaveExtra() { onExtra = false; grid.classList.remove('extra'); nextWrap.classList.remove('gone'); playBtn.classList.remove('gone'); }
@@ -167,7 +167,7 @@ export function createLevelSelect(onPick, onExtraPick) {
   }
   return {
     /** Libera (ou não) a página dos 4 níveis extras e o texto novo do "i". */
-    setExtra(on) { if (extra !== !!on) { extra = !!on; setInfo(); } },
+    setExtra(on, open = 1) { xOpen = open; if (extra !== !!on) { extra = !!on; setInfo(); } },
     get onExtra() { return onExtra; },
     open(level = 0) { if (!cards) build(); if (onExtra) leaveExtra(); sel = Math.min(level, COUNT - 1); while (sel > 0 && !cards[sel]) sel--; showPage(Math.floor(sel / PER)); paint(); el.classList.add('on'); document.body.classList.add('lsel-on'); },
     close() { closeInfo(); el.classList.remove('on'); document.body.classList.remove('lsel-on'); },

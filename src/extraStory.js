@@ -8,12 +8,15 @@ import { buildStandingReader } from './models/reader.js';
 import { buildBody } from './models/driver.js';
 
 export const EXTRA_DONE_KEY = 'adress.extra.done';     // os 4 níveis extras concluídos (fim da chuva) — ainda nunca gravado
+export const EXTRA1_KEY = 'adress.extra.1';            // extra 1 concluído (gravado no instante da quebra da imagem)
+export const EXTRA2_KEY = 'adress.extra.2';            // extra 2 concluído (ainda sem conteúdo)
 
 const BG = new THREE.Color('#0b0b0e');                  // o vazio
 const E = 6.3, HALF = E / 2, CZ = -14, FRONT = CZ + HALF, BACK = CZ - HALF;   // cubo: aresta ≈ 3× a altura do jogador
 const K0 = new THREE.Vector3(-1.1, 0, -12.3), R0 = new THREE.Vector3(1.0, 0, -14.7);
 const FAR_VAN = { x: 1e9, z: 1e9 };
-const T = { hold: 5, kWalk: 5.2, kAfter: 1.1, crack: 0.75, fall: 3.0, empty: 1.4, rise: 3.0, look: 4.6, out: 1.6 };
+const T = { hold: 5, kWalk: 5.2, kAfter: 1.1, crack: 0.75, fall: 3.0, empty: 1.4, rise: 3.0, dlg1: 5, travel: 2, dlg2: 5, pull: 1.0 };
+const VMAX = 240;                                       // velocidade do deslocamento (cenário relativo)
 
 const SKY_V = `varying vec3 vW; void main(){ vec4 w = modelMatrix * vec4(position, 1.0); vW = w.xyz; gl_Position = projectionMatrix * viewMatrix * w; }`;
 const SKY_F = `uniform float uOp; varying vec3 vW;
@@ -164,6 +167,8 @@ export function createExtraStory(ctx) {
     K.position.copy(K0); K.rotation.y = -Math.PI / 2; K.visible = true; K.userData.legs.forEach(l => { l.rotation.z = 0; l.userData.knee.rotation.z = 0; });
     R.position.copy(R0); R.rotation.y = -Math.PI / 2; R.visible = true;
     fig.visible = false; figMat.color.copy(BG); if (fh) fh.rotation.set(0, 0, 0);
+    fig.position.set(0.4, 0, -19.5); fig.rotation.y = -Math.PI / 2; streaks.visible = false;
+    camera.fov = 50; camera.updateProjectionMatrix();
   }
   function breakCube() {
     for (const m of cube.children) m.visible = false;
@@ -192,7 +197,7 @@ export function createExtraStory(ctx) {
   function stop() {
     if (!S) return;
     if (S.white) S.white.restore();                     // a customização nunca foi tocada: só devolve os materiais
-    walker.setSpeedMul(1);
+    walker.setSpeedMul(1); walker.setFloor(0); stopWhoosh();
     S = null; ctx.renderer.localClippingEnabled = false;
   }
   const go = (p) => { S.phase = p; S.t = 0; };
@@ -263,22 +268,110 @@ export function createExtraStory(ctx) {
         if (t >= T.empty) { fig.visible = true; go('rise'); }
         break;
       case 'rise':                                         // a figura aparece (sem brilho, só um preto mais fundo que o vazio)
-      case 'look': {
+      case 'dlg1': {                                       // (espaço reservado para o 1º diálogo: 5 s só de enquadramento)
         const k = S.phase === 'rise' ? Math.min(1, t / T.rise) : 1;
-        figMat.color.copy(BG).lerp(new THREE.Color(0, 0, 0), k * k * (3 - 2 * k));
-        const u = S.phase === 'rise' ? t / (T.rise + T.look) : (T.rise + t) / (T.rise + T.look);
+        figMat.color.copy(BG).lerp(BLACK, k * k * (3 - 2 * k));
+        const u = S.phase === 'rise' ? t / (T.rise + T.dlg1) : (T.rise + t) / (T.rise + T.dlg1);
         const ue = u * u * (3 - 2 * u);
         shot([-4.6 + 0.9 * ue, 1.3 + 0.2 * ue, -1.8 + 0.6 * ue], [0.2, 5.6, -16]);
-        if (fh && S.phase === 'look') fh.rotation.y = -0.18 * Math.min(1, t / 2.5);   // a cabeça se inclina de leve para o jogador
-        if (S.phase === 'rise' && t >= T.rise) go('look');
-        if (S.phase === 'look' && t >= T.look) go('out');
+        if (fh && S.phase === 'dlg1') fh.rotation.y = -0.18 * Math.min(1, t / 2.5);   // a cabeça se inclina de leve para o jogador
+        if (S.phase === 'rise' && t >= T.rise) go('dlg1');
+        if (S.phase === 'dlg1' && t >= T.dlg1) startTravel();
         break;
       }
-      case 'out':
-        S.fade = Math.min(1, t / T.out);
-        if (t >= T.out + 0.25) { const cb = ctx.onEnd; stop(); cb && cb(); return; }
+      case 'travel':                                       // levado para trás por uma força de fora; a figura fica para trás
+      case 'dlg2':                                         // (2º diálogo reservado: 5 s, o deslocamento continua)
+      case 'pull': {
+        const tt = S.phase === 'travel' ? t : S.phase === 'dlg2' ? T.travel + t : T.travel + T.dlg2 + t;
+        const a = Math.min(1, tt / 1.6), v = VMAX * a * a * (3 - 2 * a);      // aceleração inicial perceptível
+        S.dist += v * dt;
+        walker.update(dt, { x: 0, z: 0 }, 'car', [], FAR_VAN);                // parado na pose (só a respiração)
+        updateStreaks(dt, v);
+        whoosh(0.5 * Math.min(1, tt / 0.8));
+        const F = S.f, P = S.p;
+        if (S.phase === 'travel') {                        // a figura original se afasta (continuidade: ela estava ali à frente)
+          const o = S.fig0; fig.position.set(o.x + F.x * S.dist, 0, o.z + F.z * S.dist);
+          if (t >= T.travel) {                             // exatamente 2 s depois: ela já está ali, à frente
+            fig.position.set(P.x + F.x * 14, 0, P.z + F.z * 14); fig.rotation.y = -Math.atan2(-F.z, -F.x); figMat.color.copy(BLACK);
+            if (fh) fh.rotation.y = 0;
+            go('dlg2');
+          }
+        } else if (S.phase === 'dlg2') { if (t >= T.dlg2) { go('pull'); S.pullFrom = { x: walker.x, z: walker.z }; } }
+        // câmera atrás do jogador (costas), olhando para onde ele está virado; tremor leve com a velocidade
+        const sh = 0.025 * (v / VMAX) * (S.phase === 'pull' ? 3 : 1), C0 = S.cam;
+        camera.position.set(C0.x + (Math.random() - 0.5) * sh, C0.y + (Math.random() - 0.5) * sh, C0.z + (Math.random() - 0.5) * sh);
+        camera.lookAt(_l.set(P.x + F.x * 12, 2.6, P.z + F.z * 12));
+        const fov = 50 + 7 * (v / VMAX); if (Math.abs(camera.fov - fov) > 0.01) { camera.fov = fov; camera.updateProjectionMatrix(); }
+        if (S.phase === 'pull') {                          // vem de costas, rápido, até atingir a câmera (sem virar nem se preparar)
+          const k = Math.min(1, S.t / T.pull), e = k * k * k;   // (S.t: na troca de fase t ainda é o da fase anterior)
+          const tx = C0.x + F.x * 0.25, tz = C0.z + F.z * 0.25;
+          walker.pose(S.pullFrom.x + (tx - S.pullFrom.x) * e, S.pullFrom.z + (tz - S.pullFrom.z) * e, S.h);
+          walker.setFloor((C0.y - 1.25) * e);
+          if (k >= 0.97) { impact(); return; }
+        }
         break;
+      }
     }
+  }
+
+  // ---- deslocamento: poucos rastros finos e apagados passando (cauda some no preto) ----
+  const SN = 46, sPos = new Float32Array(SN * 6), sCol = new Float32Array(SN * 6), sSeed = [];
+  const sGeo = new THREE.BufferGeometry(); sGeo.setAttribute('position', new THREE.BufferAttribute(sPos, 3)); sGeo.setAttribute('color', new THREE.BufferAttribute(sCol, 3));
+  const streaks = new THREE.LineSegments(sGeo, new THREE.LineBasicMaterial({ vertexColors: true, transparent: true, opacity: 0.85, depthWrite: false }));
+  streaks.frustumCulled = false; streaks.visible = false; scene.add(streaks);
+  const BLACK = new THREE.Color(0, 0, 0);
+  function seedStreak(i, s0) { const r = 2.2 + Math.pow(Math.random(), 0.7) * 24, a = Math.random() * Math.PI * 2; sSeed[i] = { r, a, s: s0, b: 0.22 + Math.random() * 0.25 }; }
+  function updateStreaks(dt, v) {
+    const F = S.f, P = S.p, sx = -F.z, sz = F.x;
+    streaks.visible = true;
+    for (let i = 0; i < SN; i++) {
+      const q = sSeed[i]; q.s += v * dt;                    // o cenário vai para a frente (o jogador é levado para trás)
+      if (q.s > 260) seedStreak(i, -12 - Math.random() * 30);
+      const L = Math.min(22, 0.4 + v * 0.06), ox = Math.cos(q.a) * q.r, oy = 1.4 + Math.sin(q.a) * q.r * 0.7;
+      const hx = P.x + F.x * q.s + sx * ox, hz = P.z + F.z * q.s + sz * ox, o = i * 6;
+      sPos[o] = hx; sPos[o + 1] = oy; sPos[o + 2] = hz;
+      sPos[o + 3] = hx - F.x * L; sPos[o + 4] = oy; sPos[o + 5] = hz - F.z * L;
+      const c = q.b * Math.min(1, v / 60);
+      sCol[o] = sCol[o + 1] = sCol[o + 2] = c * 0.95 + 0.04; sCol[o + 4] = BG.g; sCol[o + 3] = BG.r; sCol[o + 5] = BG.b;
+    }
+    sGeo.attributes.position.needsUpdate = true; sGeo.attributes.color.needsUpdate = true;
+  }
+  function startTravel() {
+    const h = walker.heading, F = new THREE.Vector3(Math.cos(h), 0, Math.sin(h));
+    S.f = F; S.h = h; S.p = { x: walker.x, z: walker.z }; S.dist = 0;
+    S.cam = new THREE.Vector3(walker.x - F.x * 5.6, 2.15, walker.z - F.z * 5.6);
+    S.fig0 = fig.position.clone();
+    for (let i = 0; i < SN; i++) seedStreak(i, -40 + Math.random() * 300);
+    go('travel');
+  }
+  // vento abafado do deslocamento (efeitos; WebAudio, sem arquivo)
+  let W = null;
+  function whoosh(level) {
+    const ac = audio.ctx; if (!ac || !audio.out) return;
+    if (!W) {
+      const len = ac.sampleRate * 2, buf = ac.createBuffer(1, len, ac.sampleRate), d = buf.getChannelData(0); let b = 0;
+      for (let i = 0; i < len; i++) { b = 0.97 * b + 0.03 * (Math.random() * 2 - 1); d[i] = b * 3; }
+      const src = ac.createBufferSource(); src.buffer = buf; src.loop = true;
+      const f = ac.createBiquadFilter(); f.type = 'bandpass'; f.frequency.value = 260; f.Q.value = 0.7;
+      const g = ac.createGain(); g.gain.value = 0; src.connect(f); f.connect(g); g.connect(audio.out); src.start(); W = { src, f, g };
+    }
+    try { W.g.gain.setTargetAtTime(level, ac.currentTime, 0.15); W.f.frequency.setTargetAtTime(200 + 260 * level, ac.currentTime, 0.3); } catch (e) { /* */ }
+  }
+  function stopWhoosh() { if (!W) return; try { W.src.stop(); W.g.disconnect(); } catch (e) { /* */ } W = null; }
+  /** Impacto: tira a foto desta imagem, salva o extra 1 e entrega a foto para a quebra da tela (main → tela inicial por trás). */
+  function impact() {
+    ctx.renderer.render(scene, camera);
+    const dom = ctx.renderer.domElement, snap = document.createElement('canvas'); snap.width = dom.width; snap.height = dom.height;
+    try { snap.getContext('2d').drawImage(dom, 0, 0); } catch (e) { /* */ }
+    try { localStorage.setItem(EXTRA1_KEY, '1'); } catch (e) { /* */ }
+    stopWhoosh(); glass('shatter'); thud();
+    const cb = ctx.onShatter; stop(); cb && cb(snap, dom.getBoundingClientRect());
+  }
+  function thud() {
+    const ac = audio.ctx; if (!ac || !audio.out) return;
+    const now = ac.currentTime + 0.005, o = ac.createOscillator(), g = ac.createGain();
+    o.frequency.setValueAtTime(90, now); o.frequency.exponentialRampToValueAtTime(35, now + 0.5);
+    g.gain.setValueAtTime(0.9, now); g.gain.exponentialRampToValueAtTime(0.001, now + 0.9); o.connect(g); g.connect(audio.out); o.start(now); o.stop(now + 1);
   }
 
   return {
@@ -286,7 +379,55 @@ export function createExtraStory(ctx) {
     get active() { return !!S; }, get phase() { return S ? S.phase : ''; }, get t() { return S ? S.t : 0; },
     get fade() { return S ? S.fade : 0; }, get white() { return S ? S.wk : 0; },
     get locked() { return !!S && S.phase !== 'walk'; },
+    get figPos() { return fig.position.clone(); }, get camPos() { return camera.position.clone(); },
     _K: K, _R: R, _fig: fig, _shards: shards, _cube: cube,
-    _jump(p) { if (!S) return; if (p !== 'walk' && !S.white) { S.white = whitenFade(walker.object); S.wk = 1; S.white.step(1); } go(p); S.fade = 0; },
+    _jump(p) { if (!S) return; if (p !== 'walk' && !S.white) { S.white = whitenFade(walker.object); S.wk = 1; S.white.step(1); } if (p === 'travel') { fig.visible = true; startTravel(); } else go(p); S.fade = 0; },
   };
+}
+
+/** A própria visão se quebra: a foto da última imagem vira estilhaços (raios + anéis a partir do ponto do impacto) que voam
+ *  na direção de quem olha, giram, caem e somem, revelando o que já está por trás (o menu). Canvas 2D por cima de tudo. */
+export function screenShatter(snap, rect, done, at = null) {   // (at: testes — desenha só aquele instante, parado)
+  const cv = document.createElement('canvas'), dpr = snap.width / Math.max(1, rect.width);
+  cv.width = snap.width; cv.height = snap.height;
+  cv.style.cssText = `position:fixed;left:${rect.left}px;top:${rect.top}px;width:${rect.width}px;height:${rect.height}px;z-index:9999;pointer-events:none`;
+  document.body.appendChild(cv);
+  const g = cv.getContext('2d'), W = cv.width, H = cv.height, cx = W * 0.5, cy = H * 0.47, D = Math.hypot(W, H);
+  const SP = 15, RINGS = [0, 0.045, 0.12, 0.24, 0.42, 0.75];
+  const ang = Array.from({ length: SP }, (_, i) => (i + 0.5 + (Math.random() - 0.5) * 0.7) / SP * Math.PI * 2);
+  const pt = (ri, si) => { if (ri === 0) return [cx, cy]; const r = RINGS[ri] * D * (1 + (Math.random() - 0.5) * 0.25), a = ang[si % SP]; return [cx + Math.cos(a) * r, cy + Math.sin(a) * r]; };
+  const grid = RINGS.map((_, ri) => Array.from({ length: SP }, (_, si) => pt(ri, si)));
+  const shards = [];
+  for (let ri = 0; ri < RINGS.length - 1; ri++) for (let si = 0; si < SP; si++) {
+    const a = grid[ri][si], b = grid[ri][(si + 1) % SP], c = grid[ri + 1][(si + 1) % SP], d = grid[ri + 1][si];
+    const poly = ri === 0 ? [a, c, d] : [a, b, c, d];
+    const mx = poly.reduce((s, p) => s + p[0], 0) / poly.length, my = poly.reduce((s, p) => s + p[1], 0) / poly.length;
+    const dx = mx - cx, dy = my - cy, dl = Math.hypot(dx, dy) || 1, sp = (0.25 + Math.random() * 0.5) * H;
+    shards.push({ poly: poly.map(p => [p[0] - mx, p[1] - my]), x: mx, y: my, vx: dx / dl * sp, vy: dy / dl * sp - H * 0.15 * Math.random(), r: 0, w: (Math.random() - 0.5) * 5, s: 1, ws: 0.5 + Math.random() * 0.9, delay: ri * 0.025 + Math.random() * 0.03 });
+  }
+  const t0 = performance.now(), CRACK = 0.11, END = 1.45;
+  function frame() {
+    const t = at != null ? at : (performance.now() - t0) / 1000;
+    g.clearRect(0, 0, W, H);
+    if (t < CRACK) {                                   // o instante do impacto: a imagem inteira, rachada
+      g.drawImage(snap, 0, 0);
+      g.strokeStyle = 'rgba(255,255,255,0.85)'; g.lineWidth = 1.5 * dpr;
+      for (const s of shards) { g.beginPath(); s.poly.forEach((p, i) => (i ? g.lineTo : g.moveTo).call(g, s.x + p[0], s.y + p[1])); g.closePath(); g.stroke(); }
+    } else {
+      const tt = t - CRACK;
+      for (const s of shards) {
+        const k = Math.max(0, tt - s.delay);
+        const x = s.x + s.vx * k, y = s.y + s.vy * k + 0.5 * H * 2.2 * k * k, sc = 1 + s.ws * k, rot = s.w * k;
+        const op = Math.max(0, 1 - Math.max(0, k - 0.3) / 0.85); if (op <= 0) continue;
+        g.save(); g.globalAlpha = op; g.translate(x, y); g.rotate(rot); g.scale(sc, sc);
+        g.beginPath(); s.poly.forEach((p, i) => (i ? g.lineTo : g.moveTo).call(g, p[0], p[1])); g.closePath();
+        g.save(); g.clip(); g.drawImage(snap, -s.x, -s.y); g.restore();
+        g.strokeStyle = 'rgba(255,255,255,0.6)'; g.lineWidth = 1.2 * dpr / sc; g.stroke();
+        g.restore();
+      }
+    }
+    if (at != null) return cv;
+    if (t < CRACK + END) requestAnimationFrame(frame); else { cv.remove(); done && done(); }
+  }
+  return frame();
 }

@@ -21,7 +21,7 @@ import { createGrillStory, GRILL_TALK_KEY, createCrowd } from './grillStory.js';
 import { createWorkshopStory, INTRO_KEY } from './workshopStory.js';
 import { createChurchCine } from './churchCine.js';
 import { createMassStory, MASS_KEY, BELL3_KEY, NOTICE_KEY, createRainFx, createRainAudio } from './massStory.js';
-import { createExtraStory, EXTRA_DONE_KEY } from './extraStory.js';
+import { createExtraStory, EXTRA_DONE_KEY, EXTRA1_KEY, EXTRA2_KEY, screenShatter } from './extraStory.js';
 import { createNight } from './night.js';
 import { createFarmOutside } from './farmOutside.js';
 import { createReality } from './reality.js';
@@ -955,8 +955,8 @@ const title = createTitle({
 const shop = createShop();
 function openShop() { shop.open(); setState('shop'); }
 // Livre: seleção do bairro (todas as miniaturas na tela; setas escolhem, E joga). Depois o helicóptero decola.
-const levelSelect = createLevelSelect(l => confirmLevel(l), () => startExtra());   // (o 1º cartão da página dos extras: introdução do extra 1)
-function openLevelSelect() { levelSelect.setExtra(flagOn(MASS_KEY)); levelSelect.open(freeLevel); setState('levelSelect'); }   // (página dos 4 níveis extras: só depois do temporal)
+const levelSelect = createLevelSelect(l => confirmLevel(l), i => { if (i === 0) startExtra(); });   // (o 2º, liberado depois do 1º, ainda é espaço reservado)   // (o 1º cartão da página dos extras: introdução do extra 1)
+function openLevelSelect() { levelSelect.setExtra(flagOn(MASS_KEY), flagOn(EXTRA1_KEY) ? 2 : 1); levelSelect.open(freeLevel); setState('levelSelect'); }   // (página dos 4 níveis extras: só depois do temporal)
 function confirmLevel(l) {
   if (state === 'levelSelect' && l < 0 && levelSelect.onExtra) { startExtra(); return; }   // página dos extras: E/Enter abre o 1º
   if (state !== 'levelSelect' || l < 0 || RESERVED.includes(l)) return;   // (−1: página dos níveis extras, ainda sem fases)   // 17–19: reservados
@@ -1673,7 +1673,64 @@ const massStory = createMassStory({ walker, input, talkBox, audio, thirdMusic, m
 const rainOn = () => flagOn(MASS_KEY) && !flagOn(EXTRA_DONE_KEY);
 const rainFx = createRainFx(), rainAudio = createRainAudio(audio);
 const _rl = new THREE.Vector3(), _rinv = new THREE.Matrix4();
-function menuWorld() { if (rainOn() && neighborhood !== 'med10') useNeighborhood('med10'); }
+// Fundo dos menus pelo progresso salvo: depois do 4º sino → Bairro 24 na chuva; depois do extra 1 → Bairro 1 à noite
+// (sem chuva, só a luz do quintal do K acesa, sem o K); depois do extra 2: ainda não definido (volta ao de sempre).
+function menuBg() { if (!flagOn(MASS_KEY)) return ''; if (!flagOn(EXTRA1_KEY)) return 'rain'; if (!flagOn(EXTRA2_KEY)) return 'night'; return ''; }
+function menuWorld() {
+  setMenuNight(false);
+  const bg = menuBg();
+  if (bg === 'rain' && neighborhood !== 'med10') useNeighborhood('med10');
+  else if (bg === 'night' && (neighborhood !== 'grid4' || !game.layout.includes(L1_FIXED[15]))) {   // o Bairro 1 com a casa do K
+    const gm = gameMode, fl = freeLevel; gameMode = 'free'; freeLevel = 0;
+    if (neighborhood !== 'grid4') useNeighborhood('grid4'); else setupGrid4();
+    gameMode = gm; freeLevel = fl;
+  }
+}
+let nightSaved = null;
+const nightCam = { p: new THREE.Vector3(), l: new THREE.Vector3() };
+/** Noite do fundo dos menus (Bairro 1): luzes quase apagadas, nada brilhando, o K escondido e só a lâmpada do quintal dele. */
+function setMenuNight(on) {
+  if (on === !!nightSaved) return;
+  if (!on) {
+    const sv = nightSaved; nightSaved = null;
+    sv.scene.background = sv.bg; if (sv.scene.fog) sv.scene.fog.color.copy(sv.fogC);
+    for (const [l, i, c, gc] of sv.lights) { l.intensity = i; l.color.copy(c); if (gc) l.groundColor.copy(gc); }
+    for (const [m, e] of sv.em) m.emissive.copy(e);
+    for (const [o, v] of sv.vis) o.visible = v;
+    sv.lamp.removeFromParent();
+    return;
+  }
+  const sc = world.scene, sv = nightSaved = { scene: sc, bg: sc.background, fogC: sc.fog ? sc.fog.color.clone() : null, lights: [], em: [], vis: [], lamp: null };
+  const seen = new Set();
+  sc.traverse(o => {
+    if (o.isLight) sv.lights.push([o, o.intensity, o.color.clone(), o.groundColor ? o.groundColor.clone() : null]);
+    if (o.isMesh && o.material) for (const m of Array.isArray(o.material) ? o.material : [o.material]) if (m.emissive && !seen.has(m) && m.emissive.getHex() !== 0) { seen.add(m); sv.em.push([m, m.emissive.clone()]); }
+  });
+  for (const [l] of sv.lights) {
+    if (l.isHemisphereLight) { l.intensity = 0.11; l.color.set('#4a5a88'); l.groundColor.set('#080a10'); }
+    else if (l.isDirectionalLight) { l.intensity = 0.16; l.color.set('#7a8ec4'); }            // luar fraco (detalhe nas sombras)
+    else l.intensity = 0;
+  }
+  for (const [m] of sv.em) m.emissive.setRGB(0, 0, 0);                         // nenhuma luz de casa, poste ou lampião
+  sc.background = new THREE.Color('#03050a'); if (sc.fog) sc.fog.color.set('#03050a');
+  const sun = sc.getObjectByName('sun'); if (sun) { sv.vis.push([sun, sun.visible]); sun.visible = false; }
+  world.hideResident();
+  const spot = sc.getObjectByName('reader-spot');
+  const p = new THREE.Vector3(); if (spot) { spot.updateMatrixWorld(true); spot.getWorldPosition(p); }
+  if (spot && spot.userData.person) { sv.vis.push([spot.userData.person, spot.userData.person.visible]); spot.userData.person.visible = false; }   // o K não está lá
+  // a luz do quintal da casa do K (a única acesa): lampião baixo ao lado da cadeira vazia
+  const lamp = sv.lamp = new THREE.Group(); lamp.position.set(p.x + 1.3, 0, p.z - 0.6);
+  const post = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.07, 1.9, 6), new THREE.MeshStandardMaterial({ color: '#1d1b18', roughness: 0.8 })); post.position.y = 0.95; lamp.add(post);
+  const bulb = new THREE.Mesh(new THREE.SphereGeometry(0.17, 10, 8), new THREE.MeshBasicMaterial({ color: '#ffe2a8' })); bulb.position.y = 2.0; lamp.add(bulb);
+  const cap = new THREE.Mesh(new THREE.ConeGeometry(0.28, 0.2, 6), new THREE.MeshStandardMaterial({ color: '#1d1b18' })); cap.position.y = 2.2; lamp.add(cap);
+  const pl = new THREE.PointLight('#ffc27a', 60, 26, 1.6); pl.position.y = 1.9; lamp.add(pl);
+  const gc = document.createElement('canvas'); gc.width = gc.height = 64; const gg = gc.getContext('2d'), gr = gg.createRadialGradient(32, 32, 0, 32, 32, 32);
+  gr.addColorStop(0, 'rgba(255,214,150,0.9)'); gr.addColorStop(0.3, 'rgba(255,190,110,0.35)'); gr.addColorStop(1, 'rgba(255,170,90,0)'); gg.fillStyle = gr; gg.fillRect(0, 0, 64, 64);
+  const glow = new THREE.Sprite(new THREE.SpriteMaterial({ map: new THREE.CanvasTexture(gc), blending: THREE.AdditiveBlending, depthWrite: false, transparent: true }));
+  glow.scale.setScalar(4.2); glow.position.y = 2.0; lamp.add(glow);
+  sc.add(lamp);
+  nightCam.p.set(p.x - 13, 11, p.z + 23); nightCam.l.set(p.x - 5, 2.2, p.z - 3);   // de fora da sebe sul, de frente para a casa e o quintal
+}
 const MENU_STATES = ['title', 'levelSelect', 'levelFly', 'shop'];
 // nos menus: além da chuva no bairro (que o desfoque apaga), riscos finos por cima do fundo desfocado (canvas 2D, embaixo dos botões)
 const rainVeil = document.createElement('canvas'); rainVeil.className = 'rain-veil';
@@ -1695,18 +1752,20 @@ function updateRain(dt) {
   const chs = [church, medChurch].filter(c => c && c.parent === world.scene && c.visible !== false);
   const cam = rig.camera.position;
   const inChurch = chs.some(c => { c.updateMatrixWorld(); _rl.copy(cam).applyMatrix4(_rinv.copy(c.matrixWorld).invert()); return _rl.x > -24 && _rl.x < 24 && _rl.z > -58 && _rl.z < 2.4 && _rl.y < 72; });
-  rainAudio.set(on ? (menuS ? 0.16 : 0.3) : 0, insideOn || inChurch);
+  const menuRain = menuBg() === 'rain';                 // menus: chuva só no fundo do Bairro 24 (na noite do Bairro 1, nada)
+  setMenuNight(menuBg() === 'night' && MENU_STATES.includes(state) && neighborhood === 'grid4');
+  rainAudio.set(on && (!menuS || menuRain) ? (menuS ? 0.16 : 0.3) : 0, insideOn || inChurch);
   rainAudio.update(dt, document.hidden);
   if (rainFx.object.parent !== world.scene) world.scene.add(rainFx.object);
-  rainFx.update(dt, cam, on && !inMap() ? 0.55 : 0, chs);
-  const veil = on && MENU_STATES.includes(state) && !document.hidden;
+  rainFx.update(dt, cam, on && !inMap() && (!MENU_STATES.includes(state) || menuRain) ? 0.55 : 0, chs);
+  const veil = on && menuRain && MENU_STATES.includes(state) && !document.hidden;
   rainVeil.style.opacity = veil ? '1' : '0';
   if (veil) drawVeil(dt);
 }
 const EXTRA_CSS = document.createElement('style');
 EXTRA_CSS.textContent = 'body.extra-on .ahud, body.extra-on .hint-btn { display: none !important; }';   // sem pista, contador nem dica (MENU, música e Voltar ficam)
 document.head.appendChild(EXTRA_CSS);
-const extra = createExtraStory({ walker, input, audio, renderer, onEnd: () => endExtra(true) });
+const extra = createExtraStory({ walker, input, audio, renderer, onShatter: (snap, rect) => { endExtra('shatter'); screenShatter(snap, rect); } });   // (o extra 1 já foi salvo na quebra)
 function startExtra() {
   if (state !== 'levelSelect') return;
   levelSelect.close(); setState('levelFly');
@@ -1726,13 +1785,13 @@ function endExtra(toTitle) {
   world.scene.add(walker.object); walker.show(false); walker.setFloor(0);
   music.suspend(false);
   fade = 0;
-  if (toTitle) {
+  if (toTitle) {                                        // ('shatter': a imagem quebrada já cobre a tela; o menu aparece por trás dos cacos)
     menuWorld();
     if (rig.mode !== 'overview') rig.toggle();
     rig.snap({ x: van.x, z: van.z, heading: van.heading, speed: 0 });
-    talkBox.fadeBlack(1, 0); title.show('home'); if (titleDriver) titleDriver.stop();
-    setState('title');
-    setTimeout(() => talkBox.fadeBlack(0, 1500), 60);
+    title.show('home'); if (titleDriver) titleDriver.stop();
+    setState('title'); setMenuNight(menuBg() === 'night' && neighborhood === 'grid4');
+    if (toTitle !== 'shatter') { talkBox.fadeBlack(1, 0); setTimeout(() => talkBox.fadeBlack(0, 1500), 60); }
   } else showPlayPanel();
 }
 let chseq = null;
@@ -2524,6 +2583,7 @@ function update(dt, t) {
   if (fog) { fog.near = 3000 + (fn - 3000) * fb; fog.far = 3200 + (ff - 3200) * fb; }
   if (fog && state === 'gstory' && !insideOn && grillStory.ext) { fog.near = 1; fog.far = 22; }
   if (fog && massStory.fog) { fog.near = massStory.fog[0]; fog.far = massStory.fog[1]; }   // temporal: lá fora quase não se vê nada   // resgate: nevasca fechada (mal se vê o outro lado da rua)
+  if (nightSaved && nightSaved.scene === world.scene && MENU_STATES.includes(state)) { rig.camera.position.copy(nightCam.p); rig.camera.lookAt(nightCam.l); }   // fundo noturno: a casa do K
   if (!sunSprite || sunSprite.parent !== world.scene) grabSun();
   if (sunSprite) sunSprite.position.set(rig.camera.position.x, 0, rig.camera.position.z).add(SUN_OFS);   // sol acompanha a câmera (fica sempre no mesmo lugar do céu, por mais longe que se dirija)
   const shake = Math.max(hint.shake, boom.shake);
@@ -2740,7 +2800,7 @@ window.ADRESS = {
   moonPlace(p, f) { van.teleport(0, 0, 0); FRAME.reset(new THREE.Vector3(...p).normalize(), new THREE.Vector3(...f), 0, 0); moonAnchor.x = moonAnchor.z = 0; FRAME.toSphere(0, 0, vanSph.p); moonUpdate(0, true); },
   get moonVan() { return { p: vanSph.p.toArray().map(v => +v.toFixed(3)), f: vanSph.f.toArray().map(v => +v.toFixed(3)), y: +van.simY.toFixed(2) }; },
   FRAME, MOONV: () => MOONV,
-  massStory, MASS_KEY, extra, startExtra, rainFx, rainAudio, get rainOn() { return rainOn(); }, menuWorld, lockCP: n => STORY_CP.apply(n), devMissions: DEV_MISSIONS, get parcelVisible() { return !!parcel.parent; },
+  massStory, MASS_KEY, extra, startExtra, screenShatter, rainFx, rainAudio, menuBg, get menuNight() { return !!nightSaved; }, get rainOn() { return rainOn(); }, menuWorld, lockCP: n => STORY_CP.apply(n), devMissions: DEV_MISSIONS, get parcelVisible() { return !!parcel.parent; },
   laser, ursa, solar, reality, startLaser,
   get church() { return church; }, get venK() { return venK; }, startVeniceTalk, churchStage, get greenBell() { return greenBell; }, get churchBell() { return churchBell; },
   churchReveal() { if (churchOn && !churchShown) { approach.phase = 'revealed'; revealChurch(true); } },

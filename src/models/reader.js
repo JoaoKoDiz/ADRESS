@@ -197,6 +197,7 @@ export function buildReaderSpot() {
   let k = 0, goal = 0, lastT = null;
   const ease = x => x * x * (3 - 2 * x);
   /** true: coloca o jornal de lado (para conversar); false: volta a ler. */
+  root.userData.person = rd.group;                                                 // (o K sozinho, sem a cadeira: o fundo noturno dos menus o esconde)
   root.userData.setAside = on => { goal = on ? 1 : 0; };
   root.userData.asideDone = () => k === goal;
   root.userData.update = t => {
