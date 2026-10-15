@@ -27,8 +27,8 @@ export function buildWorkshop() {
     add(box(w, 1.2, d, STONE), cx, 0.6, cz); add(box(w + 0.04, 0.12, d + 0.04, STONE2), cx, 1.2, cz);
     add(box(w, 2.2, d, PLASTER), cx, 2.3, cz);
     const along = w > d, L = along ? w : d;
-    for (let u = -L / 2 + 0.1; u <= L / 2; u += 1.6) add(box(along ? 0.16 : d + 0.06, 2.2, along ? d + 0.06 : 0.16, TIMBER), along ? cx + u : cx, 2.3, along ? cz : cz + u);
-    add(box(along ? w : d + 0.06, 0.16, along ? d + 0.06 : d, TIMBER), cx, 3.4, cz);
+    for (let u = -L / 2 + 0.1; u <= L / 2; u += 1.6) add(box(along ? 0.16 : w + 0.06, 2.2, along ? d + 0.06 : 0.16, TIMBER), along ? cx + u : cx, 2.3, along ? cz : cz + u);
+    add(box(w + 0.06, 0.16, d + 0.06, TIMBER), cx, 3.4, cz);
   };
   wall(-6, 6, -7, -6.6); wall(5.6, 6, -7, 7); wall(-6, -5.6, -7, 7); wall(-6, -1.25, 6.6, 7); wall(1.25, 6, 6.6, 7);
   add(box(2.5, 0.3, 0.4, TIMBER), 0, 3.0, 6.8);                                        // verga da porta
