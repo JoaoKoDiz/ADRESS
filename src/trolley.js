@@ -82,7 +82,7 @@ export function createTrolley(stageEl) {
     scene, camera,
     get active() { return active; },
     get done() { return doneT >= 0 && t - doneT > 2.6; },
-    get side() { return side; }, get locked() { return locked; }, get x() { return x; },
+    get side() { return side; }, get locked() { return locked; }, get choosing() { return ui.classList.contains('on') && !keyHint.classList.contains('off'); }, get x() { return x; },
     start() {
       x = START; side = -1; locked = false; t = 0; doneT = -1; active = true;
       for (const v of victims) { v.fly = null; v.obj.visible = true; }

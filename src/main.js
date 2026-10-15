@@ -21,6 +21,7 @@ import { createGrillStory, GRILL_TALK_KEY, createCrowd } from './grillStory.js';
 import { createWorkshopStory, INTRO_KEY } from './workshopStory.js';
 import { createChurchCine } from './churchCine.js';
 import { createMassStory, MASS_KEY, BELL3_KEY, NOTICE_KEY, createRainFx, createRainAudio } from './massStory.js';
+import { createTouch } from './touch.js';
 import { createExtraStory, EXTRA_DONE_KEY, EXTRA1_KEY, EXTRA2_KEY, screenShatter } from './extraStory.js';
 import { createNight } from './night.js';
 import { createFarmOutside } from './farmOutside.js';
@@ -113,6 +114,7 @@ stage.appendChild(renderer.domElement);
 const audio = createAudio();
 const music = createMusic(stage);          // música de fundo (PAUSAR / CONTINUAR, tecla M)
 const input = createInput(() => { audio.unlock(); music.start(); });
+let touch = null;                                   // controles de toque (criado depois do renderer)
 // Configurações (tela inicial): volume da música/efeitos salvos e aplicados já ao abrir o jogo
 const settings = createSettings({ onChange: p => { audio.setVolumes(p.music, p.sfx); music.setVolume(p.music); } });
 const hud = createHUD(hudEl, stage);
@@ -2603,7 +2605,36 @@ function update(dt, t) {
 
 // ---------- HUD ----------
 const promptPos = new THREE.Vector3();
+/** Toque: o que pode aparecer agora (joystick, câmera com o dedo, botões das teclas que valem neste momento). */
+function touchFrame() {
+  if (!touch) touch = createTouch({ input, canvas: renderer.domElement });
+  if (!touch.on) { touch.update(); return; }
+  const acts = [], A = (key, label, k, hold) => acts.push({ key, label, k, hold });
+  let joystick = false, look = false;
+  const blocked = menu.isOpen || missions.isOpen || talkBox.open || lock.isOpen || fade > 0.5;
+  const camLbl = rig.mode === 'chase' ? 'Bairro' : 'Câmera';
+  if (!blocked) switch (state) {
+    case 'drive':
+      joystick = true; look = true;
+      if (approachLock()) break;                                     // aproximação da igreja: só a direção
+      if (heli.landed) { A('KeyH', 'Decolar', 'H'); if (gameMode === 'free' && !MOONV) A('KeyF', 'Míssil', 'F'); if (roofUnderVan()) A('KeyL', 'Descer', 'L'); }
+      else if (heli.on) { A('Space', 'Subir', '␣', true); A('ShiftLeft', 'Descer', '⇧', true); A('KeyH', 'Pousar', 'H'); if (gameMode === 'free' && !MOONV) A('KeyF', 'Míssil', 'F'); }
+      else { A('KeyL', VENICE ? 'Descer da lancha' : 'Descer da van', 'L'); if (gameMode === 'free') { A('KeyH', 'Helicóptero', 'H'); if (!MOONV) A('KeyF', 'Míssil', 'F'); } }
+      A('KeyC', camLbl, 'C');
+      break;
+    case 'walk': joystick = true; look = true; A('KeyC', camLbl, 'C'); break;
+    case 'inside': joystick = true; break;                            // Grillby's (visão de cima, sem giro)
+    case 'gstory': joystick = true; look = true; break;               // 1ª pessoa / resgate (a história decide o que vale)
+    case 'extra': joystick = look = !extra.locked; break;
+    case 'boss': if (monster.phase === 'grace') { joystick = true; if (!monster.robotOn) A('KeyT', 'Robô', 'T'); } break;
+    case 'map': joystick = true; A('KeyE', 'Jogar', 'E'); A('KeyM', 'Missões', 'M'); break;
+    case 'trolley': if (trolley.choosing) A('KeyE', 'Mudar o trajeto', 'E'); break;
+  }
+  const bar = document.querySelector('.ahud'), r = bar && bar.offsetParent ? bar.getBoundingClientRect() : null;
+  touch.update({ joystick, look, actions: acts, dialog: state === 'dialog' && !menu.isOpen, top: (r && r.height ? r.bottom : 10) + 8 });
+}
 function updateHUD() {
+  touchFrame();
   matchTimer.setBumps(bumpShown() ? bumps : null);   // visível só no Bairro 3 (no 2 conta por dentro: "Sem esbarrar")
   matchTimer.show((TIMER_PLAY.includes(state) && !approachLock()) || (state === 'fadeOut' && endToMap));   // cenas e aproximação da igreja: escondido
   music.setNowPlaying(nowPlaying());              // nome da faixa ao lado do botão de música

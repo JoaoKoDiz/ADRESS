@@ -286,7 +286,7 @@ export function createMonster(scene, stageEl, audio) {
       head.rotation.z = 0; arms.forEach(a => { a.rotation.x = 0; a.rotation.z = 0; });
       wrap.classList.remove('on'); dead.classList.remove('on'); flash.style.opacity = '0'; fill.style.width = '0%';
     },
-    get phase() { return phase; },
+    get robotOn() { return robotOn; }, get phase() { return phase; },
     get robot() { return robotOn; },
     get active() { return phase !== 'idle' && phase !== 'done'; },
   };
