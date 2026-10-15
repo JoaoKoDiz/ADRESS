@@ -230,6 +230,7 @@ export function createGrillStory(ctx) {
   function reset(full = true) {
     if (S) talkBox.hide();
     teardownOutside(); storm.stop(); timerEl.classList.remove('on'); arm = null; crowd.level(1);
+    if (S && S.near0) { rig.camera.near = S.near0; rig.camera.updateProjectionMatrix(); }
     walker.setSpeedMul(1);
     if (ctx.grillIn) {
       const st = ST(); ctx.grillIn.setFP(false); st.coatOnChair.visible = false; st.guest.root.visible = false; st.resetWalker();
@@ -336,7 +337,7 @@ export function createGrillStory(ctx) {
           if (d < 2.4 && input.action()) { S.escort = true; n.wear(true); walker.setSpeedMul(0.3); ctx.prompt(null); }
         } else {                                                     // apoiado no jogador, do lado ESQUERDO (dá para ver olhando para a esquerda)
           const lf = { x: f.z, z: -f.x };
-          n.root.position.set(walker.x + lf.x * 0.72 + f.x * 0.05, walker.floor, walker.z + lf.z * 0.72 + f.z * 0.05);   // preso ao lado: vira junto, sem atraso
+          n.root.position.set(walker.x + lf.x * 1.15 - f.x * 0.05, walker.floor, walker.z + lf.z * 1.15 - f.z * 0.05);   // preso ao lado: vira junto, sem atraso
           n.root.rotation.y = Math.atan2(f.x, f.z);
           const moved = S.lastP ? Math.hypot(walker.x - S.lastP.x, walker.z - S.lastP.z) : 0; S.lastP = { x: walker.x, z: walker.z };
           S.stepPh = (S.stepPh || 0) + moved / 0.34 * Math.PI;         // passos no ritmo do jogador (mais lento, juntos)
@@ -352,6 +353,7 @@ export function createGrillStory(ctx) {
             timerEl.classList.remove('on'); S.phase = 'enter'; ctx.prompt(null);
             talkBox.fadeBlack(1, 900, () => {
               teardownOutside(); ctx.goInside(); storm.set(0.3, 520); walker.setSpeedMul(1);
+              if (S.near0) { rig.camera.near = S.near0; rig.camera.updateProjectionMatrix(); }
               const st = ST(); ctx.grillIn.setFP(true); st.resetWalker(); crowd.start(); crowd.level(1);
               const d = ctx.grillIn.door; walker.pose(d.x, d.z - 0.4, -Math.PI / 2);   // controle de volta já: olhando para o salão
               S.phase = 'back'; S.t = 0; S.ly = 0; S.lp = 0; S.g = { x: d.x - 0.2, z: d.z - 2.0, ph: 0, seated: false };
@@ -431,6 +433,7 @@ export function createGrillStory(ctx) {
   function camOut(c) {
     if (!S || S.phase !== 'rescue' && S.phase !== 'enter' && S.phase !== 'fail') return;
     const sway = ext ? 0.012 * Math.sin(ext.t * 1.3) : 0;
+    if (c.near > 0.06) { S.near0 = c.near; c.near = 0.05; c.updateProjectionMatrix(); }   // vê o vizinho de perto sem cortar
     view(c, walker.x, walker.floor + EYE, walker.z, walker.heading + sway, -0.04);
   }
 
