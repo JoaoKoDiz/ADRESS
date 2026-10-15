@@ -341,14 +341,14 @@ function buildStory(g, add, solid, P, col, BX, BOOTHS, W, D, WALL_H, WOOD, WOOD_
   const pg2 = new THREE.BufferGeometry(); pg2.setAttribute('position', new THREE.BufferAttribute(pos, 3));
   const flakes = new THREE.Points(pg2, new THREE.PointsMaterial({ color: '#f4f8ff', size: 0.09, transparent: true, opacity: 0.95, depthWrite: false }));
   out.add(flakes);
-  let t = 0, walkT = -1; const W2 = { z: -24, ph: 0 };
+  let t = 0, walkT = -1; const W2 = { z: 21, ph: 0 };
   const st = {
     patrons: [], k, kHead: { x: SX, y: kTop - 0.28, z: kZ }, seat: { x: SX, y: 1.6, z: seatZ }, owner, coatOnChair, guest, guestWalk, look, walkerNPC: walker,
     coatPoint: { x: BX - 2.3, z: BOOTHS[1] + 1.4 }, kPoint: { x: BX - 2.3, z: TZ }, fire: { x: -W + 2.6, z: FZ }, window: { x: W, z: 5.95 },
     fp: false,
     setFP(on) { st.fp = on; fp.visible = on; },
     /** O vizinho começa a chegar (cena da janela). */
-    startWalker() { walkT = 0; W2.z = -24; W2.ph = 0; walker.root.visible = true; },
+    startWalker() { walkT = 0; W2.z = 21; W2.ph = 0; walker.root.visible = true; },
     resetWalker() { walkT = -1; walker.root.visible = false; },
     tick(dt) {
       t += dt;
@@ -362,25 +362,25 @@ function buildStory(g, add, solid, P, col, BX, BOOTHS, W, D, WALL_H, WOOD, WOOD_
       flakes.geometry.attributes.position.needsUpdate = true;
       if (walkT >= 0) {                                              // anda com dificuldade até o poste e se segura ali
         walkT += dt;
-        const n = walker, z1 = PZ - 0.75, left = z1 - W2.z;
+        const n = walker, z1 = PZ + 0.75, left = W2.z - z1;   // vem do sul pela calçada da frente (sempre à vista da janela)
         if (left > 0.01) {
           // ritmo irregular; perto do poste, mais devagar; 2 tropeços leves (perde o equilíbrio e se recupera)
           let rate = 1.25 * (0.8 + 0.22 * Math.sin(walkT * 0.9) + 0.14 * Math.sin(walkT * 2.3 + 1)) * Math.min(1, 0.35 + left / 3);
           const stum = [3.0, 6.4].map(s => walkT - s).find(d => d > 0 && d < 0.9);
           if (stum !== undefined) rate *= 0.15;
           W2.ph += rate * dt * Math.PI * 2;
-          W2.z = Math.min(z1, W2.z + rate * 0.62 * dt * (0.55 + 0.9 * Math.abs(Math.sin(W2.ph))));   // avança junto com o passo (pés não deslizam)
+          W2.z = Math.max(z1, W2.z - rate * 1.0 * dt * (0.55 + 0.9 * Math.abs(Math.sin(W2.ph))));   // avança junto com o passo (pés não deslizam)
           const sw = Math.sin(W2.ph) * 0.42;
           n.legL.rotation.x = sw; n.legR.rotation.x = -sw;                                        // passos curtos
           n.body.position.y = -0.03 * Math.abs(Math.cos(W2.ph));
           n.body.rotation.x = 0.3 + 0.04 * Math.sin(W2.ph * 2);                                   // inclinado contra o vento
           n.body.rotation.z = 0.05 * Math.sin(W2.ph) + (stum !== undefined ? 0.16 * Math.sin(stum / 0.9 * Math.PI) : 0);
-          n.root.position.set(PX - 0.6 + 0.12 * Math.sin(walkT * 0.7), 0, W2.z); n.root.rotation.y = 0.08 * Math.sin(walkT * 0.5);
+          n.root.position.set(PX - 0.6 + 0.12 * Math.sin(walkT * 0.7), 0, W2.z); n.root.rotation.y = Math.PI + 0.08 * Math.sin(walkT * 0.5);
           n.armR.rotation.set(-2.25, 0, 0.55); n.armL.rotation.set(-1.0 + 0.25 * Math.sin(W2.ph), 0, -0.35);   // um braço no rosto, o outro equilibrando
           n.head.rotation.set(0.32, 0, 0);
         } else {                                                      // no poste: para, se segura e treme
           n.legL.rotation.x = n.legR.rotation.x = 0; n.body.position.y = 0;
-          n.root.rotation.y = -0.55;
+          n.root.rotation.y = Math.PI + 0.55;
           n.body.rotation.set(0.24 + 0.03 * Math.sin(walkT * 1.1), 0, 0.025 * Math.sin(walkT * 23) + 0.03 * Math.sin(walkT * 0.9));
           n.armL.rotation.set(-1.3, 0, -0.95); n.armR.rotation.set(-2.25 + 0.04 * Math.sin(walkT * 19), 0, 0.55); n.head.rotation.set(0.3, 0.08 * Math.sin(walkT * 0.6), 0);
         }

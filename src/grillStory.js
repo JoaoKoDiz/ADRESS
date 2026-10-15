@@ -274,7 +274,7 @@ export function createGrillStory(ctx) {
         break;
       case 'talk1': case 'talk2': case 'talk3': talkBox.update(dt); if (input.action()) talkBox.press(); break;   // só avança com E / Espaço
       case 'look': {                                                 // vira a cabeça para a janela (esquerda), observa, volta
-        const v = seatView(), toWin = 0, TURN = 1.9, WATCH = 9.5;
+        const v = seatView(), toWin = 0, TURN = 1.9, WATCH = 13;
         if (S.t < dt * 1.5) { ST().startWalker(); storm.set(0.32, 520); grillMusic.setLevel(0.25, 2.5); }
         const k = S.t < TURN ? ease(S.t / TURN) : S.t < TURN + WATCH ? 1 : 1 - ease((S.t - TURN - WATCH) / TURN);
         S.yaw = lerpAng(v.yaw, toWin, k); S.pitch = v.pitch * (1 - k) - 0.02 * k;
