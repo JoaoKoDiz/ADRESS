@@ -20,7 +20,8 @@ import { createGrillbyInside } from './grillbyInside.js';
 import { createGrillStory, GRILL_TALK_KEY, createCrowd } from './grillStory.js';
 import { createWorkshopStory, INTRO_KEY } from './workshopStory.js';
 import { createChurchCine } from './churchCine.js';
-import { createMassStory, MASS_KEY, BELL3_KEY, NOTICE_KEY } from './massStory.js';
+import { createMassStory, MASS_KEY, BELL3_KEY, NOTICE_KEY, createRainFx, createRainAudio } from './massStory.js';
+import { createExtraStory, EXTRA_DONE_KEY } from './extraStory.js';
 import { createNight } from './night.js';
 import { createFarmOutside } from './farmOutside.js';
 import { createReality } from './reality.js';
@@ -954,9 +955,10 @@ const title = createTitle({
 const shop = createShop();
 function openShop() { shop.open(); setState('shop'); }
 // Livre: seleção do bairro (todas as miniaturas na tela; setas escolhem, E joga). Depois o helicóptero decola.
-const levelSelect = createLevelSelect(l => confirmLevel(l));
+const levelSelect = createLevelSelect(l => confirmLevel(l), () => startExtra());   // (o 1º cartão da página dos extras: introdução do extra 1)
 function openLevelSelect() { levelSelect.setExtra(flagOn(MASS_KEY)); levelSelect.open(freeLevel); setState('levelSelect'); }   // (página dos 4 níveis extras: só depois do temporal)
 function confirmLevel(l) {
+  if (state === 'levelSelect' && l < 0 && levelSelect.onExtra) { startExtra(); return; }   // página dos extras: E/Enter abre o 1º
   if (state !== 'levelSelect' || l < 0 || RESERVED.includes(l)) return;   // (−1: página dos níveis extras, ainda sem fases)   // 17–19: reservados
   freeLevel = l;
   levelSelect.close();
@@ -1036,7 +1038,7 @@ const resetBumps = () => { bumps = 0; bumpHold.clear(); };
 /** Prédios comerciais da partida (grade): porta e frente do lote (as fachadas dão para o sul). */
 const shopFronts = () => game.pool.filter(h => HOUSES[h].kind === 'shop' && !boom.isDestroyed(h)).map(h => { const s = game.slotOf[h]; return { x: doorPoint(s).x, z: slotOrigin(s).z + L_LOT }; });
 const TIMER_PLAY = ['drive', 'ring', 'dialog', 'fuel', 'walk', 'missile', 'chat', 'inside'];                 // partida na tela: aparece
-const TIMER_OFF = ['title', 'levelSelect', 'levelFly', 'shop', 'mapIn', 'map', 'mapOut', 'fadeIn', 'fadeOut'];   // menus e fades: não conta
+const TIMER_OFF = ['title', 'levelSelect', 'levelFly', 'shop', 'mapIn', 'map', 'mapOut', 'fadeIn', 'fadeOut', 'extra'];   // menus e fades: não conta
 const missionsBtn = createMissionsButton(stage, () => {
   if (gameMode === 'career' && IN_GAME.includes(state) && !missions.isOpen) missions.open(careerLevel);
 });
@@ -1044,6 +1046,7 @@ let careerLevel = 0;                     // fase da Carreira sendo jogada
 let freeLevel = 0;                       // bairro escolhido no modo Livre
 const IN_GAME = ['drive', 'ring', 'dialog', 'missile', 'fuel', 'walk'];
 function showPlayPanel() {
+  menuWorld();                                          // depois do 4º sino: o fundo é sempre o Bairro 24 na chuva
   if (rig.mode !== 'overview') rig.toggle();
   rig.snap({ x: van.x, z: van.z, heading: van.heading, speed: 0 });
   fade = 0;
@@ -1082,6 +1085,8 @@ function goBack() {
     missions.close();
     careerMap.leave();
     showPlayPanel();
+  } else if (state === 'extra') {
+    endExtra(false);                                    // sair do nível extra: volta ao painel Jogar (nada é salvo)
   } else if (IN_GAME.includes(state)) {
     startNewRound();
     game.delivered = 0;
@@ -1425,6 +1430,7 @@ function endRoofScene() {
   startNewRound();
   game.delivered = 0;
   if (gameMode === 'career') career.stop && career.stop();
+  menuWorld();
   if (rig.mode !== 'overview') rig.toggle();
   rig.snap({ x: van.x, z: van.z, heading: van.heading, speed: 0 });
   fade = 0;
@@ -1661,6 +1667,74 @@ const massStory = createMassStory({ walker, input, talkBox, audio, thirdMusic, m
   snapCam: (x, z, h) => rig.snap({ x, z, heading: h, speed: 0 }),
   toTitle: () => { music.setOverride(null); thirdMusic.stop(); endRoofScene(); music.suspend(false); },   // corte seco para a tela inicial
 });              // acabamento especial da igreja só nas tomadas 9–25 s (churchCine.js)
+// ---------- Depois do 4º sino: chuva contínua e o nível extra 1 ----------
+// Enquanto os 4 níveis extras não terminam (EXTRA_DONE_KEY, ainda nunca gravado), chove em todos os bairros (Livre e Carreira)
+// e o fundo dos menus é o Bairro 24 na chuva. Um laço de som só (rainAudio), mais baixo nos menus, abafado nos interiores.
+const rainOn = () => flagOn(MASS_KEY) && !flagOn(EXTRA_DONE_KEY);
+const rainFx = createRainFx(), rainAudio = createRainAudio(audio);
+const _rl = new THREE.Vector3(), _rinv = new THREE.Matrix4();
+function menuWorld() { if (rainOn() && neighborhood !== 'med10') useNeighborhood('med10'); }
+const MENU_STATES = ['title', 'levelSelect', 'levelFly', 'shop'];
+// nos menus: além da chuva no bairro (que o desfoque apaga), riscos finos por cima do fundo desfocado (canvas 2D, embaixo dos botões)
+const rainVeil = document.createElement('canvas'); rainVeil.className = 'rain-veil';
+rainVeil.style.cssText = 'position:absolute;inset:0;width:100%;height:100%;pointer-events:none;z-index:0;opacity:0;transition:opacity .8s;background:rgba(22,28,38,.22)';
+const titleRoot = document.querySelector('.title'); if (titleRoot) titleRoot.prepend(rainVeil);
+const veilDrops = Array.from({ length: 260 }, () => ({ x: Math.random(), y: Math.random(), v: 0.9 + Math.random() * 0.8, l: 0.03 + Math.random() * 0.04, a: 0.12 + Math.random() * 0.22 }));
+function drawVeil(dt) {
+  const w = rainVeil.clientWidth | 0, h = rainVeil.clientHeight | 0; if (!w || !h) return;
+  if (rainVeil.width !== w || rainVeil.height !== h) { rainVeil.width = w; rainVeil.height = h; }
+  const g = rainVeil.getContext('2d'); g.clearRect(0, 0, w, h); g.lineWidth = 1;
+  for (const d of veilDrops) {
+    d.y += d.v * dt; d.x += d.v * dt * 0.12; if (d.y > 1.05) { d.y = -0.05; d.x = Math.random(); } if (d.x > 1) d.x -= 1;
+    g.strokeStyle = `rgba(215,225,238,${d.a})`; g.beginPath(); g.moveTo(d.x * w, d.y * h); g.lineTo(d.x * w - d.l * h * 0.12, d.y * h - d.l * h); g.stroke();
+  }
+}
+function updateRain(dt) {
+  const on = rainOn() && !extra.active && !massStory.active;
+  const menuS = MENU_STATES.includes(state) || inMap();
+  const chs = [church, medChurch].filter(c => c && c.parent === world.scene && c.visible !== false);
+  const cam = rig.camera.position;
+  const inChurch = chs.some(c => { c.updateMatrixWorld(); _rl.copy(cam).applyMatrix4(_rinv.copy(c.matrixWorld).invert()); return _rl.x > -24 && _rl.x < 24 && _rl.z > -58 && _rl.z < 2.4 && _rl.y < 72; });
+  rainAudio.set(on ? (menuS ? 0.16 : 0.3) : 0, insideOn || inChurch);
+  rainAudio.update(dt, document.hidden);
+  if (rainFx.object.parent !== world.scene) world.scene.add(rainFx.object);
+  rainFx.update(dt, cam, on && !inMap() ? 0.55 : 0, chs);
+  const veil = on && MENU_STATES.includes(state) && !document.hidden;
+  rainVeil.style.opacity = veil ? '1' : '0';
+  if (veil) drawVeil(dt);
+}
+const EXTRA_CSS = document.createElement('style');
+EXTRA_CSS.textContent = 'body.extra-on .ahud, body.extra-on .hint-btn { display: none !important; }';   // sem pista, contador nem dica (MENU, música e Voltar ficam)
+document.head.appendChild(EXTRA_CSS);
+const extra = createExtraStory({ walker, input, audio, renderer, onEnd: () => endExtra(true) });
+function startExtra() {
+  if (state !== 'levelSelect') return;
+  levelSelect.close(); setState('levelFly');
+  title.fadeOut(() => {
+    if (titleDriver) titleDriver.stop();
+    title.hide(); document.body.classList.add('extra-on');
+    talkBox.hide(); music.suspend(true, 0.8);
+    extra.camera.aspect = rig.camera.aspect; extra.camera.updateProjectionMatrix();
+    extra.start(); renderer.compile(extra.scene, extra.camera);
+    fade = 1; setState('extra');
+  });
+}
+/** Fim (ou saída) do extra 1: devolve o personagem ao bairro e volta à tela inicial (toTitle) ou ao painel Jogar. Nada é salvo. */
+function endExtra(toTitle) {
+  extra.stop();
+  document.body.classList.remove('extra-on');
+  world.scene.add(walker.object); walker.show(false); walker.setFloor(0);
+  music.suspend(false);
+  fade = 0;
+  if (toTitle) {
+    menuWorld();
+    if (rig.mode !== 'overview') rig.toggle();
+    rig.snap({ x: van.x, z: van.z, heading: van.heading, speed: 0 });
+    talkBox.fadeBlack(1, 0); title.show('home'); if (titleDriver) titleDriver.stop();
+    setState('title');
+    setTimeout(() => talkBox.fadeBlack(0, 1500), 60);
+  } else showPlayPanel();
+}
 let chseq = null;
 const _cl = new THREE.Vector3(), _cl2 = new THREE.Vector3();
 const chW = (x, y, z, out = new THREE.Vector3()) => medChurch.localToWorld(out.set(x, y, z));
@@ -2091,6 +2165,7 @@ function update(dt, t) {
   stateT += dt;
   wsStory.update(dt);                                // Bairro 24: a oficina (cenas e rotina)
   massStory.update(dt);                              // Bairro 24: a conversa da oficina, a missa e o temporal
+  updateRain(dt);                                    // depois do 4º sino: chuva em todos os bairros e nos menus
   grillCrowd.update(dt, document.hidden);
   if (matchTimer.armed && TIMER_PLAY.includes(state)) matchTimer.begin();
   if (!TIMER_OFF.includes(state) && !menu.isOpen && !missions.isOpen) matchTimer.tick(dt);   // (pausado com o MENU ou as missões abertas)
@@ -2268,6 +2343,12 @@ function update(dt, t) {
       }
       break;
     }
+    case 'extra':                                    // nível extra 1: o vazio, o cubo e a figura (cena própria)
+      van.stop();
+      if (Math.abs(extra.camera.aspect - rig.camera.aspect) > 1e-4) { extra.camera.aspect = rig.camera.aspect; extra.camera.updateProjectionMatrix(); }
+      extra.update(dt, menu.isOpen || document.hidden);
+      if (extra.active) fade = extra.fade;
+      break;
     case 'mstory':                                   // Bairro 24: conversa sobre a oficina, missa, temporal (controles parados)
       van.stop();
       break;
@@ -2467,7 +2548,7 @@ function updateHUD() {
   matchTimer.show((TIMER_PLAY.includes(state) && !approachLock()) || (state === 'fadeOut' && endToMap));   // cenas e aproximação da igreja: escondido
   music.setNowPlaying(nowPlaying());              // nome da faixa ao lado do botão de música
   music.setLift(talkBox.open);
-  back.set(state === 'levelSelect' || state === 'shop' || (state === 'map' && !missions.isOpen) || (IN_GAME.includes(state) && !missions.isOpen));
+  back.set(state === 'levelSelect' || state === 'shop' || (state === 'extra' && extra.active && extra.phase !== 'out') || (state === 'map' && !missions.isOpen) || (IN_GAME.includes(state) && !missions.isOpen));
   missionsBtn.set(gameMode === 'career' && IN_GAME.includes(state) && !missions.isOpen,
     `MISSÕES ${career.completedCount(careerLevel)}/5`);
   hud.setCounter(game.delivered);
@@ -2481,6 +2562,11 @@ function updateHUD() {
     return;
   }
   lock.set(false);
+  if (state === 'extra') {                           // nível extra 1: sem pista, contador, dica nem cronômetro
+    hud.setSub('', 'muted'); hud.setMain('', 'clue'); hintBtn.set('hidden'); hud.setPrompt(false);
+    hud.setFade(fade);
+    return;
+  }
   if (state === 'gstory') {                          // encontro com o K / resgate: só o aviso da ação
     hud.setSub('', 'muted'); hud.setMain('', 'clue'); hintBtn.set('hidden');
     hud.setPrompt(!!storyPrompt, stage.clientWidth / 2, stage.clientHeight * 0.66, 'up', storyPrompt || '');
@@ -2632,7 +2718,7 @@ renderer.setAnimationLoop(now => {
   elapsed += dt;
   update(dt, elapsed);
   updateHUD();
-  if (inMap()) renderer.render(careerMap.scene, careerMap.camera); else if (insideOn) renderer.render(grillIn.scene, grillIn.camera); else if (state === 'trolley') renderer.render(trolley.scene, trolley.camera); else if (state === 'laser' && fxCine.inSpace) renderer.render(fxCine.scene, fxCine.camera); else if (churchCine.active) churchCine.render(world.scene, rig.camera); else renderer.render(world.scene, rig.camera);
+  if (inMap()) renderer.render(careerMap.scene, careerMap.camera); else if (state === 'extra' && extra.active) renderer.render(extra.scene, extra.camera); else if (insideOn) renderer.render(grillIn.scene, grillIn.camera); else if (state === 'trolley') renderer.render(trolley.scene, trolley.camera); else if (state === 'laser' && fxCine.inSpace) renderer.render(fxCine.scene, fxCine.camera); else if (churchCine.active) churchCine.render(world.scene, rig.camera); else renderer.render(world.scene, rig.camera);
 });
 
 // ---------- Ganchos para testes automatizados ----------
@@ -2654,7 +2740,7 @@ window.ADRESS = {
   moonPlace(p, f) { van.teleport(0, 0, 0); FRAME.reset(new THREE.Vector3(...p).normalize(), new THREE.Vector3(...f), 0, 0); moonAnchor.x = moonAnchor.z = 0; FRAME.toSphere(0, 0, vanSph.p); moonUpdate(0, true); },
   get moonVan() { return { p: vanSph.p.toArray().map(v => +v.toFixed(3)), f: vanSph.f.toArray().map(v => +v.toFixed(3)), y: +van.simY.toFixed(2) }; },
   FRAME, MOONV: () => MOONV,
-  massStory, MASS_KEY, lockCP: n => STORY_CP.apply(n), devMissions: DEV_MISSIONS, get parcelVisible() { return !!parcel.parent; },
+  massStory, MASS_KEY, extra, startExtra, rainFx, rainAudio, get rainOn() { return rainOn(); }, menuWorld, lockCP: n => STORY_CP.apply(n), devMissions: DEV_MISSIONS, get parcelVisible() { return !!parcel.parent; },
   laser, ursa, solar, reality, startLaser,
   get church() { return church; }, get venK() { return venK; }, startVeniceTalk, churchStage, get greenBell() { return greenBell; }, get churchBell() { return churchBell; },
   churchReveal() { if (churchOn && !churchShown) { approach.phase = 'revealed'; revealChurch(true); } },
@@ -2681,5 +2767,7 @@ window.ADRESS = {
   /** Coloca a van parada no ponto de entrega da casa h, virada para leste. */
   placeVanAtDoor(h) { const p = doorPoint(game.slotOf[h]); van.teleport(p.x, p.z, 0); },
   /** Executa n quadros de simulação com passo fixo (útil quando o requestAnimationFrame está parado). */
-  step(n = 1, dt = 1 / 60) { for (let i = 0; i < n; i++) { elapsed += dt; update(dt, elapsed); updateHUD(); } if (inMap()) renderer.render(careerMap.scene, careerMap.camera); else if (insideOn) renderer.render(grillIn.scene, grillIn.camera); else if (state === 'trolley') renderer.render(trolley.scene, trolley.camera); else if (state === 'laser' && fxCine.inSpace) renderer.render(fxCine.scene, fxCine.camera); else if (churchCine.active) churchCine.render(world.scene, rig.camera); else renderer.render(world.scene, rig.camera); },
+  step(n = 1, dt = 1 / 60) { for (let i = 0; i < n; i++) { elapsed += dt; update(dt, elapsed); updateHUD(); } if (inMap()) renderer.render(careerMap.scene, careerMap.camera); else if (state === 'extra' && extra.active) renderer.render(extra.scene, extra.camera); else if (insideOn) renderer.render(grillIn.scene, grillIn.camera); else if (state === 'trolley') renderer.render(trolley.scene, trolley.camera); else if (state === 'laser' && fxCine.inSpace) renderer.render(fxCine.scene, fxCine.camera); else if (churchCine.active) churchCine.render(world.scene, rig.camera); else renderer.render(world.scene, rig.camera); },
 };
+// depois do 4º sino o fundo dos menus já começa no Bairro 24 (na chuva)
+menuWorld();

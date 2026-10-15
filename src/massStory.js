@@ -57,7 +57,7 @@ const MASS_T = { stormAt: 6, stormFull: 17, camB: 8.5, look: 15.5, stand: 17.2, 
 const SHOP_T = 12.5, BELL_FALL = 1.7, BLACK_T = 5;
 
 /** Chuva e vento (WebAudio, sem arquivo): chiado da água + rumor grave + trovões. Abafado dentro (cutoff baixo). */
-function createRainAudio(audio) {
+export function createRainAudio(audio) {
   let N = null, lvl = 0, cut = 900, cur = 0, curCut = 900, t = 0, nextThunder = 6;
   function build() {
     const ac = audio.ctx; if (!ac) return null;
@@ -120,13 +120,13 @@ function bellImpact(audio) {
 }
 
 /** Chuva visível: riscos caindo em volta da câmera, inclinados pelo vento; nunca dentro da igreja nem da oficina coberta. */
-function createRainFx() {
+export function createRainFx() {
   const N = 5000, pos = new Float32Array(N * 6), seed = new Float32Array(N * 3);
   for (let i = 0; i < N; i++) { seed[i * 3] = Math.random(); seed[i * 3 + 1] = Math.random(); seed[i * 3 + 2] = Math.random(); }
   const geo = new THREE.BufferGeometry(); geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
   const mat = new THREE.LineBasicMaterial({ color: '#c9d2dc', transparent: true, opacity: 0.55, depthWrite: false, fog: true });
   const lines = new THREE.LineSegments(geo, mat); lines.frustumCulled = false; lines.renderOrder = 3;
-  const inv = new THREE.Matrix4(), _p = new THREE.Vector3();
+  const invAll = [], _p = new THREE.Vector3();
   let t = 0;
   return {
     object: lines,
@@ -134,7 +134,8 @@ function createRainFx() {
       t += dt; lines.visible = level > 0.02; if (!lines.visible) return;
       mat.opacity = 0.2 + 0.45 * level;
       const BX = 46, BY = 30, BZ = 46, sp = 34, wx = 9 * level, wz = 4 * level, L = 0.9 + 0.8 * level, n = Math.floor(N * Math.min(1, 0.15 + level));
-      if (church) { church.updateMatrixWorld(); inv.copy(church.matrixWorld).invert(); }
+      const chs = Array.isArray(church) ? church.filter(Boolean) : church ? [church] : [];   // (uma ou várias igrejas: nunca chove dentro)
+      const invs = chs.map((c, j) => { c.updateMatrixWorld(); return (invAll[j] = invAll[j] || new THREE.Matrix4()).copy(c.matrixWorld).invert(); });
       for (let i = 0; i < N; i++) {
         const o = i * 6;
         if (i >= n) { pos[o + 1] = pos[o + 4] = -999; continue; }
@@ -142,7 +143,7 @@ function createRainFx() {
         const ky = (cam.y + BY / 2 - y) / sp;
         let x = cam.x + (seed[i * 3] - 0.5) * BX + wx * ky, z = cam.z + (seed[i * 3 + 2] - 0.5) * BZ + wz * ky;
         x = cam.x + ((x - cam.x + BX * 1.5) % BX) - BX / 2; z = cam.z + ((z - cam.z + BZ * 1.5) % BZ) - BZ / 2;
-        if (church) { _p.set(x, y, z).applyMatrix4(inv); if (_p.x > -24 && _p.x < 24 && _p.z > -58 && _p.z < 2.4 && _p.y < 72) { pos[o + 1] = pos[o + 4] = -999; continue; } }
+        if (invs.length && invs.some(m => { _p.set(x, y, z).applyMatrix4(m); return _p.x > -24 && _p.x < 24 && _p.z > -58 && _p.z < 2.4 && _p.y < 72; })) { pos[o + 1] = pos[o + 4] = -999; continue; }
         pos[o] = x; pos[o + 1] = y; pos[o + 2] = z;
         pos[o + 3] = x - wx / sp * L * 3; pos[o + 4] = y + L; pos[o + 5] = z - wz / sp * L * 3;
       }

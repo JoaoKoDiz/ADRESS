@@ -32,6 +32,9 @@ const CSS = `
   display: none; align-items: center; justify-content: center; box-shadow: 0 3px 0 rgba(168,72,11,.55), 0 5px 12px rgba(0,0,0,.25); transition: transform .12s; }
 .lsel-nextwrap.info .lsel-info { display: flex; }
 .lsel-nextwrap.gone { visibility: hidden; }
+/* 1º nível extra: clicável (sem nome; borda laranja ao passar o mouse) */
+.lsel-grid.extra .lsel-card.xtra.x1 { cursor: pointer; transition: border-color .15s, transform .15s; }
+.lsel-grid.extra .lsel-card.xtra.x1:hover { border-color: #FF7A1A; transform: scale(1.02); }
 /* página dos 4 níveis extras (história secundária): 4 cartões altos = a altura das 2 fileiras da página anterior */
 .lsel-grid.extra .lsel-card.xtra { box-sizing: border-box; background: #ffffff; border: 3px solid rgba(201,167,106,.75); cursor: default; box-shadow: 0 4px 12px rgba(0,0,0,.18), inset 0 0 0 6px #fffaf0; }
 .lsel-grid.extra .lsel-card.xtra::after { content: ''; position: absolute; inset: 12px; border-radius: clamp(6px, .8vw, 12px); border: 2px dashed rgba(201,167,106,.45); }
@@ -64,7 +67,7 @@ export const NAMES = ['Bairro Raízes', 'Bairro Horizontes', 'Bairro Constância
 const TITLE = i => (i === 9 ? 'NÍVEL ' : 'BAIRRO ') + (i + 1);
 const COLS = 4, PER = 8;                    // 8 por página (4×2); as páginas seguem sozinhas conforme entram bairros
 
-export function createLevelSelect(onPick) {
+export function createLevelSelect(onPick, onExtraPick) {
   const style = document.createElement('style');
   style.textContent = CSS;
   document.head.appendChild(style);
@@ -107,11 +110,12 @@ export function createLevelSelect(onPick) {
     const box = modal.querySelector('.lsel-modal-box'); box.innerHTML = extra ? INFO_EXTRA : INFO0;
     const ok = box.querySelector('.lsel-modal-ok'); ok.tabIndex = -1; ok.addEventListener('mousedown', e => e.preventDefault()); ok.addEventListener('click', closeInfo);
   }
-  /** Página dos 4 níveis extras (posições 25–28): 4 cartões brancos e altos, ainda sem conteúdo (clicar não inicia nada). */
+  /** Página dos 4 níveis extras (posições 25–28): 4 cartões brancos e altos, o 1º abre a introdução do extra 1; os outros ainda sem conteúdo. */
   function showExtra() {
     const h = grid.getBoundingClientRect().height;               // a altura das 2 fileiras (com o espaço entre elas)
     onExtra = true; page = pages(); grid.textContent = ''; grid.classList.add('extra');
-    for (let k = 0; k < 4; k++) { const c = document.createElement('div'); c.className = 'lsel-card xtra'; c.dataset.level = String(24 + k); if (h > 0) c.style.height = h + 'px'; grid.appendChild(c); }
+    for (let k = 0; k < 4; k++) { const c = document.createElement('div'); c.className = 'lsel-card xtra'; c.dataset.level = String(24 + k); if (h > 0) c.style.height = h + 'px'; grid.appendChild(c);
+      if (k === 0) { c.classList.add('x1'); c.addEventListener('click', () => onExtraPick && onExtraPick(0)); } }   // o 1º extra já tem a introdução
     prevBtn.classList.remove('off'); nextWrap.classList.add('gone'); playBtn.classList.add('gone');
   }
   function leaveExtra() { onExtra = false; grid.classList.remove('extra'); nextWrap.classList.remove('gone'); playBtn.classList.remove('gone'); }
