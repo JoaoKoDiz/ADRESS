@@ -19,6 +19,7 @@ import { buildGrillbyLot } from './models/grillby.js';
 import { createGrillbyInside } from './grillbyInside.js';
 import { createGrillStory, GRILL_TALK_KEY, createCrowd } from './grillStory.js';
 import { createWorkshopStory, INTRO_KEY } from './workshopStory.js';
+import { createChurchCine } from './churchCine.js';
 import { createNight } from './night.js';
 import { createFarmOutside } from './farmOutside.js';
 import { createReality } from './reality.js';
@@ -1593,7 +1594,8 @@ const bellDrop = b => BELL_SPOT.y - b.userData.h - BELL_SPOT.floor;
 let medChurch = null, medScene = null;
 const wsStory = createWorkshopStory({ walker, van, talkBox, input,
   storyOn: () => gameMode === 'free' && !!MEDV && flagOn(GRILL_TALK_KEY), getState: () => state,
-  preload: () => { thirdMusic.load().catch(() => {}); }, onEnding: () => startChurchSeq(), setState: s => { setState(s); if (s !== 'wstory') actionLock = 0.4; } });   // (o E que fecha a fala não aciona outra coisa)
+  preload: () => { thirdMusic.load().catch(() => {}); if (medChurch && medChurch.parent === world.scene) churchCine.prepare(world.scene, medChurch, rig.camera, world); },   // (montagem: música e acabamento prontos antes)
+  onEnding: () => startChurchSeq(), setState: s => { setState(s); if (s !== 'wstory') actionLock = 0.4; } });   // (o E que fecha a fala não aciona outra coisa)
 function setupMedStory() {
   if (!MEDV || !MEDV.extra) { wsStory.setup(null); return; }
   const X = MEDV.extra, C = X.church;
@@ -1629,6 +1631,7 @@ function setupMedStory() {
   for (const b of medChurch.userData.newBells) b.visible = flagOn(INTRO_KEY);   // os sinos laranja e roxo, depois da montagem
   medChurch.userData.pewK.visible = flagOn(INTRO_KEY) && gameMode === 'free';    // o K no banco de sempre
   if (chseq) endChurchSeqAbort();
+  churchCine.release();                                        // (troca de partida, tela preta: tira o acabamento da montagem da cena)
   rig.setExtraBoxes([...C.cam, [X.shop.box.x0, X.shop.box.z0, X.shop.box.x1, X.shop.box.z1, 5.6]]);
 }
 // ---------- Bairro 24: a montagem da igreja (depois da conversa final da oficina) ----------
@@ -1638,6 +1641,7 @@ function setupMedStory() {
 const thirdMusic = createChurchMusic(audio, thirdUrl, 0.6, () => { if (state !== 'chseq') { music.setOverride(null); music.suspend(false); } });
 const THIRD_OVR = { get on() { return thirdMusic.playing; }, toggle() { if (thirdMusic.playing) thirdMusic.pause(); else thirdMusic.resume(); } };
 const SEQ_CUTS = [9, 13, 16, 19, 22, 25];
+const churchCine = createChurchCine(renderer);              // acabamento especial da igreja só nas tomadas 9–25 s (churchCine.js)
 let chseq = null;
 const _cl = new THREE.Vector3(), _cl2 = new THREE.Vector3();
 const chW = (x, y, z, out = new THREE.Vector3()) => medChurch.localToWorld(out.set(x, y, z));
@@ -1653,6 +1657,7 @@ function churchSpot() {                                // entrada (de fora, olha
 }
 function startChurchSeq() {
   const sp = churchSpot();
+  if (!churchCine.ready) churchCine.prepare(world.scene, medChurch, rig.camera, world);
   chseq = { t: 0, sp, mp: false, line: 0, ended: false };
   music.suspend(true, 0.6);                             // a de fundo some rápido; a nova começa já
   if (thirdMusic.ready) thirdMusic.play(0.05); else thirdMusic.load().then(() => { if (chseq && !chseq.ended && !thirdMusic.active && chseq.t < 20) { thirdMusic.play(0.05); } }).catch(() => {});
@@ -1662,7 +1667,7 @@ function startChurchSeq() {
   for (const b of medChurch.userData.newBells) b.visible = false;
   setState('chseq');
 }
-function endChurchSeqAbort() { chseq = null; wsStory.endCall(); talkBox.hide(); }
+function endChurchSeqAbort() { chseq = null; churchCine.off(); wsStory.endCall(); talkBox.hide(); }
 function updateChurchSeq(dt) {
   const q = chseq; if (!q) return;
   if (menu.isOpen || document.hidden) { if (thirdMusic.playing) { thirdMusic.pause(); q.mp = true; } return; }   // pausa: música e linha de tempo juntas
@@ -1675,8 +1680,9 @@ function updateChurchSeq(dt) {
   if (q.line === 1) { talkBox.update(dt); if (T >= 8.9 && talkBox.open) talkBox.hide(); }
   walker.show(false);
   for (const b of medChurch.userData.newBells) b.visible = T >= 22;               // só na 2ª tomada da fachada
+  if (T < 25) churchCine.set(T >= 9 && T < 13 || T >= 22 ? 'ext' : T >= 13 ? 'int' : null, dt);   // acabamento especial junto com cada corte
   if (T >= 25) {                                                                   // controle de volta: a pé na entrada; K no banco
-    q.ended = true; chseq = null; talkBox.hide();
+    q.ended = true; chseq = null; talkBox.hide(); churchCine.off();                // visual normal junto com a troca de câmera
     try { localStorage.setItem(INTRO_KEY, '1'); } catch (e) { /* */ }
     wsStory.endCall();
     medChurch.userData.pewK.visible = true;
@@ -2597,7 +2603,7 @@ renderer.setAnimationLoop(now => {
   elapsed += dt;
   update(dt, elapsed);
   updateHUD();
-  if (inMap()) renderer.render(careerMap.scene, careerMap.camera); else if (insideOn) renderer.render(grillIn.scene, grillIn.camera); else if (state === 'trolley') renderer.render(trolley.scene, trolley.camera); else if (state === 'laser' && fxCine.inSpace) renderer.render(fxCine.scene, fxCine.camera); else renderer.render(world.scene, rig.camera);
+  if (inMap()) renderer.render(careerMap.scene, careerMap.camera); else if (insideOn) renderer.render(grillIn.scene, grillIn.camera); else if (state === 'trolley') renderer.render(trolley.scene, trolley.camera); else if (state === 'laser' && fxCine.inSpace) renderer.render(fxCine.scene, fxCine.camera); else if (churchCine.active) churchCine.render(world.scene, rig.camera); else renderer.render(world.scene, rig.camera);
 });
 
 // ---------- Ganchos para testes automatizados ----------
@@ -2632,7 +2638,7 @@ window.ADRESS = {
   get careerLevel() { return careerLevel; },
   setCareerLevel(l) { careerLevel = l; },
   setFreeLevel(l) { freeLevel = l; },
-  walker, jamSound, cityAmb, train, walkSolids, trolley, get tseq() { return tseq; }, get FAVELA() { return FAVELA; }, traffic, tractors, chickens, plow, workTraffic, banks, get SNOWV() { return SNOWV; }, get MEDV() { return MEDV; }, medLife, get chatNpc() { return chatNpc; }, night, get grillIn() { return grillIn; }, get insideOn() { return insideOn; }, grillStory, wsStory, grillMusic, rainMusic, thirdMusic, nowPlaying, get chseq() { return chseq; }, churchDbg: () => ({ t: churchMusic.time, two: churchMusic === churchMusic2, vis: !!church && church.visible, a: churchA, shown: churchShown, phase: approach.phase }), get medChurch() { return medChurch; }, grillDoor: o => grillDoorWorld(o), get churchPewK() { return church && church.userData.pewK.visible; }, churchStage, get FARMLAND() { return FARMLAND; }, get GARDV() { return GARDV; }, gardGate, gateOpen, openGate,
+  walker, jamSound, cityAmb, train, walkSolids, trolley, get tseq() { return tseq; }, get FAVELA() { return FAVELA; }, traffic, tractors, chickens, plow, workTraffic, banks, get SNOWV() { return SNOWV; }, get MEDV() { return MEDV; }, medLife, get chatNpc() { return chatNpc; }, night, get grillIn() { return grillIn; }, get insideOn() { return insideOn; }, grillStory, wsStory, grillMusic, rainMusic, thirdMusic, churchCine, nowPlaying, get chseq() { return chseq; }, churchDbg: () => ({ t: churchMusic.time, two: churchMusic === churchMusic2, vis: !!church && church.visible, a: churchA, shown: churchShown, phase: approach.phase }), get medChurch() { return medChurch; }, grillDoor: o => grillDoorWorld(o), get churchPewK() { return church && church.userData.pewK.visible; }, churchStage, get FARMLAND() { return FARMLAND; }, get GARDV() { return GARDV; }, gardGate, gateOpen, openGate,
   get levelSelect() { return levelSelect; }, matchTimer, get bumps() { return bumps; }, HOUSES, shopFronts,
   shop,
   startGame: m => startFree(m), newRound: () => startNewRound(),
@@ -2646,5 +2652,5 @@ window.ADRESS = {
   /** Coloca a van parada no ponto de entrega da casa h, virada para leste. */
   placeVanAtDoor(h) { const p = doorPoint(game.slotOf[h]); van.teleport(p.x, p.z, 0); },
   /** Executa n quadros de simulação com passo fixo (útil quando o requestAnimationFrame está parado). */
-  step(n = 1, dt = 1 / 60) { for (let i = 0; i < n; i++) { elapsed += dt; update(dt, elapsed); updateHUD(); } if (inMap()) renderer.render(careerMap.scene, careerMap.camera); else if (insideOn) renderer.render(grillIn.scene, grillIn.camera); else if (state === 'trolley') renderer.render(trolley.scene, trolley.camera); else if (state === 'laser' && fxCine.inSpace) renderer.render(fxCine.scene, fxCine.camera); else renderer.render(world.scene, rig.camera); },
+  step(n = 1, dt = 1 / 60) { for (let i = 0; i < n; i++) { elapsed += dt; update(dt, elapsed); updateHUD(); } if (inMap()) renderer.render(careerMap.scene, careerMap.camera); else if (insideOn) renderer.render(grillIn.scene, grillIn.camera); else if (state === 'trolley') renderer.render(trolley.scene, trolley.camera); else if (state === 'laser' && fxCine.inSpace) renderer.render(fxCine.scene, fxCine.camera); else if (churchCine.active) churchCine.render(world.scene, rig.camera); else renderer.render(world.scene, rig.camera); },
 };

@@ -432,6 +432,7 @@ export function buildChurch() {
   const pr = buildPewReader(0.62); pr.position.set(2.3, 0, -16 - 5 * 1.4); pr.rotation.y = Math.PI / 2; root.add(pr);
   root.userData.pewK = pr;
   root.userData.materials = Object.values(mats);
+  root.userData.matByKey = mats;
   return root;
 }
 
