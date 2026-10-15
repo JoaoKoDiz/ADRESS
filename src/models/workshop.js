@@ -95,9 +95,22 @@ export function buildWorkshop() {
   for (const [a, b, l] of [[-0.28, -0.28, 0.55], [0.28, -0.28, 0.55], [-0.28, 0.28, 0.55]]) chair.add(at(box(0.07, l, 0.07, '#5a3a22'), a, l / 2, b));
   chair.add(at(box(0.07, 0.55, 0.07, '#5a3a22'), 0.55, 0.06, 0.4, 0, 0, Math.PI / 2));   // a perna que soltou, no chão
 
+  // celular do K, deitado sobre a bancada (a tela acende numa chamada; sem som)
+  const phone = new THREE.Group(); phone.position.set(0.5, 1.0, -5.95); phone.rotation.y = 0.35; root.add(phone);
+  phone.add(at(box(0.17, 0.025, 0.32, '#1b1d22'), 0, 0.013, 0));
+  const scr = document.createElement('canvas'); scr.width = 64; scr.height = 128;
+  const paintScreen = on => { const g = scr.getContext('2d'); g.fillStyle = on ? '#1e3a5c' : '#08090b'; g.fillRect(0, 0, 64, 128);
+    if (on) { g.fillStyle = '#eaf4ff'; g.fillRect(14, 20, 36, 4); g.fillRect(20, 30, 24, 3); g.beginPath(); g.arc(32, 62, 12, 0, Math.PI * 2); g.fillStyle = '#9ec6ff'; g.fill();
+      g.beginPath(); g.arc(18, 104, 9, 0, Math.PI * 2); g.fillStyle = '#e24a4a'; g.fill(); g.beginPath(); g.arc(46, 104, 9, 0, Math.PI * 2); g.fillStyle = '#3ccf6a'; g.fill(); } };
+  paintScreen(false);
+  const scrTex = new THREE.CanvasTexture(scr), scrMat = new THREE.MeshBasicMaterial({ map: scrTex, toneMapped: false });
+  const screen = new THREE.Mesh(new THREE.PlaneGeometry(0.15, 0.29), scrMat); screen.rotation.x = -Math.PI / 2; screen.position.y = 0.027; phone.add(screen);
+  const phoneGlow = new THREE.PointLight('#8fc0ff', 0, 1.6, 2); phoneGlow.position.y = 0.2; phone.add(phoneGlow);
   root.traverse(o => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
   const api = {
-    root, roof, doorPivot, grip, chair, newHinges, oldHinges,
+    root, roof, doorPivot, grip, chair, newHinges, oldHinges, phone,
+    /** Tela do celular: acesa com a chamada recebida (pisca de leve) ou apagada. */
+    setPhone(on, t = 0) { const k = on ? 0.75 + 0.25 * Math.sin(t * 6) : 0; paintScreen(on); scrTex.needsUpdate = true; scrMat.color.setScalar(on ? k : 1); phoneGlow.intensity = on ? 0.6 * k : 0; },
     /** Mostra o que já foi feito (não volta ao estado inicial). */
     setStage(n) {
       oldHinges.visible = n < 2; newHinges.visible = n >= 2;

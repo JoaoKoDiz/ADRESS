@@ -89,7 +89,15 @@ export function createMusic(stageEl, src = 'assets/musica-fundo.mp3') {
     /** Volume da música (Configurações), 0..1. */
     setVolume(v) { vol = v; audio.volume = BASE * vol; },
     /** Cena com música própria: pausa a de fundo SEM mudar a preferência salva; false volta como estava. */
-    suspend(on) { suspended = on; if (on) audio.pause(); else if (isOn() && started) play(); },
+    suspend(on, fade = 0) {
+      suspended = on;
+      if (on && fade > 0 && !audio.paused) {                      // some em `fade` s (sem atrasar quem começa a tocar agora)
+        const v0 = audio.volume, t0 = performance.now();
+        const id = setInterval(() => { const k = (performance.now() - t0) / (fade * 1000); if (!suspended || k >= 1) { clearInterval(id); if (suspended) audio.pause(); audio.volume = BASE * vol; } else audio.volume = v0 * (1 - k); }, 30);
+        return;
+      }
+      if (on) audio.pause(); else if (isOn() && started) play();
+    },
     get playing() { return !audio.paused; },
     /** Cena: o botão passa a controlar outra faixa ({ on, toggle() }); null devolve. A preferência salva não muda. */
     setOverride(o) { override = o; paint(); },

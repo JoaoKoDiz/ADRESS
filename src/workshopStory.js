@@ -34,7 +34,9 @@ const W_END = ['Agora temos uma porta que abre. [...] Uma bancada que aguenta o 
   'O que fizemos continua aqui, mesmo enquanto ninguém está olhando.', 'Eu queria que este lugar pudesse servir às pessoas de novo.', 'Isso ainda importa para mim.',
   'Para mim, a **perseverança** começa a fazer sentido aí.',
   'Continuar cuidando do que importa. [...] Aprender com o que não funcionou. [...] Aceitar ajuda.', 'Sem precisar esquecer que também ficamos cansados.',
-  'Obrigado por ter dividido esse trabalho comigo.', 'Vou ficar um pouco ali ao lado.', 'Se quiser continuar nossa conversa, [...] pode me encontrar lá.'].map(L);
+  'Obrigado por ter dividido esse trabalho comigo.', 'Bom, [...] acho que já podemos ir.'].map(L);
+export const INTRO_KEY = 'adress.med.churchIntro';                    // a montagem da igreja já terminou (não repete)
+const introDone = () => { try { return localStorage.getItem(INTRO_KEY) === '1'; } catch (e) { return false; } };
 // pedidos curtos do K (quem procurar) e falas dos fornecedores (onde estava guardado), sem virar uma missão à parte
 const TASKS = {
   1: { item: 'ferragens', ask: ['O ferreiro, perto da praça, deve ter dobradiças e um ferrolho que sirvam.'], from: 'smith', give: ['Dobradiças e um ferrolho, como ele pediu.', 'Diga que, se faltar alguma coisa, é só voltar.'], obj: ['Busque as ferragens com o ferreiro (perto da praça).', 'Leve as ferragens até a oficina, ao lado da igreja.'] },
@@ -80,7 +82,8 @@ export function createWorkshopStory(ctx) {
     if (!ws) return;
     const st = stage(), vis = ctx.storyOn();
     ws.setStage(Math.min(st, 4));
-    k.visible = vis; placeK(st >= 2 ? K_BENCH : K_DOOR);
+    k.visible = vis && !(st >= 5 && introDone()); placeK(st >= 2 ? K_BENCH : K_DOOR);   // depois da montagem, o K está na igreja
+    ws.setPhone(false);
     elder.root.visible = true;
   }
 
@@ -92,7 +95,7 @@ export function createWorkshopStory(ctx) {
     if (on() && task && !task.picked && footNear(E.from[TASKS[task.step].from])) return 'Buscar ' + TASKS[task.step].item;
     if (!nearK() || task) return '';
     const st = stage();
-    return st === 0 || st === 4 ? 'Conversar' : st >= 1 && st <= 3 ? 'Ajudar na oficina' : '';
+    return st === 0 || st === 4 || (st >= 5 && !introDone()) ? 'Conversar' : st >= 1 && st <= 3 ? 'Ajudar na oficina' : '';
   }
   function walkAction() {
     const a = walkPrompt(); if (!a) return false;
@@ -100,6 +103,7 @@ export function createWorkshopStory(ctx) {
     if (a.startsWith('Buscar')) startCine('pickup');
     else if (st === 0) startCine('meet');
     else if (st === 4) startCine('end');
+    else if (st >= 5) startCine('again');                      // (o jogo fechou durante a montagem: só a última fala e a montagem de novo)
     else startCine('ask');
     return true;
   }
@@ -130,7 +134,13 @@ export function createWorkshopStory(ctx) {
     if (kind === 'meet') { placeK(K_DOOR); ws.doorPivot.rotation.y = 0.9; }
     if (kind === 'pickup') talkBox.show(TASKS[task.step].give.map(L), () => { task.picked = true; done(); }, HINT);
     if (kind === 'ask') { const step = st; talkBox.show(TASKS[step].ask.map(L), () => { task = { step, picked: false }; done(); }, HINT); }
-    if (kind === 'end') talkBox.show(W_END, () => { setStage(5); try { localStorage.setItem('adress.med.talk1', '1'); } catch (e) { /* */ } done(); }, HINT);
+    if (kind === 'end' || kind === 'again') {
+      if (ctx.preload) ctx.preload();                                // a faixa da montagem fica pronta antes do tempo zero
+      talkBox.show(kind === 'end' ? W_END : W_END.slice(-1), () => {
+        setStage(5); try { localStorage.setItem('adress.med.talk1', '1'); } catch (e) { /* */ }   // oficina concluída (salva antes da montagem)
+        S = { kind: 'call', t: 0, phase: 0 }; ctx.onEnding();          // tempo zero: a chamada no celular (main.js conduz a montagem)
+      }, HINT);
+    }
   }
   function done() { if (S && (S.kind === 'meet' || S.kind === 'door')) holdDoor(0); S = null; ws.roof.visible = true; ctx.setState(prevState === 'wstory' ? 'walk' : prevState); }
   const cams = {
@@ -150,8 +160,8 @@ export function createWorkshopStory(ctx) {
     ws.roof.visible = !inside && !(S && S.kind !== 'pickup' && S.kind !== 'ask');
     if (!S) return;
     S.t += dt;
-    talkBox.update(dt);
-    if (talkBox.open && S.t > 0.2 && input.action()) talkBox.press();   // E / Espaço: completa a fala; com ela completa, avança
+    if (S.kind !== 'call') talkBox.update(dt);                       // (na montagem, main.js conduz a fala pelo tempo da música)
+    if (S.kind !== 'call' && talkBox.open && S.t > 0.2 && input.action()) talkBox.press();   // E / Espaço: completa a fala; com ela completa, avança
     if (!S) return;                                                  // (a fala acabou e a cena terminou)
     const T = S.t;
     switch (S.kind) {
@@ -196,12 +206,13 @@ export function createWorkshopStory(ctx) {
         if (S.phase === 2 && T >= 4.8) { S.phase = 3; k.position.y = 0; setStage(4); task = null; done(); }
         break;
       }
+      case 'call': break;                                            // (montagem: main.js chama call() com o tempo da música)
       default: break;
     }
   }
   /** Câmera das cenas lá dentro (depois do rig.update). Coleta e pedidos: a câmera do jogo continua. */
   function applyCam(cam) {
-    if (!S || S.kind === 'pickup') return;
+    if (!S || S.kind === 'pickup' || S.kind === 'call') return;
     const c = S.kind === 'meet' ? cams.door : S.kind === 'door' ? cams.open : cams.bench;
     const p = W(...c.pos), l = W(...c.look); cam.position.copy(p); cam.lookAt(l);
   }
@@ -210,6 +221,13 @@ export function createWorkshopStory(ctx) {
     /** Nova partida / saiu do bairro: a coleta não entregue se perde (os consertos ficam). */
     resetTask() { task = null; if (S) { talkBox.hide(); S = null; } refresh(); },
     get _ws() { return ws; }, get _k() { return k; },
+    /** Montagem: chamada no celular (T = tempo desde o início da chamada). O K olha o aparelho e volta. */
+    call(T) { if (!ws) return; ws.setPhone(T < 8.9, T); const u = T < 0.5 ? 0 : T < 1.2 ? (T - 0.5) / 0.7 : T < 2.6 ? 1 : T < 3.2 ? 1 - (T - 2.6) / 0.6 : 0;
+      k.rotation.y = K_BENCH.ry - 0.35 * u * u * (3 - 2 * u); },
+    /** Fim da montagem: a oficina fica sem o K (ele está na igreja). */
+    endCall() { S = null; if (ws) { ws.setPhone(false); ws.roof.visible = true; } refresh(); },
+    /** Ponto local da oficina → mundo. */
+    local: (x, y, z) => W(x, y, z),
     get busy() { return !!task; }, get stage() { return stage(); }, get cine() { return S && S.kind; }, get task() { return task; },
     get points() { return E && { ...E.from, front: E.shop.front, door: E.shop.door }; },
   };
