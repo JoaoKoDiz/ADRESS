@@ -409,6 +409,7 @@ export function createExtraStory(ctx) {
     S.fig0 = fig.position.clone();
     for (let i = 0; i < SN; i++) seedStreak(i, -40 + Math.random() * 300);
     go('travel');
+    ctx.onTravel && ctx.onTravel();                     // a música do deslocamento começa neste instante
   }
   // vento abafado do deslocamento (efeitos; WebAudio, sem arquivo)
   let W = null;

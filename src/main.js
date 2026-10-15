@@ -85,6 +85,9 @@ import talkTrackUrl from '../assets/church-talk.mp3';
 import secondSanctuaryUrl from '../assets/second-sanctuary.mp3';
 import innocentTimeUrl from '../assets/innocent-time.mp3';
 import thirdUrl from '../assets/third-sanctuary.mp3';
+import justUsUrl from '../assets/just-us.mp3';
+import justUsLoopUrl from '../assets/just-us-loop.mp3';
+import { createVoidMusic } from './voidMusic.js';
 import sansUrl from '../assets/sans.mp3';
 import rainUrl from '../assets/raining-somewhere-else.mp3';
 import tarantellaUrl from '../assets/tarantella.mp3';
@@ -1197,10 +1200,12 @@ const TRACK_INFO = {
   third: { title: 'The Third Sanctuary' },
   churchTalk: { title: 'Once Upon A Terrible Time', author: 'UTB Team' },
   train: { title: 'The Train Problem', author: 'MasterSwordRemix' },
+  justUs: { title: 'just us', author: 'Toby Fox' },
 };
 /** O que está tocando agora (cenas especiais primeiro). */
 function nowPlaying() {
   if (state === 'title' || state === 'levelSelect' || state === 'shop') return null;   // telas de menu: sem créditos
+  if (voidMusic.audible) return TRACK_INFO.justUs;               // extra 1: o deslocamento pelo vazio
   if (thirdMusic.audible) return TRACK_INFO.third;              // montagem da igreja (Bairro 24)
   if (rainMusic.audible) return TRACK_INFO.rain;                // conversa com o K no Grillby's
   if (grillMusic.audible) return TRACK_INFO.sans;               // Grillby's (Nevasca)
@@ -1801,7 +1806,8 @@ function updateRain(dt) {
 const EXTRA_CSS = document.createElement('style');
 EXTRA_CSS.textContent = 'body.extra-on .ahud, body.extra-on .hint-btn { display: none !important; }';   // sem pista, contador nem dica (MENU, música e Voltar ficam)
 document.head.appendChild(EXTRA_CSS);
-const extra = createExtraStory({ walker, input, audio, renderer, talkBox, onShatter: (snap, rect) => { syncNoVan(); endExtra('shatter'); screenShatter(snap, rect); } });   // (o extra 1 já foi salvo na quebra)
+const voidMusic = createVoidMusic(audio, justUsUrl, justUsLoopUrl);   // extra 1: "just us" (original → loop), do começo do deslocamento até a tela inicial
+const extra = createExtraStory({ walker, input, audio, renderer, talkBox, onTravel: () => voidMusic.start(), onShatter: (snap, rect) => { syncNoVan(); endExtra('shatter'); screenShatter(snap, rect); } });   // (o extra 1 já foi salvo na quebra)
 function startExtra() {
   if (state !== 'levelSelect') return;
   levelSelect.close(); setState('levelFly');
@@ -1810,13 +1816,14 @@ function startExtra() {
     title.hide(); document.body.classList.add('extra-on');
     talkBox.hide(); music.suspend(true, 0.8);
     extra.camera.aspect = rig.camera.aspect; extra.camera.updateProjectionMatrix();
-    extra.start(); renderer.compile(extra.scene, extra.camera);
+    extra.start(); renderer.compile(extra.scene, extra.camera); voidMusic.load();   // (a música do deslocamento já decodificada)
     fade = 1; setState('extra');
   });
 }
 /** Fim (ou saída) do extra 1: devolve o personagem ao bairro e volta à tela inicial (toTitle) ou ao painel Jogar. Nada é salvo. */
 function endExtra(toTitle) {
   extra.stop();
+  voidMusic.fadeOut(3);                                  // (com a tela inicial já aparecendo; sem corte seco)
   document.body.classList.remove('extra-on');
   world.scene.add(walker.object); walker.show(false); walker.setFloor(0);
   music.suspend(false);
@@ -2865,7 +2872,7 @@ window.ADRESS = {
   moonPlace(p, f) { van.teleport(0, 0, 0); FRAME.reset(new THREE.Vector3(...p).normalize(), new THREE.Vector3(...f), 0, 0); moonAnchor.x = moonAnchor.z = 0; FRAME.toSphere(0, 0, vanSph.p); moonUpdate(0, true); },
   get moonVan() { return { p: vanSph.p.toArray().map(v => +v.toFixed(3)), f: vanSph.f.toArray().map(v => +v.toFixed(3)), y: +van.simY.toFixed(2) }; },
   FRAME, MOONV: () => MOONV,
-  massStory, MASS_KEY, extra, startExtra, screenShatter, rainFx, rainAudio, menuBg, get menuNight() { return !!nightSaved; }, get rainOn() { return rainOn(); }, menuWorld, lockCP: n => STORY_CP.apply(n), devMissions: DEV_MISSIONS, get parcelVisible() { return !!parcel.parent; },
+  massStory, MASS_KEY, extra, startExtra, screenShatter, voidMusic, rainFx, rainAudio, menuBg, get menuNight() { return !!nightSaved; }, get rainOn() { return rainOn(); }, menuWorld, lockCP: n => STORY_CP.apply(n), devMissions: DEV_MISSIONS, get parcelVisible() { return !!parcel.parent; },
   laser, ursa, solar, reality, startLaser,
   get church() { return church; }, get venK() { return venK; }, startVeniceTalk, churchStage, get greenBell() { return greenBell; }, get churchBell() { return churchBell; },
   churchReveal() { if (churchOn && !churchShown) { approach.phase = 'revealed'; revealChurch(true); } },
