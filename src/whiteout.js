@@ -3,7 +3,7 @@
 // só guarda as referências e devolve tudo em restore(). Reutilizável em qualquer cena (jogador, van, …).
 import * as THREE from 'three';
 
-const WHITE = new THREE.MeshStandardMaterial({ color: '#ffffff', roughness: 0.85, metalness: 0, flatShading: true });
+const WHITE = new THREE.MeshStandardMaterial({ color: '#ffffff', roughness: 0.85, metalness: 0, flatShading: false });
 const WHITE2 = WHITE.clone(); WHITE2.side = THREE.DoubleSide;
 
 /** Deixa os objetos inteiramente brancos. Retorna uma função que desfaz exatamente o que foi feito. */

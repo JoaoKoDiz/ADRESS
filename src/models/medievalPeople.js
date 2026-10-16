@@ -9,7 +9,7 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 
-export const PEOPLE_MAT = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.85, metalness: 0, flatShading: true });
+export const PEOPLE_MAT = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.85, metalness: 0, flatShading: false });   // liso (sem facetas)
 
 // ---- paleta (pedra, madeira, linho, tingimentos de planta: cores calmas) ----
 export const MED_PAL = {
@@ -35,15 +35,16 @@ const UA = 0.27, LA = 0.25;                          // braço: ombro→cotovelo
 // ---- geometrias compartilhadas ----
 const GEO = new Map();
 const gget = (key, make) => { let x = GEO.get(key); if (!x) { x = make(); GEO.set(key, x); } return x; };
+const up = (n, lo, hi) => Math.max(lo, Math.min(hi, Math.round(n * 2)));   // formas arredondadas com mais segmentos (superfície lisa)
 const G = {
   box: (w, h, d) => gget(`b${w},${h},${d}`, () => new THREE.BoxGeometry(w, h, d)),
-  cyl: (rt, rb, h, s = 8) => gget(`c${rt},${rb},${h},${s}`, () => new THREE.CylinderGeometry(rt, rb, h, s)),
-  sph: (r, ws = 8, hs = 6) => gget(`s${r},${ws},${hs}`, () => new THREE.SphereGeometry(r, ws, hs)),
-  hemi: (r, ws = 10, hs = 4) => gget(`h${r},${ws},${hs}`, () => new THREE.SphereGeometry(r, ws, hs, 0, Math.PI * 2, 0, Math.PI / 2)),
-  apron: (rt, rb, h) => gget(`ap${rt},${rb},${h}`, () => new THREE.CylinderGeometry(rt, rb, h, 6, 1, true, -0.62, 1.24)),   // frente (+Z) de um cone aberto
-  hood: r => gget(`hd${r}`, () => new THREE.SphereGeometry(r, 10, 6, Math.PI * 0.8, Math.PI * 1.4, 0, Math.PI * 0.62)),   // aberto na frente (+Z)
-  cone: (r, h, s = 8) => gget(`k${r},${h},${s}`, () => new THREE.ConeGeometry(r, h, s)),
-  torus: (r, t, rs = 4, ts = 12, arc = Math.PI * 2) => gget(`t${r},${t},${rs},${ts},${arc}`, () => new THREE.TorusGeometry(r, t, rs, ts, arc)),
+  cyl: (rt, rb, h, s = 8) => gget(`c${rt},${rb},${h},${s}`, () => new THREE.CylinderGeometry(rt, rb, h, up(s, 14, 24))),
+  sph: (r, ws = 8, hs = 6) => gget(`s${r},${ws},${hs}`, () => new THREE.SphereGeometry(r, up(ws, 14, 24), up(hs, 10, 16))),
+  hemi: (r, ws = 10, hs = 4) => gget(`h${r},${ws},${hs}`, () => new THREE.SphereGeometry(r, up(ws, 16, 24), up(hs, 6, 10), 0, Math.PI * 2, 0, Math.PI / 2)),
+  apron: (rt, rb, h) => gget(`ap${rt},${rb},${h}`, () => new THREE.CylinderGeometry(rt, rb, h, 10, 1, true, -0.62, 1.24)),   // frente (+Z) de um cone aberto
+  hood: r => gget(`hd${r}`, () => new THREE.SphereGeometry(r, 18, 10, Math.PI * 0.8, Math.PI * 1.4, 0, Math.PI * 0.62)),   // aberto na frente (+Z)
+  cone: (r, h, s = 8) => gget(`k${r},${h},${s}`, () => new THREE.ConeGeometry(r, h, up(s, 12, 20))),
+  torus: (r, t, rs = 4, ts = 12, arc = Math.PI * 2) => gget(`t${r},${t},${rs},${ts},${arc}`, () => new THREE.TorusGeometry(r, t, up(rs, 6, 10), up(ts, 16, 28), arc)),
 };
 const _m = new THREE.Matrix4(), _q = new THREE.Quaternion(), _e = new THREE.Euler(), _p = new THREE.Vector3(), _s = new THREE.Vector3(), _c = new THREE.Color();
 const tm = (x = 0, y = 0, z = 0, rx = 0, ry = 0, rz = 0, sx = 1, sy = sx, sz = sx) => new THREE.Matrix4().compose(_p.set(x, y, z), _q.setFromEuler(_e.set(rx, ry, rz)), _s.set(sx, sy, sz));

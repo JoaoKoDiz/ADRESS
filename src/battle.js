@@ -8,7 +8,8 @@
 import * as THREE from 'three';
 import { buildStandingReader, reachArm } from './models/reader.js';
 import { buildStandingReader as buildFigureBody } from './models/readerClassic.js';   // a figura mantém o formato antigo
-import { buildBody } from './models/driver.js';
+import { buildBody, restArms } from './models/driver.js';
+import { smoothCharacter } from './models/kit.js';
 
 export const BATTLE_CP_KEY = 'adress.dev.battle';   // teste pelo cadeado: libera o cartão Sacrifício para começar a batalha
 
@@ -256,7 +257,7 @@ export function createBattle(ctx) {
   const PB = buildBody(pModel);
   const paintWhite = () => pModel.traverse(o => { if (o.isMesh) { o.material = whiteMat; o.castShadow = false; } });
   paintWhite();
-  PB.arms.forEach((a, i) => { const s = i ? 1 : -1; a.sh.rotation.set(-s * 0.08, 0, 0.05); a.elbow.rotation.z = 0.15; });
+  restArms(PB.arms);
   pModel.userData.torso = PB.torso;                                   // (mesma interface do reachArm do K)
   pModel.userData.arms = PB.arms.map((a, i) => ({ s: i ? 1 : -1, sh: a.sh, rest: a.sh.quaternion.clone(), elbow: a.elbow, erest: a.elbow.quaternion.clone() }));
   // K: com as cores dele
@@ -267,7 +268,7 @@ export function createBattle(ctx) {
   const kWrist = a => a.elbow.children[a.elbow.children.length - 1];
   // figura: a aparência escura do extra 1 (maior), com contorno
   const figMat = new THREE.ShaderMaterial({ vertexShader: RIM_V, fragmentShader: RIM_F, uniforms: { uRim: { value: new THREE.Color(0.2, 0.2, 0.235) }, uGlow: { value: 0 } } });
-  const fig = buildFigureBody(); fig.traverse(o => { if (o.isMesh) { o.material = figMat; o.castShadow = false; } });
+  const fig = buildFigureBody(); fig.traverse(o => { if (o.isMesh) { o.material = figMat; o.castShadow = false; } }); smoothCharacter(fig);
   fig.scale.set(...F_SCALE); fig.rotation.y = FACE_PZ; fig.position.copy(F_POS); scene.add(fig);
   const FU = fig.userData;
 

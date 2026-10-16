@@ -1,7 +1,9 @@
 // O motorista a pé (tecla L na van): anda livremente pelo bairro — entra nos quintais e na praça —, mas não entrega.
 // Colisão simples com caixas (AABB), deslizando nas paredes. Mesmo modelo/cores do motorista da tela inicial.
 import * as THREE from 'three';
-import { buildBody, CHAR_DEFAULT, CHAR_MATS, setCharColors } from './models/driver.js';
+import { buildBody, BODY, ARM_REST, CHAR_DEFAULT, CHAR_MATS, setCharColors } from './models/driver.js';
+import { createGait } from './gait.js';
+const ARM_GAIT = { open: ARM_REST.open, fwd: ARM_REST.fwd, elbow: ARM_REST.elbow, wrist: ARM_REST.wrist };
 export { CHAR_DEFAULT, CHAR_MATS, setCharColors };
 
 const SPEED = 6.5, BACK_SPEED = 3.5, TURN = 3.2, RADIUS = 0.55;
@@ -19,7 +21,6 @@ export function createWalker(scene) {
 
   const st = { x: 0, z: 0, heading: 0, speed: 0 };
   let speedMul = 1;
-  let phase = 0;
 
   let area = null;                             // Veneza: onde dá para pisar (ilhas, praças, pontes); fora disso é água
   const hits = (x, z, boxes) => (area && !area(x, z)) || boxes.some(b => x > b.x0 - RADIUS && x < b.x1 + RADIUS && z > b.z0 - RADIUS && z < b.z1 + RADIUS && (!b.r || Math.hypot(x - b.cx, z - b.cz) < b.r + RADIUS));   // (b.r: obstáculo redondo, Órbita)
@@ -34,41 +35,26 @@ export function createWalker(scene) {
     root.rotation.y = -st.heading;
   }
 
-  let walkAmt = 0, t = 0, turnV = 0, lastHeading = 0;
-  /** Ciclo de caminhada: quadril, joelho, tornozelo, braços com cotovelo, giro do tronco, balanço do quadril, quique e inclinação. */
-  function animate(dt, move) {
+  // caminhada: pés plantados por IK (gait.js); medidas do buildBody (coxa 0,25, canela 0,22, quadril a 0,61, tornozelo a 0,14)
+  const gait = createGait({ legs, arms }, { L1: 0.25, L2: 0.22, hip: BODY.pelvisY - 0.03, ankle: 0.14, stride: 0.46, ...ARM_GAIT });
+  const S_BODY = 0.9;
+  let t = 0, turnV = 0, lastHeading = 0;
+  /** travel: distância realmente andada no quadro (mundo; − de ré). */
+  function animate(dt, travel) {
     t += dt;
-    walkAmt += ((move ? 1 : 0) - walkAmt) * Math.min(1, dt * 9);        // entra e sai do passo suavemente
-    const dir = move < 0 ? -1 : 1;
-    phase += dt * Math.abs(move) * 1.7 * dir;
-    const a = walkAmt, k = 0.5 + 0.5 * Math.min(1, Math.abs(move) / SPEED);   // anda de ré: passos menores
+    const g = gait.update(dt, travel / S_BODY), a = g.amt;
     const turn = st.heading - lastHeading; lastHeading = st.heading;
     turnV += (turn / Math.max(dt, 1e-3) - turnV) * Math.min(1, dt * 6);
-    legs.forEach((l, i) => {
-      const p = phase + (i ? Math.PI : 0), sn = Math.sin(p), cs = Math.cos(p);
-      const hip = sn * 0.8 * a * k;
-      const knee = -(0.1 + 0.95 * Math.pow(Math.max(0, cs), 2)) * a * k;      // dobra na fase de balanço, quase reto no apoio
-      l.hip.rotation.z = hip;
-      l.knee.rotation.z = knee;
-      l.foot.rotation.z = -(hip + knee) * 0.7 + 0.1 * a;                       // pé acompanha o chão (calcanhar e ponta)
-    });
-    arms.forEach((m, i) => {
-      const p = phase + (i ? 0 : Math.PI), sn = Math.sin(p);                   // braço oposto à perna do mesmo lado
-      m.sh.rotation.z = sn * 0.75 * a * k + 0.05;
-      m.elbow.rotation.z = (0.15 + 0.7 * Math.max(0, sn)) * a + 0.1 * (1 - a) + 0.05 * Math.sin(t * 1.6 + i);   // cotovelo dobra quando o braço vai à frente
-      m.sh.rotation.x = (i ? 1 : -1) * (0.03 + 0.06 * a);                       // braços levemente afastados do corpo
-    });
-    const sw = Math.sin(phase);
-    body.position.y = 0.055 * Math.cos(phase * 2) * a;                         // sobe no apoio, desce na passada dupla
-    body.position.z = sw * 0.05 * a;                                           // quadril desloca para o lado do apoio
-    pelvis.rotation.y = sw * 0.14 * a * k;                                     // quadril gira…
-    torso.rotation.y = -sw * 0.22 * a * k + THREE.MathUtils.clamp(turnV * 0.04, -0.3, 0.3);   // …tronco contra-gira (e entra nas curvas)
-    torso.rotation.z = -0.13 * a * k + 0.012 * Math.sin(t * 2) * (1 - a);     // inclina para a frente / respira parado
-    torso.rotation.x = Math.sin(phase) * 0.05 * a - THREE.MathUtils.clamp(turnV * 0.025, -0.15, 0.15);
-    head.rotation.z = 0.1 * a * k;                                            // cabeça se mantém olhando à frente (compensa a inclinação)
-    head.rotation.x = -sw * 0.04 * a;
-    head.rotation.y = -torso.rotation.y * 0.6;                                // acompanha a contra-rotação do tronco
-    torso.scale.y = 1 + 0.012 * Math.sin(t * 2.2) * (1 - a);                   // respiração
+    body.position.y = g.bob * S_BODY;
+    body.position.z = g.sway * S_BODY;
+    pelvis.rotation.y = g.twist;
+    torso.rotation.y = -g.twist * 1.4 + THREE.MathUtils.clamp(turnV * 0.035, -0.25, 0.25) * a;
+    torso.rotation.z = -g.lean + 0.012 * Math.sin(t * 2) * (1 - a);           // inclina um pouco para a frente / respira parado
+    torso.rotation.x = -g.sway * 2 - THREE.MathUtils.clamp(turnV * 0.02, -0.12, 0.12) * a;
+    head.rotation.z = g.lean * 0.8;                                           // cabeça estável, olhando à frente
+    head.rotation.y = g.twist * 0.4;
+    head.rotation.x = g.sway * 1.5;
+    torso.scale.y = 1 + 0.012 * Math.sin(t * 2.2) * (1 - a);                  // respiração
   }
 
   return {
@@ -122,9 +108,10 @@ export function createWalker(scene) {
       }
       st.speed = move;
       const dx = Math.cos(st.heading) * move * dt, dz = Math.sin(st.heading) * move * dt;
+      const x0 = st.x, z0 = st.z;
       if (!blocked(st.x + dx, st.z, boxes, van)) st.x += dx;     // desliza: tenta cada eixo separado
       if (!blocked(st.x, st.z + dz, boxes, van)) st.z += dz;
-      animate(dt, move);
+      animate(dt, (st.x - x0) * Math.cos(st.heading) + (st.z - z0) * Math.sin(st.heading));   // o passo segue o que ele realmente andou
       if (lowG) {                                                    // gravidade baixa: cai devagar; andando, dá pulinhos
         vy -= 3.2 * dt; yAbs += vy * dt;
         if (yAbs <= floorY) { yAbs = floorY; vy = Math.abs(move) > 0.5 ? 1.5 : 0; }

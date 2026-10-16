@@ -70,6 +70,34 @@ export function bigShoe(g, mUp, mSole = mUp, k = 1) {
 const HAIRS = mat('#3a2418', { ...SOFT, flatShading: false, side: THREE.DoubleSide }), BROWS = mat('#2e1c12', { ...SOFT, flatShading: false });
 const EYES = mat('#16100e', { roughness: 0.4, flatShading: false }), MOUTHS = mat('#5a2e22', { ...SOFT, flatShading: false });
 const FRAMES = mat('#1c1c22', { roughness: 0.5, flatShading: false }), LENSS = mat('#101218', { roughness: 0.2, metalness: 0.3, flatShading: false, side: THREE.DoubleSide });
+/**
+ * Óculos encaixados numa cabeça esférica de raio r (rosto para +X): cada aro fica tangente ao rosto na frente do olho (y = ey, z = ±ez),
+ * a ponte desce e encosta no alto do nariz, as hastes contornam as laterais da cabeça até as orelhas (sempre um pouco por fora da pele).
+ * octo: aro octogonal (K). lens: material da lente (opcional). Tudo num grupo filho da cabeça: acompanha os movimentos.
+ */
+export function buildGlasses(r, { ey, ez, R, tube, frame, lens = null, octo = false, gap = 0.055, earY = 0.02, earA = 1.66 }) {
+  const g = new THREE.Group(); g.name = 'glasses';
+  const rh = Math.sqrt(r * r - ey * ey), th = Math.asin(ez / rh), off = r * gap;
+  const tubeAlong = (pts, rad = tube) => mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts), 24, rad, 8, false), frame);
+  for (const s of [-1, 1]) {
+    const a = s * th, cx = (rh + off) * Math.cos(a), cz = (rh + off) * Math.sin(a);
+    const ring = new THREE.Group(); ring.position.set(cx, ey, cz); ring.rotation.y = Math.PI / 2 - a; g.add(ring);    // aro tangente ao rosto
+    const t = mesh(new THREE.TorusGeometry(R, tube, 8, octo ? 8 : 36), frame); if (octo) t.rotation.z = Math.PI / 8; ring.add(t);
+    if (lens) { const l = mesh(new THREE.CircleGeometry(R * 0.97, octo ? 8 : 36), lens); l.rotation.z = t.rotation.z; ring.add(l); }
+    // haste: da borda de fora do aro, pela lateral da cabeça, até em cima da orelha
+    const ox = cx - R * Math.sin(th), oz = cz + s * R * Math.cos(th);              // ponto do aro mais longe do nariz
+    const pts = [new THREE.Vector3(ox, ey, oz)];
+    for (const [k, an] of [[0.15, th + 0.62], [0.45, 1.05], [0.75, 1.38], [1, earA]]) {
+      const y = ey + (earY - ey) * k, rr = Math.sqrt(Math.max(0, r * r - y * y)) + r * 0.045;
+      pts.push(new THREE.Vector3(rr * Math.cos(an), y, s * rr * Math.sin(an)));
+    }
+    g.add(tubeAlong(pts));
+  }
+  // ponte: liga as bordas de dentro dos aros e desce até encostar no alto do nariz
+  const ix = (rh + off) * Math.cos(th) + Math.sin(th) * R, iz = (rh + off) * Math.sin(th) - Math.cos(th) * R;
+  g.add(tubeAlong([new THREE.Vector3(ix, ey + R * 0.15, -iz), new THREE.Vector3(Math.sqrt(r * r - ey * ey) + r * 0.035, ey - R * 0.2, 0), new THREE.Vector3(ix, ey + R * 0.15, iz)], tube * 0.9));
+  return g;
+}
 /** Cabeça nova: grande e redonda, rosto simples (olhos ovais, sobrancelhas, boca pequena), óculos escuros e boné do jogador. */
 export function buildHeadS(r) {
   const SKIN = CHAR_MATS.skin, h = new THREE.Group();
@@ -80,14 +108,10 @@ export function buildHeadS(r) {
     h.add(at(ballS(r * 0.15, SKIN, 0.5, 0.9, 0.62), -0.04 * r, -0.04 * r, s * r * 0.97));        // orelhas lisas
     const ez = s * r * 0.36, ey = r * 0.1;
     h.add(at(ballS(r * 0.085, EYES, 0.3, 1.3, 0.85), face(ey, ez) - 0.004, ey, ez));             // olhos ovais
-    const ring = mesh(new THREE.TorusGeometry(r * 0.26, r * 0.03, 8, 24), FRAMES);                // óculos escuros (mesmo desenho, liso)
-    ring.position.set(face(ey, ez) + r * 0.07, ey, ez); ring.rotation.set(0, Math.PI / 2 + s * 0.35, 0); h.add(ring);
-    const lens = mesh(new THREE.CircleGeometry(r * 0.26, 24), LENSS); lens.position.copy(ring.position); lens.rotation.copy(ring.rotation); h.add(lens);
-    h.add(at(mesh(new THREE.CapsuleGeometry(r * 0.022, r * 0.7, 4, 8), FRAMES), r * 0.45, ey + 0.02 * r, s * r * 0.74, Math.PI / 2, s * 0.55, 0));
     const by = r * 0.44, bz = s * r * 0.34;                                                       // sobrancelhas retas (sério)
     h.add(at(mesh(new THREE.CapsuleGeometry(r * 0.045, r * 0.26, 4, 10), BROWS), face(by, bz) + 0.006, by, bz, Math.PI / 2, -s * 0.3, 0));
   }
-  h.add(at(mesh(new THREE.CapsuleGeometry(r * 0.025, r * 0.18, 4, 8), FRAMES), face(r * 0.12, 0) + r * 0.07, r * 0.12, 0, Math.PI / 2, 0, 0));   // ponte
+  h.add(buildGlasses(r, { ey: r * 0.1, ez: r * 0.36, R: r * 0.25, tube: r * 0.032, frame: FRAMES, lens: LENSS }));            // óculos escuros
   h.add(at(mesh(new THREE.CapsuleGeometry(r * 0.022, r * 0.2, 4, 8), MOUTHS), face(-r * 0.42, 0) - 0.004, -r * 0.42, 0, Math.PI / 2, 0, 0));       // boca pequena e reta
   h.add(mesh(new THREE.SphereGeometry(r * 1.04, 28, 16, -1.5, 3.0, 1.0, 0.95), HAIRS));                                                              // cabelo da nuca (liso)
   for (const s of [-1, 1]) h.add(at(ballS(r * 0.2, HAIRS, 0.55, 1.15, 0.5), 0.08 * r, 0.24 * r, s * r * 0.9, 0, 0, 0.2));                       // costeletas
@@ -156,7 +180,7 @@ export const capModelNow = () => capModel;
 
 /** Calota: borda em `TC` (rad a partir do topo) no raio R0, superfície no raio R1; sy estica a copa acima da borda;
  *  sq > 0 deixa a copa levemente quadrada. phi0/phiL: só um pedaço (ex.: metade da frente). */
-function dome(r, { R1 = 1.07, TC = 1.08, sy = 1, sq = 0, seg = 16, phi0 = 0, phiL = Math.PI * 2, R0 = 0.99 } = {}) {
+function dome(r, { R1 = 1.07, TC = 1.08, sy = 1, sq = 0, seg = 36, phi0 = 0, phiL = Math.PI * 2, R0 = 0.99 } = {}) {
   const r0 = r * R0, r1 = r * R1, pts = [new THREE.Vector2(r0 * Math.sin(TC), r0 * Math.cos(TC))];
   for (let i = 0; i <= 10; i++) { const t = TC * (1 - i / 10); pts.push(new THREE.Vector2(Math.max(1e-4, r1 * Math.sin(t)), r1 * Math.cos(t))); }
   const geo = new THREE.LatheGeometry(pts, seg, phi0, phiL), p = geo.attributes.position, y0 = r0 * Math.cos(TC);
@@ -171,8 +195,8 @@ function dome(r, { R1 = 1.07, TC = 1.08, sy = 1, sq = 0, seg = 16, phi0 = 0, phi
 /** Aba: presa na borda (raio rc, altura y), comprimento E, meia-abertura A; curve dobra as pontas para baixo; tilt inclina (+ = sobe). */
 function brimAt(r, { rc, y, E, A = 1.0, curve = 0, tilt = 0.12, thick = 0.06, back = false }) {
   const sh = new THREE.Shape();
-  for (let i = 0; i <= 12; i++) { const t = -A + 2 * A * i / 12; (i ? sh.lineTo.bind(sh) : sh.moveTo.bind(sh))(rc * Math.cos(t), rc * Math.sin(t)); }
-  for (let i = 12; i >= 0; i--) { const t = -A + 2 * A * i / 12, e = rc + E * Math.cos(t / A * Math.PI / 2) ** 1.2; sh.lineTo(e * Math.cos(t), e * Math.sin(t)); }
+  for (let i = 0; i <= 28; i++) { const t = -A + 2 * A * i / 28; (i ? sh.lineTo.bind(sh) : sh.moveTo.bind(sh))(rc * Math.cos(t), rc * Math.sin(t)); }
+  for (let i = 28; i >= 0; i--) { const t = -A + 2 * A * i / 28, e = rc + E * Math.cos(t / A * Math.PI / 2) ** 1.2; sh.lineTo(e * Math.cos(t), e * Math.sin(t)); }
   const geo = new THREE.ExtrudeGeometry(sh, { depth: r * thick, bevelEnabled: false, curveSegments: 4 }), p = geo.attributes.position, W = rc + E;
   for (let k = 0; k < p.count; k++) p.setZ(k, p.getZ(k) + curve * r * (p.getY(k) / W) ** 2);   // (depois de girar, z vira "para baixo")
   geo.computeVertexNormals();
@@ -190,7 +214,7 @@ function seam(r, R1, TC, phi, sy, y0) {
 }
 function buildCap(r, model) {
   const g = new THREE.Group(), TC = 1.08, rc = r * 0.99 * Math.sin(TC), yb = r * 0.99 * Math.cos(TC) + r * 0.02, y0 = r * 0.99 * Math.cos(TC);
-  const button = (R1, sy) => g.add(at(lowBall(r * 0.08, CHAR_MATS.cap, 1, 0.6, 1), 0, y0 + (r * R1 - y0) * sy - r * 0.005, 0));
+  const button = (R1, sy) => g.add(at(ballS(r * 0.08, CHAR_MATS.cap, 1, 0.6, 1), 0, y0 + (r * R1 - y0) * sy - r * 0.005, 0));
   if (model === 1) {                                    // Aba reta: copa mais alta, aba larga e plana
     g.add(dome(r, { sy: 1.16 })); button(1.07, 1.16);
     g.add(brimAt(r, { rc, y: yb, E: r * 0.7, A: 1.1, curve: 0, tilt: 0.02, thick: 0.07 }));
@@ -211,7 +235,7 @@ function buildCap(r, model) {
     g.add(brimAt(r, { rc: r * 0.99 * Math.sin(1.12), y: r * 0.99 * Math.cos(1.12) + r * 0.02, E: r * 0.56, A: 0.95, curve: 0.38, tilt: 0.05, thick: 0.05 }));
   } else if (model === 4) {                             // Cinco painéis: copa mais baixa e levemente quadrada, costuras, aba curta
     const sy = 0.93;
-    g.add(dome(r, { sy, sq: 0.22, seg: 20, R1: 1.08 }));
+    g.add(dome(r, { sy, sq: 0.22, seg: 40, R1: 1.08 }));
     for (let k = 0; k < 5; k++) g.add(seam(r, 1.08 * (1 + 0.22 * 0.15), TC, Math.PI / 2 + Math.PI / 5 + k * 2 * Math.PI / 5, sy, y0));
     button(1.08, sy);
     g.add(brimAt(r, { rc, y: yb, E: r * 0.44, A: 0.95, curve: 0.12, tilt: 0.08 }));
@@ -247,18 +271,28 @@ export function buildBody(parent, opts = {}) {
     const foot = new THREE.Group(); foot.position.y = -0.22; knee.add(foot);
     bigShoe(foot, SHOES);                                                                            // pés um pouco maiores
     legs.push({ hip, knee, foot });
-    const sh = new THREE.Group(); sh.position.set(0, 0.53, s * 0.26); torso.add(sh);                 // ombro dentro do volume do tronco
+    const sh = new THREE.Group(); sh.position.set(0, 0.52, s * 0.325); torso.add(sh);               // ombro na borda do tronco (braço por fora do volume)
     sh.add(limb(0.122, 0.108, 0.14, SHIRT));                                                         // manga curta
     sh.add(limb(0.086, 0.078, 0.28, SKIN));
     const elbow = new THREE.Group(); elbow.position.y = -0.28; sh.add(elbow);
     const wrist = new THREE.Group(); wrist.position.y = -0.2; elbow.add(wrist);
     elbow.add(limb(0.078, 0.066, 0.2, SKIN)); wrist.add(mitten(SKIN));                               // antebraço contínuo + mão de luva com polegar
-    arms.push({ sh, elbow, wrist });
+    arms.push({ sh, elbow, wrist, s });
   }
+  restArms(arms);
   const head = new THREE.Group(); head.position.y = 0.7; torso.add(head);
   head.add(at(limb(0.11, 0.115, 0.1, SKIN), 0, 0.1, 0));                                            // pescoço curto e largo (transição suave)
   head.add(at(buildHeadS(0.5), 0, 0.5, 0));                                                          // cabeça maior e redonda
   return { pelvis, torso, legs, arms, head };
+}
+/** Pose de repouso dos braços (forma nova): ombros soltos, braços um pouco afastados (mãos fora do quadril e da camisa),
+ *  cotovelos levemente dobrados, mãos viradas para as coxas. rotation.x = abertura lateral (−s abre), z = para a frente. */
+export const ARM_REST = { open: 0.14, fwd: 0.05, elbow: 0.24, wrist: 0.08 };
+export function restArms(arms, k = 1) {
+  arms.forEach((a, i) => {
+    const s = a.s || (i ? 1 : -1);
+    a.sh.rotation.set(-s * ARM_REST.open * k, 0, ARM_REST.fwd * k); a.elbow.rotation.set(0, 0, ARM_REST.elbow * k); a.wrist.rotation.set(0, 0, ARM_REST.wrist * k);
+  });
 }
 /** Corpo antigo (facetado), mantido para a R e a estátua do cartão Rigidez. */
 function buildBodyClassic(parent) {

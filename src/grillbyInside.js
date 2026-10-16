@@ -5,7 +5,7 @@
 // mesinha embaixo à esquerda e a entrada do jogador embaixo, no meio. Luz quente; moradores no estilo do jogo.
 // Coordenadas: x = leste, z = sul (para a câmera), frente da sala (porta) em z = +10.
 import * as THREE from 'three';
-import { box, cyl, sphere, at, mat, torus } from './models/kit.js';
+import { box, cyl, sphere, at, mat, torus, smoothCharacter } from './models/kit.js';
 import { SHIRTS, HAIRS } from './data.js';
 import { WINTER } from './models/resident.js';
 import { buildPewReader } from './models/reader.js';
@@ -83,6 +83,7 @@ export function buildNPC({ shirt, hair, pants, seatY = 0, apron = false, k = 0, 
   coat.add(at(torus(0.34, 0.1, COAT, 6, 14), 0, 1.2, 0, Math.PI / 2, 0, 0));
   for (const a of [armL, armR]) { const s = at(cyl(0.135, 0.125, 0.48, COAT, 8), 0, -0.24, 0); a.add(s); s.visible = false; a.userData.coat = s; }
   const wear = on => { coat.visible = on; for (const a of [armL, armR]) a.userData.coat.visible = on; };
+  smoothCharacter(root);                                     // superfície lisa (mais segmentos, sem facetas)
   return { root, body, head, armL, armR, mouth, k, wear, legL: legs[0] || null, legR: legs[1] || null };
 }
 

@@ -8,7 +8,7 @@
 //   bell  → corte para o corredor dos sinos: o roxo cai; no impacto, tela preta (5 s, só o temporal) → tela inicial
 // Salva MASS_KEY no impacto. Sem falas na missa nem depois da conversa.
 import * as THREE from 'three';
-import { buildStandingReader } from './models/reader.js';
+import { buildStandingReader, walkK } from './models/reader.js';
 import { buildMedPerson, animatePerson } from './models/medievalPeople.js';
 import { buildBody } from './models/driver.js';
 import { BELL_SPOT } from './models/bell.js';
@@ -274,14 +274,13 @@ export function createMassStory(ctx) {
   }
   function runK(dt) {                                    // o K sai do banco e corre pelo corredor livre até a porta
     const k = kRun, path = k.path;
-    let left = 4.3 * dt;
+    let left = 4.3 * dt; const x0 = k.x, z0 = k.z;
     while (left > 0 && k.i < path.length) {
       const p = path[k.i], dx = p[0] - k.x, dz = p[1] - k.z, d = Math.hypot(dx, dz);
       if (d <= left) { k.x = p[0]; k.z = p[1]; k.i++; left -= d; } else { k.x += dx / d * left; k.z += dz / d * left; left = 0; k.dir = Math.atan2(-dz, dx); }
     }
-    k.ph += dt * 11;
-    k.m.position.set(k.x, 0.04 * Math.abs(Math.sin(k.ph)), k.z); k.m.rotation.y = k.dir;
-    const legs = k.m.userData.legs; legs.forEach((l, i) => { const a = Math.sin(k.ph + i * Math.PI); l.rotation.z = 0.7 * a; l.userData.knee.rotation.z = -0.6 * Math.max(0, -a) - 0.2; });
+    k.m.position.set(k.x, 0, k.z); k.m.rotation.y = k.dir;
+    walkK(k.m, dt, Math.hypot(k.x - x0, k.z - z0));                     // passos com os pés plantados (gait.js)
     return k.i >= path.length;
   }
 
@@ -367,7 +366,8 @@ export function createMassStory(ctx) {
       }
     } else if (S.phase === 'free') {
       updateCrowd(dt, T + 40);
-      if (kRun && !kRun.done) { if (runK(dt)) { kRun.done = true; kRun.m.rotation.y = Math.PI / 2; kRun.m.position.y = 0; kRun.m.userData.legs.forEach(l => { l.rotation.z = 0; l.userData.knee.rotation.z = 0; }); } }   // chegou: para em frente à oficina, olhando para ela (e espera)
+      if (kRun && !kRun.done) { if (runK(dt)) { kRun.done = true; kRun.m.rotation.y = Math.PI / 2; kRun.m.position.y = 0; } }
+      else if (kRun && kRun.m.userData.gait && kRun.m.userData.gait.amt > 0.003) walkK(kRun.m, dt, 0);   // para de andar suavemente   // chegou: para em frente à oficina, olhando para ela (e espera)
       rainAudio.set(1, insideChurch()); storm(0.85, insideChurch()); flashLight(flash);
       if (streaks) streaks.userData.tex.offset.y -= dt * 0.65;
       const p = church().worldToLocal(new THREE.Vector3(walker.x, 0, walker.z));

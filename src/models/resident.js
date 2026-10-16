@@ -1,7 +1,7 @@
 // Morador que aparece no portão durante o diálogo: bonequinho low-poly, cabeçudo, virado para +Z (câmera).
 // userData.setMood('angry' | 'happy') troca pose e balão; userData.update(t) anima.
 import * as THREE from 'three';
-import { box, cyl, sphere, cone, torus, at, mat, dynamic, bakeStatic } from './kit.js';
+import { box, cyl, sphere, cone, torus, at, mat, dynamic, bakeStatic, smoothCharacter } from './kit.js';
 import { SHIRTS, HAIRS, HOUSES, MOON_COL } from '../data.js';
 import { medLook } from './medievalPeople.js';
 
@@ -272,6 +272,7 @@ function buildCore(houseIndex, { shirt, hair, ven = false, look = null, V = VEN_
   }
 
   // cada parte animada vira poucos meshes; o resto do corpo é fundido por material
+  smoothCharacter(body);                                       // superfície lisa (mais segmentos, sem facetas)
   for (const part of [armL, armR, pkg, brows, smile]) bakeStatic(part);
   bakeStatic(body);
 

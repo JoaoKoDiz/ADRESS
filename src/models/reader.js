@@ -3,7 +3,8 @@
 // Estilo low-poly (sombreamento chapado), como a referência. Frente do personagem/cadeira = +X local.
 import * as THREE from 'three';
 import { mesh, mat, at, box, sphere, cone, dynamic } from './kit.js';
-import { limb, torsoS, mitten, bigShoe } from './driver.js';
+import { limb, torsoS, mitten, bigShoe, buildGlasses } from './driver.js';
+import { createGait } from '../gait.js';
 
 const C = {
   skin: '#f3cfa8', hair: '#e3c45c', hairD: '#c9a743', red: '#c01212', white: '#f2f1ec', pants: '#4a0b10',
@@ -71,20 +72,13 @@ function readerHead(r, { sun = false } = {}) {
     h.add(at(lowBall(r * 0.17, M.skin, 0.55, 1, 0.7), -0.03 * r, -0.02 * r, s * r * 0.97)); // orelha
     const ez = s * r * 0.38, ey = r * 0.12;
     h.add(at(lowBall(r * 0.1, M.eye, 0.35, 1.15, 0.85), face(ey, ez) - 0.005, ey, ez)); // olho
-    // óculos: aro octogonal (fino), haste até a orelha
-    const ring = mesh(new THREE.TorusGeometry(r * 0.27, r * 0.035, 8, 8), M.frame);
-    ring.position.set(face(ey, ez) + r * 0.08, ey, ez); ring.rotation.set(0, Math.PI / 2 + s * 0.35, Math.PI / 8); h.add(ring);
-    if (sun) {                                                                    // óculos de sol: lente escura dentro do mesmo aro
-      const lens = mesh(new THREE.CircleGeometry(r * 0.27, 8), mat('#141619', { side: THREE.DoubleSide, roughness: 0.2, metalness: 0.3 }));
-      lens.position.copy(ring.position); lens.rotation.copy(ring.rotation); h.add(lens);
-    }
-    h.add(at(box(r * 0.75, r * 0.05, r * 0.05, M.frame), r * 0.45, ey + 0.02 * r, s * r * 0.72, 0, s * 0.55, 0));
     // sobrancelhas grossas, retas e um pouco franzidas (sério)
     const by = r * 0.42, bz = s * r * 0.36;
-    h.add(at(box(r * 0.08, r * 0.1, r * 0.36, M.brow), face(by, bz) + 0.01, by, bz, s * 0.22, -s * 0.3, 0));
+    const brow = at(mesh(new THREE.CapsuleGeometry(r * 0.05, r * 0.28, 6, 12), M.brow), face(by, bz) + 0.008, by, bz, Math.PI / 2 + s * 0.22, -s * 0.3, 0); brow.scale.set(1, 1, 1.15); h.add(brow);
   }
-  h.add(at(box(r * 0.08, r * 0.05, r * 0.3, M.frame), face(r * 0.14, 0) + r * 0.08, r * 0.14, 0));   // ponte dos óculos
-  h.add(at(box(r * 0.05, r * 0.04, r * 0.34, M.mouth), face(-r * 0.42, 0) - 0.005, -r * 0.42, 0));  // boca reta
+  h.add(buildGlasses(r, { ey: r * 0.12, ez: r * 0.38, R: r * 0.26, tube: r * 0.036, frame: M.frame, octo: true, earY: 0.0,
+    lens: sun ? mat('#141619', { side: THREE.DoubleSide, roughness: 0.2, metalness: 0.3, flatShading: false }) : null }));   // óculos octogonais (de sol no terraço)
+  h.add(at(mesh(new THREE.CapsuleGeometry(r * 0.022, r * 0.3, 4, 10), M.mouth), face(-r * 0.42, 0) - 0.004, -r * 0.42, 0, Math.PI / 2, 0, 0));  // boca reta
   // cabelo loiro: calota (puxada para trás, testa livre, sem franja) + nuca + mechas nos lados (formas chapadas)
   h.add(at(mesh(new THREE.SphereGeometry(r * 1.07, 28, 14, 0, Math.PI * 2, 0, 1.25), M.hair), -r * 0.04, r * 0.04, 0, 0, 0, 0.42));
   h.add(mesh(new THREE.SphereGeometry(r * 1.05, 28, 14, -1.5, 3.0, 1.0, 0.95), M.hairD));
@@ -334,7 +328,7 @@ export function buildStandingReader() {
     const knee = new THREE.Group(); knee.position.y = -0.32; knee.rotation.z = 0; thigh.add(knee); thigh.userData.knee = knee;
     const shin = 0.42;
     knee.add(limb(0.13, 0.11, shin, M.pants));
-    const foot = new THREE.Group(); foot.position.y = -shin; foot.rotation.z = 0; knee.add(foot);
+    const foot = new THREE.Group(); foot.position.y = -shin; foot.rotation.z = 0; knee.add(foot); thigh.userData.foot = foot;
     bigShoe(foot, M.shoe, M.sole);                                                // calçado maior (mesmo tênis branco de sola escura)
   }
   // tronco reto (encostado de leve): camisa branca + casaco vermelho aberto
@@ -346,15 +340,15 @@ export function buildStandingReader() {
     torso.add(at(box(0.05, 0.62, 0.04, M.white), 0.235, 0.32, s * 0.1, 0, 0, 0.05));
     torso.add(at(box(0.12, 0.2, 0.1, M.red), 0.17, 0.63, s * 0.14, s * 0.5, 0, -0.5));
     // braços descansando: mãos em cima das coxas, mangas dobradas
-    const sh = new THREE.Group(); sh.position.set(0, 0.56, s * 0.31); sh.rotation.set(-s * 0.1, 0, 0.04); torso.add(sh);
+    const sh = new THREE.Group(); sh.position.set(0, 0.55, s * 0.345); sh.rotation.set(-s * 0.13, 0, 0.05); torso.add(sh);   // ombro na borda do casaco, braço solto e um pouco afastado
     arms.push({ s, sh, rest: sh.quaternion.clone() });
     sh.add(limb(0.14, 0.12, 0.27, M.red));
     sh.add(limb(0.085, 0.075, 0.28, M.skin));
-    const elbow = new THREE.Group(); elbow.position.y = -0.28; elbow.rotation.set(s * 0.05, 0, 0.25); sh.add(elbow); arms[arms.length - 1].elbow = elbow; arms[arms.length - 1].erest = elbow.quaternion.clone();
+    const elbow = new THREE.Group(); elbow.position.y = -0.28; elbow.rotation.set(0, 0, 0.26); sh.add(elbow); arms[arms.length - 1].elbow = elbow; arms[arms.length - 1].erest = elbow.quaternion.clone();
     elbow.add(limb(0.12, 0.11, 0.06, M.red));
     elbow.add(at(mesh(new THREE.TorusGeometry(0.1, 0.042, 10, 22), M.red), 0, -0.08, 0, Math.PI / 2, 0, 0));
     elbow.add(limb(0.072, 0.06, 0.2, M.skin));
-    const wrist = new THREE.Group(); wrist.position.y = -0.2; elbow.add(wrist);
+    const wrist = new THREE.Group(); wrist.position.y = -0.2; wrist.rotation.z = 0.08; elbow.add(wrist); arms[arms.length - 1].wrist = wrist;
     wrist.add(mitten(M.skin));
   }
   const head = new THREE.Group(); head.position.y = 0.7; torso.add(head); head.name = 'k-head';
@@ -364,7 +358,21 @@ export function buildStandingReader() {
   root.userData.arms = arms; root.userData.torso = torso;
   root.traverse(o => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = false; } });
   root.userData.legs = legs; if (!root.userData.head) root.userData.head = root.getObjectByName('k-head');
+  root.userData.body = g;
   return root;
+}
+
+/** K em pé andando (gait.js: pés plantados, joelhos, braços em oposição, tronco). travel = distância andada no quadro (mundo).
+ *  Chamar com travel 0 por alguns quadros faz ele parar suavemente. */
+export function walkK(root, dt, travel) {
+  const u = root.userData;
+  if (!u.gait) u.gait = createGait({ legs: u.legs.map(t => ({ hip: t, knee: t.userData.knee, foot: t.userData.foot })), arms: u.arms },
+    { L1: 0.32, L2: 0.42, hip: 0.91, ankle: 0.17, stride: 0.66, open: 0.13, fwd: 0.05, elbow: 0.26, wrist: 0.08 });
+  const o = u.gait.update(dt, travel / 0.9);
+  u.body.position.set(0, o.bob * 0.9, o.sway * 0.9);
+  u.torso.rotation.set(-o.sway * 2, -o.twist * 1.2, -o.lean);
+  u.head.rotation.set(o.sway * 1.5, o.twist * 0.4, o.lean * 0.8);
+  return o.amt;
 }
 
 /** Leva a mão do braço (s = 1 direito, −1 esquerdo) até um ponto do mundo (k = 0..1 mistura com o braço solto).

@@ -4,7 +4,8 @@
 // aparece a figura preta gigante e a cena volta para a tela inicial. Nada é salvo como concluído.
 import * as THREE from 'three';
 import { whitenFade } from './whiteout.js';
-import { buildStandingReader } from './models/reader.js';
+import { buildStandingReader, walkK } from './models/reader.js';
+import { smoothCharacter } from './models/kit.js';
 import { buildStandingReader as buildFigureBody } from './models/readerClassic.js';   // a figura mantém o formato antigo
 import { buildBody } from './models/driver.js';
 
@@ -175,20 +176,20 @@ export function createExtraStory(ctx) {
   scene.add(K);
   const R = new THREE.Group(); const rBody = new THREE.Group(); rBody.scale.setScalar(0.86); R.add(rBody);
   const RB = buildBody(rBody, { classic: true });   // (a R mantém a forma antiga)
-  const rMat = new THREE.MeshStandardMaterial({ color: '#003EFF', roughness: 0.85, flatShading: true, clippingPlanes: clip, transparent: true });
+  const rMat = new THREE.MeshStandardMaterial({ color: '#003EFF', roughness: 0.85, clippingPlanes: clip, transparent: true });   // liso
   const capSlot = R.getObjectByName('cap'); if (capSlot) capSlot.visible = false;
   // cabelo comprido e saia (mesmo estilo facetado), tudo da mesma cor
   const hr = 0.45;
   const crown = new THREE.Mesh(new THREE.SphereGeometry(hr * 1.07, 10, 7, 0, Math.PI * 2, 0, 1.5), rMat); crown.position.y = 0.46; RB.head.add(crown);
   const back = new THREE.Mesh(new THREE.CapsuleGeometry(hr * 0.78, 0.5, 4, 8), rMat); back.position.set(-0.2, 0.25, 0); back.scale.set(0.7, 1, 1.15); RB.head.add(back);
   const skirt = new THREE.Mesh(new THREE.CylinderGeometry(0.24, 0.42, 0.42, 9, 1, true), rMat); skirt.position.y = -0.12; RB.pelvis.add(skirt);
-  R.traverse(o => { if (o.isMesh) { o.material = rMat; o.castShadow = false; } });
-  RB.arms.forEach((a, i) => { a.sh.rotation.z = 0.05; a.sh.rotation.x = (i ? 1 : -1) * 0.06; a.elbow.rotation.z = 0.12; });
+  R.traverse(o => { if (o.isMesh) { o.material = rMat; o.castShadow = false; } }); smoothCharacter(R);   // superfície lisa (mais segmentos)
+  RB.arms.forEach((a, i) => { a.sh.rotation.z = 0.05; a.sh.rotation.x = (i ? -1 : 1) * 0.1; a.elbow.rotation.z = 0.16; });   // braços um pouco afastados do vestido
   scene.add(R);
 
   // ---- a figura: humanoide inteiro preto, bem maior ----
   const figMat = new THREE.MeshBasicMaterial({ color: '#000000', transparent: true, opacity: 0 });
-  const fig = buildFigureBody(); fig.traverse(o => { if (o.isMesh) { o.material = figMat; o.castShadow = false; } });
+  const fig = buildFigureBody(); fig.traverse(o => { if (o.isMesh) { o.material = figMat; o.castShadow = false; } }); smoothCharacter(fig);
   fig.scale.set(4.6, 5.0, 4.6); fig.rotation.y = -Math.PI / 2; fig.position.set(0.4, 0, -19.5); fig.visible = false;
   const fh = fig.userData.head; scene.add(fig);
 
@@ -241,7 +242,8 @@ export function createExtraStory(ctx) {
     cube.visible = true; cracks.visible = false; crackMat.opacity = 0;
     skyMat.uniforms.uOp.value = 1; plainMat.opacity = 1; rMat.opacity = 1; rMat.transparent = false; rMat.needsUpdate = true;
     while (shards.children.length) { const s = shards.children.pop(); s.geometry.dispose(); }
-    K.position.copy(K0); K.rotation.y = K_FACE; K.visible = true; K.userData.legs.forEach(l => { l.rotation.z = 0; l.userData.knee.rotation.z = 0; });
+    K.position.copy(K0); K.rotation.y = K_FACE; K.visible = true; K.userData.legs.forEach(l => { l.rotation.z = 0; l.userData.knee.rotation.z = 0; l.userData.foot.rotation.z = 0; });
+    delete K.userData.gait; K.userData.arms.forEach(a => { a.sh.quaternion.copy(a.rest); a.elbow.quaternion.copy(a.erest); }); K.userData.body.position.set(0, 0, 0); K.userData.torso.rotation.set(0, 0, 0); K.userData.head.rotation.set(0, 0, 0);
     R.position.copy(R0); R.rotation.y = -Math.PI / 2; R.visible = true;
     fig.visible = false; figMat.color.copy(BLACK); figMat.opacity = 0; if (fh) fh.rotation.set(0, 0, 0);
     fig.position.set(0.4, 0, -19.5); fig.rotation.y = -Math.PI / 2; streaks.visible = false;
@@ -319,8 +321,7 @@ export function createExtraStory(ctx) {
         if (t > 0.5) {
           const v = 1.25 * Math.min(1, (t - 0.5) / 0.4), hd = -K.rotation.y;
           K.position.x += Math.cos(hd) * v * dt; K.position.z += Math.sin(hd) * v * dt;
-          S.ph += dt * 6.2;
-          K.userData.legs.forEach((l, i) => { const a = Math.sin(S.ph + i * Math.PI); l.rotation.z = 0.45 * a; l.userData.knee.rotation.z = -0.55 * Math.max(0, -a) - 0.08; });
+          walkK(K, dt, v * dt);                                  // passos com os pés plantados (gait.js)
         }
         if (K.position.x > HALF + 0.9) { K.visible = false; if (!S.kGone) S.kGone = t; }
         if (S.kGone && t - S.kGone > T.kAfter) { go('crack'); glass('crack'); }

@@ -116,3 +116,35 @@ export function textTexture(text, { width = 512, height = 128, bg = '#8a5a36', f
   t.anisotropy = 4;
   return t;
 }
+
+// ---- personagens com superfície suave: mais segmentos nas formas arredondadas e sombreamento suave (sem facetas).
+// As caixas continuam caixas (o estilo simples do jogo); só esferas, cilindros, cones, toros, cápsulas e tornos mudam.
+const upCache = new WeakMap(), smCache = new WeakMap();
+const segUp = (n, lo, hi) => Math.max(lo, Math.min(hi, Math.round(n * 2)));
+function upGeo(g) {
+  if (upCache.has(g)) return upCache.get(g);
+  const p = g.parameters; let n = g;
+  if (p) switch (g.type) {
+    case 'SphereGeometry': n = new THREE.SphereGeometry(p.radius, segUp(p.widthSegments, 18, 32), segUp(p.heightSegments, 12, 22), p.phiStart, p.phiLength, p.thetaStart, p.thetaLength); break;
+    case 'CylinderGeometry': n = new THREE.CylinderGeometry(p.radiusTop, p.radiusBottom, p.height, segUp(p.radialSegments, 18, 32), p.heightSegments, p.openEnded, p.thetaStart, p.thetaLength); break;
+    case 'ConeGeometry': n = new THREE.ConeGeometry(p.radius, p.height, segUp(p.radialSegments, 16, 28), p.heightSegments, p.openEnded, p.thetaStart, p.thetaLength); break;
+    case 'TorusGeometry': n = new THREE.TorusGeometry(p.radius, p.tube, segUp(p.radialSegments, 8, 16), segUp(p.tubularSegments, 20, 40), p.arc); break;
+    case 'CapsuleGeometry': n = new THREE.CapsuleGeometry(p.radius, p.length ?? p.height, segUp(p.capSegments, 6, 12), segUp(p.radialSegments, 14, 28)); break;
+    case 'LatheGeometry': n = new THREE.LatheGeometry(p.points, segUp(p.segments, 20, 40), p.phiStart, p.phiLength); break;
+  }
+  upCache.set(g, n); return n;
+}
+function smoothMat(m) {
+  if (!m || Array.isArray(m) || !m.flatShading) return m;
+  if (!smCache.has(m)) { const c = m.clone(); c.flatShading = false; c.needsUpdate = true; smCache.set(m, c); }
+  return smCache.get(m);
+}
+/** Deixa um personagem liso: troca geometrias arredondadas por versões com mais segmentos e materiais facetados pela versão suave.
+ *  Chamar antes de bakeStatic. Peças com userData.keepFacets ficam como estão. */
+export function smoothCharacter(root) {
+  root.traverse(o => {
+    if (!o.isMesh || o.isSkinnedMesh || o.userData.keepFacets) return;
+    o.geometry = upGeo(o.geometry); o.material = smoothMat(o.material);
+  });
+  return root;
+}
