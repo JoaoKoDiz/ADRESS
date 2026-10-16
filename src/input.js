@@ -24,6 +24,8 @@ export function createInput(onFirstKey) {
       };
     },
     action: () => pressed.has('KeyE') || pressed.has('Space') || pressed.has('Enter'),
+    /** Tecla segurada agora (teclado ou botão de toque segurado). */
+    held: code => keys.has(code) || vkeys.has(code),
     /** Navegação em menus: setas/WASD, um passo por toque. */
     nav() {
       const p = (...c) => c.some(k => pressed.has(k));

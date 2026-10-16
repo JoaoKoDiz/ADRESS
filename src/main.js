@@ -88,6 +88,7 @@ import thirdUrl from '../assets/third-sanctuary.mp3';
 import justUsUrl from '../assets/just-us.mp3';
 import justUsLoopUrl from '../assets/just-us-loop.mp3';
 import { createMenuMusic } from './menuMusic.js';
+import { createBattle, BATTLE_CP_KEY } from './battle.js';
 import { SNOW_LOOP_URL, SNOW_LOOP_SECS } from './menuTrackUrl.js';
 import { createVoidMusic } from './voidMusic.js';
 import sansUrl from '../assets/sans.mp3';
@@ -970,8 +971,8 @@ const title = createTitle({
 const shop = createShop();
 function openShop() { shop.open(); setState('shop'); }
 // Livre: seleção do bairro (todas as miniaturas na tela; setas escolhem, E joga). Depois o helicóptero decola.
-const levelSelect = createLevelSelect(l => confirmLevel(l), i => { if (i === 0) startExtra(); });   // (o 2º, liberado depois do 1º, ainda é espaço reservado)   // (o 1º cartão da página dos extras: introdução do extra 1)
-function openLevelSelect() { levelSelect.setExtra(flagOn(MASS_KEY), flagOn(EXTRA1_KEY) ? 2 : 1); levelSelect.open(freeLevel); setState('levelSelect'); }   // (página dos 4 níveis extras: só depois do temporal)
+const levelSelect = createLevelSelect(l => confirmLevel(l), i => { if (i === 0) startExtra(); else if (i === 3 && battleTest()) startBattle(); });   // (o 2º, liberado depois do 1º, ainda é espaço reservado)   // (o 1º cartão da página dos extras: introdução do extra 1)
+function openLevelSelect() { levelSelect.setExtra(flagOn(MASS_KEY), flagOn(EXTRA1_KEY) ? 2 : 1, battleTest() ? [3] : []); levelSelect.open(freeLevel); setState('levelSelect'); }   // (página dos 4 níveis extras: só depois do temporal)
 function confirmLevel(l) {
   if (state === 'levelSelect' && l < 0 && levelSelect.onExtra) { startExtra(); return; }   // página dos extras: E/Enter abre o 1º
   if (state !== 'levelSelect' || l < 0 || RESERVED.includes(l)) return;   // (−1: página dos níveis extras, ainda sem fases)   // 17–19: reservados
@@ -1010,7 +1011,10 @@ const missions = createMissions(career); // Carreira: M perto da maquete abre as
 // escolhida e apaga as posteriores. Cada cena lê esse progresso ao começar (caixa, K no terraço, igreja e sinos, bonde, Veneza).
 const STORY_STEPS = ['Nada', 'Conversa na casa do personagem — completa', 'Conversa no terraço — completa', 'Primeira conversa na igreja — completa',
   'Trolley Problem — completo', 'Conversa em Veneza — completa', 'Segunda conversa na igreja — completa', "Encontro no Grillby's — completo",
-  'Oficina — Entregar a última peça', 'Oficina no Bairro 24 — completa', 'Apresentação da igreja (Bairro 24) — vista', 'Missa e temporal — completos'];
+  'Oficina — Entregar a última peça', 'Oficina no Bairro 24 — completa', 'Apresentação da igreja (Bairro 24) — vista', 'Missa e temporal — completos',
+  'Batalha após Sacrifício (teste)'];
+const BATTLE_CP = 12;    // teste da batalha: tudo até a missa + marca que libera o cartão Sacrifício para começar a batalha (não conclui os extras)
+const battleTest = () => flagOn(BATTLE_CP_KEY);
 const WS_LAST_CP = 8;    // checkpoint especial (fora da contagem de chaves): Grillby's feito, oficina na 3ª tarefa com a travessa buscada
 const WS_CP_KEY = 'adress.dev.wsLast';   // 'start' = ainda vai pôr o jogador a pé diante da oficina (1× por seleção); 'held' = só mantém a travessa até a entrega
 const storyKeys = () => [PARCEL_KEY, ROOF_KEY, CHURCH_TALK_KEY, TROLLEY_TALK_KEY, VENICE_TALK_KEY, CHURCH2_KEY, GRILL_TALK_KEY, 'adress.med.talk1', INTRO_KEY, MASS_KEY];
@@ -1033,11 +1037,17 @@ const STORY_CP = {
   names: STORY_STEPS,
   current() {
     const k = storyKeys(); let n = 0; while (n < k.length && flagOn(k[n])) n++;
+    if (flagOn(BATTLE_CP_KEY)) return BATTLE_CP;
     if (n === 7 && localStorage.getItem(WS_CP_KEY) && localStorage.getItem('adress.med.shop') === '3') return WS_LAST_CP;
     return n >= 8 ? n + 1 : n;                          // (o da oficina ocupa a posição 9)
   },
   apply(n) {
-    try { localStorage.removeItem(WS_CP_KEY); } catch (e) { /* */ }
+    try { localStorage.removeItem(WS_CP_KEY); localStorage.removeItem(BATTLE_CP_KEY); } catch (e) { /* */ }
+    if (n === BATTLE_CP) {                                 // só prepara: depois da missa, o cartão Sacrifício (4º extra) começa a batalha
+      this.apply(11);
+      try { localStorage.setItem(BATTLE_CP_KEY, '1'); } catch (e) { /* */ }
+      return;
+    }
     if (n === WS_LAST_CP) {                                // "Oficina — Entregar a última peça": tudo até o Grillby's, oficina etapa 3, nada depois
       this.apply(7);
       try { localStorage.setItem('adress.med.shop', '3'); localStorage.setItem(WS_CP_KEY, 'start'); for (const k of [EXTRA1_KEY, EXTRA2_KEY, EXTRA_DONE_KEY, NOVAN_KEY]) localStorage.removeItem(k); } catch (e) { /* */ }
@@ -1083,7 +1093,7 @@ const resetBumps = () => { bumps = 0; bumpHold.clear(); };
 /** Prédios comerciais da partida (grade): porta e frente do lote (as fachadas dão para o sul). */
 const shopFronts = () => game.pool.filter(h => HOUSES[h].kind === 'shop' && !boom.isDestroyed(h)).map(h => { const s = game.slotOf[h]; return { x: doorPoint(s).x, z: slotOrigin(s).z + L_LOT }; });
 const TIMER_PLAY = ['drive', 'ring', 'dialog', 'fuel', 'walk', 'missile', 'chat', 'inside'];                 // partida na tela: aparece
-const TIMER_OFF = ['title', 'levelSelect', 'levelFly', 'shop', 'mapIn', 'map', 'mapOut', 'fadeIn', 'fadeOut', 'extra'];   // menus e fades: não conta
+const TIMER_OFF = ['title', 'levelSelect', 'levelFly', 'shop', 'mapIn', 'map', 'mapOut', 'fadeIn', 'fadeOut', 'extra', 'battle'];   // menus e fades: não conta
 const missionsBtn = createMissionsButton(stage, () => {
   if (gameMode === 'career' && IN_GAME.includes(state) && !missions.isOpen) missions.open(careerLevel);
 });
@@ -1130,6 +1140,8 @@ function goBack() {
     missions.close();
     careerMap.leave();
     showPlayPanel();
+  } else if (state === 'battle') {
+    endBattle(false);                                   // sair da batalha: volta ao painel Jogar (nada é salvo)
   } else if (state === 'extra') {
     endExtra(false);                                    // sair do nível extra: volta ao painel Jogar (nada é salvo)
   } else if (IN_GAME.includes(state)) {
@@ -1822,7 +1834,7 @@ function updateMenuMusic() {
   else if (menuMusic.playing) menuMusic.stop(0.8);
 }
 function updateRain(dt) {
-  const on = rainOn() && !extra.active && !massStory.active;
+  const on = rainOn() && !extra.active && !massStory.active && !battle.active;
   const menuS = MENU_STATES.includes(state) || inMap();
   const chs = [church, medChurch].filter(c => c && c.parent === world.scene && c.visible !== false);
   const cam = rig.camera.position;
@@ -1880,6 +1892,39 @@ function endExtra(toTitle) {
     title.show('home'); if (titleDriver) titleDriver.stop();
     setState('title'); setMenuNight(menuBg() === 'night' && neighborhood === 'grid4');
     if (toTitle !== 'shatter') { talkBox.fadeBlack(1, 0); setTimeout(() => talkBox.fadeBlack(0, 1500), 60); }
+  } else showPlayPanel();
+}
+// ---------- Batalha (depois do 4º nível extra, Sacrifício) ----------
+// Cena própria (battle.js). Entrada: no futuro, direto do fim do extra 4 (startBattle({ direct: true }), sem voltar ao menu);
+// por enquanto só pelo teste do cadeado (o cartão Sacrifício na página dos extras). Nada é salvo no progresso.
+const battle = createBattle({ input, audio, renderer, stage, onFinish: () => endBattle(true) });
+function startBattle(opts = {}) {
+  const go = () => {
+    if (titleDriver) titleDriver.stop();
+    title.hide(); document.body.classList.add('extra-on');
+    talkBox.hide(); music.suspend(true, 0.8);
+    battle.camera.aspect = rig.camera.aspect; battle.camera.updateProjectionMatrix();
+    battle.start(opts); renderer.compile(battle.scene, battle.camera);
+    fade = 1; setState('battle');
+  };
+  document.body.classList.add('extra-on'); menu.close();   // nada da interface pisca ao carregar
+  if (opts.direct || state !== 'levelSelect') { go(); return; }
+  levelSelect.close(); setState('levelFly');
+  title.fadeOut(go);
+}
+/** Fim (ou saída) da batalha: volta à tela inicial (toTitle, depois do ponto final provisório) ou ao painel Jogar. Nada é salvo. */
+function endBattle(toTitle) {
+  battle.stop();
+  document.body.classList.remove('extra-on');
+  music.suspend(false);
+  fade = 0;
+  if (toTitle) {
+    menuWorld();
+    if (rig.mode !== 'overview') rig.toggle();
+    rig.snap({ x: van.x, z: van.z, heading: van.heading, speed: 0 });
+    title.show('home'); if (titleDriver) titleDriver.stop();
+    setState('title'); setMenuNight(menuBg() === 'night' && neighborhood === 'grid4');
+    talkBox.fadeBlack(1, 0); setTimeout(() => talkBox.fadeBlack(0, 1500), 60);
   } else showPlayPanel();
 }
 let chseq = null;
@@ -2491,6 +2536,12 @@ function update(dt, t) {
       }
       break;
     }
+    case 'battle':                                   // batalha depois do extra 4 (cena própria)
+      van.stop();
+      if (Math.abs(battle.camera.aspect - rig.camera.aspect) > 1e-4) { battle.camera.aspect = rig.camera.aspect; battle.camera.updateProjectionMatrix(); }
+      battle.update(dt, document.hidden);
+      if (battle.active) fade = battle.fade;
+      break;
     case 'extra':                                    // nível extra 1: o vazio, o cubo e a figura (cena própria)
       van.stop();
       if (Math.abs(extra.camera.aspect - rig.camera.aspect) > 1e-4) { extra.camera.aspect = rig.camera.aspect; extra.camera.updateProjectionMatrix(); }
@@ -2713,6 +2764,7 @@ function touchFrame() {
     case 'inside': joystick = true; break;                            // Grillby's (visão de cima, sem giro)
     case 'gstory': joystick = true; look = true; break;               // 1ª pessoa / resgate (a história decide o que vale)
     case 'extra': joystick = look = !extra.locked; break;
+    case 'battle': joystick = battle.joystick; if (battle.actionLabel) A('Space', battle.actionLabel, '●', true); break;   // círculo + botão de ação (segurado)
     case 'boss': if (monster.phase === 'grace') { joystick = true; if (!monster.robotOn) A('KeyT', 'Robô', 'T'); } break;
     case 'map': joystick = true; A('KeyE', 'Jogar', 'E'); A('KeyM', 'Missões', 'M'); break;
     case 'trolley': if (trolley.choosing) A('KeyE', 'Mudar o trajeto', 'E'); break;
@@ -2726,7 +2778,7 @@ function updateHUD() {
   matchTimer.show((TIMER_PLAY.includes(state) && !approachLock()) || (state === 'fadeOut' && endToMap));   // cenas e aproximação da igreja: escondido
   music.setNowPlaying(nowPlaying());              // nome da faixa ao lado do botão de música
   music.setLift(talkBox.open);
-  back.set(state === 'levelSelect' || state === 'shop' || (state === 'extra' && extra.active && extra.phase !== 'out') || (state === 'map' && !missions.isOpen) || (IN_GAME.includes(state) && !missions.isOpen));
+  back.set(state === 'levelSelect' || state === 'shop' || (state === 'extra' && extra.active && extra.phase !== 'out') || (state === 'battle' && battle.active) || (state === 'map' && !missions.isOpen) || (IN_GAME.includes(state) && !missions.isOpen));
   missionsBtn.set(gameMode === 'career' && IN_GAME.includes(state) && !missions.isOpen,
     `MISSÕES ${career.completedCount(careerLevel)}/5`);
   hud.setCounter(game.delivered);
@@ -2740,7 +2792,7 @@ function updateHUD() {
     return;
   }
   lock.set(false);
-  if (state === 'extra') {                           // nível extra 1: sem pista, contador, dica nem cronômetro
+  if (state === 'extra' || state === 'battle') {     // nível extra 1 e batalha: sem pista, contador, dica nem cronômetro
     hud.setSub('', 'muted'); hud.setMain('', 'clue'); hintBtn.set('hidden'); hud.setPrompt(false);
     hud.setFade(fade);
     return;
@@ -2896,7 +2948,7 @@ renderer.setAnimationLoop(now => {
   elapsed += dt;
   update(dt, elapsed);
   updateHUD();
-  if (inMap()) renderer.render(careerMap.scene, careerMap.camera); else if (state === 'extra' && extra.active) renderer.render(extra.scene, extra.camera); else if (insideOn) renderer.render(grillIn.scene, grillIn.camera); else if (state === 'trolley') renderer.render(trolley.scene, trolley.camera); else if (state === 'laser' && fxCine.inSpace) renderer.render(fxCine.scene, fxCine.camera); else if (churchCine.active) churchCine.render(world.scene, rig.camera); else renderer.render(world.scene, rig.camera);
+  if (inMap()) renderer.render(careerMap.scene, careerMap.camera); else if (state === 'extra' && extra.active) renderer.render(extra.scene, extra.camera); else if (state === 'battle' && battle.active) renderer.render(battle.scene, battle.camera); else if (insideOn) renderer.render(grillIn.scene, grillIn.camera); else if (state === 'trolley') renderer.render(trolley.scene, trolley.camera); else if (state === 'laser' && fxCine.inSpace) renderer.render(fxCine.scene, fxCine.camera); else if (churchCine.active) churchCine.render(world.scene, rig.camera); else renderer.render(world.scene, rig.camera);
 });
 
 // ---------- Ganchos para testes automatizados ----------
@@ -2918,7 +2970,7 @@ window.ADRESS = {
   moonPlace(p, f) { van.teleport(0, 0, 0); FRAME.reset(new THREE.Vector3(...p).normalize(), new THREE.Vector3(...f), 0, 0); moonAnchor.x = moonAnchor.z = 0; FRAME.toSphere(0, 0, vanSph.p); moonUpdate(0, true); },
   get moonVan() { return { p: vanSph.p.toArray().map(v => +v.toFixed(3)), f: vanSph.f.toArray().map(v => +v.toFixed(3)), y: +van.simY.toFixed(2) }; },
   FRAME, MOONV: () => MOONV,
-  massStory, MASS_KEY, extra, startExtra, screenShatter, voidMusic, menuMusic, rainFx, rainAudio, menuBg, get menuNight() { return !!nightSaved; }, get rainOn() { return rainOn(); }, menuWorld, lockCP: n => STORY_CP.apply(n), lockCPcur: () => STORY_CP.current(), devMissions: DEV_MISSIONS, get parcelVisible() { return !!parcel.parent; },
+  massStory, MASS_KEY, extra, startExtra, battle, startBattle, endBattle, screenShatter, voidMusic, menuMusic, rainFx, rainAudio, menuBg, get menuNight() { return !!nightSaved; }, get rainOn() { return rainOn(); }, menuWorld, lockCP: n => STORY_CP.apply(n), lockCPcur: () => STORY_CP.current(), devMissions: DEV_MISSIONS, get parcelVisible() { return !!parcel.parent; },
   laser, ursa, solar, reality, startLaser,
   get church() { return church; }, get venK() { return venK; }, startVeniceTalk, churchStage, get greenBell() { return greenBell; }, get churchBell() { return churchBell; },
   churchReveal() { if (churchOn && !churchShown) { approach.phase = 'revealed'; revealChurch(true); } },
@@ -2945,7 +2997,7 @@ window.ADRESS = {
   /** Coloca a van parada no ponto de entrega da casa h, virada para leste. */
   placeVanAtDoor(h) { const p = doorPoint(game.slotOf[h]); van.teleport(p.x, p.z, 0); },
   /** Executa n quadros de simulação com passo fixo (útil quando o requestAnimationFrame está parado). */
-  step(n = 1, dt = 1 / 60) { for (let i = 0; i < n; i++) { elapsed += dt; update(dt, elapsed); updateHUD(); } if (inMap()) renderer.render(careerMap.scene, careerMap.camera); else if (state === 'extra' && extra.active) renderer.render(extra.scene, extra.camera); else if (insideOn) renderer.render(grillIn.scene, grillIn.camera); else if (state === 'trolley') renderer.render(trolley.scene, trolley.camera); else if (state === 'laser' && fxCine.inSpace) renderer.render(fxCine.scene, fxCine.camera); else if (churchCine.active) churchCine.render(world.scene, rig.camera); else renderer.render(world.scene, rig.camera); },
+  step(n = 1, dt = 1 / 60) { for (let i = 0; i < n; i++) { elapsed += dt; update(dt, elapsed); updateHUD(); } if (inMap()) renderer.render(careerMap.scene, careerMap.camera); else if (state === 'extra' && extra.active) renderer.render(extra.scene, extra.camera); else if (state === 'battle' && battle.active) renderer.render(battle.scene, battle.camera); else if (insideOn) renderer.render(grillIn.scene, grillIn.camera); else if (state === 'trolley') renderer.render(trolley.scene, trolley.camera); else if (state === 'laser' && fxCine.inSpace) renderer.render(fxCine.scene, fxCine.camera); else if (churchCine.active) churchCine.render(world.scene, rig.camera); else renderer.render(world.scene, rig.camera); },
 };
 // depois do 4º sino o fundo dos menus já começa no Bairro 24 (na chuva)
 menuWorld(); syncNoVan();
