@@ -211,11 +211,13 @@ export function createMassStory(ctx) {
     for (const l of B.legs) { l.hip.rotation.z = Math.PI / 2 - 0.05; l.knee.rotation.z = -Math.PI / 2 + 0.1; }
     for (const a of B.arms) { a.sh.rotation.z = 0.5; a.elbow.rotation.z = 0.9; }          // mãos sobre as coxas
     g.traverse(o => { if (o.isMesh) o.castShadow = true; });
+    const cap = g.getObjectByName('cap'); if (cap) cap.visible = false;   // na igreja, sem boné (a customização salva não muda)
     seated = { g, B };
     return seated;
   }
   function startTalk() {
     S = { phase: 'sitIn', t: 0, line: 0, gest: [0, 0, 0], g: [0, 0, 0] };
+    ctx.thirdMusic.fadeOut(3);                          // "The Third Sanctuary" some em ~3 s enquanto a conversa começa
     ctx.setState('mstory'); walker.show(false);
     talkBox.fadeBlack(1, 350, () => {
       const P = seatedPlayer(); P.g.position.set(P_SEAT.x, 0, P_SEAT.z); P.g.rotation.set(0, Math.PI / 2, 0); church().add(P.g); P.g.visible = true;
@@ -227,7 +229,7 @@ export function createMassStory(ctx) {
   function endTalk() {
     if (!S) return;
     S.phase = 'toMass'; S.t = 0;
-    ctx.thirdMusic.fadeOut(2.6);                        // "The Third Sanctuary" some durante o preto
+    if (ctx.thirdMusic.active) ctx.thirdMusic.fadeOut(2.6);   // (já saiu no começo da conversa)
     talkBox.fadeBlack(1, 1400, () => { setupMass(); if (S) { S.phase = 'mass'; S.t = 0; S.massReady = true; } setTimeout(() => talkBox.fadeBlack(0, 1600), 1200); });
   }
 
@@ -242,12 +244,12 @@ export function createMassStory(ctx) {
       for (let r = 0; r < 15; r++) for (const [x0, x1] of [[1.4, 4.2], [-4.2, -1.4]]) {
         if (r === 5 && x0 > 0) continue;                                     // o banco do K e do jogador
         for (const x of [x0 + 0.72, x1 - 0.72]) {                            // a dupla: 2 por banco, folga entre um banco e outro
-          const P = buildMedPerson({ role: roles[n % roles.length], k: n * 7 + 3 });
+          const P = buildMedPerson({ role: roles[n % roles.length], k: n * 7 + 3, hat: null });   // (dentro da igreja: ninguém de chapéu/capuz)
           P.root.position.set(x, 0, PEW_Z(r) - 0.02); P.root.rotation.y = Math.PI;   // de frente para o altar (−z)
           crowd.add(P.root); crowd.userData.people.push({ P, ph: n * 1.37, s: { mode: 'sit', seat: 0.6, t: 0 } }); n++;
         }
       }
-      priest = buildMedPerson({ role: 'elder', k: 11 }); priest.root.position.set(0, 0.66, -43.0); crowd.add(priest.root);
+      priest = buildMedPerson({ role: 'elder', k: 11, hat: null }); priest.root.position.set(0, 0.66, -43.0); crowd.add(priest.root);
       crowd.userData.priestS = { mode: 'idle', t: 0 };
       // água escorrendo por dentro dos vitrais das naves laterais
       streaks = new THREE.Group(); c.add(streaks);

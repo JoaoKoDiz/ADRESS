@@ -1822,6 +1822,9 @@ function updateRain(dt) {
   const menuRain = menuBg() === 'rain';                 // menus: chuva só no fundo do Bairro 24 (na noite do Bairro 1, nada)
   setMenuNight(menuBg() === 'night' && MENU_STATES.includes(state) && neighborhood === 'grid4');
   rainAudio.set(on && (!menuS || menuRain) ? (menuS ? MENU_RAIN : 0.3) : 0, insideOn || inChurch);
+  // dentro de qualquer igreja: o jogador a pé sem boné (só esconde o acessório; volta ao sair; a customização salva não muda)
+  const capSlot = walker.object.getObjectByName('cap');
+  if (capSlot) { const wp = walker.object.position; capSlot.visible = !chs.some(c => { _rl.set(wp.x, wp.y + 1, wp.z).applyMatrix4(_rinv.copy(c.matrixWorld).invert()); return _rl.x > -24 && _rl.x < 24 && _rl.z > -58 && _rl.z < 2.4; }); }
   rainAudio.update(dt, document.hidden);
   if (rainFx.object.parent !== world.scene) world.scene.add(rainFx.object);
   rainFx.update(dt, cam, on && !inMap() && (!MENU_STATES.includes(state) || menuRain) ? 0.55 : 0, chs);

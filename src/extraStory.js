@@ -15,7 +15,11 @@ const BG = new THREE.Color('#0b0b0e');                  // o vazio
 const E = 6.3, HALF = E / 2, CZ = -14, FRONT = CZ + HALF, BACK = CZ - HALF;   // cubo: aresta ≈ 3× a altura do jogador
 const K0 = new THREE.Vector3(-1.1, 0, -12.3), R0 = new THREE.Vector3(1.0, 0, -14.7);
 const FAR_VAN = { x: 1e9, z: 1e9 };
-const T = { hold: 5, kWalk: 5.2, kAfter: 1.1, crack: 0.75, fall: 3.0, empty: 1.4, rise: 3.0, ease: 5, travel: 2, pull: 1.0 };
+const START_Z = 34;                                       // o jogador começa bem longe do cubo (frente em z ≈ −10,9)
+const TRIGGER = 21;                                       // a cena começa ainda longe: a esta distância da frente do cubo
+const K_FACE = Math.atan2(-(R0.z - K0.z), R0.x - K0.x);  // o K de frente para a R (despedida)
+const FIG_H = 9.5;                                        // altura da figura (para subir de baixo para o quadro)
+const T = { hold: 5, kWalk: 5.2, kAfter: 1.1, crack: 0.75, fall: 3.0, empty: 1.4, rise: 0.7, ease: 5, travel: 2, up: 1.1, pull: 1.0 };
 // Falas da figura (avanço manual: E/Espaço ou toque no balão; "[…]" = pausa curta na digitação, não aparece).
 const P_ = s => { const out = []; for (const part of s.split(/(\[…\])/)) { if (!part) continue; if (part === '[…]') out.push({ p: 0.6 }); else out.push(out.length && out[out.length - 1].p ? part.replace(/^\s+/, '') : part); } return out; };
 const TALK2 = [   // diálogo 2: depois que o cubo se quebra e a figura aparece
@@ -182,7 +186,7 @@ export function createExtraStory(ctx) {
   scene.add(R);
 
   // ---- a figura: humanoide inteiro preto, bem maior ----
-  const figMat = new THREE.MeshBasicMaterial({ color: BG.clone() });
+  const figMat = new THREE.MeshBasicMaterial({ color: '#000000', transparent: true, opacity: 0 });
   const fig = buildStandingReader(); fig.traverse(o => { if (o.isMesh) { o.material = figMat; o.castShadow = false; } });
   fig.scale.set(4.6, 5.0, 4.6); fig.rotation.y = -Math.PI / 2; fig.position.set(0.4, 0, -19.5); fig.visible = false;
   const fh = fig.userData.head; scene.add(fig);
@@ -219,6 +223,16 @@ export function createExtraStory(ctx) {
     camera.lookAt(_l.set(walker.x, 1.35, walker.z));
   }
   const shot = (p, l) => { camera.position.set(...p); camera.lookAt(_l.set(...l)); };
+  // câmeras de fora do cubo, presas a onde o jogador parou (u: do cubo para ele; sd: lateral). O FOV fecha com a distância,
+  // para o cubo/figura terem no quadro o mesmo tamanho de antes (ref = distância da tomada original) sem mover ninguém.
+  const view = { px: 0, pz: 0, ux: 0, uz: 1 };
+  function setView() { view.px = walker.x; view.pz = walker.z; const dx = walker.x, dz = walker.z - CZ, l = Math.hypot(dx, dz) || 1; view.ux = dx / l; view.uz = dz / l; }
+  function outShot(side, y, back, look, fov) {             // atrás do jogador, um pouco de lado: ele em primeiro plano, o cubo/figura ao fundo
+    const sx = view.uz, sz = -view.ux;
+    camera.position.set(view.px + sx * side + view.ux * back, y, view.pz + sz * side + view.uz * back);
+    camera.lookAt(_l.set(...look));
+    if (Math.abs(camera.fov - fov) > 0.01) { camera.fov = fov; camera.updateProjectionMatrix(); }
+  }
 
   let S = null;
   function reset() {
@@ -226,9 +240,9 @@ export function createExtraStory(ctx) {
     cube.visible = true; cracks.visible = false; crackMat.opacity = 0;
     skyMat.uniforms.uOp.value = 1; plainMat.opacity = 1; rMat.opacity = 1; rMat.transparent = false; rMat.needsUpdate = true;
     while (shards.children.length) { const s = shards.children.pop(); s.geometry.dispose(); }
-    K.position.copy(K0); K.rotation.y = -Math.PI / 2; K.visible = true; K.userData.legs.forEach(l => { l.rotation.z = 0; l.userData.knee.rotation.z = 0; });
+    K.position.copy(K0); K.rotation.y = K_FACE; K.visible = true; K.userData.legs.forEach(l => { l.rotation.z = 0; l.userData.knee.rotation.z = 0; });
     R.position.copy(R0); R.rotation.y = -Math.PI / 2; R.visible = true;
-    fig.visible = false; figMat.color.copy(BG); if (fh) fh.rotation.set(0, 0, 0);
+    fig.visible = false; figMat.color.copy(BLACK); figMat.opacity = 0; if (fh) fh.rotation.set(0, 0, 0);
     fig.position.set(0.4, 0, -19.5); fig.rotation.y = -Math.PI / 2; streaks.visible = false;
     camera.fov = 50; camera.updateProjectionMatrix();
   }
@@ -250,7 +264,7 @@ export function createExtraStory(ctx) {
   /** Começa a cena (o jogador já foi passado para cá pelo main). */
   function start() {
     reset();
-    scene.add(walker.object); walker.setFloor(0); walker.pose(0, 0, -Math.PI / 2); walker.show(true);
+    scene.add(walker.object); walker.setFloor(0); walker.pose(0, START_Z, -Math.PI / 2); walker.show(true);
     C.yaw = walker.heading; C.oy = 0; C.op = 0; C.hold = false;
     S = { phase: 'walk', t: 0, white: null, wk: 0, fade: 1, stopK: 1, ph: 0 };
     chaseCam(0, true);
@@ -273,13 +287,13 @@ export function createExtraStory(ctx) {
     if (S.phase === 'walk') {
       S.fade = Math.max(0, S.fade - dt / 1.0);
       const bx = Math.max(0, Math.abs(walker.x) - HALF), bz = Math.max(0, walker.z - FRONT, BACK - walker.z);
-      if (Math.hypot(bx, bz) < 2.5) { go('stop'); S.stopAx = { x: ax.x, z: ax.z || -1 }; }
+      if (Math.hypot(bx, bz) < TRIGGER) { go('stop'); S.stopAx = { x: ax.x, z: ax.z || -1 }; }
     }
     const box = [{ x0: -HALF, x1: HALF, z0: BACK, z1: FRONT }];
     if (S.phase === 'stop') { S.stopK = Math.max(0, 1 - S.t / 0.7); walker.setSpeedMul(S.stopK); walker.update(dt, S.stopK > 0.02 ? S.stopAx : { x: 0, z: 0 }, 'car', box, FAR_VAN); }
     else walker.update(dt, ax, 'car', box, FAR_VAN);
     // branco: só depois do 1º deslocamento de verdade (girar a câmera não conta)
-    if (!S.white && Math.hypot(walker.x, walker.z) > 0.05) S.white = whitenFade(walker.object);
+    if (!S.white && Math.hypot(walker.x, walker.z - START_Z) > 0.05) S.white = whitenFade(walker.object);
     if (S.white && !S.white.done) { S.wk = Math.min(1, S.wk + dt / 1.6); S.white.step(S.wk * S.wk * (3 - 2 * S.wk)); }
     // R: respira; K: parado olhando para fora, depois sai andando
     if (talkBox.open && (S.phase === 'talk2' || S.phase === 'talk3')) {   // E/Espaço (ou toque no balão): completa a fala; com ela completa, avança
@@ -291,7 +305,7 @@ export function createExtraStory(ctx) {
       case 'walk': chaseCam(dt); break;
       case 'stop':
         chaseCam(dt);
-        if (S.t >= 0.95) { walker.setSpeedMul(1); go('hold'); }
+        if (S.t >= 0.95) { walker.setSpeedMul(1); setView(); go('hold'); }   // (o jogador fica onde parou)
         break;
       case 'hold':                                         // câmera de dentro, atrás da R, um pouco à esquerda dela
         shot([2.35 + t * 0.01, 2.55, BACK + 0.25], [-0.7, 1.0, FRONT + 2.5]);
@@ -300,7 +314,7 @@ export function createExtraStory(ctx) {
       case 'kexit': {                                     // o K sai andando pela esquerda da R e some no corte do cubo
         shot([2.4, 2.55, BACK + 0.25], [-0.7, 1.0, FRONT + 2.5]);
         const want = 0.25, tr = Math.min(1, t / 0.7);
-        K.rotation.y = -Math.PI / 2 + (want + Math.PI / 2) * (tr * tr * (3 - 2 * tr));
+        K.rotation.y = K_FACE + (want - K_FACE) * (tr * tr * (3 - 2 * tr));
         if (t > 0.5) {
           const v = 1.25 * Math.min(1, (t - 0.5) / 0.4), hd = -K.rotation.y;
           K.position.x += Math.cos(hd) * v * dt; K.position.z += Math.sin(hd) * v * dt;
@@ -312,12 +326,12 @@ export function createExtraStory(ctx) {
         break;
       }
       case 'crack':                                        // fora do cubo: o jogador (branco) e o cubo inteiro; a imagem racha
-        shot([-4.6, 2.7, -3.4], [0.4, 2.7, CZ]);
+        outShot(-1.7, 1.95, 9, [0.2, 2.4, CZ], 30);
         cracks.visible = true; crackMat.opacity = Math.min(0.85, t / T.crack);
         if (t >= T.crack) { breakCube(); glass('shatter'); go('fall'); }
         break;
       case 'fall': {                                       // os cacos caem no vazio e somem (sem chão)
-        shot([-4.6, 2.7, -3.4], [0.4, 2.4 - t * 0.2, CZ]);
+        outShot(-1.7, 1.95, 9, [0.2, 2.4 - t * 0.2, CZ], 30);
         rMat.transparent = true; rMat.opacity = Math.max(0, 1 - t / 1.1); R.visible = rMat.opacity > 0.01;
         for (const m of shards.children) {
           const ud = m.userData, tt = t - ud.delay; if (tt <= 0) continue;
@@ -330,16 +344,16 @@ export function createExtraStory(ctx) {
         break;
       }
       case 'empty':
-        shot([-4.6, 2.7, -3.4], [0.4, 2.1, CZ]);
+        outShot(-1.7, 1.95, 9, [0.2, 2.2, CZ], 30);
         if (t >= T.empty) { fig.visible = true; go('rise'); }
         break;
       case 'rise':                                         // a figura aparece (sem brilho, só um preto mais fundo que o vazio)
       case 'talk2': {                                      // diálogo 2 (manual); o movimento só começa depois da última fala
-        const k = S.phase === 'rise' ? Math.min(1, t / T.rise) : 1;
-        figMat.color.copy(BG).lerp(BLACK, k * k * (3 - 2 * k));
+        const k = S.phase === 'rise' ? Math.min(1, t / T.rise) : 1;   // fade-in rápido (≈0,7 s) só na figura: de invisível ao preto
+        figMat.opacity = k * k * (3 - 2 * k);
         const u = Math.min(1, S.phase === 'rise' ? t / (T.rise + T.ease) : (T.rise + t) / (T.rise + T.ease));
         const ue = u * u * (3 - 2 * u);
-        shot([-4.6 + 0.9 * ue, 1.3 + 0.2 * ue, -1.8 + 0.6 * ue], [0.2, 3.7, -16]);   // (a figura fica acima da caixa de fala)
+        outShot(-1.7 + 0.5 * ue, 1.25 + 0.15 * ue, 9 - 1.2 * ue, [0.3, 3.2, -18], 34);   // (a figura acima da caixa de fala, o jogador à frente)   // (a figura fica acima da caixa de fala)
         if (fh && S.phase === 'talk2') fh.rotation.y = -0.18 * Math.min(1, t / 2.5);   // a cabeça se inclina de leve para o jogador
         if (S.phase === 'rise' && t >= T.rise) { go('talk2'); talkBox.show(TALK2, () => { if (S && S.phase === 'talk2') startTravel(); }, { hint: HINT }); }
         break;
@@ -352,13 +366,16 @@ export function createExtraStory(ctx) {
         S.dist += v * dt;
         walker.update(dt, { x: 0, z: 0 }, 'car', [], FAR_VAN);                // parado na pose (só a respiração)
         updateStreaks(dt, v);
-        whoosh(0.5 * Math.min(1, tt / 0.8));
+        whoosh(0.2 * Math.min(1, tt / 0.8));                  // vento a 40% do anterior (0,5 → 0,2), pelo volume de efeitos
         const F = S.f, P = S.p;
         if (S.phase === 'travel') {                        // a figura original se afasta (continuidade: ela estava ali à frente)
           const o = S.fig0; fig.position.set(o.x + F.x * S.dist, 0, o.z + F.z * S.dist);
-          if (t >= T.travel) {                             // exatamente 2 s depois: ela já está ali, à frente
-            fig.position.set(P.x + F.x * 14, 0, P.z + F.z * 14); fig.rotation.y = -Math.atan2(-F.z, -F.x); figMat.color.copy(BLACK);
+          if (t >= T.travel) {                             // exatamente 2 s depois: ela reaparece à frente, subindo de baixo para o quadro
+            const k = Math.min(1, (t - T.travel) / T.up), e = 1 - Math.pow(1 - k, 3);
+            fig.position.set(P.x + F.x * 14, -FIG_H * 1.15 * (1 - e), P.z + F.z * 14); fig.rotation.y = -Math.atan2(-F.z, -F.x); figMat.opacity = 1;
             if (fh) fh.rotation.y = 0;
+          }
+          if (t >= T.travel + T.up) {                      // chegou: começa o diálogo 3 (o deslocamento continua)
             go('talk3');
             talkBox.show(TALK3, () => { if (S && S.phase === 'talk3') { go('pull'); S.pullFrom = { x: walker.x, z: walker.z }; } }, { hint: HINT });   // a última fala → o puxão
           }
@@ -448,7 +465,7 @@ export function createExtraStory(ctx) {
     get locked() { return !!S && S.phase !== 'walk'; },
     get figPos() { return fig.position.clone(); }, get camPos() { return camera.position.clone(); },
     _K: K, _R: R, _fig: fig, _shards: shards, _cube: cube,
-    _jump(p) { if (!S) return; if (p !== 'walk' && !S.white) { S.white = whitenFade(walker.object); S.wk = 1; S.white.step(1); } if (p === 'travel') { fig.visible = true; startTravel(); } else go(p); S.fade = 0; },
+    _jump(p) { if (!S) return; if (p !== 'walk' && !S.white) { S.white = whitenFade(walker.object); S.wk = 1; S.white.step(1); } if (p === 'travel') { fig.visible = true; figMat.opacity = 1; startTravel(); } else go(p); S.fade = 0; },
   };
 }
 
