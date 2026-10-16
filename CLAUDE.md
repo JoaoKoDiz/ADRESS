@@ -325,6 +325,13 @@ document.title = 'OK ' + A.dialog.text + ' errs=' + JSON.stringify(window.__errs
 - **Teste de alcance** já usado: *flood fill* numa grade de 0.5 com raio 1.3 da van contra `SOLIDS`; todas as portas (`doorPoint`) devem ser alcançáveis.
 - Cuidado com aspas simples dentro de `node -e '…'` no Bash. Prefira escrever scripts de edição em arquivo.
 
+## 7b. Batalha depois do extra 4 (Sacrifício) — EM ANDAMENTO
+
+- `src/battle.js` (`createBattle`; estado `battle` em `main.js`: `startBattle(opts)` / `endBattle(toTitle)`; `startBattle({ direct: true })` = entrada futura direto do fim do extra 4). Arena preta com grade em shader, câmera fixa ~140° (atrás/direita do jogador), círculo WASD preso à grade, mecanismos Bloquear / Refletir / Firmar (um por trecho), projéteis com aviso, fissuras e estruturas, estabilidade em anéis, falha reinicia só o trecho, autonomia do K por fragmentos concluídos (nada antes do 2º azul), 18 trechos + 8 fragmentos + final com placeholders neutros (`setFragmentHandler` / `setFinaleHandler` para integrar depois). Sem música. Ganchos: `ADRESS.battle` (`step`, `mech`, `_jump`, `_setCircle`, `_action`, `_fire`, `_setStab`…).
+- Teste: cadeado 1225 → checkpoint 13 "Batalha após Sacrifício (teste)" (só prepara: grava até a missa + `adress.dev.battle`), depois Livre → página dos extras → cartão **Sacrifício** começa a batalha. Não conclui os extras.
+- Prévia separada (trabalho incompleto): https://claude.ai/artifact/Tq23mt8j9rBsbe7AmVVdCj (build do `src/` em `scratchpad/batalha-previa.html`); a versão estável continua no artifact principal e no `index.html` da raiz (não rebuildado com a batalha ainda).
+- Pendências menores (verificação): prévia do traço ainda segue o círculo depois do limite; soltar perto do limite descarta a cauda em vez de cortá-la; cooldown do Bloquear (`lastBar`) não zera num novo início; estilhaço do bloqueio meio escuro; opacidade das barreiras/paredes (~0,25–0,3) menor que a pedida (~0,7); coordenação do K conta barreira que vai expirar antes do projétil; `retries` é da batalha toda; raiz da ameaça curta perto do K; núcleo (3.8, 5.5) perto da borda da tela/rótulo; ajuda de mira residual (~5°, `REFL.assist`) na reflexão; dificuldade só testada com robô.
+
 ## 8. Pendências / próximos passos conhecidos
 
 - Missões dos Níveis 5 e 6: aguardando o dono mandar.
