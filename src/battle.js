@@ -13,18 +13,19 @@ import { buildBody } from './models/driver.js';
 export const BATTLE_CP_KEY = 'adress.dev.battle';   // teste pelo cadeado: libera o cartão Sacrifício para começar a batalha
 
 // ---------- constantes (fáceis de ajustar) ----------
-const GRID = { x0: -6.5, x1: 6.5, z0: -9, z1: 9, cell: 1 };          // X = lados, Z = comprimento (figura em −Z, jogador em +Z)
+const GRID = { x0: -7, x1: 7, z0: -9, z1: 9, cell: 1 };                // 14 × 18 células inteiras, sem moldura
+const LIM = { x0: -6.5, x1: 6.5, z0: -9, z1: 9 };                  // limites do círculo (os de sempre)          // X = lados, Z = comprimento (figura em −Z, jogador em +Z)
 const P_POS = new THREE.Vector3(-1.0, 0, 8.4), K_POS = new THREE.Vector3(1.7, 0, 2.6), F_POS = new THREE.Vector3(0, 0, -11);
 const F_SCALE = [4.6, 5.0, 4.6];
 const FACE_NZ = Math.PI / 2, FACE_PZ = -Math.PI / 2;                 // os modelos olham para +X: π/2 → −Z, −π/2 → +Z
 const H_PROJ = 1.05, PR = 0.2, HIT_R = 0.45;                          // altura de voo, raio do projétil, raio do alvo
 // câmera fixa (ajustada por screenshots: jogador à esquerda em primeiro plano, K no centro, a figura inteira à direita, mais longe);
 // fov = vertical em 16:9; em telas mais estreitas ele abre para manter a mesma largura de visão (até 80°)
-const CAM = { angle: 128, dist: 10.5, height: 5.0, fov: 50, look: new THREE.Vector3(-0.4, 2.3, -3.0) };
+const CAM = { angle: 112, dist: 8.4, height: 0.95, fov: 50, look: new THREE.Vector3(-6.1, 2.7, -3.8) };   // rente ao chão (cintura), atrás e à direita do jogador
 const CIRCLE_R = 0.36, CIRCLE_SPEED = 6.5, CIRCLE_HOME = { x: 0, z: 5.5 };
 const WARN = 1.0;                                                     // aviso antes de cada disparo (s)
 const DMG = { P: 20, K: 34, K2: 28 }, REGEN = { wait: 5, rate: 4 };   // estabilidade: dano por impacto e regeneração lenta
-const BLOCK = { r: 0.55, h: 1.6, rise: 0.16, life: 1.8, max: 3, cooldown: 0.18 };
+const BLOCK = { r: 0.65, w: 1.3, h: 0.72, rise: 0.16, life: 1.8, max: 3, cooldown: 0.18 };
 // Refletir: lei pura v' = v − 2(v·n)n; única exceção (assist): se a volta passa a ≤ REFL.assist (0,09 rad ≈ 5°) da
 // estrutura que disparou, segue até ela (parede quase perpendicular, ex. desenhada no joystick). Com o teclado as retas
 // saem a 0°/45°/90° e devolvem exatas.
@@ -158,9 +159,10 @@ void main(){
   if (vP.x < uRect.x || vP.x > uRect.y || vP.y < uRect.z || vP.y > uRect.w) discard;
   vec2 w = max(fwidth(vP), vec2(1e-4));
   vec2 g = abs(fract(vP - 0.5) - 0.5) / w;
+  vec2 n = floor(vP + 0.5);                                          // linha mais perto; as das bordas não existem (sem moldura)
+  if (abs(n.x - uRect.x) < 0.01 || abs(n.x - uRect.y) < 0.01) g.x = 1e4;
+  if (abs(n.y - uRect.z) < 0.01 || abs(n.y - uRect.w) < 0.01) g.y = 1e4;
   float line = 1.0 - min(min(g.x, g.y) / 1.3, 1.0);                  // linhas finas nos inteiros (anti-alias)
-  float dE = min(min(vP.x - uRect.x, uRect.y - vP.x), min(vP.y - uRect.z, uRect.w - vP.y));
-  float edge = 1.0 - min(dE / max(w.x, w.y) / 2.2, 1.0);            // borda externa um pouco mais forte
   float keep = 1.0, glow = 0.0;
   for (int i = 0; i < 4; i++) {                                      // regiões escuras: a grade some e se recompõe do núcleo para fora
     if (uOn[i] <= 0.0) continue;
@@ -171,7 +173,7 @@ void main(){
     keep = min(keep, mix(1.0, rec, inside * uOn[i]));
     if (r.w > 0.001 && r.w < 0.999) glow = max(glow, exp(-abs(d - pr) * 7.0) * inside * uOn[i] * 0.6);
   }
-  float a = max(line * uAlpha * keep, edge * 0.85);
+  float a = line * uAlpha * keep;
   a = max(a, line * glow);
   if (a < 0.004) discard;
   gl_FragColor = vec4(1.0, 1.0, 1.0, a);
@@ -211,8 +213,7 @@ export function createBattle(ctx) {
   const lineM = (color, opacity) => new THREE.LineBasicMaterial({ color, transparent: true, opacity, depthWrite: false });
   const M = {
     white: basic('#ffffff', 0.9), dark: basic('#050506'), edge: lineM('#ffffff', 0.9), trail: lineM('#ffffff', 0.28),
-    // barreiras: cilindro aberto de dois lados → no meio se vêem 2 camadas: 1 − (1 − 0.45)² ≈ 0.7
-    barP: basic('#ffffff', 0.45, { side: THREE.DoubleSide }), barK: basic('#cfe0ff', 0.42, { side: THREE.DoubleSide }),
+    barP: basic('#ffffff', 0.3, { side: THREE.DoubleSide }), barK: basic('#cfe0ff', 0.3, { side: THREE.DoubleSide }),
     barLineP: lineM('#ffffff', 0.85), barLineK: lineM('#d6e4ff', 0.85),
     wall: basic('#ffffff', 0.3, { side: THREE.DoubleSide }), wallLine: lineM('#ffffff', 0.9),
     shardW: basic('#ffffff'), shardD: basic('#141418'),
@@ -304,13 +305,14 @@ export function createBattle(ctx) {
   const warnPool = pool(() => ribbon(2, 0.07, 0.34, 0.24, '#ffffff', 0.5));
   const pulseGeo = new THREE.RingGeometry(0.3, 0.37, 32);
   const pulsePool = pool(() => new THREE.Mesh(pulseGeo, basic('#ffffff', 0.6, { depthWrite: false, side: THREE.DoubleSide })));
-  // barreira: cilindro aberto + anéis (a do K com anel duplo, levemente azulada)
-  const barGeo = new THREE.CylinderGeometry(BLOCK.r, BLOCK.r, BLOCK.h, 28, 1, true); barGeo.translate(0, BLOCK.h / 2, 0);
-  const ringGeo = unitCircle(BLOCK.r), ring2Geo = unitCircle(BLOCK.r + 0.09);
+  // barreira: placa plana branca suspensa na altura do voo (mesma linguagem das paredes do Refletir; a do K com contorno duplo, levemente azulada)
+  const barGeo = new THREE.PlaneGeometry(BLOCK.w, BLOCK.h);
+  const rectGeo = (w, h) => new THREE.BufferGeometry().setFromPoints([[-w, -h], [w, -h], [w, h], [-w, h]].map(([x, y]) => new THREE.Vector3(x, y, 0)));
+  const ringGeo = rectGeo(BLOCK.w / 2, BLOCK.h / 2), ring2Geo = rectGeo(BLOCK.w / 2 + 0.07, BLOCK.h / 2 + 0.07);
   const makeBar = own => () => {
     const g = new THREE.Group(), lm = own === 'K' ? M.barLineK : M.barLineP;
-    g.add(new THREE.Mesh(barGeo, own === 'K' ? M.barK : M.barP));
-    for (const y of [0.02, BLOCK.h]) { const r = new THREE.LineLoop(ringGeo, lm); r.position.y = y; g.add(r); if (own === 'K') { const r2 = new THREE.LineLoop(ring2Geo, lm); r2.position.y = y; g.add(r2); } }
+    g.add(new THREE.Mesh(barGeo, own === 'K' ? M.barK : M.barP), new THREE.LineLoop(ringGeo, lm));
+    if (own === 'K') g.add(new THREE.LineLoop(ring2Geo, lm));
     return g;
   };
   const barPool = { P: pool(makeBar('P')), K: pool(makeBar('K')) };
@@ -477,9 +479,21 @@ export function createBattle(ctx) {
     if (kAct && kAct.proj === p && !kAct.made) kAct.cancel = true;
   }
   function removeWarning(w) { warnPool.put(w.line); pulsePool.put(w.pulse); if (w.fis && !w.fisOff) w.fis.want = Math.max(0, w.fis.want - 1); }
-  function addBarrier(x, z, owner) {
-    const obj = barPool[owner].get(); obj.position.set(x, 0, z); obj.scale.set(1, 0.001, 1); obj.visible = true; scene.add(obj);
-    const b = { x, z, owner, age: 0, life: BLOCK.life, alive: true, die: -1, obj };
+  /** Direção de onde vem o projétil que esta barreira vai pegar (projétil em voo ou aviso), ou da figura. */
+  function incomingDir(x, z, proj) {
+    let best = proj ? { vx: proj.vx, vz: proj.vz } : null, bd = 1.6 ** 2;
+    if (!best) {
+      for (const p of projectiles) { if (!p.alive) continue; const d = segDist2(x, z, p.x, p.z, p.tx, p.tz); if (d < bd) { bd = d; best = { vx: p.vx, vz: p.vz }; } }
+      for (const w of warnings) { if (w.proj) continue; const d = segDist2(x, z, w.ox, w.oz, w.tx, w.tz); if (d < bd) { bd = d; best = { vx: w.tx - w.ox, vz: w.tz - w.oz }; } }
+    }
+    if (!best) best = { vx: x - F_POS.x, vz: z - F_POS.z };
+    const l = Math.hypot(best.vx, best.vz) || 1; return { x: best.vx / l, z: best.vz / l };
+  }
+  function addBarrier(x, z, owner, proj) {
+    const d = incomingDir(x, z, proj), tx = -d.z, tz = d.x, hw = BLOCK.w / 2;
+    const seg = { ax: x - tx * hw, az: z - tz * hw, bx: x + tx * hw, bz: z + tz * hw, tx, tz, nx: d.x, nz: d.z, len: BLOCK.w };
+    const obj = barPool[owner].get(); obj.position.set(x, H_PROJ, z); obj.rotation.set(0, Math.atan2(d.x, d.z), 0); obj.scale.set(1, 0.001, 1); obj.visible = true; scene.add(obj);
+    const b = { x, z, owner, seg, age: 0, life: BLOCK.life, alive: true, die: -1, obj };
     barriers.push(b);
     if (owner === 'P') { const mine = barriers.filter(o => o.alive && o.owner === 'P'); if (mine.length > BLOCK.max) killBarrier(mine[0]); }
     return b;
@@ -603,10 +617,9 @@ export function createBattle(ctx) {
   function covered(p) {
     const px = p.x, pz = p.z, dx = p.tx - px, dz = p.tz - pz, L2 = Math.hypot(dx, dz) || 1, ux = dx / L2, uz = dz / L2, R = BLOCK.r + PR;
     for (const b of barriers) {
-      if (!b.alive || segDist2(b.x, b.z, px, pz, p.tx, p.tz) > R * R) continue;
-      const al = (b.x - px) * ux + (b.z - pz) * uz, pe = Math.abs((b.x - px) * uz - (b.z - pz) * ux);
-      const tIn = Math.max(0, al - Math.sqrt(Math.max(0, R * R - pe * pe))) / p.speed;   // quando o projétil encosta nela
-      if (b.life - b.age >= tIn + 0.05) return true;
+      if (!b.alive) continue;
+      const t = segT(px, pz, p.tx, p.tz, b.seg);                        // a placa corta o caminho restante?
+      if (t >= 0 && b.life - b.age >= Math.max(0, t * L2 - R) / p.speed + 0.05) return true;
     }
     for (const w of walls) if (w.alive) for (const s of w.segs) {
       const t = segT(px, pz, p.tx, p.tz, s);
@@ -633,7 +646,7 @@ export function createBattle(ctx) {
       if (!p.alive || p.reflected) a.cancel = true;
       else if (covered(p)) { a.cancel = true; L('kcancel'); }     // o jogador já cobriu: abaixa o braço
       else {
-        addBarrier(a.bx, a.bz, 'K'); a.made = true; lastKDef = time; L('kdef'); sfx('barrier');
+        addBarrier(a.bx, a.bz, 'K', a.proj); a.made = true; lastKDef = time; L('kdef'); sfx('barrier');
         traceT = 0.5;
       }
       if (a.cancel) { p.kClaim = false; if (p.alive) p.obj.userData.claim.visible = false; }
@@ -645,8 +658,8 @@ export function createBattle(ctx) {
   // ---------- laço por fase ----------
   function moveCircle(dt) {
     const ax = input.axis(); let x = ax.x, z = ax.z; const l = Math.hypot(x, z); if (l > 1) { x /= l; z /= l; }
-    cpos.x = clamp(cpos.x + x * CIRCLE_SPEED * dt, GRID.x0 + CIRCLE_R, GRID.x1 - CIRCLE_R);
-    cpos.z = clamp(cpos.z + z * CIRCLE_SPEED * dt, GRID.z0 + CIRCLE_R, GRID.z1 - CIRCLE_R);
+    cpos.x = clamp(cpos.x + x * CIRCLE_SPEED * dt, LIM.x0 + CIRCLE_R, LIM.x1 - CIRCLE_R);
+    cpos.z = clamp(cpos.z + z * CIRCLE_SPEED * dt, LIM.z0 + CIRCLE_R, LIM.z1 - CIRCLE_R);
   }
   function actionInput() {
     const act = mouseDown || simAct || input.held('Space'), click = act && !prevAct; prevAct = act;
@@ -685,8 +698,8 @@ export function createBattle(ctx) {
       // 1) barreiras (de pé o bastante para cobrir a altura de voo)
       let hit = false;
       for (const b of barriers) {
-        if (!b.alive || BLOCK.h * Math.min(1, b.age / BLOCK.rise) < H_PROJ) continue;
-        if (segDist2(b.x, b.z, p.x, p.z, x1, z1) <= (BLOCK.r + PR) ** 2) { killProjectile(p, 9, 0); killBarrier(b); sfx('block'); L(b.owner === 'K' ? 'block:K' : 'block'); hit = true; break; }
+        if (!b.alive || b.age < BLOCK.rise * 0.5) continue;
+        if (wallHit(p.x, p.z, x1, z1, b.seg)) { killProjectile(p, 9, 0); killBarrier(b); sfx('block'); L(b.owner === 'K' ? 'block:K' : 'block'); hit = true; break; }
       }
       if (hit) continue;
       // 2) paredes: reflexão no plano horizontal
@@ -864,7 +877,7 @@ export function createBattle(ctx) {
     // traço de luz do K
     if (traceT > 0 && kAct && kAct.made) {
       traceT -= dt; const a = KU.arms.find(x => x.s === kAct.s), hp = kWrist(a).localToWorld(new THREE.Vector3(0, -0.1, 0)), pa = traceGeo.attributes.position;
-      pa.setXYZ(0, hp.x, hp.y, hp.z); pa.setXYZ(1, kAct.bx, BLOCK.h * 0.7, kAct.bz); pa.needsUpdate = true; trace.material.opacity = 0.9 * Math.max(0, traceT / 0.5);
+      pa.setXYZ(0, hp.x, hp.y, hp.z); pa.setXYZ(1, kAct.bx, H_PROJ, kAct.bz); pa.needsUpdate = true; trace.material.opacity = 0.9 * Math.max(0, traceT / 0.5);
     } else trace.material.opacity = 0;
     animateChars(dt);
     // câmera (tremor curto e sutil num impacto)
@@ -995,7 +1008,7 @@ export function createBattle(ctx) {
     get mech() { return seg ? seg.mech : null; }, get phase() { return phase; },
     get circle() { return { x: cpos.x, z: cpos.z }; },
     get projectiles() { return projectiles.map(p => ({ id: p.id, x: p.x, y: H_PROJ, z: p.z, vx: p.vx, vz: p.vz, target: p.target, reflected: p.reflected, alive: p.alive, kClaim: p.kClaim })); },
-    get barriers() { return barriers.map(b => ({ x: b.x, z: b.z, owner: b.owner, y0: 0, y1: b.alive ? BLOCK.h * ease(b.age / BLOCK.rise) : BLOCK.h * Math.max(0, 1 - b.die / 0.15), age: b.age, life: b.life, alive: b.alive })); },
+    get barriers() { return barriers.map(b => ({ x: b.x, z: b.z, owner: b.owner, y0: H_PROJ - BLOCK.h / 2 * (b.alive ? ease(b.age / BLOCK.rise) : Math.max(0, 1 - b.die / 0.15)), y1: H_PROJ + BLOCK.h / 2 * (b.alive ? ease(b.age / BLOCK.rise) : Math.max(0, 1 - b.die / 0.15)), nx: b.seg.nx, nz: b.seg.nz, age: b.age, life: b.life, alive: b.alive })); },
     get walls() { return walls.map(w => ({ pts: w.pts.map(p => ({ x: p.x, z: p.z })), alive: w.alive, preview: false })); },
     get preview() { return drawing ? drawing.pts.map(p => ({ x: p.x, z: p.z })) : null; }, get previewLen() { return drawing ? drawing.len : 0; },
     get structures() { return seg ? seg.structures.map(s => ({ x: s.x, z: s.z, alive: s.alive })) : []; },
@@ -1008,7 +1021,7 @@ export function createBattle(ctx) {
       token++; hideMsg(); pauseDone = null;
       fragmentsDone = STEPS.slice(0, i).filter(s => s.k === 'F').length; fade = 1; enterStep(i);
     },
-    _setCircle(x, z) { cpos.x = clamp(x, GRID.x0 + CIRCLE_R, GRID.x1 - CIRCLE_R); cpos.z = clamp(z, GRID.z0 + CIRCLE_R, GRID.z1 - CIRCLE_R); },
+    _setCircle(x, z) { cpos.x = clamp(x, LIM.x0 + CIRCLE_R, LIM.x1 - CIRCLE_R); cpos.z = clamp(z, LIM.z0 + CIRCLE_R, LIM.z1 - CIRCLE_R); },
     _action(down) { simAct = !!down; },
     _fire({ from = 'fig', target = 'K', speed = 6.5, warn = 0 } = {}) { const w = createWarning(from, target, speed, warn); return w.proj ? w.proj.id : null; },
     _setStab(who, v) { stab[who] = v; if (v <= 0) fail(); },
