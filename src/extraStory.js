@@ -5,6 +5,7 @@
 import * as THREE from 'three';
 import { whitenFade } from './whiteout.js';
 import { buildStandingReader } from './models/reader.js';
+import { buildStandingReader as buildFigureBody } from './models/readerClassic.js';   // a figura mantém o formato antigo
 import { buildBody } from './models/driver.js';
 
 export const EXTRA_DONE_KEY = 'adress.extra.done';     // os 4 níveis extras concluídos (fim da chuva) — ainda nunca gravado
@@ -173,7 +174,7 @@ export function createExtraStory(ctx) {
   K.traverse(o => { if (o.isMesh) { o.material = o.material.clone(); o.material.clippingPlanes = clip; o.castShadow = false; } });
   scene.add(K);
   const R = new THREE.Group(); const rBody = new THREE.Group(); rBody.scale.setScalar(0.86); R.add(rBody);
-  const RB = buildBody(rBody);
+  const RB = buildBody(rBody, { classic: true });   // (a R mantém a forma antiga)
   const rMat = new THREE.MeshStandardMaterial({ color: '#003EFF', roughness: 0.85, flatShading: true, clippingPlanes: clip, transparent: true });
   const capSlot = R.getObjectByName('cap'); if (capSlot) capSlot.visible = false;
   // cabelo comprido e saia (mesmo estilo facetado), tudo da mesma cor
@@ -187,7 +188,7 @@ export function createExtraStory(ctx) {
 
   // ---- a figura: humanoide inteiro preto, bem maior ----
   const figMat = new THREE.MeshBasicMaterial({ color: '#000000', transparent: true, opacity: 0 });
-  const fig = buildStandingReader(); fig.traverse(o => { if (o.isMesh) { o.material = figMat; o.castShadow = false; } });
+  const fig = buildFigureBody(); fig.traverse(o => { if (o.isMesh) { o.material = figMat; o.castShadow = false; } });
   fig.scale.set(4.6, 5.0, 4.6); fig.rotation.y = -Math.PI / 2; fig.position.set(0.4, 0, -19.5); fig.visible = false;
   const fh = fig.userData.head; scene.add(fig);
 

@@ -10,7 +10,7 @@ const rand = () => { rnd = (rnd * 16807) % 2147483647; return (rnd - 1) / 214748
 
 function statue() {
   const g = new THREE.Group(), body = new THREE.Group(); g.add(body);
-  const B = buildBody(body);
+  const B = buildBody(body, { classic: true });   // (a estátua do cartão mantém a forma antiga)
   const glass = new THREE.MeshPhysicalMaterial({ color: '#003EFF', roughness: 0.08, metalness: 0, transparent: true, opacity: 0.9,
     clearcoat: 1, clearcoatRoughness: 0.06, emissive: '#003EFF', emissiveIntensity: 0.22, envMapIntensity: 0.3, flatShading: true, depthWrite: false });
   const cap = g.getObjectByName('cap'); if (cap) cap.visible = false;

@@ -332,6 +332,13 @@ document.title = 'OK ' + A.dialog.text + ' errs=' + JSON.stringify(window.__errs
 - Prévia separada (trabalho incompleto): https://claude.ai/artifact/Tq23mt8j9rBsbe7AmVVdCj (build do `src/` em `scratchpad/batalha-previa.html`); a versão estável continua no artifact principal e no `index.html` da raiz (não rebuildado com a batalha ainda).
 - Pendências menores (verificação): prévia do traço ainda segue o círculo depois do limite; soltar perto do limite descarta a cauda em vez de cortá-la; cooldown do Bloquear (`lastBar`) não zera num novo início; estilhaço do bloqueio meio escuro; opacidade das barreiras/paredes (~0,25–0,3) menor que a pedida (~0,7); coordenação do K conta barreira que vai expirar antes do projétil; `retries` é da batalha toda; raiz da ameaça curta perto do K; núcleo (3.8, 5.5) perto da borda da tela/rótulo; ajuda de mira residual (~5°, `REFL.assist`) na reflexão; dificuldade só testada com robô.
 
+## 7c. Forma nova do jogador e do K (referência de proporções: PEAK)
+
+- Só o jogador e o K mudaram; o ESQUELETO (juntas, medidas, `BODY`, poses, `reachArm`) é o mesmo, então sentar, segurar, apoiar e as barreiras continuam encaixando. Mudou só a "pele": materiais lisos (sem `flatShading`), cabeça maior e redonda (jogador `buildHeadS(0.5)`, K `readerHead(0.47)`), pescoço curto e largo, tronco em feijão (`torsoS`), mão de luva com polegar (`mitten`), calçados maiores (`bigShoe`). Funções novas em `models/driver.js`; o K (`models/reader.js`, as 4 versões) usa as mesmas peças com as cores dele.
+- Customização intacta: `CHAR_MATS` (1 material por peça, recolorível), bonés pelo `slot` `cap` (a regra de tirar o boné na igreja continua), óculos escuros redesenhados lisos.
+- Ficaram no formato ANTIGO, como pedido: a R e a estátua do cartão Rigidez (`buildBody(parent, { classic: true })`) e a figura escura (`models/readerClassic.js`, cópia do K antigo, usada no extra 1 e na batalha). Os outros NPCs não mudaram.
+- O branco das cenas (`whiten`, material `WHITE` facetado em `whiteout.js`) continua igual; na batalha o jogador branco usa material liso.
+
 ## 8. Pendências / próximos passos conhecidos
 
 - Missões dos Níveis 5 e 6: aguardando o dono mandar.

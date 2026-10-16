@@ -7,6 +7,7 @@
 // Sem música; só efeitos curtos procedurais pela saída de efeitos.
 import * as THREE from 'three';
 import { buildStandingReader, reachArm } from './models/reader.js';
+import { buildStandingReader as buildFigureBody } from './models/readerClassic.js';   // a figura mantém o formato antigo
 import { buildBody } from './models/driver.js';
 
 export const BATTLE_CP_KEY = 'adress.dev.battle';   // teste pelo cadeado: libera o cartão Sacrifício para começar a batalha
@@ -248,7 +249,7 @@ export function createBattle(ctx) {
 
   // ---- personagens ----
   // jogador: o mesmo corpo do jogo com um material branco próprio (os materiais do Shop não mudam)
-  const whiteMat = new THREE.MeshStandardMaterial({ color: '#ffffff', emissive: '#ffffff', emissiveIntensity: 0.35, roughness: 0.8, flatShading: true });
+  const whiteMat = new THREE.MeshStandardMaterial({ color: '#ffffff', emissive: '#ffffff', emissiveIntensity: 0.35, roughness: 0.8 });   // liso como o corpo novo
   const pHold = new THREE.Group(); pHold.position.copy(P_POS); scene.add(pHold);
   const pModel = new THREE.Group(); pModel.rotation.y = FACE_NZ; pHold.add(pModel);
   const PB = buildBody(pModel);
@@ -265,7 +266,7 @@ export function createBattle(ctx) {
   const kWrist = a => a.elbow.children[a.elbow.children.length - 1];
   // figura: a aparência escura do extra 1 (maior), com contorno
   const figMat = new THREE.ShaderMaterial({ vertexShader: RIM_V, fragmentShader: RIM_F, uniforms: { uRim: { value: new THREE.Color(0.2, 0.2, 0.235) }, uGlow: { value: 0 } } });
-  const fig = buildStandingReader(); fig.traverse(o => { if (o.isMesh) { o.material = figMat; o.castShadow = false; } });
+  const fig = buildFigureBody(); fig.traverse(o => { if (o.isMesh) { o.material = figMat; o.castShadow = false; } });
   fig.scale.set(...F_SCALE); fig.rotation.y = FACE_PZ; fig.position.copy(F_POS); scene.add(fig);
   const FU = fig.userData;
 
