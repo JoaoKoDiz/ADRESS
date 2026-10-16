@@ -105,6 +105,7 @@ export function createMusic(stageEl, src = 'assets/musica-fundo.mp3') {
     get wanted() { return wanted; },
     /** Cena: o botão passa a controlar outra faixa ({ on, toggle() }); null devolve. A preferência salva não muda. */
     setOverride(o) { override = o; paint(); },
+    get override() { return override; },
     /** Faixa de fundo atual (src). */
     get track() { return track; },
     /** Sobe os créditos (caixa de diálogo aberta embaixo). */

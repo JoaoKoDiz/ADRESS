@@ -1801,10 +1801,16 @@ function drawVeil(dt) {
 // contínua entre menus; num nível para (guardando a posição) e volta ao retornar. Respeita o volume e a preferência de música.
 const menuMusic = createMenuMusic(audio, SNOW_LOOP_URL, '"104. snow (1)-loop.wav" (assets/snow-loop.mp3)', SNOW_LOOP_SECS);
 let menuFadeIn = 0.6;
+// Pausa própria desta faixa (botão ♪ onde ele aparece, como no mapa da Carreira). A preferência da música padrão
+// (adress.music) NÃO a silencia: antes, uma pausa feita num bairro deixava os menus mudos sem botão para religar.
+const MENU_PAUSE_KEY = 'adress.menuMusic.paused';
+let menuPaused = flagOn(MENU_PAUSE_KEY), menuOvrOn = false;
+const MENU_OVR = { get on() { return !menuPaused; }, toggle() { menuPaused = !menuPaused; try { localStorage.setItem(MENU_PAUSE_KEY, menuPaused ? '1' : '0'); } catch (e) { /* */ } } };
 function updateMenuMusic() {
   const menus = rainOn() && (MENU_STATES.includes(state) || inMap());
   music.block(menus);
-  if (menus && music.wanted) { if (!menuMusic.playing && menuMusic.play(menuFadeIn)) menuFadeIn = 0.6; }
+  if (menus !== menuOvrOn) { menuOvrOn = menus; if (menus) music.setOverride(MENU_OVR); else if (music.override === MENU_OVR) music.setOverride(null); }
+  if (menus && !menuPaused) { if (!menuMusic.playing && menuMusic.play(menuFadeIn)) menuFadeIn = 0.6; }
   else if (menuMusic.playing) menuMusic.stop(0.8);
 }
 function updateRain(dt) {
@@ -1830,7 +1836,10 @@ const voidMusic = createVoidMusic(audio, justUsUrl, justUsLoopUrl);   // extra 1
 const extra = createExtraStory({ walker, input, audio, renderer, talkBox, onTravel: () => voidMusic.start(), onShatter: (snap, rect) => { syncNoVan(); endExtra('shatter'); screenShatter(snap, rect); } });   // (o extra 1 já foi salvo na quebra)
 // Extra 1: qualquer tecla/toque (ex.: avançar o diálogo 2) retoma o áudio se o navegador o tiver suspendido e garante as faixas
 // decodificadas antes do deslocamento — sem tocar nada antes da hora.
-for (const ev of ['keydown', 'pointerdown']) addEventListener(ev, () => { if (state === 'extra') { audio.unlock(); voidMusic.load(); } }, true);
+for (const ev of ['keydown', 'pointerdown']) addEventListener(ev, () => {
+  if (state === 'extra') { audio.unlock(); voidMusic.load(); }
+  else if (audio.ctx && audio.ctx.state !== 'running') audio.unlock();   // (navegador suspendeu o áudio: retoma na próxima interação; a música dos menus segue de onde estava)
+}, true);
 function startExtra() {
   if (state !== 'levelSelect') return;
   document.body.classList.add('extra-on'); menu.close();   // já antes do fade: nada da interface pisca ao carregar
