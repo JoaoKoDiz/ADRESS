@@ -22,7 +22,8 @@ const FACE_NZ = Math.PI / 2, FACE_PZ = -Math.PI / 2;                 // os model
 const H_PROJ = 1.05, PR = 0.2, HIT_R = 0.45;                          // altura de voo, raio do projétil, raio do alvo
 // câmera fixa (ajustada por screenshots: jogador à esquerda em primeiro plano, K no centro, a figura inteira à direita, mais longe);
 // fov = vertical em 16:9; em telas mais estreitas ele abre para manter a mesma largura de visão (até 80°)
-const CAM = { angle: 162, dist: 4.7, height: 1.55, fov: 56, look: new THREE.Vector3(-2.0, 2.15, -7.1) };   // quase atrás do jogador e do K (diagonal pela direita), abaixo do topo da cabeça, olhando para a figura
+// câmera sobre o 3º quadrado da grade à direita do jogador (célula x 2..3, z 8..9), na altura do peito, olhando na diagonal para a figura
+const CAM = { pos: new THREE.Vector3(2.5, 1.5, 8.8), fov: 68, look: new THREE.Vector3(-12.0, 3.25, -4.96) };
 const CIRCLE_R = 0.36, CIRCLE_SPEED = 6.5, CIRCLE_HOME = { x: 0, z: 5.5 };
 const WARN = 1.0;                                                     // aviso antes de cada disparo (s)
 const DMG = { P: 20, K: 34, K2: 28 }, REGEN = { wait: 5, rate: 4 };   // estabilidade: dano por impacto e regeneração lenta
@@ -456,9 +457,7 @@ export function createBattle(ctx) {
     if (Math.abs(camera.fov - fov) > 0.01) { camera.fov = fov; camera.updateProjectionMatrix(); }
   }
   function placeCamera() {
-    const a = CAM.angle * Math.PI / 180, fx = 0, fz = -1, rx = 1, rz = 0;      // frente do jogador = −Z, direita = +X
-    const dx = fx * Math.cos(a) + rx * Math.sin(a), dz = fz * Math.cos(a) + rz * Math.sin(a);
-    camBase.set(P_POS.x + dx * CAM.dist, CAM.height, P_POS.z + dz * CAM.dist);
+    camBase.copy(CAM.pos);
     camera.position.copy(camBase); camera.lookAt(CAM.look); fitFov();
     key.position.set(camBase.x + 2, camBase.y + 7, camBase.z + 2); key.target.position.set(0, 0, 0);
     for (const f of Object.values(fissures)) f.g.rotation.y = Math.atan2(camBase.x - f.x, camBase.z - f.z);   // de frente para a câmera
