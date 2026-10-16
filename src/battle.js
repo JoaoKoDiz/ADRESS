@@ -22,15 +22,19 @@ const FACE_NZ = Math.PI / 2, FACE_PZ = -Math.PI / 2;                 // os model
 const H_PROJ = 1.05, PR = 0.2, HIT_R = 0.45;                          // altura de voo, raio do projétil, raio do alvo
 // câmera fixa (ajustada por screenshots: jogador à esquerda em primeiro plano, K no centro, a figura inteira à direita, mais longe);
 // fov = vertical em 16:9; em telas mais estreitas ele abre para manter a mesma largura de visão (até 80°)
-const CAM = { angle: 112, dist: 8.4, height: 0.95, fov: 50, look: new THREE.Vector3(-6.1, 2.7, -3.8) };   // rente ao chão (cintura), atrás e à direita do jogador
+const CAM = { angle: 162, dist: 4.7, height: 1.55, fov: 56, look: new THREE.Vector3(-2.0, 2.15, -7.1) };   // quase atrás do jogador e do K (diagonal pela direita), abaixo do topo da cabeça, olhando para a figura
 const CIRCLE_R = 0.36, CIRCLE_SPEED = 6.5, CIRCLE_HOME = { x: 0, z: 5.5 };
 const WARN = 1.0;                                                     // aviso antes de cada disparo (s)
 const DMG = { P: 20, K: 34, K2: 28 }, REGEN = { wait: 5, rate: 4 };   // estabilidade: dano por impacto e regeneração lenta
-const BLOCK = { r: 0.65, w: 1.3, h: 0.72, rise: 0.16, life: 1.8, max: 3, cooldown: 0.18 };
+const BLOCK = { r: 0.65, w: 1.3, h: 0.72, rise: 0.16, life: 1.8, cooldown: 0.18 };
+const P_SLOTS = 2;                                                  // barreiras do jogador ao mesmo tempo (Bloquear + Refletir juntos)
+// brilho das barreiras: pulso forte ao surgir (~0,3 s) e depois um brilho contínuo mais fraco até sumir
+const GLOW = { surf: 0.46, surfPulse: 0.32, line: 0.95, glow: 0.55, glowPulse: 1.5, up: 0.05, down: 0.28 };
+const glowPulse = age => age < GLOW.up ? age / GLOW.up : Math.max(0, 1 - (age - GLOW.up) / GLOW.down) ** 2;
 // Refletir: lei pura v' = v − 2(v·n)n; única exceção (assist): se a volta passa a ≤ REFL.assist (0,09 rad ≈ 5°) da
 // estrutura que disparou, segue até ela (parede quase perpendicular, ex. desenhada no joystick). Com o teclado as retas
 // saem a 0°/45°/90° e devolvem exatas.
-const REFL = { step: 0.3, maxLen: 7.0, eps: 0.15, minSeg: 0.45, h: 1.6, life: 3.5, maxWalls: 2, minLen: 0.6, assist: 0.09 };
+const REFL = { step: 0.3, maxLen: 7.0, eps: 0.15, minSeg: 0.45, h: 1.6, life: 3.5, minLen: 0.6, assist: 0.09 };
 const STRUCT = { hitR: 0.95 };
 // Firmar (protótipo): R = raio da região apagada; reach = distância ao núcleo para começar; zoneR/orbitR/orbitSpeed/wobble =
 // a área de acompanhamento; fill/decay = progresso por segundo (dentro segurando / fora); threatTime = tempo até a raiz
@@ -179,6 +183,15 @@ void main(){
   if (a < 0.004) discard;
   gl_FragColor = vec4(1.0, 1.0, 1.0, a);
 }`;
+// halo aditivo das barreiras. Placa: retângulo arredondado (meia-medida uHalf) dentro de um quadrado maior (uv);
+// parede: faixa vertical (y local) com brilho no topo e na base e um véu claro no corpo.
+const GLOW_V = `varying vec2 vUv; varying float vY; void main(){ vUv = uv; vY = position.y; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`;
+const GLOWP_F = `uniform vec3 uCol; uniform float uI; uniform vec2 uHalf, uSize; varying vec2 vUv;
+void main(){ vec2 p = (vUv - 0.5) * uSize; vec2 q = abs(p) - uHalf; float d = length(max(q, 0.0)) + min(max(q.x, q.y), 0.0);
+  float a = d < 0.0 ? 0.18 + 0.5 * exp(d * 14.0) : exp(-d * 7.5); a *= uI; if (a < 0.003) discard; gl_FragColor = vec4(uCol * a, 1.0); }`;
+const GLOWW_F = `uniform vec3 uCol; uniform float uI, uH; varying float vY;
+void main(){ float a = vY <= uH ? 0.16 + 0.55 * exp(-(uH - vY) * 9.0) + 0.35 * exp(-vY * 12.0) : 0.71 * exp(-(vY - uH) * 14.0);
+  a *= uI; if (a < 0.003) discard; gl_FragColor = vec4(uCol * a, 1.0); }`;
 // fita tracejada no chão (mais legível que linhas de 1 px): aD = distância ao longo do traço
 const RIB_V = `attribute float aD; varying float vD; void main(){ vD = aD; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`;
 const RIB_F = `uniform vec3 uCol; uniform float uOp, uDash, uGap, uShift; varying float vD;
@@ -214,11 +227,23 @@ export function createBattle(ctx) {
   const lineM = (color, opacity) => new THREE.LineBasicMaterial({ color, transparent: true, opacity, depthWrite: false });
   const M = {
     white: basic('#ffffff', 0.9), dark: basic('#050506'), edge: lineM('#ffffff', 0.9), trail: lineM('#ffffff', 0.28),
-    barP: basic('#ffffff', 0.3, { side: THREE.DoubleSide }), barK: basic('#cfe0ff', 0.3, { side: THREE.DoubleSide }),
+    barP: basic('#ffffff', GLOW.surf, { side: THREE.DoubleSide }), barK: basic('#cfe0ff', GLOW.surf, { side: THREE.DoubleSide }),
     barLineP: lineM('#ffffff', 0.85), barLineK: lineM('#d6e4ff', 0.85),
-    wall: basic('#ffffff', 0.3, { side: THREE.DoubleSide }), wallLine: lineM('#ffffff', 0.9),
+    wall: basic('#ffffff', GLOW.surf, { side: THREE.DoubleSide }), wallLine: lineM('#ffffff', 0.9),
     shardW: basic('#ffffff'), shardD: basic('#141418'),
   };
+  const ADD = { transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide, toneMapped: false };
+  const glowPlate = (col, half, size) => new THREE.ShaderMaterial({ vertexShader: GLOW_V, fragmentShader: GLOWP_F, ...ADD,
+    uniforms: { uCol: { value: new THREE.Color(col) }, uI: { value: 1 }, uHalf: { value: new THREE.Vector2(...half) }, uSize: { value: new THREE.Vector2(...size) } } });
+  const glowWall = (col, h) => new THREE.ShaderMaterial({ vertexShader: GLOW_V, fragmentShader: GLOWW_F, ...ADD,
+    uniforms: { uCol: { value: new THREE.Color(col) }, uI: { value: 1 }, uH: { value: h } } });
+  /** Opacidade/brilho de uma barreira pela idade (pulso ao surgir) e pelo sumiço (fade = 1 → 0). */
+  function shine(u, age, fade = 1) {
+    const k = glowPulse(age);
+    u.surf.opacity = Math.min(0.95, GLOW.surf + GLOW.surfPulse * k) * fade;
+    u.line.opacity = GLOW.line * fade; if (u.line2) u.line2.opacity = GLOW.line * fade;
+    u.glow.uniforms.uI.value = (GLOW.glow + GLOW.glowPulse * k) * fade;
+  }
   const arcMat = () => new THREE.ShaderMaterial({ vertexShader: ARC_V, fragmentShader: ARC_F, transparent: true, depthWrite: false,
     uniforms: { uFrac: { value: 1 }, uA: { value: 0.5 }, uBase: { value: 0.08 }, uCol: { value: new THREE.Color('#ffffff') } } });
   const arcRing = (r0, r1) => { const o = new THREE.Mesh(new THREE.RingGeometry(r0, r1, 64), arcMat()); o.rotation.x = -Math.PI / 2; return o; };
@@ -274,9 +299,8 @@ export function createBattle(ctx) {
 
   // ---- círculo, prévia e indicador de comprimento ----
   const circle = new THREE.Group(); circle.position.y = 0.04; scene.add(circle);
-  const cRing = new THREE.Mesh(new THREE.RingGeometry(CIRCLE_R - 0.07, CIRCLE_R, 48), basic('#ffffff', 0.95, { depthWrite: false }));
-  cRing.rotation.x = -Math.PI / 2; circle.add(cRing);
-  const cDot = new THREE.Mesh(new THREE.CircleGeometry(0.06, 16), M.white); cDot.rotation.x = -Math.PI / 2; circle.add(cDot);
+  const cDisc = new THREE.Mesh(new THREE.CircleGeometry(CIRCLE_R, 48), basic('#ffffff', 1, { toneMapped: false }));   // disco cheio #FFFFFF
+  cDisc.rotation.x = -Math.PI / 2; circle.add(cDisc);
   const lenArc = arcRing(CIRCLE_R + 0.08, CIRCLE_R + 0.13); lenArc.visible = false; circle.add(lenArc);
   const PREV_MAX = 128;
   const prevLine = ribbon(PREV_MAX, 0.08, 0.22, 0.14, '#ffffff', 0.6); prevLine.visible = false; scene.add(prevLine);
@@ -310,10 +334,15 @@ export function createBattle(ctx) {
   const barGeo = new THREE.PlaneGeometry(BLOCK.w, BLOCK.h);
   const rectGeo = (w, h) => new THREE.BufferGeometry().setFromPoints([[-w, -h], [w, -h], [w, h], [-w, h]].map(([x, y]) => new THREE.Vector3(x, y, 0)));
   const ringGeo = rectGeo(BLOCK.w / 2, BLOCK.h / 2), ring2Geo = rectGeo(BLOCK.w / 2 + 0.07, BLOCK.h / 2 + 0.07);
+  const GM = 0.42, haloGeo = new THREE.PlaneGeometry(BLOCK.w + 2 * GM, BLOCK.h + 2 * GM);
   const makeBar = own => () => {
-    const g = new THREE.Group(), lm = own === 'K' ? M.barLineK : M.barLineP;
-    g.add(new THREE.Mesh(barGeo, own === 'K' ? M.barK : M.barP), new THREE.LineLoop(ringGeo, lm));
-    if (own === 'K') g.add(new THREE.LineLoop(ring2Geo, lm));
+    const g = new THREE.Group(), K = own === 'K';
+    const surf = (K ? M.barK : M.barP).clone(), line = (K ? M.barLineK : M.barLineP).clone();
+    const glow = glowPlate(K ? '#dfe9ff' : '#ffffff', [BLOCK.w / 2, BLOCK.h / 2], [BLOCK.w + 2 * GM, BLOCK.h + 2 * GM]);
+    const halo = new THREE.Mesh(haloGeo, glow); halo.renderOrder = 2;
+    g.add(new THREE.Mesh(barGeo, surf), new THREE.LineLoop(ringGeo, line), halo);
+    if (K) g.add(new THREE.LineLoop(ring2Geo, line));
+    g.userData = { surf, line, glow };
     return g;
   };
   const barPool = { P: pool(makeBar('P')), K: pool(makeBar('K')) };
@@ -496,9 +525,11 @@ export function createBattle(ctx) {
     const obj = barPool[owner].get(); obj.position.set(x, H_PROJ, z); obj.rotation.set(0, Math.atan2(d.x, d.z), 0); obj.scale.set(1, 0.001, 1); obj.visible = true; scene.add(obj);
     const b = { x, z, owner, seg, age: 0, life: BLOCK.life, alive: true, die: -1, obj };
     barriers.push(b);
-    if (owner === 'P') { const mine = barriers.filter(o => o.alive && o.owner === 'P'); if (mine.length > BLOCK.max) killBarrier(mine[0]); }
     return b;
   }
+  /** Vagas do jogador em uso: placas do Bloquear + paredes do Refletir ainda de pé (as defesas do K não contam). */
+  const slotsUsed = () => barriers.filter(o => o.alive && o.owner === 'P').length + walls.filter(o => o.alive).length;
+  const slotFree = () => slotsUsed() < P_SLOTS;
   function killBarrier(b) { if (!b.alive) return; b.alive = false; b.die = 0; }
   function addWall(pts) {
     const segs = [], pos = [], lin = [], h = REFL.h;
@@ -513,15 +544,20 @@ export function createBattle(ctx) {
     const g = new THREE.Group();
     const pg = new THREE.BufferGeometry(); pg.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
     const lg = new THREE.BufferGeometry(); lg.setAttribute('position', new THREE.Float32BufferAttribute(lin, 3));
-    g.add(new THREE.Mesh(pg, M.wall), new THREE.LineSegments(lg, M.wallLine)); g.scale.y = 0.001; scene.add(g);
+    const gh = h + 0.3, gpos = [];                                   // halo: a mesma faixa, um pouco mais alta (brilho acima do topo)
+    for (const sg of segs) gpos.push(sg.ax, 0, sg.az, sg.bx, 0, sg.bz, sg.bx, gh, sg.bz, sg.ax, 0, sg.az, sg.bx, gh, sg.bz, sg.ax, gh, sg.az);
+    const gg = new THREE.BufferGeometry(); gg.setAttribute('position', new THREE.Float32BufferAttribute(gpos, 3)); gg.setAttribute('uv', new THREE.Float32BufferAttribute(new Float32Array(gpos.length / 3 * 2), 2));
+    const surf = M.wall.clone(), line = M.wallLine.clone(), glow = glowWall('#ffffff', h);
+    const halo = new THREE.Mesh(gg, glow); halo.renderOrder = 2;
+    g.add(new THREE.Mesh(pg, surf), new THREE.LineSegments(lg, line), halo); g.scale.y = 0.001; scene.add(g);
+    g.userData = { surf, line, glow };
     const w = { pts: pts.map(p => ({ x: p.x, z: p.z })), segs, age: 0, life: REFL.life, alive: true, die: -1, obj: g };
     walls.push(w);
-    const alive = walls.filter(o => o.alive); if (alive.length > REFL.maxWalls) killWall(alive[0]);
     sfx('barrier'); L('wall');
     return w;
   }
   function killWall(w) { if (!w.alive) return; w.alive = false; w.die = 0; }
-  function disposeWall(w) { scene.remove(w.obj); w.obj.children.forEach(c => c.geometry.dispose()); }
+  function disposeWall(w) { scene.remove(w.obj); w.obj.children.forEach(c => c.geometry.dispose()); const u = w.obj.userData; u.surf.dispose(); u.line.dispose(); u.glow.dispose(); }
   function setPreview(on) {
     prevLine.visible = on; lenArc.visible = on;
     if (!on) drawing = null;
@@ -666,9 +702,11 @@ export function createBattle(ctx) {
     const act = mouseDown || simAct || input.held('Space'), click = act && !prevAct; prevAct = act;
     if (phase !== 'play' || !seg) return;
     if (seg.mech === 'block') {
-      if (click && time - lastBar >= BLOCK.cooldown) { lastBar = time; addBarrier(cpos.x, cpos.z, 'P'); sfx('barrier'); L('barrier'); gest = { t: 0, x: cpos.x, z: cpos.z }; }
+      if (click && !slotFree()) L('slots:full');                    // 2 vagas ocupadas: não cria nem gasta a ação
+      else if (click && time - lastBar >= BLOCK.cooldown) { lastBar = time; addBarrier(cpos.x, cpos.z, 'P'); sfx('barrier'); L('barrier'); gest = { t: 0, x: cpos.x, z: cpos.z }; }
     } else if (seg.mech === 'reflect') {
-      if (act && !drawing) { drawing = { pts: [{ x: cpos.x, z: cpos.z }], len: 0, atLimit: false }; setPreview(true); }
+      if (click && !drawing && !slotFree()) L('slots:full');      // não começa a desenhar sem vaga
+      if (act && !drawing && slotFree()) { drawing = { pts: [{ x: cpos.x, z: cpos.z }], len: 0, atLimit: false }; setPreview(true); }
       if (act && drawing) {
         const last = drawing.pts[drawing.pts.length - 1], d = dist(last, cpos);
         if (d >= REFL.step) {
@@ -813,14 +851,14 @@ export function createBattle(ctx) {
     // barreiras
     barriers = barriers.filter(b => {
       b.age += dt;
-      if (b.alive) { b.obj.scale.set(1, Math.max(0.001, ease(b.age / BLOCK.rise)), 1); if (b.age >= b.life) killBarrier(b); return true; }
-      b.die += dt; const k = b.die / 0.15; b.obj.scale.set(1 + 0.25 * k, Math.max(0.001, 1 - k), 1 + 0.25 * k);
+      if (b.alive) { b.obj.scale.set(1, Math.max(0.001, ease(b.age / BLOCK.rise)), 1); shine(b.obj.userData, b.age); if (b.age >= b.life) killBarrier(b); return true; }
+      b.die += dt; const k = b.die / 0.15; b.obj.scale.set(1 + 0.25 * k, Math.max(0.001, 1 - k), 1 + 0.25 * k); shine(b.obj.userData, b.age, Math.max(0, 1 - k));
       if (k >= 1) { barPool[b.owner].put(b.obj); return false; } return true;
     });
     walls = walls.filter(w => {
       w.age += dt;
-      if (w.alive) { w.obj.scale.y = Math.max(0.001, ease(w.age / 0.16)); if (w.age >= w.life) killWall(w); return true; }
-      w.die += dt; w.obj.scale.y = Math.max(0.001, 1 - w.die / 0.15);
+      if (w.alive) { w.obj.scale.y = Math.max(0.001, ease(w.age / 0.16)); shine(w.obj.userData, w.age); if (w.age >= w.life) killWall(w); return true; }
+      w.die += dt; w.obj.scale.y = Math.max(0.001, 1 - w.die / 0.15); shine(w.obj.userData, w.age, Math.max(0, 1 - w.die / 0.15));
       if (w.die >= 0.15) { disposeWall(w); return false; } return true;
     });
     // estilhaços
@@ -1027,6 +1065,6 @@ export function createBattle(ctx) {
     _fire({ from = 'fig', target = 'K', speed = 6.5, warn = 0 } = {}) { const w = createWarning(from, target, speed, warn); return w.proj ? w.proj.id : null; },
     _setStab(who, v) { stab[who] = v; if (v <= 0) fail(); },
     _skipIntro() { if (phase === 'intro') { phase = 'play'; pt = 0; fade = 0; } },
-    GRID, H_PROJ, BLOCK, REFL, FIRM, K_DEF, STEPS, SEGMENTS, CAM,
+    GRID, H_PROJ, BLOCK, REFL, P_SLOTS, get slots() { return slotsUsed(); }, FIRM, K_DEF, STEPS, SEGMENTS, CAM,
   };
 }
