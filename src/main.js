@@ -1801,14 +1801,19 @@ function drawVeil(dt) {
 // contínua entre menus; num nível para (guardando a posição) e volta ao retornar. Respeita o volume e a preferência de música.
 const menuMusic = createMenuMusic(audio, SNOW_LOOP_URL, '"104. snow (1)-loop.wav" (assets/snow-loop.mp3)', SNOW_LOOP_SECS);
 let menuFadeIn = 0.6;
-// Pausa própria desta faixa (botão ♪ onde ele aparece, como no mapa da Carreira). A preferência da música padrão
-// (adress.music) NÃO a silencia: antes, uma pausa feita num bairro deixava os menus mudos sem botão para religar.
-const MENU_PAUSE_KEY = 'adress.menuMusic.paused';
-let menuPaused = flagOn(MENU_PAUSE_KEY), menuOvrOn = false;
-const MENU_OVR = { get on() { return !menuPaused; }, toggle() { menuPaused = !menuPaused; try { localStorage.setItem(MENU_PAUSE_KEY, menuPaused ? '1' : '0'); } catch (e) { /* */ } } };
+// Pausa própria desta faixa, só nesta sessão: ao abrir o jogo (ou entrar na fase) ela sempre começa sozinha, mesmo com a
+// música padrão desligada/pausada antes. O botão ♪ aparece nesses menus (canto inferior esquerdo) e pausa/continua do mesmo
+// ponto; trocar de menu ou voltar de um nível não força a retomada.
+let menuPaused = false, menuOvrOn = false;
+try { localStorage.removeItem('adress.menuMusic.paused'); } catch (e) { /* (pausa salva da versão anterior: não vale mais) */ }
+const MENU_OVR = { get on() { return !menuPaused; }, toggle() { menuPaused = !menuPaused; } };
+const SNOW_CSS = document.createElement('style');
+SNOW_CSS.textContent = 'body.menu-snow .music-btn { visibility: visible !important; display: flex !important; left: clamp(10px, 1.4vw, 20px) !important; z-index: 60 !important; } body.menu-snow .music-now { display: none !important; }';
+document.head.appendChild(SNOW_CSS);
 function updateMenuMusic() {
   const menus = rainOn() && (MENU_STATES.includes(state) || inMap());
   music.block(menus);
+  document.body.classList.toggle('menu-snow', menus);
   if (menus !== menuOvrOn) { menuOvrOn = menus; if (menus) music.setOverride(MENU_OVR); else if (music.override === MENU_OVR) music.setOverride(null); }
   if (menus && !menuPaused) { if (!menuMusic.playing && menuMusic.play(menuFadeIn)) menuFadeIn = 0.6; }
   else if (menuMusic.playing) menuMusic.stop(0.8);
