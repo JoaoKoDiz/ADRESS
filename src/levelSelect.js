@@ -1,5 +1,8 @@
 // Modo Livre: escolha do bairro. Páginas de 8 cartões creme (4×2), setas laterais para trocar de página com as miniaturas; setas ou clique selecionam; botão "Jogar no Bairro N" ou E/Enter joga.
 import { renderMiniThumbnails } from './careerMap.js';
+import { renderExtraThumbs } from './extraThumbs.js';
+
+const XTITLES = ['Rigidez', 'Maledicência', 'Covardia', 'Sacrifício'];   // os 4 níveis extras (só título, sem subtítulo)
 
 const CSS = `
 .lsel { position: fixed; inset: 0; z-index: 25; display: none; flex-direction: column; align-items: center; justify-content: center;
@@ -38,6 +41,11 @@ const CSS = `
 /* página dos 4 níveis extras (história secundária): 4 cartões altos = a altura das 2 fileiras da página anterior */
 .lsel-grid.extra .lsel-card.xtra { box-sizing: border-box; background: #ffffff; border: 3px solid rgba(201,167,106,.75); cursor: default; box-shadow: 0 4px 12px rgba(0,0,0,.18), inset 0 0 0 6px #fffaf0; }
 .lsel-grid.extra .lsel-card.xtra::after { content: ''; position: absolute; inset: 12px; border-radius: clamp(6px, .8vw, 12px); border: 2px dashed rgba(201,167,106,.45); }
+.lsel-grid.extra .lsel-card.xtra { display: flex; flex-direction: column; padding: 10px; gap: 8px; }
+.lsel-grid.extra .lsel-card.xtra::after { display: none; }
+.lsel-card.xtra .xi { flex: 1; min-height: 0; background: #000; border-radius: clamp(6px, .8vw, 12px); overflow: hidden; display: flex; align-items: center; justify-content: center; }
+.lsel-card.xtra .xi img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.lsel-card.xtra .xt { flex: none; text-align: center; font-weight: 900; font-size: clamp(14px, min(1.45vw, 2.6vh), 24px); letter-spacing: .03em; color: #2e1d10; padding: 0 0 2px; }
 .lsel-play.gone { visibility: hidden; }
 .lsel-info:hover { transform: translateX(-50%) scale(1.1); }
 .lsel-modal { position: absolute; inset: 0; z-index: 2; display: none; align-items: center; justify-content: center; background: rgba(30,22,14,.38); }
@@ -100,7 +108,7 @@ export function createLevelSelect(onPick, onExtraPick) {
   addEventListener('keydown', e => {                       // Esc fecha só a janela (sem abrir o menu de opções)
     if (e.code === 'Escape' && modal.classList.contains('on')) { e.stopImmediatePropagation(); closeInfo(); }
   }, true);
-  let cards = null, sel = 0, page = 0, COUNT = 0, extra = false, onExtra = false, xOpen = 1;
+  let cards = null, sel = 0, page = 0, COUNT = 0, extra = false, onExtra = false, xOpen = 1, xImgs = null;
   const INFO0 = modal.querySelector('.lsel-modal-box').innerHTML;
   const INFO_EXTRA = '<h3 id="lsel-modal-title">Além das entregas</h3><p>Se você completou as cinco missões de cada um dos 24 bairros, sua jornada de entregador está completa.</p>' +
     '<p>Os quatro níveis seguintes pertencem exclusivamente à história secundária e agora estão disponíveis para você.</p>' +
@@ -114,7 +122,9 @@ export function createLevelSelect(onPick, onExtraPick) {
   function showExtra() {
     const h = grid.getBoundingClientRect().height;               // a altura das 2 fileiras (com o espaço entre elas)
     onExtra = true; page = pages(); grid.textContent = ''; grid.classList.add('extra');
+    if (!xImgs) { try { xImgs = renderExtraThumbs(); } catch (e) { console.error('[levelSelect] imagens dos extras:', e); xImgs = [null, null, null, null]; } }
     for (let k = 0; k < 4; k++) { const c = document.createElement('div'); c.className = 'lsel-card xtra'; c.dataset.level = String(24 + k); if (h > 0) c.style.height = h + 'px'; grid.appendChild(c);
+      c.innerHTML = `<div class="xi">${xImgs[k] ? `<img src="${xImgs[k]}" alt="">` : ''}</div><div class="xt">${XTITLES[k]}</div>`;
       if (k < xOpen) { c.classList.add('x1'); c.addEventListener('click', () => onExtraPick && onExtraPick(k)); } }   // liberados: o 1º sempre; o 2º depois do 1º (ainda reservado)   // o 1º extra já tem a introdução
     prevBtn.classList.remove('off'); nextWrap.classList.add('gone'); playBtn.classList.add('gone');
   }
