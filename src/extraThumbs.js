@@ -20,10 +20,16 @@ function statue() {
   const hr = 0.45;
   const crown = new THREE.Mesh(new THREE.SphereGeometry(hr * 1.07, 10, 7, 0, Math.PI * 2, 0, 1.5), glass); crown.position.y = 0.46; B.head.add(crown);
   const hair = new THREE.Mesh(new THREE.CapsuleGeometry(hr * 0.78, 0.5, 4, 8), glass); hair.position.set(-0.2, 0.25, 0); hair.scale.set(0.7, 1, 1.15); B.head.add(hair);
-  const skirt = new THREE.Mesh(new THREE.CylinderGeometry(0.24, 0.42, 0.42, 9, 1, true), glass); skirt.position.y = -0.12; B.pelvis.add(skirt);
-  B.arms.forEach((a, i) => { a.sh.rotation.z = 0.05; a.sh.rotation.x = (i ? 1 : -1) * 0.06; a.elbow.rotation.z = 0.12; });
+  const skirt = new THREE.Mesh(new THREE.CylinderGeometry(0.24, 0.5, 0.36, 10, 1, true), glass); skirt.position.y = -0.1; B.pelvis.add(skirt);   // saia um pouco mais rodada
+  // pose de bailarina (como a referência): uma mão erguida, o outro braço aberto para o lado oposto, em diagonal para baixo
+  const [down, up] = B.arms;                                    // (o braço erguido é o do lado da câmera)
+  up.sh.rotation.set(-2.45, 0, 0.12); up.elbow.rotation.z = 0.18; up.wrist.rotation.z = 0.25;
+  down.sh.rotation.set(0.95, 0, 0.12); down.elbow.rotation.z = 0.2; down.wrist.rotation.z = -0.15;
+  const [lA, lB] = B.legs;                                      // uma perna levemente à frente, a outra dobrada para trás
+  lA.hip.rotation.z = 0.12; lB.hip.rotation.z = -0.18; lB.knee.rotation.z = -0.55;
+  B.head.rotation.x = 0.12;                                    // cabeça um pouco inclinada para o lado do braço erguido
   g.traverse(o => { if (o.isMesh) { o.material = glass; o.renderOrder = 1; } });
-  g.rotation.y = -Math.PI / 2 + 0.5;                          // de frente, em três quartos: a silhueta inteira contra o preto
+  g.rotation.y = -Math.PI / 2 + 0.3;                          // de frente, em três quartos: a silhueta inteira contra o preto
   return g;
 }
 
@@ -45,16 +51,19 @@ function tombstone() {
     return new THREE.Vector3(px, py, side * T / 2);
   };
   const tuft = new THREE.IcosahedronGeometry(1, 0);
-  const bare = [[0.32, 0.55, 0.09], [0.7, 0.28, 0.07], [0.56, 0.86, 0.06]];   // manchas de pedra aparente (u, v, raio)
+  // densidade irregular: mais na base, nas bordas e em algumas manchas; o meio e o alto ficam com pedra bem aparente
+  const sm = (a, b, x) => { const t = Math.max(0, Math.min(1, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
+  const blobs = [[0.18, 1.02, 0.16], [0.8, 0.72, 0.13], [0.62, 1.32, 0.1]];
+  const dens = (u, v) => Math.min(0.92, 0.04 + 0.85 * sm(0.5, 0.05, v) + 0.6 * sm(0.36, 0.5, Math.abs(u - 0.5)) * sm(1.3, 0.6, v) + blobs.reduce((m, [bu, bv, r]) => Math.max(m, 0.85 * sm(r, 0, Math.hypot(u - bu, (v - bv) * 0.9))), 0));
   for (let i = 0; i < 2600; i++) {
     const side = rand() < 0.8 ? 1 : -1, u = rand(), v = rand() * 1.45;
-    if (side === 1 && bare.some(([bu, bv, r]) => Math.hypot(u - bu, (v - bv) * 1.2) < r)) continue;
+    if (rand() > dens(u, v)) continue;
     const p = surf(u, v, side); if (!p) continue;
     const m = new THREE.Mesh(tuft, moss[i % 3]), s = 0.04 + rand() * 0.065;
     m.scale.set(s * 1.4, s, s * 0.6); m.position.copy(p); m.position.z += side * s * 0.25; m.rotation.set(rand() * 3, rand() * 3, rand() * 3); g.add(m);
   }
-  for (let i = 0; i < 160; i++) {                              // laterais e a beirada de cima também
-    const sx = rand() < 0.5 ? -1 : 1, y = rand() * H, m = new THREE.Mesh(tuft, moss[i % 3]), s = 0.04 + rand() * 0.05;
+  for (let i = 0; i < 70; i++) {                               // laterais (mais embaixo)
+    const sx = rand() < 0.5 ? -1 : 1, y = Math.pow(rand(), 1.8) * H, m = new THREE.Mesh(tuft, moss[i % 3]), s = 0.04 + rand() * 0.05;
     m.scale.set(s * 0.6, s, s * 1.3); m.position.set(sx * W / 2, y, (rand() - 0.5) * T); g.add(m);
   }
   const base = new THREE.Group(); base.add(g);
@@ -92,14 +101,16 @@ function candle() {
   }
   // cera derretida espalhada em volta (poça irregular)
   const shape = new THREE.Shape(); const N = 22;
-  for (let i = 0; i <= N; i++) { const a = i / N * Math.PI * 2, r = 0.62 + Math.sin(a * 3 + 1) * 0.12 + Math.sin(a * 7) * 0.06 + (i % N ? rand() * 0.05 : 0); const px = Math.cos(a) * r, pz = Math.sin(a) * r; if (!i) shape.moveTo(px, pz); else shape.lineTo(px, pz); }
+  for (let i = 0; i <= N; i++) { const a = i / N * Math.PI * 2, r = 0.47 + Math.sin(a * 3 + 1) * 0.07 + Math.sin(a * 7) * 0.035 + (i % N ? rand() * 0.03 : 0); const px = Math.cos(a) * r, pz = Math.sin(a) * r; if (!i) shape.moveTo(px, pz); else shape.lineTo(px, pz); }
   const puddle = new THREE.Mesh(new THREE.ExtrudeGeometry(shape, { depth: 0.05, bevelEnabled: true, bevelThickness: 0.025, bevelSize: 0.04, bevelSegments: 2 }), wax);
   puddle.rotation.x = Math.PI / 2; puddle.position.y = 0.05; g.add(puddle);
-  for (let i = 0; i < 4; i++) { const a = rand() * 6.28, r = 0.7 + rand() * 0.15, b = new THREE.Mesh(new THREE.SphereGeometry(0.05 + rand() * 0.04, 6, 4), wax); b.scale.y = 0.4; b.position.set(Math.cos(a) * r, 0.02, Math.sin(a) * r); g.add(b); }
+  for (let i = 0; i < 3; i++) { const a = rand() * 6.28, r = 0.55 + rand() * 0.06, b = new THREE.Mesh(new THREE.SphereGeometry(0.05 + rand() * 0.04, 6, 4), wax); b.scale.y = 0.4; b.position.set(Math.cos(a) * r, 0.02, Math.sin(a) * r); g.add(b); }
   const wick = new THREE.Mesh(new THREE.CylinderGeometry(0.012, 0.016, 0.12, 5), new THREE.MeshStandardMaterial({ color: '#1a1410', roughness: 1 })); wick.position.y = 0.47; wick.rotation.z = 0.15; g.add(wick);
   const flame = new THREE.Sprite(new THREE.SpriteMaterial({ map: flameTexture(), blending: THREE.AdditiveBlending, depthWrite: false, transparent: true }));
   flame.scale.set(0.22, 0.44, 1); flame.position.y = 0.72; g.add(flame);
   const glow = new THREE.PointLight('#9B00FF', 0.35, 1.4, 2); glow.position.y = 0.7; g.add(glow);
+  // moldura invisível do tamanho da poça antiga: o enquadramento (câmera e tamanho da vela) continua o mesmo
+  const frame = new THREE.Mesh(new THREE.CylinderGeometry(0.9, 0.9, 0.96, 12)); frame.position.y = 0.46; frame.visible = false; g.add(frame);
   return g;
 }
 
@@ -125,7 +136,7 @@ export function renderExtraThumbs(w = 360, h = 480) {
     s.add(new THREE.HemisphereLight('#8fa8ff', '#000000', 0.25));
     const key = new THREE.DirectionalLight('#ffffff', 1.1); key.position.set(3, 5, 4); s.add(key);
     const rim = new THREE.DirectionalLight('#7f9fff', 2.2); rim.position.set(-4, 3, -4); s.add(rim);
-  }, { dir: new THREE.Vector3(0, 0.08, 1), k: 0.9, tone: false }));   // sem tone mapping: o azul fica fiel ao #003EFF
+  }, { dir: new THREE.Vector3(0, 0.08, 1), k: 1.18, tone: false }));   // sem tone mapping: o azul fica fiel ao #003EFF
   rnd = 11;
   urls.push(shot(tombstone(), s => {
     s.add(new THREE.HemisphereLight('#e8f0ff', '#1a120a', 1.1));
