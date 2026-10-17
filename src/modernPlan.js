@@ -2,6 +2,7 @@
 // 5 rotatórias pequenas e ruas residenciais sem saída (balão de retorno). Casas com jardim aberto e recuo grande, de frente
 // para a rua; poucas lojas. Muro contínuo em volta (no lugar da sebe) e portaria na entrada (guarita + cancela, main.js).
 // Mesmo formato do plano do Bosque (forestPlan.js): o jogo usa os pontos (SPOTS) do mesmo jeito; aqui não há patamar.
+import { obbBox } from './obb.js';
 
 export const MODERN = { RW: 10, ROUND: 11.5, ISLAND: 4.6, CUL: 9.5, WALL: 0.8, WALL_H: 2.4 };
 
@@ -55,12 +56,6 @@ export function planModern(MAP, HEDGE) {
   // ---- casas: lote 17.2 (+ calçada), jardim aberto, de frente para a rua (também em volta dos balões) ----
   const S = 9.0;
   const toW = (sp, x, z) => { const c = Math.cos(sp.ry), s = Math.sin(sp.ry); return { x: sp.px + x * c + z * s, z: sp.pz - x * s + z * c }; };
-  const aabb = (sp, x0, z0, x1, z1) => {                                  // caixa (eixos do mundo) do retângulo local girado
-    const k = 1 - 0.3 * Math.abs(Math.sin(2 * sp.ry)), mx = (x0 + x1) / 2, mz = (z0 + z1) / 2;   // na diagonal, encolhida (não engole o jardim da frente)
-    x0 = mx + (x0 - mx) * k; x1 = mx + (x1 - mx) * k; z0 = mz + (z0 - mz) * k; z1 = mz + (z1 - mz) * k;
-    const p = [toW(sp, x0, z0), toW(sp, x1, z0), toW(sp, x0, z1), toW(sp, x1, z1)];
-    return { x0: Math.min(...p.map(q => q.x)), x1: Math.max(...p.map(q => q.x)), z0: Math.min(...p.map(q => q.z)), z1: Math.max(...p.map(q => q.z)) };
-  };
   const spots = [];
   const tryAt = (px, pz, fx, fz, dx, dz) => {   // (dx, dz): ponto de entrega na beira da pista
     const b = { x0: px - S, z0: pz - S, x1: px + S, z1: pz + S };
@@ -68,7 +63,7 @@ export function planModern(MAP, HEDGE) {
     if (!clearOfRoads(b, 1.8) || spots.some(o => hit(b, o.box, 2.2)) || inR(ENTRY, px, pz)) return false;
     const sp = { px, pz, ry: Math.atan2(fx, fz), fx, fz, y: 0, box: b, tags: [] };
     const c = toW(sp, 0, -3.6), r = toW(sp, 0, 6.8);
-    Object.assign(sp, { cx: c.x, cz: c.z, door: { x: dx, z: dz }, res: { x: r.x, z: r.z, ry: sp.ry }, walkBox: aabb(sp, -6, -7.4, 6, 1.4) });
+    Object.assign(sp, { cx: c.x, cz: c.z, door: { x: dx, z: dz }, res: { x: r.x, z: r.z, ry: sp.ry }, walkBox: obbBox((x, z) => toW(sp, x, z), sp.ry, -6, -7.4, 6, 1.4) });
     spots.push(sp); return true;
   };
   for (const k of CULS) {                                                 // em volta do balão (as melhores casas)

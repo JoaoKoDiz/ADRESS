@@ -7,6 +7,7 @@
 //  - faixas arborizadas entre as ruas, árvores nas calçadas e nos cantos livres;
 //  - casas (lote 17,2) de frente para as ruas; 4 casas dentro do parque, com a entrada voltada para ele (só a pé).
 // Tudo é geometria pura (x = leste, z = sul); o desenho fica em models/garden.js.
+import { obbBox } from './obb.js';
 
 export const GARD = { RW: 8 };
 let CACHE = null;                                   // (o plano é fixo: calculado uma vez)
@@ -72,9 +73,9 @@ function makePlan(MAP, HEDGE) {
   const S = 9.0, spots = [];
   const toW = (sp, x, z) => { const c = Math.cos(sp.ry), s = Math.sin(sp.ry); return { x: sp.px + x * c + z * s, z: sp.pz - x * s + z * c }; };
   const finish = (sp, lv = 0) => {
-    const c = toW(sp, 0, -3.6), d = toW(sp, 0, 11.4), r = toW(sp, 0, 6.6), w0 = toW(sp, -5.2, -7.6), w1 = toW(sp, 5.2, 1.6);
+    const c = toW(sp, 0, -3.6), d = toW(sp, 0, 11.4), r = toW(sp, 0, 6.6);
     Object.assign(sp, { cx: c.x, cz: c.z, door: d, res: { x: r.x, z: r.z, ry: sp.ry }, y: lv,
-      walkBox: { x0: Math.min(w0.x, w1.x), x1: Math.max(w0.x, w1.x), z0: Math.min(w0.z, w1.z), z1: Math.max(w0.z, w1.z) } });
+      walkBox: obbBox((x, z) => toW(sp, x, z), sp.ry, -5.2, -7.6, 5.2, 1.6) });
     spots.push(sp);
   };
   // 4 casas dentro do parque (cantos), com a entrada voltada para ele: a van para no anel; o resto é a pé

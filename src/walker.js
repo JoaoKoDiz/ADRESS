@@ -1,6 +1,7 @@
 // O motorista a pé (tecla L na van): anda livremente pelo bairro — entra nos quintais e na praça —, mas não entrega.
 // Colisão simples com caixas (AABB), deslizando nas paredes. Mesmo modelo/cores do motorista da tela inicial.
 import * as THREE from 'three';
+import { obbHits } from './obb.js';
 import { buildBody, BODY, ARM_REST, CHAR_DEFAULT, CHAR_MATS, setCharColors } from './models/driver.js';
 import { createGait } from './gait.js';
 const ARM_GAIT = { open: ARM_REST.open, fwd: ARM_REST.fwd, elbow: ARM_REST.elbow, wrist: ARM_REST.wrist };
@@ -23,7 +24,7 @@ export function createWalker(scene) {
   let speedMul = 1;
 
   let area = null;                             // Veneza: onde dá para pisar (ilhas, praças, pontes); fora disso é água
-  const hits = (x, z, boxes) => (area && !area(x, z)) || boxes.some(b => x > b.x0 - RADIUS && x < b.x1 + RADIUS && z > b.z0 - RADIUS && z < b.z1 + RADIUS && (!b.r || Math.hypot(x - b.cx, z - b.cz) < b.r + RADIUS));   // (b.r: obstáculo redondo, Órbita)
+  const hits = (x, z, boxes) => (area && !area(x, z)) || boxes.some(b => x > b.x0 - RADIUS && x < b.x1 + RADIUS && z > b.z0 - RADIUS && z < b.z1 + RADIUS && (!b.r || Math.hypot(x - b.cx, z - b.cz) < b.r + RADIUS) && (!b.obb || obbHits(b.obb, x, z, RADIUS)));   // (b.obb: casa girada)   // (b.r: obstáculo redondo, Órbita)
   // a van é um círculo; se o personagem já está dentro dele (acabou de descer), só impede de entrar mais fundo
   const hitsVan = (x, z, van) => { const d = Math.hypot(x - van.x, z - van.z); return d < 2.5 + RADIUS && d < Math.hypot(st.x - van.x, st.z - van.z) - 1e-6; };
   const blocked = (x, z, boxes, van) => hits(x, z, boxes) || hitsVan(x, z, van);

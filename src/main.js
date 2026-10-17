@@ -2956,7 +2956,7 @@ renderer.setAnimationLoop(now => {
 // ---------- Ganchos para testes automatizados ----------
 window.ADRESS = {
   THREE, renderer, game, van, rig, hud, input, audio, hint, boom, menu, music, heli, monster,
-  get world() { return world; }, get SNOWV() { return SNOWV; }, get FORESTV() { return FORESTV; }, get MEDV() { return MEDV; }, get TERRAIN() { return TERRAIN; },
+  get world() { return world; }, get FORESTV() { return FORESTV; }, get TERRAIN() { return TERRAIN; },
   get neighborhood() { return neighborhood; },
   barriers, SOLIDS, doorPoint, slotOrigin, GAS_CANOPY, GAS_ISLANDS,
   get gas() { return GAS_LIST; },

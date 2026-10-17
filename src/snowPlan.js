@@ -3,6 +3,7 @@
 // rede, com caminhos alternativos (2 ladeiras para cada patamar). Atalhos fechados por montes de neve que o limpa-neve
 // abre por um tempo (nunca são o único acesso a uma casa). Placas de gelo em ruas secundárias, curvas e numa ladeira.
 // Casas (lote normal 17.2 com quintal e cerca) mais espaçadas, de frente para a rua. Tudo é geometria pura.
+import { obbBox } from './obb.js';
 
 export const SNOW = { MIDH: 3, HIGHH: 6, RW: 8 };
 
@@ -71,9 +72,9 @@ export function planSnow(MAP, HEDGE) {
         if (lv < 0 || lv !== level(ax + ux * t, az + uz * t) || !clearOfRoads(b, 0.6) || rampBoxes.some(r => hit(b, r, 1)) || spots.some(o => hit(b, o.box, 3))) continue;   // espaçadas
         if (Math.abs(px - 104.6) < 20 && pz < 34) continue;              // entrada livre
         const sp = { px, pz, ry: Math.atan2(fx, fz), fx, fz, y: [0, MIDH, HIGHH][lv], box: b, tags: [] };
-        const c = toW(sp, 0, -3.6), d = toW(sp, 0, 11.4), r = toW(sp, 0, 6.8), w0 = toW(sp, -4.5, -7.1), w1 = toW(sp, 4.5, -0.1);
+        const c = toW(sp, 0, -3.6), d = toW(sp, 0, 11.4), r = toW(sp, 0, 6.8);
         Object.assign(sp, { cx: c.x, cz: c.z, door: d, res: { x: r.x, z: r.z, ry: sp.ry },
-          walkBox: { x0: Math.min(w0.x, w1.x), x1: Math.max(w0.x, w1.x), z0: Math.min(w0.z, w1.z), z1: Math.max(w0.z, w1.z) } });
+          walkBox: obbBox((x, z) => toW(sp, x, z), sp.ry, -4.5, -7.1, 4.5, -0.1) });
         spots.push(sp); break;
       }
     }

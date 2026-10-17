@@ -6,6 +6,7 @@
 // R1) e da praça sobe até o castelo pela ladeira longa R3. Alternativas: ladeiras R2 (oeste) e R4 (leste).
 // Mesmo formato dos planos com pontos (SPOTS): spots[s] = { px, pz, ry, fx, fz, y, box, walkBox, cx, cz, door, res, … }.
 
+import { obbBox } from './obb.js';
 import { CHURCH_SOLIDS, CHURCH_CAM } from './models/church.js';
 
 export const MED = { RW: 8, STRIP: 1.3, MIDH: 1.4, HIGHH: 5.0, LW: 9.6, LD: 12, SW: 14, SD: 15 };
@@ -153,9 +154,9 @@ export function planMedieval(MAP, HEDGE) {
     // construção: casa z ∈ [−3,2; 5] (frente recuada 1 do limite do lote: degrau, vasos, barris, lanterna); loja z ∈ [−4; 5] (+ área de trabalho
     // na frente até 7,5). Quintal nos fundos. Porta: casa em x = −1,4; loja em x = 0. (coordenadas locais; frente para +z)
     const front = d / 2, wallZ = shop ? d / 2 - 2.5 : d / 2 - 1, bd = shop ? 9 : 8.2;
-    const c = toW(sp, 0, wallZ - bd / 2), q0 = toW(sp, -w / 2, wallZ - bd), q1 = toW(sp, w / 2, wallZ);
+    const c = toW(sp, 0, wallZ - bd / 2);
     const doorX = shop ? 0 : -1.4, fr = toW(sp, doorX, front + 0.6), r = toW(sp, doorX + 0.9, wallZ + 0.7);
-    Object.assign(sp, { cx: c.x, cz: c.z, walkBox: { x0: Math.min(q0.x, q1.x), x1: Math.max(q0.x, q1.x), z0: Math.min(q0.z, q1.z), z1: Math.max(q0.z, q1.z) },
+    Object.assign(sp, { cx: c.x, cz: c.z, walkBox: obbBox((x, z) => toW(sp, x, z), sp.ry, -w / 2, wallZ - bd, w / 2, wallZ),
       door: { x: ax + ux * t + nx * (hw - 1.3), z: az + uz * t + nz * (hw - 1.3) }, front: fr, res: { x: r.x, z: r.z, ry: sp.ry }, doorX, wallZ });
     spots.push(sp); return sp;
   }

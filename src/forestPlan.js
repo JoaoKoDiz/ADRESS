@@ -3,6 +3,7 @@
 // no canto sudeste com 2 ladeiras suaves. Casas (lote 17.2 com quintal e cerca, centrado e girado para a rua) em grupos;
 // trechos 'wood' atravessam o mato (sem casas). Árvores entre os grupos, sempre fora das pistas, lotes, portas e caminhos.
 // Mesmo formato do plano do Nevasca (snowPlan.js): o resto do jogo usa os pontos (SPOTS) do mesmo jeito.
+import { obbBox } from './obb.js';
 
 export const FOREST = { MIDH: 2.4, RW: 8 };
 
@@ -67,9 +68,9 @@ export function planForest(MAP, HEDGE) {
         if (Math.abs(px - 104.6) < 20 && pz < 34) continue;              // entrada livre
         const sp = { px, pz, ry: Math.atan2(fx, fz), fx, fz, y: lv ? MIDH : 0, box: b, tags: [] };
         const c = toW(sp, 0, -3.6), d = { x: ax + ux * t + nx * (hw - 1.2), z: az + uz * t + nz * (hw - 1.2) },   // ponto de entrega na beira da rua, em frente ao lote
-           r = toW(sp, 0, 6.8), w0 = toW(sp, -4.5, -7.1), w1 = toW(sp, 4.5, -0.1);
+           r = toW(sp, 0, 6.8);
         Object.assign(sp, { cx: c.x, cz: c.z, door: d, res: { x: r.x, z: r.z, ry: sp.ry },
-          walkBox: { x0: Math.min(w0.x, w1.x), x1: Math.max(w0.x, w1.x), z0: Math.min(w0.z, w1.z), z1: Math.max(w0.z, w1.z) } });
+          walkBox: obbBox((x, z) => toW(sp, x, z), sp.ry, -4.5, -7.1, 4.5, -0.1) });
         spots.push(sp); break;
       }
     }
