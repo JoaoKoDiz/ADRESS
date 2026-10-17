@@ -929,7 +929,7 @@ function startLaser(h, slot, kind = 'laser') {
       else if (i === 6) m = new THREE.Mesh(new THREE.BoxGeometry(rect.w - 0.2, 0.05, rect.d - 0.2), dark);
       else m = new THREE.Mesh(new THREE.CylinderGeometry(2.6 + i * 0.5, 3 + i * 0.5, 0.05, 20), dark);
       const off = i === 6 ? [0, 0] : [(Math.random() - 0.5) * (MOONV ? 6 : rect.w * 0.45), (Math.random() - 0.5) * (MOONV ? 6 : rect.d * 0.45)];
-      m.position.set(local.x + off[0], local.y + (MOONV ? 0.09 : 0.215 + i * 0.002), local.z + off[1]);
+      m.position.set(local.x + off[0], local.y + (MOONV ? 0.09 + i * 0.01 : 0.215 + i * 0.012), local.z + off[1]);
       m.receiveShadow = true; parent.add(m); laserVoids.push(m);
     };
     if (kind === 'solar') {                             // Sistema Solar: 7 planetas (o 4º derruba a construção) e o Sol (quadra arrasada)

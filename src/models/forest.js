@@ -40,7 +40,7 @@ export function buildForestScene(g, V, MAP, HEDGE) {
   const { MIDH, RW } = FOREST, X1 = MAP - HEDGE, P = V.MID;
   const slab = (x0, x1, z0, z1) => {
     if (x1 - x0 < 0.05 || z1 - z0 < 0.05) return;
-    add(box(x1 - x0, MIDH - 0.04, z1 - z0, EARTH), (x0 + x1) / 2, (MIDH - 0.04) / 2, (z0 + z1) / 2);
+    add(box(x1 - x0, MIDH - 0.06, z1 - z0, EARTH), (x0 + x1) / 2, (MIDH - 0.06) / 2, (z0 + z1) / 2);
     add(box(x1 - x0, 0.06, z1 - z0, GRASS), (x0 + x1) / 2, MIDH - 0.03, (z0 + z1) / 2);
   };
   // patamar com recorte nas ladeiras

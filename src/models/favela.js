@@ -109,7 +109,7 @@ export function buildFavelaScene(g, F, MAP, HEDGE) {
   const { B1, B2, H1, H2, RW } = FAV, X0 = HEDGE, X1 = MAP - HEDGE;
   const slab = (x0, x1, z0, z1, y0, y1, side = WALLC, top = CONC) => {
     if (x1 - x0 < 0.05 || z1 - z0 < 0.05) return;
-    add(box(x1 - x0, y1 - y0 - 0.04, z1 - z0, side), (x0 + x1) / 2, y0 + (y1 - y0 - 0.04) / 2, (z0 + z1) / 2);
+    add(box(x1 - x0, y1 - y0 - 0.06, z1 - z0, side), (x0 + x1) / 2, y0 + (y1 - y0 - 0.06) / 2, (z0 + z1) / 2);
     add(box(x1 - x0, 0.06, z1 - z0, top), (x0 + x1) / 2, y1 - 0.03, (z0 + z1) / 2);
   };
   // faixas do morro: blocos com buracos nas ladeiras/escadarias (no trecho em que elas cortam a faixa)

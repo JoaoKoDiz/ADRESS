@@ -40,7 +40,7 @@ export function buildTerrain() {
 function block(g, x0, x1, z0, z1, y0, y1) {
   if (x1 - x0 < 0.05 || z1 - z0 < 0.05) return;
   const h = y1 - y0;
-  g.add(at(box(x1 - x0, h - 0.04, z1 - z0, WALLC), (x0 + x1) / 2, y0 + (h - 0.04) / 2, (z0 + z1) / 2));
+  g.add(at(box(x1 - x0, h - 0.06, z1 - z0, WALLC), (x0 + x1) / 2, y0 + (h - 0.06) / 2, (z0 + z1) / 2));
   g.add(at(box(x1 - x0, 0.06, z1 - z0, ASPHALT), (x0 + x1) / 2, y1 - 0.03, (z0 + z1) / 2));
 }
 /** Faixa ao longo de x (z0..z1) com buracos nas colunas de rua `gaps`. */

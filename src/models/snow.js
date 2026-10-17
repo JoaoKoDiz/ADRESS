@@ -75,7 +75,7 @@ export function buildSnowScene(g, V, MAP, HEDGE) {
   const { MIDH, HIGHH, RW } = SNOW, X1 = MAP - HEDGE;
   const slab = (x0, x1, z0, z1, y0, y1) => {
     if (x1 - x0 < 0.05 || z1 - z0 < 0.05) return;
-    add(box(x1 - x0, y1 - y0 - 0.04, z1 - z0, STONE), (x0 + x1) / 2, y0 + (y1 - y0 - 0.04) / 2, (z0 + z1) / 2);
+    add(box(x1 - x0, y1 - y0 - 0.06, z1 - z0, STONE), (x0 + x1) / 2, y0 + (y1 - y0 - 0.06) / 2, (z0 + z1) / 2);
     add(box(x1 - x0, 0.06, z1 - z0, SNOWC), (x0 + x1) / 2, y1 - 0.03, (z0 + z1) / 2);
   };
   // patamares: blocos com recorte nas ladeiras (o trecho da ladeira dentro do patamar fica vazio)
