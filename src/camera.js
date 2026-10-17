@@ -4,7 +4,8 @@
 //     Parada, a câmera sobe para olhar por cima dos telhados; entregando, vira um pouco para a casa visitada.
 //   'overview' (tecla C): visão fixa do SUL, com o bairro inteiro enquadrado na tela.
 import * as THREE from 'three';
-import { MAP, HOUSE_SLOTS, GAS_LIST, GAS_PARTS, BUILD_H, slotOrigin, LOT_ANCHORS, ENTRANCE } from './layout.js';
+import { MAP, HEDGE, HOUSE_SLOTS, GAS_LIST, GAS_PARTS, BUILD_H, slotOrigin, LOT_ANCHORS, ENTRANCE, FAVELA, FARMLAND, SNOWV, MOONV, GARDV, FORESTV, MEDV, WARE_LIST, VENICE, LOT, ROAD } from './layout.js';
+import { FAV } from './favelaPlan.js';
 
 const PITCH = THREE.MathUtils.degToRad(57);   // inclinação para baixo
 const FOV = 32;                               // campo de visão vertical (graus): pouca diferença de escala entre fileiras
@@ -28,7 +29,7 @@ function buildFit() {
   const pts = [];
   for (const x of [0, MAP]) {
     for (const z of [0, MAP]) pts.push([x, 0, z], [x, 1.6, z]);
-    pts.push([x, 4.6, 0], [x, 9, 10]);
+    pts.push([x, 4.6, 0], [x, BUILD_H > 20 ? BUILD_H * 0.75 : 9, 10]);
   }
   // coordenadas de cada ponto na base da câmera
   FIT_A = pts.map(p => p[0]);
@@ -84,6 +85,11 @@ const SLOW_DIST = 9;            // parada/devagar: mais perto e mais alta, olhan
 const SLOW_HEIGHT = 13;         //   (dá para ver os quintais da frente mesmo estando atrás das casas)
 const BOOM_MIN_DIST = 4.5;      // braço encolhido ao máximo (quando algo fica entre a van e a câmera)
 const BOOM_TOP_HEIGHT = 14.5;   //   … e a altura correspondente: encolher = subir e olhar mais para baixo
+const FIXED_DIST = 11.5, FIXED_HEIGHT = 10;   // braço da câmera (fixo; a van parada ou em movimento tem o mesmo enquadramento)
+const R0_BASE = Math.hypot(FIXED_DIST, FIXED_HEIGHT - 2.2), EL0_BASE = Math.atan2(FIXED_HEIGHT - 2.2, FIXED_DIST);   // distância e elevação padrão do braço (PIVOT_Y = 2,2)
+let R0 = R0_BASE, EL0 = EL0_BASE;            // (o Medieval usa um braço mais curto e mais baixo: setProfile)
+const MIN_RADIUS = 3.2, MIN_ZOOM = 0.28, TIGHT_RADIUS = 0.8;      // aproximação máxima
+const MIN_ELEV = 0.1, MAX_ELEV = 1.5;         // inclinação mínima/máxima do braço (rad)
 const CHASE_LOOK_AHEAD = 6;     // ponto olhado fica um pouco à frente da van
 const CHASE_LOOK_Y = 1.2;
 const CHASE_YAW_SMOOTH = 3.2;   // rapidez com que a câmera alcança a direção da van nas curvas
@@ -95,11 +101,61 @@ const UP = new THREE.Vector3(0, 1, 0);
 // e a placa da entrada. Caixas [x0, z0, x1, z1, yTopo], já com folga (plano near = 1).
 const CAM_PAD = 1.0;
 const CAM_BOXES = [];
+const EXTRA_BOXES = [];          // caixas extras fora do bairro (ex.: paredes da igreja), sem folga: [x0, z0, x1, z1, yTopo]
+const SCENE_BOXES = [];
 function buildCamBoxes() {
   CAM_BOXES.length = 0;
-  for (const s of HOUSE_SLOTS) {
+  for (const b of SCENE_BOXES) CAM_BOXES.push(b);
+  for (const b of EXTRA_BOXES) CAM_BOXES.push([b[0] - CAM_PAD * 0.6, b[1] - CAM_PAD * 0.6, b[2] + CAM_PAD * 0.6, b[3] + CAM_PAD * 0.6, b[4]]);
+  if (MOONV) return;                                           // Órbita: só os obstáculos perto do jogador (main.js, a cada quadro)
+  if (FAVELA) {                                                // Morro: faixas do morro (o braço não entra na encosta), casario e mercadinho
+    const X0 = HEDGE, X1 = MAP - HEDGE;
+    CAM_BOXES.push([X0, FAV.B1, X1, MAP, FAV.H1 + 0.6], [X0, FAV.B2, X1, MAP, FAV.H2 + 0.6]);
+    for (const f of FAVELA.fillers) CAM_BOXES.push([f.x0 - 0.5, f.z0 - 0.5, f.x1 + 0.5, f.z1 + 0.5, f.y + f.floors * 2.8 + 1.2]);
+    for (const sp of FAVELA.spots) CAM_BOXES.push([sp.box.x0 - 0.6, sp.box.z0 - 0.6, sp.box.x1 + 0.6, sp.box.z1 + 0.6, sp.y + 3 * 2.8 + 1.8]);
+    const m = FAVELA.market; CAM_BOXES.push([m.x0 - 0.6, m.z0 - 0.6, m.x1 + 0.6, m.z1 + 0.6, 7]);
+    for (const b of FAVELA.outside.cam) CAM_BOXES.push(b);    // entorno (com a van fora do bairro): terraços, casas e prédios
+  }
+  if (FARMLAND) {                                              // Colheita: construções e grupos de árvores
+    for (const sp of FARMLAND.spots) CAM_BOXES.push([sp.box.x0 - 0.6, sp.box.z0 - 0.6, sp.box.x1 + 0.6, sp.box.z1 + 0.6, 10]);
+    for (const d of FARMLAND.decor) if (d.type === 'trees' || d.type === 'orchard') CAM_BOXES.push([d.x0, d.z0, d.x1, d.z1, d.type === 'trees' ? 8 : 5]);
+  }
+  if (SNOWV) {                                                 // Nevasca: patamares (o braço não entra no barranco), casas e pinheiros
+    CAM_BOXES.push([SNOWV.MID.x0, SNOWV.MID.z0, MAP, MAP, 3.6], [SNOWV.HIGH.x0, SNOWV.HIGH.z0, MAP, MAP, 6.6]);
+    for (const sp of SNOWV.spots) CAM_BOXES.push([sp.walkBox.x0 - 0.8, sp.walkBox.z0 - 0.8, sp.walkBox.x1 + 0.8, sp.walkBox.z1 + 0.8, sp.y + 7.8]);
+    for (const p of SNOWV.pines) CAM_BOXES.push([p.x - 1.4, p.z - 1.4, p.x + 1.4, p.z + 1.4, p.y + 5.5]);
+  }
+  if (MEDV) {                                                  // Medieval: patamares, muralha, casas (até o telhado), castelo, depósito, barracas, portão
+    const V = MEDV;
+    CAM_BOXES.push([V.MID.x0, V.MID.z0, MAP, MAP, V.MIDH + 0.5], [V.HIGH.x0, V.HIGH.z0, MAP, MAP, V.HIGHH + 0.5]);
+    for (const sp of V.spots) CAM_BOXES.push([sp.walkBox.x0 - 0.6, sp.walkBox.z0 - 0.6, sp.walkBox.x1 + 0.6, sp.walkBox.z1 + 0.6, sp.y + (sp.shop ? 9.5 : 9)]);
+    const C = V.castle; CAM_BOXES.push([C.x0 - 1, C.z0 - 1, C.x1 + 1, C.z1 + 1, V.HIGHH + 26]);
+    for (const f of V.fillers || []) if (f.kind !== 'yard') CAM_BOXES.push([f.box.x0 - 0.5, f.box.z0 - 0.5, f.box.x1 + 0.5, f.box.z1 + 0.5, f.y + (f.kind === 'shed' ? 3.6 : 6.5)]);   // (a horta murada é baixa: não bloqueia a câmera)
+    const D = V.depot; CAM_BOXES.push([D.x0 - 0.5, D.z0 - 0.5, D.x1 + 0.5, D.z1 + 0.5, V.MIDH + 5.5]);
+    for (const st of V.stalls) CAM_BOXES.push([st.box.x0 - 0.4, st.box.z0 - 0.4, st.box.x1 + 0.4, st.box.z1 + 0.4, V.MIDH + 3.4]);
+    CAM_BOXES.push([108, -12, 125.2, 4, 14], [133.6, -12, 151, 4, 14]);   // torres do portão (o vão do arco fica livre: a câmera acompanha a van por baixo)
+  }
+  if (FORESTV) {                                               // Bosque: patamar, casas e copas (o braço encurta antes de entrar numa árvore)
+    if (FORESTV.MID) CAM_BOXES.push([FORESTV.MID.x0, FORESTV.MID.z0, MAP, MAP, 2.9]);
+    for (const sp of FORESTV.spots) CAM_BOXES.push([sp.walkBox.x0 - 0.8, sp.walkBox.z0 - 0.8, sp.walkBox.x1 + 0.8, sp.walkBox.z1 + 0.8, sp.y + 7.8]);
+    if (FORESTV.modern || FORESTV.work) for (const t of FORESTV.trees) { const r = (t.type === 'wide' ? 2.2 : 1.6) * t.s; CAM_BOXES.push([t.x - r, t.z - r, t.x + r, t.z + r, t.y + (t.type === 'tall' ? 6 : 5) * t.s]); }
+  }
+  if (GARDV) {                                                 // Jardins: casas (até o bico do chalé de 2 andares), árvores, guarita e salão do clube
+    for (const sp of GARDV.spots) CAM_BOXES.push([sp.walkBox.x0 - 0.8, sp.walkBox.z0 - 0.8, sp.walkBox.x1 + 0.8, sp.walkBox.z1 + 0.8, 10]);
+    for (const t of GARDV.trees) { const r = 1.4 * t.s; CAM_BOXES.push([t.x - r, t.z - r, t.x + r, t.z + r, (t.type === 'tall' ? 5 : t.type === 'palm' ? 5.6 : 3.9) * t.s]); }
+    for (const b of [GARDV.BOOTH, GARDV.club.hall]) CAM_BOXES.push([b.x0 - 1.4, b.z0 - 1.4, b.x1 + 1.4, b.z1 + 1.4, b === GARDV.BOOTH ? 3.6 : 4.2]);
+  }
+  for (const s of FAVELA || FARMLAND || SNOWV || MOONV || GARDV || FORESTV || MEDV ? [] : HOUSE_SLOTS) {
     const o = slotOrigin(s), H = LOT_ANCHORS.house;
     CAM_BOXES.push([o.x + H.x0 - 0.7 - CAM_PAD, o.z + H.z0 - 0.7 - CAM_PAD, o.x + H.x1 + 0.7 + CAM_PAD, o.z + H.z1 + 1.1 + CAM_PAD, BUILD_H + CAM_PAD]);
+  }
+  for (const w of WARE_LIST || []) {                           // galpões: 2 lotes + a rua entre eles (o 2º lote não está em HOUSE_SLOTS)
+    const o = slotOrigin(w.slots[0]);
+    CAM_BOXES.push([o.x + 1.5 - CAM_PAD, o.z + 0.8 - CAM_PAD, o.x + 2 * LOT + ROAD - 1.5 + CAM_PAD, o.z + 10.6 + CAM_PAD, 9.1 + CAM_PAD]);
+  }
+  if (VENICE) for (const cf of VENICE.cafes) {                 // Veneza: cafés girados (caixa que envolve o retângulo)
+    const c = Math.abs(Math.cos(cf.ang)), sn = Math.abs(Math.sin(cf.ang)), hx = (cf.w * c + cf.d * sn) / 2, hz = (cf.w * sn + cf.d * c) / 2;
+    CAM_BOXES.push([cf.cx - hx, cf.cz - hz, cf.cx + hx, cf.cz + hz, 9]);
   }
   for (const g of GAS_LIST) {                                 // postos: loja e totem (a van entra; a cobertura some)
     const o = slotOrigin(g.slots[0]);
@@ -122,11 +178,12 @@ function rebuildGrid() { buildFit(); buildCamBoxes(); CAM_LIM1 = MAP + 0.5; }
 rebuildGrid();
 
 /** O segmento P→C (P no pivô) atravessa alguma caixa? (método das placas; as caixas vão do chão até yTopo) */
+let CAM_BASE = 0;                // altura do chão sob o alvo (Morro/encostas): o topo das caixas é absoluto
 function segmentBlocked(px, pz, cx, cy, cz) {
   const dx = cx - px, dy = cy - PIVOT_Y, dz = cz - pz;
   const mnx = Math.min(px, cx), mxx = Math.max(px, cx), mnz = Math.min(pz, cz), mxz = Math.max(pz, cz);
   for (let i = 0; i < CAM_BOXES.length; i++) {
-    const b = CAM_BOXES[i];
+    const b = CAM_BOXES[i], top = b[4] - CAM_BASE;
     if (mxx < b[0] || mnx > b[2] || mxz < b[1] || mnz > b[3]) continue;
     let t0 = 0, t1 = 1;
     if (Math.abs(dx) > 1e-9) {
@@ -141,8 +198,8 @@ function segmentBlocked(px, pz, cx, cy, cz) {
     } else if (pz < b[1] || pz > b[3]) continue;
     if (t0 > t1) continue;
     // abaixo do topo da caixa: y(t) = PIVOT_Y + dy·t ≤ yTopo
-    if (dy > 1e-9) { const a = (b[4] - PIVOT_Y) / dy; if (a < t1) t1 = a; }
-    else if (PIVOT_Y > b[4]) continue;
+    if (dy > 1e-9) { const a = (top - PIVOT_Y) / dy; if (a < t1) t1 = a; }
+    else if (PIVOT_Y > top) continue;
     if (t0 <= t1) return true;
   }
   return false;
@@ -161,68 +218,61 @@ export function createCameraRig() {
   let mode = 'chase';                          // 'chase' (padrão, atrás da van) | 'overview' (bairro inteiro)
   let blend = 1;                               // 0 = visão geral, 1 = atrás da van (antes do smoothstep)
   let aspect = 1;
-  let yaw = Math.PI / 2;                       // direção suavizada da câmera de perseguição
-  let slowK = 1;                               // 0 = pose andando, 1 = pose parada (suavizado)
-  let focusK = 0;                              // 0..1: quanto a câmera se volta para a casa visitada
-  let boomU = 0;                               // 0 = braço inteiro, 1 = encolhido ao máximo (suavizado)
-  const tgt = { x: MAP / 2, z: 5 };
-  let tgtY = 0;                                // altura da van (voo de helicóptero)
-  const focus = { x: 0, z: 0 };
+  let yaw = Math.PI / 2;                       // direção (suavizada) em que a van/personagem aponta
+  const tgt = { x: MAP / 2, z: 5 };            // posição real do alvo
+  let tgtY = 0;                                // altura do alvo (voo de helicóptero)
+  const piv = new THREE.Vector3(MAP / 2, PIVOT_Y, 5);   // pivô da câmera: segue o alvo com um leve amortecimento (filtra tremidas da física)
   const overviewPos = new THREE.Vector3();
   const overviewQuat = new THREE.Quaternion().setFromEuler(new THREE.Euler(-PITCH, 0, 0));
-  const chasePos = new THREE.Vector3(), chaseLook = new THREE.Vector3();
+  const chasePos = new THREE.Vector3(), chaseLook = new THREE.Vector3(), dir = new THREE.Vector3(), tmp = new THREE.Vector3();
   const chaseQuat = new THREE.Quaternion(), m4 = new THREE.Matrix4();
 
-  let focusOff = 0;                            // desvio suavizado na direção da casa
-  function focusGoal() {
-    if (focusK <= 0) return 0;
-    const d = angleDiff(Math.atan2(focus.z - tgt.z, focus.x - tgt.x), yaw);
-    return Math.max(-FOCUS_YAW, Math.min(FOCUS_YAW, d)) * focusK;
-  }
-  function camYaw() { return yaw + focusOff; }
-  const baseDist = () => CHASE_DIST + (SLOW_DIST - CHASE_DIST) * slowK;
-  const baseHeight = () => CHASE_HEIGHT + (SLOW_HEIGHT - CHASE_HEIGHT) * slowK;
+  // ---- câmera do jogador: botão direito arrastando = girar/inclinar; roda = zoom (só aproxima). Nada muda sozinho.
+  let orbYaw = 0, orbPitch = 0;                // posição atual (suavizada)
+  let goalYaw = 0, goalPitch = 0;              // posição pedida pelo mouse
+  let velYaw = 0, velPitch = 0;                // velocidade do mouse (rad/s), suavizada: dá inércia curta ao soltar
+  let orbHeld = false, zoom = 1, zoomGoal = 1;
+  let lookLift = 0, liftGoal = 0;              // cena: a mira sobe suavemente (ex.: aproximação da igreja, para enquadrar o horizonte)
+  let arm = R0;                                // comprimento atual do braço (suavizado); encolhe quando algo fica entre a van e a câmera
+  const camYaw = () => yaw + orbYaw;
 
-  /** Menor encolhimento u (0..1) do braço que deixa a linha van→câmera livre de casas e dentro do mapa. */
-  function clearBoom() {
-    const cy = camYaw(), fx = Math.cos(cy), fz = Math.sin(cy);
-    const D = baseDist(), H = baseHeight();
-    const free = u => {
-      const d = D + (BOOM_MIN_DIST - D) * u, h = H + (BOOM_TOP_HEIGHT - H) * u;
-      const cx = tgt.x - fx * d, cz = tgt.z - fz * d;
-      // só segura a câmera dentro da sebe enquanto a van está no bairro (fora dele, o mundo é livre)
-      const inside = tgt.x > 0 && tgt.x < MAP && tgt.z > 0 && tgt.z < MAP;
-      if (inside && (cx < CAM_LIM0 || cx > CAM_LIM1 || cz < CAM_LIM0 || cz > CAM_LIM1)) return false;
-      return !segmentBlocked(tgt.x, tgt.z, cx, h, cz);
-    };
-    if (free(0)) return 0;
-    let lo = 0, hi = -1;
-    for (let u = 0.125; u <= 1.0001; u += 0.125) { if (free(u)) { hi = u; break; } lo = u; }
-    if (hi < 0) return 1;
-    for (let i = 0; i < 5; i++) { const m = (lo + hi) / 2; if (free(m)) hi = m; else lo = m; }
-    return hi;
+  /** Direção (unitária) do pivô para a câmera: atrás da van no giro atual, inclinada pela elevação atual. */
+  function rayDir(out) {
+    const cy = camYaw(), el = THREE.MathUtils.clamp(EL0 + orbPitch, MIN_ELEV, MAX_ELEV);
+    return out.set(-Math.cos(cy) * Math.cos(el), Math.sin(el), -Math.sin(cy) * Math.cos(el));
+  }
+  /** O ponto a distância r do pivô, nessa direção, é uma posição livre (dentro da sebe, sem casa entre ele e a van)? */
+  function freeAt(r, d) {
+    const cx = piv.x + d.x * r, cy = piv.y - tgtY + d.y * r, cz = piv.z + d.z * r;
+    const inside = !MOONV && tgt.x > 0 && tgt.x < MAP && tgt.z > 0 && tgt.z < MAP;      // só segura a câmera dentro da sebe enquanto está no bairro
+    if (inside && (cx < CAM_LIM0 || cx > CAM_LIM1 || cz < CAM_LIM0 || cz > CAM_LIM1)) return false;
+    CAM_BASE = tgtY; return !segmentBlocked(piv.x, piv.z, cx, cy, cz);
+  }
+  /** Maior distância (≤ a pedida pelo zoom) que fica livre ao longo do raio: a câmera para na frente da primeira parede/casa. */
+  function armGoal(wanted, d) {
+    if (freeAt(wanted, d)) return wanted;
+    let lo = MIN_RADIUS, hi = wanted;
+    if (!freeAt(MIN_RADIUS, d)) { lo = TIGHT_RADIUS; hi = MIN_RADIUS; }   // encostado numa parede (a pé, becos): o braço encurta mais (antes a lente ficava dentro da parede)
+    else for (let r = MIN_RADIUS; r < wanted; r += 0.5) { if (!freeAt(r, d)) { hi = r; break; } lo = r; }
+    for (let i = 0; i < 6; i++) { const m = (lo + hi) / 2; if (freeAt(m, d)) lo = m; else hi = m; }
+    return Math.max(TIGHT_RADIUS, lo - 0.15);
   }
 
   function apply() {
-    const cy = camYaw(), fx = Math.cos(cy), fz = Math.sin(cy);
-    const D = baseDist(), H = baseHeight();
-    const d = D + (BOOM_MIN_DIST - D) * boomU, h = H + (BOOM_TOP_HEIGHT - H) * boomU;
-    chasePos.set(tgt.x - fx * d, h, tgt.z - fz * d);
+    rayDir(dir);
+    chasePos.set(piv.x + dir.x * arm, piv.y + dir.y * arm, piv.z + dir.z * arm);
+    // onde olhar: um pouco à frente da van; quanto mais o jogador gira/inclina, mais a mira volta para a van (transição contínua, sem saltos)
+    const k = smooth(Math.min(1, Math.abs(orbYaw) / 0.7 + Math.abs(orbPitch) / 0.5));
     const hx = Math.cos(yaw), hz = Math.sin(yaw);
-    chaseLook.set(tgt.x + hx * CHASE_LOOK_AHEAD, CHASE_LOOK_Y, tgt.z + hz * CHASE_LOOK_AHEAD);
-    if (focusK > 0) {                          // entregando: olha para o meio do caminho entre a van e a casa
-      const k = 0.55 * focusK;
-      chaseLook.x += (focus.x - chaseLook.x) * k;
-      chaseLook.z += (focus.z - chaseLook.z) * k;
-      chaseLook.y += (1.6 - chaseLook.y) * k;
-    }
-    chasePos.y += tgtY; chaseLook.y += tgtY;                  // acompanha a altura do helicóptero
+    chaseLook.set(piv.x + hx * CHASE_LOOK_AHEAD * (1 - k), piv.y - PIVOT_Y + CHASE_LOOK_Y + (PIVOT_Y - CHASE_LOOK_Y) * k, piv.z + hz * CHASE_LOOK_AHEAD * (1 - k));
+    chaseLook.y += lookLift;
     chaseQuat.setFromRotationMatrix(m4.lookAt(chasePos, chaseLook, UP));
     const b = smooth(blend);
     camera.position.lerpVectors(overviewPos, chasePos, b);
     camera.quaternion.slerpQuaternions(overviewQuat, chaseQuat, b);
     const fov = FOV + (CHASE_FOV - FOV) * b;
-    if (Math.abs(camera.fov - fov) > 1e-4) { camera.fov = fov; camera.updateProjectionMatrix(); }
+    const near = b > 0.99 && arm < MIN_RADIUS ? Math.max(0.2, arm * 0.3) : 1;   // braço bem curto: plano próximo menor (só aí; a precisão de profundidade normal fica)
+    if (Math.abs(camera.fov - fov) > 1e-4 || camera.near !== near) { camera.fov = fov; camera.near = near; camera.updateProjectionMatrix(); }
   }
 
   let lastW = 1600, lastH = 900;
@@ -234,37 +284,40 @@ export function createCameraRig() {
     camera.updateProjectionMatrix();
     // margem pequena (em pixels) em volta do mapa
     const m = Math.max(8, 0.012 * Math.min(w, h));
-    fitOverview(aspect, Math.max(0.5, 1 - 2 * m / w), Math.max(0.5, 1 - 2 * m / h), overviewPos);
+    const bar = (typeof document !== 'undefined' && document.querySelector('.ahud') || {}).offsetHeight || 0;   // a barra de cima cobre a borda norte: margem extra
+    fitOverview(aspect, Math.max(0.5, 1 - 2 * m / w), Math.max(0.5, 1 - 2 * (m + bar) / h), overviewPos);
     apply();
   }
 
-  const slowGoal = speed => Math.max(0, Math.min(1, (6 - Math.abs(speed || 0)) / 4));
-  function setFocus(f) { if (f) { focus.x = f.x; focus.z = f.z; } }
-
-  /** target: { x, z, heading, speed?, focus? } da van (focus = ponto da casa sendo visitada, ou null). */
+  /** target: { x, z, heading, y? } do alvo (van ou personagem a pé). */
   function snap(target) {
     tgt.x = target.x; tgt.z = target.z; tgtY = target.y || 0;
+    piv.set(tgt.x, PIVOT_Y + tgtY, tgt.z);
     if (target.heading !== undefined) yaw = target.heading;
-    slowK = slowGoal(target.speed);
-    setFocus(target.focus);
-    focusK = target.focus ? 1 : 0;
-    focusOff = focusGoal();
+    orbYaw = goalYaw = orbPitch = goalPitch = 0; velYaw = velPitch = 0; zoom = zoomGoal = 1; lookLift = liftGoal = 0;      // partida/tela nova: câmera padrão
     blend = mode === 'chase' ? 1 : 0;
-    boomU = clearBoom();
+    rayDir(dir); arm = armGoal(Math.max(MIN_RADIUS, R0 * zoom), dir);
     apply();
   }
 
   function update(dt, target) {
+    dt = Math.min(dt, 0.1);
     tgt.x = target.x; tgt.z = target.z; tgtY = target.y || 0;
     if (target.heading !== undefined) yaw += angleDiff(target.heading, yaw) * (1 - Math.exp(-CHASE_YAW_SMOOTH * dt));
-    slowK += (slowGoal(target.speed) - slowK) * (1 - Math.exp(-2.5 * dt));
-    setFocus(target.focus);
-    focusK += ((target.focus ? 1 : 0) - focusK) * (1 - Math.exp(-3 * dt));
-    if (focusK < 1e-3 && !target.focus) focusK = 0;
-    focusOff += (focusGoal() - focusOff) * (1 - Math.exp(-2.5 * dt));
-    // braço: encolhe rápido (nunca atravessa um telhado), volta devagar (sem trancos)
-    const want = clearBoom();
-    boomU += (want - boomU) * (1 - Math.exp(-(want > boomU ? 18 : 2.5) * dt));
+    // pivô: acompanha o alvo quase colado (a câmera não tem "pose" própria, só segue)
+    const kp = 1 - Math.exp(-26 * dt), kh = 1 - Math.exp(-14 * dt);
+    piv.x += (tgt.x - piv.x) * kp; piv.z += (tgt.z - piv.z) * kp; piv.y += (PIVOT_Y + tgtY - piv.y) * kh;
+    // mouse → giro/inclinação: o ponto pedido anda com o mouse; a câmera o alcança com uma mola crítica (sem trancos e sem oscilar)
+    const gk = 1 - Math.exp(-(orbHeld ? 30 : 14) * dt);
+    const ny = orbYaw + (goalYaw - orbYaw) * gk, np = orbPitch + (goalPitch - orbPitch) * gk;
+    velYaw += ((ny - orbYaw) / dt - velYaw) * (1 - Math.exp(-20 * dt)); velPitch += ((np - orbPitch) / dt - velPitch) * (1 - Math.exp(-20 * dt));
+    orbYaw = ny; orbPitch = np;
+    zoom += (zoomGoal - zoom) * (1 - Math.exp(-11 * dt));
+    lookLift += (liftGoal - lookLift) * (1 - Math.exp(-0.9 * dt));
+    // braço (distância): para na frente de paredes/casas; encolhe depressa mas nunca de repente, e só volta devagar (sem "pulsar")
+    rayDir(dir);
+    const want = armGoal(Math.max(MIN_RADIUS, R0 * zoom), dir);
+    arm += (want - arm) * (1 - Math.exp(-(want < arm ? 12 : 2.2) * dt));
     const wantB = mode === 'chase' ? 1 : 0;
     const stepB = dt / TRANSITION;
     blend = wantB > blend ? Math.min(wantB, blend + stepB) : Math.max(wantB, blend - stepB);
@@ -280,7 +333,33 @@ export function createCameraRig() {
     /** 0 = visão geral … 1 = atrás da van (já suavizado). */
     get blend() { return smooth(blend); },
     toggle, resize, update, snap,
+    /** Botão direito pressionado/solto: começa/termina de girar a câmera (só atrás da van). */
+    orbitHold(on) { orbHeld = on && mode === 'chase'; },
+    /** Movimento do mouse em pixels (enquanto o botão direito está pressionado). */
+    orbit(dx, dy) {
+      if (!orbHeld) return;
+      goalYaw += dx * 0.0055;                                                   // sem limite: dá para dar voltas completas
+      if (Math.abs(goalYaw) > Math.PI * 6) { const w = Math.round(goalYaw / (Math.PI * 2)) * Math.PI * 2; goalYaw -= w; orbYaw -= w; }   // (reenrola sem salto visível)
+      goalPitch = THREE.MathUtils.clamp(goalPitch + dy * 0.0045, MIN_ELEV - EL0, MAX_ELEV - EL0);   // (mesmo limite do braço: sem zona morta no arrasto)
+    },
+    /** Roda do mouse (deltaY em pixels): aproxima (negativo) ou afasta de volta (positivo), sem passar da distância normal. */
+    zoom(deltaY) {
+      if (mode !== 'chase') return;
+      zoomGoal = THREE.MathUtils.clamp(zoomGoal * Math.exp(THREE.MathUtils.clamp(deltaY, -300, 300) * 0.0011), MIN_ZOOM, 1);
+    },
+    /** Volta à câmera padrão (sem giro nem zoom). */
+    resetView() { goalYaw = goalPitch = 0; zoomGoal = 1; },
     /** O bairro mudou de tamanho (ex.: Bairro 2, 6×6): refaz enquadramento e obstáculos da câmera. */
     refit() { rebuildGrid(); resize(lastW, lastH); },
+    /** Perfil do braço padrão do bairro: dist (× distância normal) e elev (radianos somados à inclinação). Medieval: mais perto e mais baixo. */
+    setProfile({ dist = 1, elev = 0 } = {}) { R0 = R0_BASE * dist; EL0 = EL0_BASE + elev; },
+    /** Cena: levanta a mira da câmera atrás da van em `v` (suave; 0 volta ao normal). */
+    setLookLift(v) { liftGoal = v; },
+    /** Caixas extras que seguram o braço da câmera ([x0, z0, x1, z1, yTopo]); [] tira. */
+    setExtraBoxes(list) { EXTRA_BOXES.length = 0; EXTRA_BOXES.push(...list); buildCamBoxes(); },
+    /** Caixas do cenário da composição (ex.: outdoors da Penumbra); ficam até a próxima chamada, independentes das extras das cenas. */
+    setSceneBoxes(list) { SCENE_BOXES.length = 0; SCENE_BOXES.push(...list); buildCamBoxes(); },
+    /** Órbita: pose da visão geral (a lua inteira), refeita a cada quadro. */
+    setOverview(pos, quat) { if (!pos) { overviewQuat.setFromEuler(new THREE.Euler(-PITCH, 0, 0)); resize(lastW, lastH); return; } overviewPos.copy(pos); overviewQuat.copy(quat); },
   };
 }

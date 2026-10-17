@@ -1,0 +1,1346 @@
+// Batalha depois do 4º nível extra (Sacrifício). Cena própria: vazio preto, só a grade branca no chão da área.
+// Três personagens fixos (não andam): o jogador (todo branco) numa ponta, a figura escura na outra, o K entre os dois.
+// O jogador controla só um círculo no chão (WASD / joystick) e uma ação (clique esquerdo, Espaço ou o botão de toque).
+// Cada trecho tem UM mecanismo: Bloquear (barreira no círculo), Refletir (desenhar uma parede que devolve o projétil)
+// ou Conduzir (atrair os projéteis com o clique esquerdo e levá-los por um portal aberto puxando, com o direito, uma
+// ponta de um objeto preto; do outro lado do portal há um vazio branco).
+// Estrutura fixa: 18 trechos, 8 fragmentos e o ponto final (fragmentos/final = pausas neutras provisórias, com ganchos).
+// Música: a adaptação de "Finale" (battleMusic.js); a POSIÇÃO DELA é o relógio: cada trecho tem uma janela (TL) e os
+// fragmentos começam no alarme do episódio da faixa — quando a janela acaba, o trecho é interrompido e a batalha segue.
+// Duas câmeras: a de jogo (elevada) em toda janela de ataque; a de impacto (baixa) só em intervalos seguros e na apresentação.
+// Efeitos curtos procedurais pela saída de efeitos.
+import * as THREE from 'three';
+import { buildStandingReader, reachArm } from './models/reader.js';
+import { buildStandingReader as buildFigureBody } from './models/readerClassic.js';   // a figura mantém o formato antigo
+import { buildBody, restArms } from './models/driver.js';
+import { smoothCharacter } from './models/kit.js';
+
+export const BATTLE_CP_KEY = 'adress.dev.battle';   // teste pelo cadeado: libera o cartão Sacrifício para começar a batalha
+
+// ---------- constantes (fáceis de ajustar) ----------
+const GRID = { x0: -7, x1: 7, z0: -9, z1: 9, cell: 1 };                // 14 × 18 células inteiras, sem moldura
+const LIM = { x0: -6.5, x1: 6.5, z0: -9, z1: 9 };                  // limites do círculo (os de sempre)          // X = lados, Z = comprimento (figura em −Z, jogador em +Z)
+const P_POS = new THREE.Vector3(-1.0, 0, 8.4), K_POS = new THREE.Vector3(0.7, 0, 2.6), F_POS = new THREE.Vector3(0, 0, -11);
+const F_SCALE = [4.6, 5.0, 4.6];
+const FACE_NZ = Math.PI / 2, FACE_PZ = -Math.PI / 2;                 // os modelos olham para +X: π/2 → −Z, −π/2 → +Z
+const H_PROJ = 1.05, PR = 0.2, HIT_R = 0.45;                          // altura de voo, raio do projétil, raio do alvo
+// ---------- câmera: duas posições, ligadas por transições curtas ----------
+// fov = vertical em 16:9; em telas mais estreitas ele abre para manter a mesma largura de visão (até 80°).
+// angle: 0° = de frente para o jogador (ele olha para −Z, a figura), 90° = à direita, 180° = atrás.
+const camAt = (angle, dist, height) => { const a = angle * Math.PI / 180; return new THREE.Vector3(P_POS.x + Math.sin(a) * dist, height, P_POS.z - Math.cos(a) * dist); };
+const CAMS = {
+  // jogo: a 1ª câmera elevada (diagonal atrás/à direita, altura 5, fov 50) com o ângulo e a mira ajustados por busca para
+  // caberem a área do círculo à frente do jogador, as fissuras laterais e a figura inteira (antes: 128°, 10,5, mira −0,4/2,3/−3)
+  game: { pos: camAt(136, 11.25, 5.0), look: new THREE.Vector3(-1.73, 1.79, -1.94), fov: 50 },
+  // impacto: baixa e próxima (jogador em primeiro plano, K entre os dois, a figura ao fundo) — sobre o 4º quadrado à direita do jogador
+  impact: { pos: new THREE.Vector3(3.5, 1.5, 8.8), look: new THREE.Vector3(-11.0, 3.25, -4.96), fov: 68 },
+};
+const CAM_T = 1.0;                                                    // duração de uma troca de câmera (s)
+const CIRCLE_R = 0.36, CIRCLE_SPEED = 6.5, CIRCLE_HOME = { x: 0, z: 5.5 };
+const WARN = 1.0;                                                     // aviso antes de cada disparo (s)
+const DMG = { P: 20, K: 34, K2: 28 }, REGEN = { wait: 5, rate: 4 };   // estabilidade: dano por impacto e regeneração lenta
+const BLOCK = { r: 0.65, w: 1.3, h: 0.72, rise: 0.16, life: 1.8, cooldown: 0.18 };
+const P_SLOTS = 2;                                                  // barreiras do jogador ao mesmo tempo (Bloquear + Refletir juntos)
+// brilho das barreiras: pulso forte ao surgir (~0,3 s) e depois um brilho contínuo mais fraco até sumir
+const GLOW = { surf: 0.46, surfPulse: 0.32, line: 0.95, glow: 0.55, glowPulse: 1.5, up: 0.05, down: 0.28 };
+const glowPulse = age => age < GLOW.up ? age / GLOW.up : Math.max(0, 1 - (age - GLOW.up) / GLOW.down) ** 2;
+// Refletir: lei pura v' = v − 2(v·n)n; única exceção (assist): se a volta passa a ≤ REFL.assist (0,09 rad ≈ 5°) da
+// estrutura que disparou, segue até ela (parede quase perpendicular, ex. desenhada no joystick). Com o teclado as retas
+// saem a 0°/45°/90° e devolvem exatas.
+const REFL = { step: 0.3, maxLen: 7.0, eps: 0.15, minSeg: 0.45, h: 1.6, life: 3.5, minLen: 0.6, assist: 0.09 };
+const STRUCT = { hitR: 0.95 };
+// Conduzir: turn = giro máximo dos projéteis (rad/s; perseguem como mísseis, sem fila de posições); grabR = distância do
+// círculo ao pé do objeto para agarrar; pull = quanto puxar até romper; objY = altura do objeto; formT = abertura do portal;
+// closeDelay/closeT = espera depois do último e fechamento; portalW/H = tamanho; passW = meia-largura estável da passagem;
+// kLevel/kDelay/kOpenT = o K abre o portal sozinho nos trechos finais (nível de autonomia, espera e duração do gesto).
+const GUIDE = { turn: 2.6, grabR: 0.8, pull: 3.0, objY: 2.2, formT: 0.7, closeDelay: 2.5, closeT: 0.5, portalW: 2.3, portalH: 1.5,
+  passW: 0.85, kLevel: 3, kDelay: 1.5, kOpenT: 2.4, spikes: 16, far: 45, ring: 48 };
+// Autonomia do K por nível (gap = intervalo mínimo entre defesas; chance por projétil; hesitate = tempo do gesto;
+// self = defende a si mesmo; other = chance de proteger o jogador)
+const K_DEF = [null, { gap: 9, chance: 0.35, hesitate: 0.7, self: true, other: 0 }, { gap: 6, chance: 0.5, hesitate: 0.5 }, { gap: 4.5, chance: 0.65, hesitate: 0.4 }, { gap: 3.5, chance: 0.7, hesitate: 0.3, other: 0.45 }];
+const kDef = l => Object.assign({}, K_DEF[1], K_DEF[l]);
+const T = { fadeIn: 0.7, startFade: 1.5, intro: 1.0, clear: 1.0, out: 0.7, freeze: 0.35, failMsg: 1.0 };
+const RETRY_MIN = 4;                                                  // falha com menos que isso de janela: o trecho não recomeça (a música segue)
+const BOUND = { x: 14, z: 16 };
+// fissuras suspensas nas laterais (fora da grade)
+const FIS = { L1: [-8.4, -6.5], L2: [-8.4, -3.5], L3: [-8.4, -0.5], R1: [8.4, -6.5], R2: [8.4, -2.5], R3: [8.4, 1.5] };
+const COLOR_HEX = { azul: '#003EFF', verde: '#00C000', laranja: '#FCA600', roxo: '#9B00FF' };
+
+// ---------- estrutura: 18 trechos (S), 8 fragmentos (F) e o final (E) ----------
+const STEPS = (() => {
+  const out = []; let s = 0, f = 0;
+  const S = () => out.push({ k: 'S', seg: s++ }), F = (color, pass) => out.push({ k: 'F', index: f++, color, pass });
+  S(); S(); F('azul', 1); S(); S(); F('verde', 1); S(); S(); F('laranja', 1); S(); S(); F('roxo', 1);
+  S(); S(); S(); F('azul', 2); S(); S(); F('verde', 2); S(); S(); F('laranja', 2); S(); S(); F('roxo', 2); S();
+  out.push({ k: 'E' });
+  return out;
+})();
+
+// ---------- linha do tempo pela música ----------
+// Posições na faixa ADAPTADA (assets/finale-batalha.mp3; marks.json da edição) — nunca as do MP3 original.
+const MUS = { intro: 0, b1: 39.334, azul: 64.591, b2: 102.166, verde: 125.022, b3: 162.548, laranja: 183.071, b4: 220.885,
+  roxo: 246.157, b5a: 284.037, b5b: 304.559, finale: 327.411, end: 581.856 };
+// Início de cada passo de STEPS. CONFIRMADOS: os 4 fragmentos da 1ª passagem = os 4 episódios da faixa (do alarme ao fim da
+// estática: azul 1:04,6 · verde 2:05,0 · laranja 3:03,1 · roxo 4:06,2) e os trechos dentro das passagens de batalha entre eles
+// (2 por passagem, divididos ao meio; os 3 depois do roxo = 4:44,0 e a passagem 5:04,6 dividida). PROVISÓRIOS (ajustáveis,
+// FIN_PLAN): a 2ª passagem e o final, dentro do Finale (5:27,4 → 9:41,9) — azul 2 na entrada do Finale (estática),
+// fragmentos de FRAG2 s, os trechos repartem o resto e o encerramento ocupa o fim da faixa.
+const FIN_PLAN = { frag2: 30, end: 14 };
+const TL = (() => {
+  const a = [10.5, MUS.b1, MUS.azul, MUS.b2, (MUS.b2 + MUS.verde) / 2, MUS.verde, MUS.b3, (MUS.b3 + MUS.laranja) / 2, MUS.laranja,
+    MUS.b4, (MUS.b4 + MUS.roxo) / 2, MUS.roxo, MUS.b5a, MUS.b5b, (MUS.b5b + MUS.finale) / 2, MUS.finale];
+  const nFixed = a.length;                                           // até aqui: tempos da edição (o 1º trecho começa depois da apresentação)
+  const rest = STEPS.slice(nFixed), endA = MUS.end - FIN_PLAN.end;
+  const nS = rest.filter(s => s.k === 'S').length, nF = rest.filter(s => s.k === 'F').length;
+  const segLen = (endA - (MUS.finale + FIN_PLAN.frag2) - nF * FIN_PLAN.frag2) / nS;
+  let t = MUS.finale + FIN_PLAN.frag2;
+  for (const s of rest) { a.push(+t.toFixed(3)); t += s.k === 'S' ? segLen : s.k === 'F' ? FIN_PLAN.frag2 : 0; }
+  return STEPS.map((s, i) => {
+    const next = STEPS[i + 1], b = i + 1 < a.length ? a[i + 1] : MUS.end;
+    return { a: a[i], b: s.k === 'S' ? b - (next && next.k === 'S' ? 0.3 : T.out) : b, fixed: i < nFixed - 1 };   // (o azul 2 na entrada do Finale ainda é provisório)
+  });
+})();
+const PRE = CAM_T + 0.6;                                              // o trecho se arma (e a câmera volta à de jogo) antes da janela
+
+/** Gerador determinístico (cada trecho sempre igual, inclusive ao recomeçar). */
+const rng = seed => () => { seed |= 0; seed = seed + 0x6D2B79F5 | 0; let t = Math.imul(seed ^ seed >>> 15, 1 | seed); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; };
+const ORIGINS = ['fig', 'fig', 'L1', 'L2', 'L3', 'R1', 'R2', 'R3'];
+const sideOf = o => o[0] === 'L' ? 'L' : o[0] === 'R' ? 'R' : 'F';
+/** Disparos de um trecho de Bloquear: [t (início do aviso), origem, alvo, velocidade]. Lados opostos seguidos só com folga. */
+function genShots(seed, n, gap, v0, v1, pair = 0) {
+  const r = rng(seed), out = []; let t = 0, prev = 'fig';
+  for (let i = 0; i < n; i++) {
+    let from = ORIGINS[Math.floor(r() * ORIGINS.length)];
+    const g = gap * (0.85 + 0.3 * r());
+    if (i && sideOf(from) !== 'F' && sideOf(prev) !== 'F' && sideOf(from) !== sideOf(prev)) from = 'fig';
+    out.push([+t.toFixed(2), from, r() < 0.55 ? 'K' : 'P', +(v0 + (v1 - v0) * r()).toFixed(2)]);
+    if (pair && i < n - 1 && r() < pair) {                     // par quase junto, do mesmo lado (os dois pedem barreiras perto)
+      i++; out.push([+(t + 0.55).toFixed(2), sideOf(from) === 'F' ? 'fig' : from, out[out.length - 1][2] === 'K' ? 'P' : 'K', +(v0 + (v1 - v0) * r()).toFixed(2)]);
+      t += 0.55;
+    }
+    prev = from; t += g;
+  }
+  return out;
+}
+// estruturas: { x, z, target, period, speed, phase } — em linha reta (0°/45°/90°) até o alvo, para a parede devolver
+const SK = (dx, dz, d) => ({ x: +(K_POS.x + dx * d).toFixed(2), z: +(K_POS.z + dz * d).toFixed(2), target: 'K' });
+const SP = (dx, dz, d) => ({ x: +(P_POS.x + dx * d).toFixed(2), z: +(P_POS.z + dz * d).toFixed(2), target: 'P' });
+const st = (o, period, speed, phase) => Object.assign(o, { period, speed, phase });
+const D = Math.SQRT1_2;
+// posições conferidas pela câmera: estruturas longe da cabeça do jogador na tela; núcleos na metade de perto da grade
+const SA = () => SK(-D, -D, 13), SB = () => SK(D, -D, 9.6), SC = () => SP(D, -D, 12.6), SD = () => SP(-D, -D, 14);
+const SEGMENTS = [
+  { mech: 'block', shots: [[0, 'fig', 'K', 5.5], [3.6, 'fig', 'K', 5.5], [7.2, 'fig', 'K', 5.8]] },                         // 1 introdução: poucos, lentos, só no K
+  { mech: 'block', shots: [[0, 'fig', 'K', 6], [2.6, 'L2', 'K', 6], [5.2, 'fig', 'P', 6.2], [7.8, 'R2', 'K', 6.2], [10.4, 'fig', 'K', 6.4], [13, 'R3', 'P', 6.2]] },
+  { mech: 'reflect', structs: [st(SA(), 5, 5.2, 0.2)] },                                                                      // 3 introdução: 1 estrutura
+  { mech: 'reflect', structs: [st(SA(), 5.5, 5.6, 0.2), st(SC(), 5.5, 5.6, 2.8)] },
+  { mech: 'guide', shots: [[1.5, 'fig', 'K', 5.0], [2.4, 'L2', 'P', 5.0], [3.3, 'R2', 'K', 5.2]] },                                  // 5 introdução: 3 projéteis
+  { mech: 'block', shots: genShots(6, 8, 1.9, 6.2, 6.8) },
+  { mech: 'reflect', structs: [st(SB(), 5.2, 5.8, 0.2), st(SD(), 5.2, 5.8, 2.7)] },
+  { mech: 'guide', shots: [[1.5, 'fig', 'P', 5.2], [2.3, 'R1', 'K', 5.2], [3.1, 'L3', 'K', 5.4], [3.9, 'fig', 'P', 5.4]] },
+  { mech: 'block', shots: genShots(9, 9, 1.65, 6.4, 7.0) },
+  { mech: 'reflect', structs: [st(SA(), 5, 6, 0.2), st(SC(), 5, 6, 1.9), st(SD(), 5, 6, 3.6)] },
+  { mech: 'guide', shots: [[1.2, 'L1', 'K', 5.4], [1.9, 'fig', 'P', 5.4], [2.6, 'R3', 'K', 5.6], [3.3, 'fig', 'K', 5.6]] },
+  { mech: 'block', shots: genShots(12, 10, 1.45, 6.5, 7.2, 0.15) },
+  { mech: 'reflect', structs: [st(SB(), 4.8, 6.2, 0.2), st(SD(), 4.8, 6.2, 1.8), st(SA(), 4.8, 6.2, 3.4)], figEvery: 7 },
+  { mech: 'guide', shots: [[1.2, 'fig', 'K', 5.6], [1.8, 'L2', 'P', 5.6], [2.4, 'R2', 'K', 5.8], [3.0, 'fig', 'P', 5.8], [3.6, 'L3', 'K', 5.8]] },
+  { mech: 'block', shots: genShots(15, 11, 1.3, 6.8, 7.3, 0.2) },
+  { mech: 'reflect', structs: [st(SA(), 4.6, 6.4, 0.2), st(SD(), 4.6, 6.4, 1.4), st(SB(), 4.6, 6.4, 2.6), st(SC(), 4.6, 6.4, 3.8)], figEvery: 6 },
+  { mech: 'guide', kOpens: true, shots: [[1.2, 'R1', 'K', 5.8], [1.7, 'fig', 'P', 5.8], [2.2, 'L1', 'K', 6], [2.7, 'fig', 'K', 6], [3.2, 'R3', 'P', 6], [3.7, 'L2', 'K', 6]] },   // 17: o K abre o portal
+  { mech: 'block', shots: genShots(18, 14, 1.1, 7.0, 7.5, 0.25) },                                                           // 18: o mais intenso
+];
+const LABEL = {
+  block: ['BLOQUEAR · clique esquerdo', 'BLOQUEAR · botão Ação'],
+  reflect: ['REFLETIR · segure o clique e mova (WASD)', 'REFLETIR · segure o botão Ação e mova'],
+  guide: ['CONDUZIR · segure o clique esquerdo para atrair · sob o objeto, segure o direito e puxe', 'CONDUZIR · segure Atrair · sob o objeto, segure Puxar e arraste'],
+};
+const ACTION = { block: 'Bloquear', reflect: 'Refletir', guide: 'Atrair' };
+
+// ---------- geometria 2D ----------
+function segDist2(px, pz, ax, az, bx, bz) {
+  const dx = bx - ax, dz = bz - az, L = dx * dx + dz * dz;
+  let t = L > 1e-9 ? ((px - ax) * dx + (pz - az) * dz) / L : 0; t = t < 0 ? 0 : t > 1 ? 1 : t;
+  const ex = ax + dx * t - px, ez = az + dz * t - pz; return ex * ex + ez * ez;
+}
+function segT(ax, az, bx, bz, s) {                                   // cruzamento de dois segmentos (sem raio): fração em AB ou −1
+  const d1x = bx - ax, d1z = bz - az, d2x = s.bx - s.ax, d2z = s.bz - s.az, den = d1x * d2z - d1z * d2x;
+  if (Math.abs(den) < 1e-9) return -1;
+  const ox = s.ax - ax, oz = s.az - az, t = (ox * d2z - oz * d2x) / den, u = (ox * d1z - oz * d1x) / den;
+  return t >= 0 && t <= 1 && u >= -0.05 && u <= 1.05 ? t : -1;
+}
+/** Projétil (raio PR) indo de p0 a p1 encosta no segmento s? Devolve o ponto de contato e a normal do lado de onde veio. */
+function wallHit(p0x, p0z, p1x, p1z, s) {
+  const d0 = (p0x - s.ax) * s.nx + (p0z - s.az) * s.nz, d1 = (p1x - s.ax) * s.nx + (p1z - s.az) * s.nz;
+  const sg = d0 >= 0 ? 1 : -1, a0 = d0 * sg, a1 = d1 * sg;
+  if (a1 >= PR || a1 >= a0) return null;                             // não chega à faixa, ou está se afastando
+  const t = a0 > PR ? (a0 - PR) / (a0 - a1) : 0;
+  const cx = p0x + (p1x - p0x) * t, cz = p0z + (p1z - p0z) * t;
+  const u = (cx - s.ax) * s.tx + (cz - s.az) * s.tz;
+  if (u < -PR || u > s.len + PR) return null;
+  return { cx, cz, nx: s.nx * sg, nz: s.nz * sg };
+}
+/** Ramer–Douglas–Peucker. */
+function rdp(pts, eps) {
+  if (pts.length < 3) return pts.slice();
+  const a = pts[0], b = pts[pts.length - 1]; let im = 0, dm = 0;
+  for (let i = 1; i < pts.length - 1; i++) { const d = Math.sqrt(segDist2(pts[i].x, pts[i].z, a.x, a.z, b.x, b.z)); if (d > dm) { dm = d; im = i; } }
+  if (dm <= eps) return [a, b];
+  return rdp(pts.slice(0, im + 1), eps).slice(0, -1).concat(rdp(pts.slice(im), eps));
+}
+const dist = (a, b) => Math.hypot(a.x - b.x, a.z - b.z);
+function mergeShort(pts, min) {                                      // tira pontos internos de segmentos curtos demais
+  const out = pts.slice();
+  for (let again = true; again && out.length > 2;) {
+    again = false;
+    for (let i = 1; i < out.length - 1; i++) if (dist(out[i - 1], out[i]) < min || dist(out[i], out[i + 1]) < min) { out.splice(i, 1); again = true; break; }
+  }
+  return out;
+}
+const ease = x => x <= 0 ? 0 : x >= 1 ? 1 : x * x * (3 - 2 * x);
+const clamp = (v, a, b) => v < a ? a : v > b ? b : v;
+
+// ---------- shaders ----------
+const GRID_V = `varying vec2 vP; void main(){ vec4 w = modelMatrix * vec4(position, 1.0); vP = w.xz; gl_Position = projectionMatrix * viewMatrix * w; }`;
+const GRID_F = `uniform vec4 uReg[4]; uniform float uOn[4]; uniform vec4 uRect; uniform float uAlpha; varying vec2 vP;
+void main(){
+  if (vP.x < uRect.x || vP.x > uRect.y || vP.y < uRect.z || vP.y > uRect.w) discard;
+  vec2 w = max(fwidth(vP), vec2(1e-4));
+  vec2 g = abs(fract(vP - 0.5) - 0.5) / w;
+  vec2 n = floor(vP + 0.5);                                          // linha mais perto; as das bordas não existem (sem moldura)
+  if (abs(n.x - uRect.x) < 0.01 || abs(n.x - uRect.y) < 0.01) g.x = 1e4;
+  if (abs(n.y - uRect.z) < 0.01 || abs(n.y - uRect.w) < 0.01) g.y = 1e4;
+  float line = 1.0 - min(min(g.x, g.y) / 1.3, 1.0);                  // linhas finas nos inteiros (anti-alias)
+  float keep = 1.0, glow = 0.0;
+  for (int i = 0; i < 4; i++) {                                      // regiões escuras: a grade some e se recompõe do núcleo para fora
+    if (uOn[i] <= 0.0) continue;
+    vec4 r = uReg[i]; float d = length(vP - r.xy);
+    float inside = 1.0 - smoothstep(r.z - 0.35, r.z, d);
+    float pr = r.w * r.z;
+    float rec = r.w > 0.001 ? 1.0 - smoothstep(pr - 0.25, pr + 0.02, d) : 0.0;
+    keep = min(keep, mix(1.0, rec, inside * uOn[i]));
+    if (r.w > 0.001 && r.w < 0.999) glow = max(glow, exp(-abs(d - pr) * 7.0) * inside * uOn[i] * 0.6);
+  }
+  float a = line * uAlpha * keep;
+  a = max(a, line * glow);
+  if (a < 0.004) discard;
+  gl_FragColor = vec4(1.0, 1.0, 1.0, a);
+}`;
+// halo aditivo das barreiras. Placa: retângulo arredondado (meia-medida uHalf) dentro de um quadrado maior (uv);
+// parede: faixa vertical (y local) com brilho no topo e na base e um véu claro no corpo.
+const GLOW_V = `varying vec2 vUv; varying float vY; void main(){ vUv = uv; vY = position.y; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`;
+const GLOWP_F = `uniform vec3 uCol; uniform float uI; uniform vec2 uHalf, uSize; varying vec2 vUv;
+void main(){ vec2 p = (vUv - 0.5) * uSize; vec2 q = abs(p) - uHalf; float d = length(max(q, 0.0)) + min(max(q.x, q.y), 0.0);
+  float a = d < 0.0 ? 0.18 + 0.5 * exp(d * 14.0) : exp(-d * 7.5); a *= uI; if (a < 0.003) discard; gl_FragColor = vec4(uCol * a, 1.0); }`;
+const GLOWW_F = `uniform vec3 uCol; uniform float uI, uH; varying float vY;
+void main(){ float a = vY <= uH ? 0.16 + 0.55 * exp(-(uH - vY) * 9.0) + 0.35 * exp(-vY * 12.0) : 0.71 * exp(-(vY - uH) * 14.0);
+  a *= uI; if (a < 0.003) discard; gl_FragColor = vec4(uCol * a, 1.0); }`;
+// fita tracejada no chão (mais legível que linhas de 1 px): aD = distância ao longo do traço
+const RIB_V = `attribute float aD; varying float vD; void main(){ vD = aD; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`;
+const RIB_F = `uniform vec3 uCol; uniform float uOp, uDash, uGap, uShift; varying float vD;
+void main(){ if (uGap > 0.0 && mod(vD + uShift, uDash + uGap) > uDash) discard; gl_FragColor = vec4(uCol, uOp); }`;
+const ARC_V = `varying vec2 vL; void main(){ vL = position.xy; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`;
+const ARC_F = `uniform float uFrac, uA, uBase; uniform vec3 uCol; varying vec2 vL;
+void main(){ float a = atan(vL.x, vL.y); a = (a < 0.0 ? a + 6.2831853 : a) / 6.2831853;
+  float al = a <= uFrac ? uA : uBase; if (al < 0.003) discard; gl_FragColor = vec4(uCol, al); }`;
+// portal: a abertura mostra, pixel a pixel, o vazio branco renderizado com a mesma câmera (janela com profundidade)
+const WIN_V = `void main(){ gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`;
+const WIN_F = `uniform sampler2D tWS; uniform vec2 uRes; uniform float uA; void main(){ vec3 c = texture2D(tWS, gl_FragCoord.xy / uRes).rgb; gl_FragColor = vec4(c, uA); }`;
+// chão do vazio branco: linhas cinza-claras (o inverso da arena) que somem com a distância — dão a profundidade
+const WGRID_F = `uniform vec2 uC; varying vec2 vP;
+void main(){ vec2 w = max(fwidth(vP), vec2(1e-4)); vec2 g = abs(fract(vP - 0.5) - 0.5) / w;
+  float line = 1.0 - min(min(g.x, g.y) / 1.2, 1.0); float a = line * 0.5 * exp(-length(vP - uC) / 22.0);
+  if (a < 0.004) discard; gl_FragColor = vec4(vec3(0.55), a); }`;
+// figura: preta com um contorno (fresnel) cinza-escuro, para a silhueta existir no preto
+const RIM_V = `varying vec3 vN; varying vec3 vV; void main(){ vec4 w = modelMatrix * vec4(position, 1.0); vN = normalize(mat3(modelMatrix) * normal); vV = cameraPosition - w.xyz; gl_Position = projectionMatrix * viewMatrix * w; }`;
+const RIM_F = `uniform vec3 uRim; uniform float uGlow; varying vec3 vN; varying vec3 vV;
+void main(){ float f = 1.0 - max(dot(normalize(vN), normalize(vV)), 0.0); float r = pow(f, 2.0) * 1.2 + uGlow * pow(f, 1.2);
+  gl_FragColor = vec4(uRim * r, 1.0); }`;
+
+export function createBattle(ctx) {
+  const { input, audio, stage } = ctx;
+  const scene = new THREE.Scene(); scene.background = new THREE.Color('#000000');
+  const camera = new THREE.PerspectiveCamera(CAMS.impact.fov, 16 / 9, 0.05, 300);
+  scene.add(new THREE.HemisphereLight('#ffffff', '#202020', 0.45));
+  const key = new THREE.DirectionalLight('#ffffff', 1.7); scene.add(key); scene.add(key.target);
+
+  // ---- grade ----
+  const regions = [0, 1, 2, 3].map(() => new THREE.Vector4(0, 0, 1, 0));
+  const gridMat = new THREE.ShaderMaterial({
+    vertexShader: GRID_V, fragmentShader: GRID_F, transparent: true, depthWrite: false,
+    uniforms: { uReg: { value: regions }, uOn: { value: [0, 0, 0, 0] }, uRect: { value: new THREE.Vector4(GRID.x0, GRID.x1, GRID.z0, GRID.z1) }, uAlpha: { value: 0.5 } },
+  });
+  const grid = new THREE.Mesh(new THREE.PlaneGeometry(GRID.x1 - GRID.x0 + 0.2, GRID.z1 - GRID.z0 + 0.2), gridMat);
+  grid.rotation.x = -Math.PI / 2; grid.position.set((GRID.x0 + GRID.x1) / 2, 0, (GRID.z0 + GRID.z1) / 2); grid.renderOrder = -1; scene.add(grid);
+
+  // ---- materiais compartilhados ----
+  const basic = (color, opacity = 1, o = {}) => new THREE.MeshBasicMaterial(Object.assign({ color, transparent: opacity < 1, opacity, depthWrite: opacity >= 1 }, o));
+  const lineM = (color, opacity) => new THREE.LineBasicMaterial({ color, transparent: true, opacity, depthWrite: false });
+  const M = {
+    white: basic('#ffffff', 0.9), dark: basic('#050506'), edge: lineM('#ffffff', 0.9), trail: lineM('#ffffff', 0.28),
+    barP: basic('#ffffff', GLOW.surf, { side: THREE.DoubleSide }), barK: basic('#cfe0ff', GLOW.surf, { side: THREE.DoubleSide }),
+    barLineP: lineM('#ffffff', 0.85), barLineK: lineM('#d6e4ff', 0.85),
+    wall: basic('#ffffff', GLOW.surf, { side: THREE.DoubleSide }), wallLine: lineM('#ffffff', 0.9),
+    shardW: basic('#ffffff'), shardD: basic('#141418'),
+  };
+  const ADD = { transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide, toneMapped: false };
+  const glowPlate = (col, half, size) => new THREE.ShaderMaterial({ vertexShader: GLOW_V, fragmentShader: GLOWP_F, ...ADD,
+    uniforms: { uCol: { value: new THREE.Color(col) }, uI: { value: 1 }, uHalf: { value: new THREE.Vector2(...half) }, uSize: { value: new THREE.Vector2(...size) } } });
+  const glowWall = (col, h) => new THREE.ShaderMaterial({ vertexShader: GLOW_V, fragmentShader: GLOWW_F, ...ADD,
+    uniforms: { uCol: { value: new THREE.Color(col) }, uI: { value: 1 }, uH: { value: h } } });
+  /** Opacidade/brilho de uma barreira pela idade (pulso ao surgir) e pelo sumiço (fade = 1 → 0). */
+  function shine(u, age, fade = 1) {
+    const k = glowPulse(age);
+    u.surf.opacity = Math.min(0.95, GLOW.surf + GLOW.surfPulse * k) * fade;
+    u.line.opacity = GLOW.line * fade; if (u.line2) u.line2.opacity = GLOW.line * fade;
+    u.glow.uniforms.uI.value = (GLOW.glow + GLOW.glowPulse * k) * fade;
+  }
+  const arcMat = () => new THREE.ShaderMaterial({ vertexShader: ARC_V, fragmentShader: ARC_F, transparent: true, depthWrite: false,
+    uniforms: { uFrac: { value: 1 }, uA: { value: 0.5 }, uBase: { value: 0.08 }, uCol: { value: new THREE.Color('#ffffff') } } });
+  const arcRing = (r0, r1) => { const o = new THREE.Mesh(new THREE.RingGeometry(r0, r1, 64), arcMat()); o.rotation.x = -Math.PI / 2; return o; };
+  const unitCircle = (r, n = 48) => { const p = []; for (let i = 0; i < n; i++) { const a = i / n * Math.PI * 2; p.push(Math.cos(a) * r, 0, Math.sin(a) * r); } const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(p, 3)); return g; };
+  /** Fita tracejada no plano XZ (até `max` pontos): set(pts, y) refaz os vértices; count(n) mostra só os n primeiros pontos. */
+  function ribbon(max, width, dash, gap, color = '#ffffff', opacity = 0.6) {
+    const geo = new THREE.BufferGeometry(), idx = [];
+    geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(max * 6), 3));
+    geo.setAttribute('aD', new THREE.BufferAttribute(new Float32Array(max * 2), 1));
+    for (let i = 0; i < max - 1; i++) { const a = i * 2; idx.push(a, a + 1, a + 2, a + 1, a + 3, a + 2); }
+    geo.setIndex(idx);
+    const mat = new THREE.ShaderMaterial({ vertexShader: RIB_V, fragmentShader: RIB_F, transparent: true, depthWrite: false, side: THREE.DoubleSide,
+      uniforms: { uCol: { value: new THREE.Color(color) }, uOp: { value: opacity }, uDash: { value: dash }, uGap: { value: gap }, uShift: { value: 0 } } });
+    const mesh = new THREE.Mesh(geo, mat); mesh.frustumCulled = false;
+    const pa = geo.attributes.position, da = geo.attributes.aD, h = width / 2;
+    mesh.userData.set = (pts, y = 0.03) => {
+      const n = Math.min(max, pts.length); let d = 0;
+      for (let i = 0; i < n; i++) {
+        const a = pts[Math.max(0, i - 1)], b = pts[Math.min(n - 1, i + 1)];
+        let tx = b.x - a.x, tz = b.z - a.z; const l = Math.hypot(tx, tz) || 1; tx /= l; tz /= l;
+        if (i) d += dist(pts[i], pts[i - 1]);
+        pa.setXYZ(i * 2, pts[i].x - tz * h, y, pts[i].z + tx * h); pa.setXYZ(i * 2 + 1, pts[i].x + tz * h, y, pts[i].z - tx * h);
+        da.setX(i * 2, d); da.setX(i * 2 + 1, d);
+      }
+      pa.needsUpdate = true; da.needsUpdate = true; geo.setDrawRange(0, Math.max(0, n - 1) * 6); mesh.userData.n = n;
+    };
+    mesh.userData.count = n => geo.setDrawRange(0, Math.max(0, Math.min(n, mesh.userData.n || 0) - 1) * 6);
+    return mesh;
+  }
+
+  // ---- personagens ----
+  // jogador: o mesmo corpo do jogo com um material branco próprio (os materiais do Shop não mudam)
+  const whiteMat = new THREE.MeshStandardMaterial({ color: '#ffffff', emissive: '#ffffff', emissiveIntensity: 0.35, roughness: 0.8, transparent: true });   // liso como o corpo novo (transparent: pode ficar translúcido se cobrir algo)
+  const pHold = new THREE.Group(); pHold.position.copy(P_POS); scene.add(pHold);
+  const pModel = new THREE.Group(); pModel.rotation.y = FACE_NZ; pHold.add(pModel);
+  const PB = buildBody(pModel);
+  const paintWhite = () => pModel.traverse(o => { if (o.isMesh) { o.material = whiteMat; o.castShadow = false; } });
+  paintWhite();
+  restArms(PB.arms);
+  pModel.userData.torso = PB.torso;                                   // (mesma interface do reachArm do K)
+  pModel.userData.arms = PB.arms.map((a, i) => ({ s: i ? 1 : -1, sh: a.sh, rest: a.sh.quaternion.clone(), elbow: a.elbow, erest: a.elbow.quaternion.clone() }));
+  // K: com as cores dele
+  const kHold = new THREE.Group(); kHold.position.copy(K_POS); scene.add(kHold);
+  const K = buildStandingReader(); K.rotation.y = FACE_NZ; kHold.add(K);
+  const kMats = [];                                                   // materiais próprios (podem ficar translúcidos sem mexer no K das outras cenas)
+  K.traverse(o => { if (!o.isMesh) return; o.castShadow = false; o.material = Array.isArray(o.material) ? o.material.map(m => m.clone()) : o.material.clone(); for (const m of [].concat(o.material)) { m.userData.op = m.opacity; m.transparent = true; kMats.push(m); } });
+  whiteMat.userData.op = 1;
+  const KU = K.userData;
+  const kWrist = a => a.elbow.children[a.elbow.children.length - 1];
+  // figura: a aparência escura do extra 1 (maior), com contorno
+  const figMat = new THREE.ShaderMaterial({ vertexShader: RIM_V, fragmentShader: RIM_F, uniforms: { uRim: { value: new THREE.Color(0.2, 0.2, 0.235) }, uGlow: { value: 0 } } });
+  const fig = buildFigureBody(); fig.traverse(o => { if (o.isMesh) { o.material = figMat; o.castShadow = false; } }); smoothCharacter(fig);
+  fig.scale.set(...F_SCALE); fig.rotation.y = FACE_PZ; fig.position.copy(F_POS); scene.add(fig);
+  const FU = fig.userData;
+
+  // ---- círculo, prévia e indicador de comprimento ----
+  const circle = new THREE.Group(); circle.position.y = 0.04; scene.add(circle);
+  const cDisc = new THREE.Mesh(new THREE.CircleGeometry(CIRCLE_R, 48), basic('#ffffff', 1, { toneMapped: false }));   // disco cheio #FFFFFF
+  cDisc.rotation.x = -Math.PI / 2; circle.add(cDisc);
+  const lenArc = arcRing(CIRCLE_R + 0.08, CIRCLE_R + 0.13); lenArc.visible = false; circle.add(lenArc);
+  const PREV_MAX = 128;
+  const prevLine = ribbon(PREV_MAX, 0.08, 0.22, 0.14, '#ffffff', 0.6); prevLine.visible = false; scene.add(prevLine);
+
+  // ---- estabilidade: anel aos pés (arco = estabilidade) ----
+  const stabRing = { P: arcRing(0.62, 0.68), K: arcRing(0.62, 0.68) };
+  stabRing.P.position.set(P_POS.x, 0.03, P_POS.z); stabRing.K.position.set(K_POS.x, 0.03, K_POS.z);
+  scene.add(stabRing.P, stabRing.K);
+
+  // ---- pools ----
+  const pool = make => { const free = []; return { get: () => free.pop() || make(), put: o => { o.visible = false; if (o.parent) o.parent.remove(o); free.push(o); } }; };
+  // projétil: fragmento escuro alongado com arestas claras, rastro curto e o anel de "o K vai defender"
+  const projGeo = new THREE.OctahedronGeometry(0.27, 0), projEdges = new THREE.EdgesGeometry(projGeo);
+  const trailGeo = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(0, 0, -0.12), new THREE.Vector3(0, 0, -0.95)]);
+  const claimGeo = new THREE.RingGeometry(0.36, 0.41, 32);
+  const projPool = pool(() => {
+    const g = new THREE.Group(), spin = new THREE.Group(); spin.scale.set(0.75, 0.55, 1.7); g.add(spin);
+    const edges = new THREE.LineSegments(projEdges, M.edge), trail = new THREE.Line(trailGeo, M.trail);
+    spin.add(new THREE.Mesh(projGeo, M.dark), edges); g.add(trail);
+    const claim = new THREE.Mesh(claimGeo, basic('#dfe9ff', 0.8, { depthWrite: false, side: THREE.DoubleSide })); claim.rotation.x = -Math.PI / 2; g.add(claim);
+    g.userData = { spin, claim, edges, trail }; return g;
+  });
+  // estilhaços (impactos, bloqueios)
+  const shardGeo = new THREE.TetrahedronGeometry(0.07, 0);
+  const shardPool = pool(() => new THREE.Mesh(shardGeo, M.shardW));
+  // aviso: linha tracejada no chão (origem → alvo) e anel pulsando na origem
+  const warnPool = pool(() => ribbon(2, 0.07, 0.34, 0.24, '#ffffff', 0.5));
+  const pulseGeo = new THREE.RingGeometry(0.3, 0.37, 32);
+  const pulsePool = pool(() => new THREE.Mesh(pulseGeo, basic('#ffffff', 0.6, { depthWrite: false, side: THREE.DoubleSide })));
+  // barreira: placa plana branca suspensa na altura do voo (mesma linguagem das paredes do Refletir; a do K com contorno duplo, levemente azulada)
+  const barGeo = new THREE.PlaneGeometry(BLOCK.w, BLOCK.h);
+  const rectGeo = (w, h) => new THREE.BufferGeometry().setFromPoints([[-w, -h], [w, -h], [w, h], [-w, h]].map(([x, y]) => new THREE.Vector3(x, y, 0)));
+  const ringGeo = rectGeo(BLOCK.w / 2, BLOCK.h / 2), ring2Geo = rectGeo(BLOCK.w / 2 + 0.07, BLOCK.h / 2 + 0.07);
+  const GM = 0.42, haloGeo = new THREE.PlaneGeometry(BLOCK.w + 2 * GM, BLOCK.h + 2 * GM);
+  const makeBar = own => () => {
+    const g = new THREE.Group(), K = own === 'K';
+    const surf = (K ? M.barK : M.barP).clone(), line = (K ? M.barLineK : M.barLineP).clone();
+    const glow = glowPlate(K ? '#dfe9ff' : '#ffffff', [BLOCK.w / 2, BLOCK.h / 2], [BLOCK.w + 2 * GM, BLOCK.h + 2 * GM]);
+    const halo = new THREE.Mesh(haloGeo, glow); halo.renderOrder = 2;
+    g.add(new THREE.Mesh(barGeo, surf), new THREE.LineLoop(ringGeo, line), halo);
+    if (K) g.add(new THREE.LineLoop(ring2Geo, line));
+    g.userData = { surf, line, glow };
+    return g;
+  };
+  const barPool = { P: pool(makeBar('P')), K: pool(makeBar('K')) };
+  // fissuras: rachadura vertical suspensa (preenchida de preto, contorno branco irregular)
+  const crack = (() => {
+    const H = 1.8, n = 9, L = [], R = [], r = rng(77);
+    for (let i = 0; i <= n; i++) { const y = -H / 2 + H * i / n, w = 0.3 * Math.sin(Math.PI * i / n) + 0.015, j = (i % 2 ? 0.1 : -0.08) * Math.sin(Math.PI * i / n); L.push(new THREE.Vector2(-w + j - r() * 0.05, y)); R.push(new THREE.Vector2(w + j * 0.5 + r() * 0.05, y)); }
+    const loop = L.concat(R.slice().reverse()), sh = new THREE.Shape(loop);
+    return { fill: new THREE.ShapeGeometry(sh), line: new THREE.BufferGeometry().setFromPoints(loop.map(p => new THREE.Vector3(p.x, p.y, 0.01))) };
+  })();
+  const fissures = {};
+  for (const [name, [x, z]] of Object.entries(FIS)) {
+    const g = new THREE.Group(); g.position.set(x, H_PROJ, z);
+    g.add(new THREE.Mesh(crack.fill, basic('#000000', 1, { side: THREE.DoubleSide })), new THREE.LineLoop(crack.line, M.edge));
+    g.visible = false; scene.add(g);
+    fissures[name] = { g, open: 0, want: 0, x, z };
+  }
+  // estruturas (Refletir): cristais escuros suspensos com contorno branco
+  const structGeo = new THREE.OctahedronGeometry(0.45, 0), structEdges = new THREE.EdgesGeometry(structGeo);
+  const structObjs = [0, 1, 2, 3].map(() => {
+    const g = new THREE.Group(), body = new THREE.Group(); body.scale.set(0.6, 1.55, 0.6); g.add(body);
+    const em = lineM('#ffffff', 0.9);
+    body.add(new THREE.Mesh(structGeo, M.dark), new THREE.LineSegments(structEdges, em));
+    g.userData = { body, em }; g.visible = false; scene.add(g); return g;
+  });
+  // ---- Conduzir: o objeto de pontas, a ligação puxada, o portal e o vazio branco do outro lado ----
+  const obj = new THREE.Group(); obj.visible = false; scene.add(obj);
+  const objCore = new THREE.Mesh(new THREE.IcosahedronGeometry(0.22, 0), basic('#000000')); obj.add(objCore);
+  const spikeGeo = new THREE.ConeGeometry(0.06, 1, 4).translate(0, 0.5, 0);
+  const spikes = []; for (let i = 0; i < GUIDE.spikes; i++) { const m = new THREE.Mesh(spikeGeo, basic('#000000')); obj.add(m); spikes.push({ m, d: new THREE.Vector3(0, 1, 0), l: 0.4 }); }
+  const spikeLineGeo = new THREE.BufferGeometry(); spikeLineGeo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(GUIDE.spikes * 6), 3));
+  const spikeLines = new THREE.LineSegments(spikeLineGeo, lineM('#80808a', 0.85)); spikeLines.frustumCulled = false; obj.add(spikeLines);   // contraste local discreto
+  const objHalo = new THREE.Mesh(new THREE.CircleGeometry(0.85, 32), basic('#202028', 0.6, { depthWrite: false })); obj.add(objHalo);        // leve véu cinza atrás (de frente para a câmera)
+  const footRing = ribbon(49, 0.05, 0.14, 0.1, '#9a9aa2', 0.55); footRing.visible = false; scene.add(footRing);                              // onde pôr o círculo (embaixo do objeto)
+  const tether = new THREE.Mesh(new THREE.ConeGeometry(1, 1, 5, 1, true).translate(0, -0.5, 0).rotateX(-Math.PI / 2), basic('#000000', 1, { side: THREE.DoubleSide }));
+  tether.visible = false; scene.add(tether);                                                                                                  // a ponta esticada (preta, afina com a tensão)
+  const tetherLineGeo = new THREE.BufferGeometry(); tetherLineGeo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(6), 3));
+  const tetherLine = new THREE.Line(tetherLineGeo, lineM('#8a8a92', 0.9)); tetherLine.frustumCulled = false; tetherLine.visible = false; scene.add(tetherLine);
+  // vazio branco: cena própria, renderizada com a câmera da batalha numa textura (prerender) e vista só pela abertura
+  const ws = new THREE.Scene(); ws.background = new THREE.Color('#f6f6f3'); ws.fog = new THREE.Fog('#f6f6f3', 18, 75);
+  const wsGridMat = new THREE.ShaderMaterial({ vertexShader: GRID_V, fragmentShader: WGRID_F, transparent: true, depthWrite: false, uniforms: { uC: { value: new THREE.Vector2() } } });
+  const wsGrid = new THREE.Mesh(new THREE.PlaneGeometry(240, 240), wsGridMat); wsGrid.rotation.x = -Math.PI / 2; ws.add(wsGrid);
+  const WSM = { edge: lineM('#2a2a30', 0.95), trail: lineM('#55555c', 0.5) };                                                              // contornos escuros no branco
+  let wsRT = null;
+  const winMat = new THREE.ShaderMaterial({ vertexShader: WIN_V, fragmentShader: WIN_F, transparent: true, depthWrite: false, side: THREE.DoubleSide,
+    uniforms: { tWS: { value: null }, uRes: { value: new THREE.Vector2(1, 1) }, uA: { value: 1 } } });
+  const RING = GUIDE.ring, winGeo = new THREE.BufferGeometry();
+  winGeo.setAttribute('position', new THREE.BufferAttribute(new Float32Array((RING + 1) * 3), 3));
+  { const idx = []; for (let i = 0; i < RING; i++) idx.push(0, 1 + i, 1 + (i + 1) % RING); winGeo.setIndex(idx); }
+  const portal = new THREE.Group(); portal.visible = false; scene.add(portal);
+  const win = new THREE.Mesh(winGeo, winMat); win.renderOrder = 4; win.frustumCulled = false; portal.add(win);
+  const rimGeo = new THREE.BufferGeometry(); rimGeo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(RING * 3), 3));
+  const rim = new THREE.LineLoop(rimGeo, lineM('#e9e9f0', 0.9)); rim.renderOrder = 5; rim.frustumCulled = false; portal.add(rim);
+  /** Borda viva: 4 lados reconhecíveis (super-elipse), irregulares e em movimento; k = abertura (0..1). */
+  function shapePortal(k, t) {
+    const a = GUIDE.portalW / 2 * k, b = GUIDE.portalH / 2 * k, pw = winGeo.attributes.position, pr = rimGeo.attributes.position;
+    pw.setXYZ(0, 0, 0, 0);
+    for (let i = 0; i < RING; i++) {
+      const th = i / RING * Math.PI * 2, c = Math.cos(th), sn = Math.sin(th);
+      const r = 1 / Math.pow(Math.pow(Math.abs(c), 6) + Math.pow(Math.abs(sn), 6), 1 / 6);   // quase quadrada: 4 lados
+      const n = 1 + 0.05 * Math.sin(3 * th + t * 2.1) + 0.035 * Math.sin(5 * th - t * 3.3) + 0.02 * Math.sin(9 * th + t * 5.2);
+      const x = c * r * a * n, y = sn * r * b * n;
+      pw.setXYZ(1 + i, x, y, 0); pr.setXYZ(i, x * 1.015, y * 1.015, 0.002);
+    }
+    pw.needsUpdate = true; pr.needsUpdate = true;
+  }
+  // traço de luz do braço do K até a barreira dele
+  const traceGeo = new THREE.BufferGeometry(); traceGeo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(6), 3));
+  const trace = new THREE.Line(traceGeo, lineM('#e6efff', 0)); trace.frustumCulled = false; scene.add(trace);
+
+  // ---- DOM: rótulo do mecanismo (no palco) e mensagens sobre o preto (acima do véu do fade) ----
+  const label = document.createElement('div');
+  label.style.cssText = 'position:absolute;left:50%;bottom:20px;transform:translateX(-50%);color:rgba(255,255,255,0.7);font:14px "Trebuchet MS",sans-serif;letter-spacing:1.5px;pointer-events:none;z-index:6;opacity:0;transition:opacity .35s;white-space:nowrap;display:none';
+  stage.appendChild(label);
+  // véu preto próprio por cima do véu do jogo (o do main é verde-escuro; aqui o vazio é preto puro): mesma opacidade de `fade`
+  const veil = document.createElement('div');
+  veil.style.cssText = 'position:fixed;inset:0;background:#000;opacity:0;display:none;z-index:50;pointer-events:none';
+  document.body.appendChild(veil);
+  const setVeil = a => { veil.style.display = a > 0.001 ? 'block' : 'none'; veil.style.opacity = a.toFixed(3); };
+  const msg = document.createElement('div');
+  msg.style.cssText = 'position:fixed;inset:0;display:none;flex-direction:column;align-items:center;justify-content:center;gap:14px;z-index:51;pointer-events:none;font:13px "Trebuchet MS",sans-serif;color:rgba(255,255,255,0.55);letter-spacing:1px;text-align:center';
+  const msgSq = document.createElement('div'); msgSq.style.cssText = 'width:16px;height:16px;display:none';
+  const msgTx = document.createElement('div'); msg.append(msgSq, msgTx);
+  document.body.appendChild(msg);
+  const showMsg = (text, color) => { msgTx.textContent = text; msgSq.style.display = color ? 'block' : 'none'; if (color) msgSq.style.background = color; msg.style.display = 'flex'; };
+  const hideMsg = () => { msg.style.display = 'none'; };
+
+  // ---- som (efeitos curtos, procedurais) ----
+  let noiseBuf = null;
+  function sfx(kind) {
+    const ac = audio && audio.ctx, out = audio && audio.out; if (!ac || !out || ac.state !== 'running') return;
+    try {
+      const now = ac.currentTime + 0.005, g = ac.createGain(); g.connect(out);
+      const tone = (f0, f1, dur, type, vol, at = 0) => { const o = ac.createOscillator(), e = ac.createGain(); o.type = type; o.frequency.setValueAtTime(f0, now + at); o.frequency.exponentialRampToValueAtTime(f1, now + at + dur); e.gain.setValueAtTime(0.0001, now + at); e.gain.exponentialRampToValueAtTime(vol, now + at + 0.008); e.gain.exponentialRampToValueAtTime(0.0001, now + at + dur); o.connect(e); e.connect(g); o.start(now + at); o.stop(now + at + dur + 0.02); };
+      const noise = (dur, type, freq, vol) => { if (!noiseBuf) { noiseBuf = ac.createBuffer(1, ac.sampleRate, ac.sampleRate); const d = noiseBuf.getChannelData(0); for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1; } const s = ac.createBufferSource(); s.buffer = noiseBuf; const f = ac.createBiquadFilter(); f.type = type; f.frequency.value = freq; const e = ac.createGain(); e.gain.setValueAtTime(vol, now); e.gain.exponentialRampToValueAtTime(0.0001, now + dur); s.connect(f); f.connect(e); e.connect(g); s.start(now); s.stop(now + dur + 0.02); };
+      if (kind === 'warn') tone(760, 740, 0.09, 'sine', 0.035);
+      else if (kind === 'launch') noise(0.22, 'bandpass', 1400, 0.05);
+      else if (kind === 'barrier') tone(520, 640, 0.09, 'sine', 0.04);
+      else if (kind === 'block') { tone(1500, 900, 0.16, 'triangle', 0.06); noise(0.12, 'highpass', 3000, 0.04); }
+      else if (kind === 'reflect') { tone(1700, 1900, 0.2, 'sine', 0.05); tone(2550, 2700, 0.16, 'sine', 0.025, 0.02); }
+      else if (kind === 'impact') { tone(110, 60, 0.26, 'sine', 0.12); noise(0.14, 'lowpass', 900, 0.06); }
+      else if (kind === 'struct') { noise(0.32, 'highpass', 2200, 0.07); tone(420, 210, 0.3, 'triangle', 0.035); }
+      else if (kind === 'core') { tone(660, 660, 0.7, 'sine', 0.04); tone(990, 990, 0.6, 'sine', 0.025, 0.06); }
+      else if (kind === 'fail') tone(180, 90, 0.6, 'sine', 0.07);
+      setTimeout(() => { try { g.disconnect(); } catch (e) { /* */ } }, 1500);
+    } catch (e) { /* som é opcional */ }
+  }
+
+  // ---- mouse: botão esquerdo segurado = ação ----
+  let mouseDown = false, simAct = false, rightDown = false;           // esquerdo = ação (atrair no Conduzir); direito = puxar (Conduzir)
+  const isUI = e => e.target && e.target.closest && e.target.closest('button, .back-btn, .tc-zone, .tc-acts, .tc-btn');
+  addEventListener('pointerdown', e => { if (active && e.pointerType === 'mouse' && !isUI(e)) { if (e.button === 0) mouseDown = true; else if (e.button === 2) rightDown = true; } });
+  addEventListener('pointerup', e => { if (e.pointerType === 'mouse') { if (e.button === 0) mouseDown = false; else if (e.button === 2) rightDown = false; } });
+  addEventListener('pointercancel', () => { mouseDown = false; rightDown = false; });
+  addEventListener('blur', () => { mouseDown = false; rightDown = false; });
+  addEventListener('contextmenu', e => { if (active) e.preventDefault(); });   // o direito é do jogo aqui (sem menu do navegador, sem girar câmera)
+  const _up = new THREE.Vector3(0, 1, 0);
+
+  // ---------- estado ----------
+  let active = false, fade = 0, phase = 'idle', pt = 0, time = 0;
+  let step = 0, fragmentsDone = 0, retries = 0, log = [];
+  let seg = null;                                                     // trecho atual
+  let projectiles = [], warnings = [], barriers = [], walls = [], shards = [];
+  let drawing = null;                                                 // { pts, len, atLimit }
+  const cpos = { x: CIRCLE_HOME.x, z: CIRCLE_HOME.z };
+  const stab = { P: 100, K: 100 }, lastHit = { P: -99, K: -99 }, react = { P: 0, K: 0 };
+  let prevAct = false, lastBar = -9, nextId = 1, lastKDef = -99, kAct = null, gest = null, shakeT = 0, traceT = 0;
+  let fragHandler = null, finaleHandler = null, token = 0, figGest = null;
+  let mt = 0;                                                         // posição da música = relógio da batalha
+  const music = ctx.music || null;
+  let camK = 1, camSnap = false;                                      // 0 = câmera de jogo, 1 = câmera de impacto
+  const camBase = new THREE.Vector3(), camLook = new THREE.Vector3();
+  const occ = { P: 1, K: 1 };                                         // opacidade de quem cobre algo interativo
+  const L = s => { log.push(s); if (log.length > 500) log.shift(); };
+  const kLevelOf = n => n < 5 ? 0 : Math.min(4, n - 4);
+  const kLevel = () => kLevelOf(fragmentsDone);
+  const charPos = who => who === 'K' ? K_POS : P_POS;
+
+  function fitFov(base) {
+    const asp = camera.aspect || 16 / 9, h = Math.tan(base * Math.PI / 360) * 16 / 9;
+    const fov = asp >= 16 / 9 ? base : Math.min(80, Math.atan(h / asp) * 360 / Math.PI);
+    if (Math.abs(camera.fov - fov) > 0.01) { camera.fov = fov; camera.updateProjectionMatrix(); }
+  }
+  /** Câmera entre as duas posições (k: 0 = jogo, 1 = impacto), com a troca suavizada. */
+  function placeCamera() {
+    const e = ease(camK), G = CAMS.game, I = CAMS.impact;
+    camBase.lerpVectors(G.pos, I.pos, e); camLook.lerpVectors(G.look, I.look, e);
+    camera.position.copy(camBase); camera.lookAt(camLook); fitFov(G.fov + (I.fov - G.fov) * e);
+    for (const f of Object.values(fissures)) f.g.rotation.y = Math.atan2(camBase.x - f.x, camBase.z - f.z);   // de frente para a câmera
+  }
+  /** Nada que exija reação: sem projéteis/avisos, sem traço sendo desenhado, sem núcleo sendo segurado. */
+  const calm = () => !projectiles.some(p => p.alive && !p.through) && !warnings.length && !drawing && !(seg && seg.guide && (seg.guide.state === 'grab' || seg.guide.state === 'kpull'));
+  /** Câmera de impacto só em intervalos seguros (apresentação, espera entre janelas, antes de um fragmento), com tempo de voltar. */
+  function camGoal() {
+    const s = STEPS[step];
+    if (phase !== 'wait' || !s || !calm()) return 0;
+    if (s.k !== 'S') return 1;
+    const left = TL[step].a - mt;                                     // a câmera de jogo tem de estar no lugar antes da janela
+    return left > CAM_T + 0.45 + (camK > 0 ? 0 : CAM_T + 1.5) ? 1 : 0;
+  }
+  function updateCamera(dt) {
+    if (camSnap) { camSnap = false; camK = 0; }
+    else { const g = camGoal(); camK = g > camK ? Math.min(g, camK + dt / CAM_T) : Math.max(g, camK - dt / CAM_T); }
+    placeCamera();
+  }
+
+  // ---------- criação/remoção de coisas do trecho ----------
+  function spawnShards(x, y, z, n, darkMix = 0.4, speed = 2.4) {
+    for (let i = 0; i < n; i++) {
+      const m = shardPool.get(); m.material = Math.random() < darkMix ? M.shardD : M.shardW;
+      m.position.set(x, y, z); m.visible = true; scene.add(m);
+      const a = Math.random() * Math.PI * 2, u = Math.random() * 2 - 1, s = speed * (0.4 + Math.random() * 0.8), c = Math.sqrt(1 - u * u);
+      m.userData = { vx: Math.cos(a) * c * s, vy: u * s * 0.7 + 0.6, vz: Math.sin(a) * c * s, age: 0, life: 0.45 + Math.random() * 0.35, s0: 0.6 + Math.random() * 0.8, w: Math.random() * 10 };
+      shards.push(m);
+    }
+  }
+  function originOf(from, target) {
+    if (from === 'fig') { const s = charPos(target).x < 0 ? -1 : 1; return { x: s * 0.9, z: F_POS.z + 1.3, src: null, fis: null }; }
+    if (typeof from === 'string') { const f = fissures[from]; return { x: f.x, z: f.z, src: null, fis: f }; }
+    return { x: from.x, z: from.z, src: from, fis: null };          // estrutura
+  }
+  function createWarning(from, target, speed, dur = WARN) {
+    const o = originOf(from, target), tp = charPos(target);
+    const w = { from, target, speed, t: 0, dur, ox: o.x, oz: o.z, tx: tp.x, tz: tp.z, src: o.src, fis: o.fis, line: warnPool.get(), pulse: pulsePool.get(), proj: null };
+    w.line.userData.set([{ x: o.x, z: o.z }, { x: tp.x, z: tp.z }], 0.03);
+    w.line.material.uniforms.uOp.value = 0.12; w.line.visible = true; scene.add(w.line);
+    w.pulse.position.set(o.x, H_PROJ, o.z); w.pulse.visible = true; scene.add(w.pulse);
+    if (o.src) o.src.busy = true;
+    if (o.fis) o.fis.want++;
+    if (from === 'fig') figGest = { s: tp.x < 0 ? 1 : -1, pt: new THREE.Vector3(o.x, H_PROJ, o.z).lerp(new THREE.Vector3(tp.x, H_PROJ, tp.z), 0.25), t: 0, dur: dur + 0.5 };
+    else if (o.fis) figGest = { s: o.x < 0 ? 1 : -1, pt: new THREE.Vector3(o.x * 0.6, 4.2, F_POS.z + 2), t: 0, dur: dur + 0.4, soft: true };
+    warnings.push(w); sfx('warn');
+    if (dur <= 0) launch(w);
+    return w;
+  }
+  function launch(w) {
+    const dx = w.tx - w.ox, dz = w.tz - w.oz, l = Math.hypot(dx, dz) || 1;
+    const p = { id: nextId++, x: w.ox, z: w.oz, vx: dx / l * w.speed, vz: dz / l * w.speed, speed: w.speed, target: w.target, tx: w.tx, tz: w.tz,
+      reflected: false, alive: true, kClaim: false, kEval: 1.4 + Math.random() * 0.4, evaluated: false, src: w.src, obj: projPool.get(), age: 0 };
+    const u = p.obj.userData; u.edges.material = M.edge; u.trail.material = M.trail;   // (pode voltar do vazio branco)
+    p.obj.position.set(p.x, H_PROJ, p.z); p.obj.visible = true; u.claim.visible = false; scene.add(p.obj);
+    if (seg && seg.guide) {                                           // Conduzir: míssil que guarda o alvo original
+      p.homing = true; p.through = false; seg.guide.armed = true;
+      if (seg.guide.attract || (mouseDown || simAct || input.held('Space'))) {   // já nasce perseguindo o círculo se a atração está segurada
+        seg.guide.attract = true; const cx = cpos.x - p.x, cz = cpos.z - p.z, cl = Math.hypot(cx, cz) || 1; p.vx = cx / cl * p.speed; p.vz = cz / cl * p.speed;
+      }
+    }
+    projectiles.push(p); w.proj = p; w.done = true; w.pulse.visible = false;
+    sfx('launch');
+  }
+  function killProjectile(p, burst = 0, darkMix = burst > 8 ? 0.5 : 0.3) {
+    if (!p.alive) return; p.alive = false;
+    if (burst) spawnShards(p.x, H_PROJ, p.z, burst, darkMix);
+    projPool.put(p.obj);
+    if (p.src) p.src.busy = false;
+    if (kAct && kAct.proj === p && !kAct.made) kAct.cancel = true;
+  }
+  function removeWarning(w) { warnPool.put(w.line); pulsePool.put(w.pulse); if (w.fis && !w.fisOff) w.fis.want = Math.max(0, w.fis.want - 1); }
+  /** Direção de onde vem o projétil que esta barreira vai pegar (projétil em voo ou aviso), ou da figura. */
+  function incomingDir(x, z, proj) {
+    let best = proj ? { vx: proj.vx, vz: proj.vz } : null, bd = 1.6 ** 2;
+    if (!best) {
+      for (const p of projectiles) { if (!p.alive) continue; const d = segDist2(x, z, p.x, p.z, p.tx, p.tz); if (d < bd) { bd = d; best = { vx: p.vx, vz: p.vz }; } }
+      for (const w of warnings) { if (w.proj) continue; const d = segDist2(x, z, w.ox, w.oz, w.tx, w.tz); if (d < bd) { bd = d; best = { vx: w.tx - w.ox, vz: w.tz - w.oz }; } }
+    }
+    if (!best) best = { vx: x - F_POS.x, vz: z - F_POS.z };
+    const l = Math.hypot(best.vx, best.vz) || 1; return { x: best.vx / l, z: best.vz / l };
+  }
+  function addBarrier(x, z, owner, proj) {
+    const d = incomingDir(x, z, proj), tx = -d.z, tz = d.x, hw = BLOCK.w / 2;
+    const seg = { ax: x - tx * hw, az: z - tz * hw, bx: x + tx * hw, bz: z + tz * hw, tx, tz, nx: d.x, nz: d.z, len: BLOCK.w };
+    const obj = barPool[owner].get(); obj.position.set(x, H_PROJ, z); obj.rotation.set(0, Math.atan2(d.x, d.z), 0); obj.scale.set(1, 0.001, 1); obj.visible = true; scene.add(obj);
+    const b = { x, z, owner, seg, age: 0, life: BLOCK.life, alive: true, die: -1, obj };
+    barriers.push(b);
+    return b;
+  }
+  /** Vagas do jogador em uso: placas do Bloquear + paredes do Refletir ainda de pé (as defesas do K não contam). */
+  const slotsUsed = () => barriers.filter(o => o.alive && o.owner === 'P').length + walls.filter(o => o.alive).length;
+  const slotFree = () => slotsUsed() < P_SLOTS;
+  function killBarrier(b) { if (!b.alive) return; b.alive = false; b.die = 0; }
+  function addWall(pts) {
+    const segs = [], pos = [], lin = [], h = REFL.h;
+    for (let i = 0; i < pts.length - 1; i++) {
+      const a = pts[i], b = pts[i + 1], len = dist(a, b); if (len < 1e-4) continue;
+      const tx = (b.x - a.x) / len, tz = (b.z - a.z) / len;
+      segs.push({ ax: a.x, az: a.z, bx: b.x, bz: b.z, tx, tz, nx: -tz, nz: tx, len });
+      pos.push(a.x, 0, a.z, b.x, 0, b.z, b.x, h, b.z, a.x, 0, a.z, b.x, h, b.z, a.x, h, a.z);
+      lin.push(a.x, 0.02, a.z, b.x, 0.02, b.z, a.x, h, a.z, b.x, h, b.z);
+    }
+    for (const p of pts) lin.push(p.x, 0, p.z, p.x, h, p.z);
+    const g = new THREE.Group();
+    const pg = new THREE.BufferGeometry(); pg.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+    const lg = new THREE.BufferGeometry(); lg.setAttribute('position', new THREE.Float32BufferAttribute(lin, 3));
+    const gh = h + 0.3, gpos = [];                                   // halo: a mesma faixa, um pouco mais alta (brilho acima do topo)
+    for (const sg of segs) gpos.push(sg.ax, 0, sg.az, sg.bx, 0, sg.bz, sg.bx, gh, sg.bz, sg.ax, 0, sg.az, sg.bx, gh, sg.bz, sg.ax, gh, sg.az);
+    const gg = new THREE.BufferGeometry(); gg.setAttribute('position', new THREE.Float32BufferAttribute(gpos, 3)); gg.setAttribute('uv', new THREE.Float32BufferAttribute(new Float32Array(gpos.length / 3 * 2), 2));
+    const surf = M.wall.clone(), line = M.wallLine.clone(), glow = glowWall('#ffffff', h);
+    const halo = new THREE.Mesh(gg, glow); halo.renderOrder = 2;
+    g.add(new THREE.Mesh(pg, surf), new THREE.LineSegments(lg, line), halo); g.scale.y = 0.001; scene.add(g);
+    g.userData = { surf, line, glow };
+    const w = { pts: pts.map(p => ({ x: p.x, z: p.z })), segs, age: 0, life: REFL.life, alive: true, die: -1, obj: g };
+    walls.push(w);
+    sfx('barrier'); L('wall');
+    return w;
+  }
+  function killWall(w) { if (!w.alive) return; w.alive = false; w.die = 0; }
+  function disposeWall(w) { scene.remove(w.obj); w.obj.children.forEach(c => c.geometry.dispose()); const u = w.obj.userData; u.surf.dispose(); u.line.dispose(); u.glow.dispose(); }
+  function setPreview(on) {
+    prevLine.visible = on; lenArc.visible = on;
+    if (!on) drawing = null;
+  }
+  function updatePreview() {
+    if (!drawing) return;
+    // a cauda até o círculo só mostra o que ainda cabe no limite (no limite: só o traço já feito)
+    const last = drawing.pts[drawing.pts.length - 1], d = dist(last, cpos), r = drawing.atLimit ? 0 : Math.max(0, REFL.maxLen - drawing.len);
+    const k = d > 1e-6 ? Math.min(1, r / d) : 0;
+    prevLine.userData.set(k > 0.001 ? drawing.pts.concat([{ x: last.x + (cpos.x - last.x) * k, z: last.z + (cpos.z - last.z) * k }]) : drawing.pts, 0.036);
+    const u = lenArc.material.uniforms, full = drawing.atLimit;
+    u.uFrac.value = Math.min(1, drawing.len / REFL.maxLen); u.uA.value = full ? 0.35 + 0.35 * (Math.sin(time * 16) > 0 ? 1 : 0) : 0.8;
+    u.uCol.value.set(full ? '#8a8a90' : '#ffffff');
+  }
+
+  // ---------- trechos ----------
+  function clearAll() {
+    for (const p of projectiles) if (p.alive) { p.alive = false; projPool.put(p.obj); }
+    projectiles = [];
+    for (const w of warnings) removeWarning(w); warnings = [];
+    for (const b of barriers) barPool[b.owner].put(b.obj); barriers = [];
+    for (const w of walls) disposeWall(w); walls = [];
+    for (const s of shards) shardPool.put(s); shards = [];
+    setPreview(false);
+    for (const f of Object.values(fissures)) { f.want = 0; f.open = 0; f.g.visible = false; }
+    for (const o of structObjs) o.visible = false;
+    clearGuide();
+    gridMat.uniforms.uOn.value.fill(0);
+    if (kAct) kAct = null;
+    gest = null; figGest = null; traceT = 0; trace.material.opacity = 0;
+  }
+  function setupSegment(i) {
+    clearAll();
+    const def = SEGMENTS[i];
+    seg = { i, def, mech: def.mech, t: 0, shotIdx: 0, figNext: def.figEvery || 0, figTgt: 0, structures: [], guide: null };
+    (def.structs || []).forEach((s, j) => {
+      const o = structObjs[j]; o.position.set(s.x, H_PROJ, s.z); o.scale.setScalar(1); o.visible = true; o.userData.em.color.set('#ffffff'); o.userData.em.opacity = 0.9;
+      seg.structures.push({ x: s.x, z: s.z, target: s.target, period: s.period, speed: s.speed, next: s.phase, alive: true, busy: false, die: -1, obj: o });
+    });
+    if (def.mech === 'guide') setupGuide();
+    stab.P = stab.K = 100; lastHit.P = lastHit.K = -99; react.P = react.K = 0;
+    cpos.x = CIRCLE_HOME.x; cpos.z = CIRCLE_HOME.z; prevAct = true;  // (ação já segurada não conta como clique novo)
+    lastKDef = -99; lastBar = -9;
+  }
+  /** Passa ao próximo passo; quem decide quando ele começa é a música (fase 'wait'). */
+  function nextStep() { step++; pt = 0; phase = 'wait'; const s = STEPS[step]; if (s) L(`step:${step} ${s.k}${s.k === 'S' ? ' ' + SEGMENTS[s.seg].mech : s.k === 'F' ? ' ' + s.color : ''}`); }
+  /** Espera entre janelas: arma o trecho um pouco antes (a câmera volta à de jogo) ou escurece para o fragmento/final. */
+  function stepWait(dt) {
+    const s = STEPS[step], w = TL[step];
+    if (!s) return;
+    if (s.k === 'S') {
+      fade = Math.max(0, fade - dt / (step === 0 ? T.startFade : T.fadeIn));
+      if ((!seg || seg.i !== s.seg) && mt >= w.a - PRE) setupSegment(s.seg);
+      if (seg && camK < 0.02) moveCircle(dt);
+      if (mt >= w.a) { if (!seg || seg.i !== s.seg) setupSegment(s.seg); retries = 0; phase = 'intro'; pt = 0; L(`window:${step} ${mt.toFixed(2)}`); }
+    } else {
+      fade = Math.max(fade, clamp((mt - (w.a - T.out)) / T.out, 0, 1));
+      if (mt >= w.a) { fade = 1; beginPause(); }
+    }
+  }
+  /** Fim da janela pela música: interrompe o trecho (ataques e barreiras somem) e segue. */
+  function cutSegment() {
+    L(`cut:${step} ${mt.toFixed(2)}`);
+    for (const p of projectiles) killProjectile(p, 6); projectiles = [];
+    for (const w of warnings) removeWarning(w); warnings = [];
+    for (const b of barriers) killBarrier(b);
+    for (const w of walls) killWall(w);
+    setPreview(false); kAct = null; hideMsg();
+    nextStep();
+  }
+  function beginPause() {                                            // fragmento ou final: gancho de integração ou pausa neutra
+    const s = STEPS[step], w = TL[step], my = ++token; phase = s.k === 'F' ? 'frag' : 'end'; pt = 0; fade = 1;
+    clearAll(); seg = null; camSnap = true;                           // no preto a câmera já fica na de jogo para a volta
+    const done = () => { if (my !== token || !active) return; hideMsg(); token++; finishPause(); };
+    const info = { start: w.a, end: w.b, duration: w.b - w.a, confirmed: w.fixed, time: () => mt };
+    if (s.k === 'F') {
+      L(`frag:${s.color}:${s.pass} ${mt.toFixed(2)}`);
+      if (fragHandler) { phase = 'fragWait'; fragHandler(Object.assign({ index: s.index, color: s.color, pass: s.pass }, info), done); }
+      else showMsg(`fragmento ${s.color} · ${s.pass}ª passagem — conteúdo pendente`, COLOR_HEX[s.color]);
+    } else {
+      L(`end ${mt.toFixed(2)}`);
+      if (finaleHandler) { phase = 'endWait'; finaleHandler(info, done); }
+      else showMsg('encerramento — pendente', '#ffffff');
+    }
+    pauseDone = done;
+  }
+  let pauseDone = null;
+  function finishPause() {
+    const s = STEPS[step];
+    if (s.k === 'F') { fragmentsDone = Math.max(fragmentsDone, s.index + 1); nextStep(); }
+    else { phase = 'done'; active = false; ctx.onFinish && ctx.onFinish(); }
+  }
+  function fail() {
+    if (phase !== 'play' && phase !== 'intro' && phase !== 'clear') return;
+    phase = 'fail'; pt = 0; L('fail'); sfx('fail'); setPreview(false);
+  }
+
+  // ---------- Conduzir ----------
+  /** Ponto válido para o objeto: na grade, longe dos personagens, visível e com espaço para puxar (vale para qualquer lado de dentro). */
+  function pickObjSpot() {
+    for (let k = 0; k < 200; k++) {
+      const x = -5.2 + Math.random() * 10.4, z = -7.0 + Math.random() * 13.0;
+      if (Math.hypot(x - P_POS.x, z - P_POS.z) < 3.4 || Math.hypot(x - K_POS.x, z - K_POS.z) < 2.6) continue;
+      if (Math.hypot(x - CIRCLE_HOME.x, z - CIRCLE_HOME.z) < 1.2) continue;
+      return { x, z };
+    }
+    return { x: -3.5, z: -2.0 };
+  }
+  function setupGuide() {
+    const o = pickObjSpot();
+    seg.guide = { x: o.x, z: o.z, state: 'idle', t: 0, attract: false, armed: false, tension: 0, pullTo: null, passed: 0, endT: -1,
+      portal: null, kTried: false };
+    obj.position.set(o.x, GUIDE.objY, o.z); obj.scale.setScalar(1); obj.visible = true;
+    const pts = []; for (let i = 0; i <= 48; i++) { const a = i / 48 * Math.PI * 2; pts.push({ x: o.x + Math.cos(a) * GUIDE.grabR * 0.85, z: o.z + Math.sin(a) * GUIDE.grabR * 0.85 }); }
+    footRing.userData.set(pts, 0.035); footRing.visible = true;
+    L(`guide:obj ${o.x.toFixed(2)},${o.z.toFixed(2)}`);
+  }
+  function clearGuide() {
+    obj.visible = false; footRing.visible = false; tether.visible = false; tetherLine.visible = false; portal.visible = false;
+    for (const ch of ws.children.slice()) if (ch !== wsGrid) { ws.remove(ch); }
+  }
+  /** Romper: o portal nasce no lugar do objeto, de frente para quem puxou (sem depois girar). */
+  function rupture(dx, dz, by) {
+    const g = seg.guide; let l = Math.hypot(dx, dz) || 1, nx = dx / l, nz = dz / l;
+    // a câmera de jogo precisa olhar a face de entrada (senão não se vê o outro lado)
+    const cx = CAMS.game.pos.x - g.x, cz = CAMS.game.pos.z - g.z, cl = Math.hypot(cx, cz), ux = cx / cl, uz = cz / cl;
+    for (let i = 0; i < 30 && nx * ux + nz * uz < 0.55; i++) { nx += ux * 0.15; nz += uz * 0.15; l = Math.hypot(nx, nz); nx /= l; nz /= l; }
+    g.portal = { x: g.x, z: g.z, nx, nz, tx: -nz, tz: nx, k: 0 };
+    g.state = 'form'; g.t = 0; g.by = by;
+    obj.visible = false; footRing.visible = false; tether.visible = false; tetherLine.visible = false;
+    portal.position.set(g.x, H_PROJ, g.z); portal.rotation.set(0, Math.atan2(nx, nz), 0); portal.visible = true; shapePortal(0.01, time);
+    wsGridMat.uniforms.uC.value.set(g.x, g.z);
+    spawnShards(g.x, GUIDE.objY, g.z, 16, 0.9, 2.2); sfx('struct'); L(`guide:rupture ${by} ${nx.toFixed(2)},${nz.toFixed(2)}`);
+  }
+  /** Atravessou a abertura: passa para o vazio branco (segue reto, não persegue mais nada). */
+  function passThrough(p) {
+    p.through = true; p.kClaim = false; seg.guide.passed++;
+    const o = p.obj; if (o.parent) o.parent.remove(o); ws.add(o);
+    o.userData.edges.material = WSM.edge; o.userData.trail.material = WSM.trail; o.userData.claim.visible = false;
+    if (p.src) { p.src.busy = false; p.src = null; }
+    sfx('reflect'); L('guide:pass');
+  }
+  /** Missil: vira no máximo GUIDE.turn rad/s em direção ao alvo do momento (círculo ou o alvo original). */
+  function steer(p, dt) {
+    const g = seg && seg.guide, toC = g && g.attract;
+    const gx = toC ? cpos.x : p.tx, gz = toC ? cpos.z : p.tz;
+    const want = Math.atan2(gz - p.z, gx - p.x), cur = Math.atan2(p.vz, p.vx);
+    let d = want - cur; d = Math.atan2(Math.sin(d), Math.cos(d));
+    const a = cur + clamp(d, -GUIDE.turn * dt, GUIDE.turn * dt);
+    p.vx = Math.cos(a) * p.speed; p.vz = Math.sin(a) * p.speed;
+  }
+  /** Quantos ainda precisam atravessar (inclui os disparos que nem saíram). */
+  const guidePending = () => seg.shotIdx < seg.def.shots.length || warnings.some(w => !w.done) || projectiles.some(p => p.alive && !p.through);
+  function updateGuide(dt) {
+    const g = seg.guide, def = seg.def; g.t += dt;
+    while (seg.shotIdx < def.shots.length && seg.t >= def.shots[seg.shotIdx][0]) { const [, from, tg, v] = def.shots[seg.shotIdx++]; createWarning(from, tg, v); }
+    // o K abre o portal sozinho só nos trechos finais (autonomia já alta)
+    if (def.kOpens && g.state === 'idle' && !g.kTried && kLevel() >= GUIDE.kLevel && seg.t >= GUIDE.kDelay) { g.kTried = true; g.state = 'kpull'; g.t = 0; L('guide:kpull'); }
+    if (g.state === 'grab') {
+      const d = Math.hypot(cpos.x - g.x, cpos.z - g.z); g.tension = Math.min(1, d / GUIDE.pull);
+      if (d >= GUIDE.pull) rupture(cpos.x - g.x, cpos.z - g.z, 'P');
+    } else if (g.state === 'release') { g.tension = Math.max(0, g.tension - dt / 0.35); if (g.tension <= 0) g.state = 'idle'; }
+    else if (g.state === 'kpull') { g.tension = ease(g.t / GUIDE.kOpenT); if (g.t >= GUIDE.kOpenT) rupture(cpos.x - g.x, cpos.z - g.z, 'K'); }
+    else if (g.state === 'form') { g.portal.k = ease(g.t / GUIDE.formT); if (g.t >= GUIDE.formT) { g.state = 'open'; g.t = 0; g.portal.k = 1; } }
+    else if (g.state === 'closing') { g.portal.k = 1 - ease(g.t / GUIDE.closeT); if (g.t >= GUIDE.closeT) { g.state = 'closed'; portal.visible = false; toClear(); return; } }
+    // conclusão: tudo lançado e nada pendente → espera 2–3 s com o portal aberto (os transferidos seguem pelo branco) e fecha
+    if (!guidePending() && g.state !== 'closing' && g.state !== 'closed') {
+      if (g.endT < 0) g.endT = seg.t;
+      const open = g.state === 'open' || g.state === 'form';
+      if (open && seg.t - g.endT >= GUIDE.closeDelay) { g.state = 'closing'; g.t = 0; L('guide:close'); }
+      else if (!open && seg.t - g.endT >= 0.8) { L('guide:end'); toClear(); }
+    } else if (guidePending()) g.endT = -1;
+  }
+  function updateGuideVisuals() {
+    const g = seg && seg.guide; if (!g) return;
+    if (g.state === 'idle' || g.state === 'grab' || g.state === 'release' || g.state === 'kpull') {
+      // pontas que mudam dezenas de vezes por segundo; com tensão, puxadas para o lado do puxão e mais compridas
+      let px = 0, pz = 0, py = 0; const T2 = g.tension || 0;
+      let to = null;
+      if (g.state === 'grab' || (g.state === 'release' && g.pullTo)) to = g.pullTo = new THREE.Vector3(cpos.x, 0.04, cpos.z);
+      if (g.state === 'kpull') { const a = KU.arms.find(x => x.s === g.kSide) || KU.arms[0]; to = kWrist(a).localToWorld(new THREE.Vector3(0, -0.1, 0)); }
+      if (to) { const d = to.clone().sub(obj.position).normalize(); px = d.x; py = d.y; pz = d.z; }
+      obj.position.set(g.x + px * 0.3 * T2, GUIDE.objY + py * 0.3 * T2, g.z + pz * 0.3 * T2);
+      obj.scale.set(1 + 0.5 * T2 * Math.abs(px), 1 + 0.5 * T2 * Math.abs(py), 1 + 0.5 * T2 * Math.abs(pz));
+      const lp = spikeLineGeo.attributes.position;
+      spikes.forEach((sp, i) => {
+        if (Math.random() < 0.55) {                                    // troca de forma irregular (várias vezes por segundo, nem todas juntas)
+          sp.d.set(Math.random() * 2 - 1, Math.random() * 2 - 1, Math.random() * 2 - 1).normalize();
+          if (T2 > 0) sp.d.lerp(new THREE.Vector3(px, py, pz), 0.6 * T2).normalize();
+          sp.l = (0.3 + Math.random() * 0.5) * (1 + 0.8 * T2);
+        }
+        sp.m.quaternion.setFromUnitVectors(_up, sp.d); sp.m.scale.set(1 - 0.4 * T2, sp.l, 1 - 0.4 * T2);
+        lp.setXYZ(i * 2, 0, 0, 0); lp.setXYZ(i * 2 + 1, sp.d.x * sp.l, sp.d.y * sp.l, sp.d.z * sp.l);
+      });
+      lp.needsUpdate = true;
+      objHalo.quaternion.copy(camera.quaternion);
+      footRing.visible = g.state === 'idle' || g.state === 'release';
+      footRing.material.uniforms.uOp.value = Math.hypot(cpos.x - g.x, cpos.z - g.z) <= GUIDE.grabR ? 0.95 : 0.5;
+      footRing.material.uniforms.uShift.value += 0.004;
+      // a ponta esticada até o círculo (ou até a mão do K): afina e clareia com a tensão
+      const show = to && (g.state === 'grab' || g.state === 'kpull' || (g.state === 'release' && T2 > 0.02));
+      tether.visible = tetherLine.visible = !!show;
+      if (show) {
+        const from = obj.position, end = g.state === 'release' ? from.clone().lerp(to, T2) : to;
+        const len = from.distanceTo(end), r = 0.07 * (1 - 0.75 * T2) + 0.012;
+        tether.position.copy(from); tether.lookAt(end); tether.scale.set(r, r, len);
+        const tp = tetherLineGeo.attributes.position; tp.setXYZ(0, from.x, from.y, from.z); tp.setXYZ(1, end.x, end.y, end.z); tp.needsUpdate = true;
+        const c = 0.6 + 0.4 * T2; tetherLine.material.color.setRGB(c, c, c * 1.02); tetherLine.material.opacity = 0.5 + 0.5 * T2 * (0.8 + 0.2 * Math.sin(time * 40 * T2));
+      }
+    }
+    if (g.portal && portal.visible) shapePortal(Math.max(0.01, g.portal.k), time);
+  }
+  /** Antes de desenhar a batalha: o vazio branco visto pela câmera da batalha (só com o portal aberto). */
+  function prerender() {
+    if (!active || !portal.visible || !ctx.renderer) return;
+    const R = ctx.renderer, sz = R.getDrawingBufferSize(new THREE.Vector2());
+    if (!wsRT || wsRT.width !== sz.x || wsRT.height !== sz.y) { if (wsRT) wsRT.dispose(); wsRT = new THREE.WebGLRenderTarget(sz.x, sz.y); }
+    winMat.uniforms.tWS.value = wsRT.texture; winMat.uniforms.uRes.value.copy(sz);
+    const prev = R.getRenderTarget(); R.setRenderTarget(wsRT); R.render(ws, camera); R.setRenderTarget(prev);
+  }
+
+  // ---------- defesa do K ----------
+  /** O caminho restante de p já está coberto por uma barreira/parede que ainda vai existir quando ele chegar lá? */
+  function covered(p) {
+    const px = p.x, pz = p.z, dx = p.tx - px, dz = p.tz - pz, L2 = Math.hypot(dx, dz) || 1, ux = dx / L2, uz = dz / L2, R = BLOCK.r + PR;
+    for (const b of barriers) {
+      if (!b.alive) continue;
+      const t = segT(px, pz, p.tx, p.tz, b.seg);                        // a placa corta o caminho restante?
+      if (t >= 0 && b.life - b.age >= Math.max(0, t * L2 - R) / p.speed + 0.05) return true;
+    }
+    for (const w of walls) if (w.alive) for (const s of w.segs) {
+      const t = segT(px, pz, p.tx, p.tz, s);
+      if (t >= 0 && w.life - w.age >= t * L2 / p.speed + 0.05) return true;
+    }
+    return false;
+  }
+  function kEvaluate(p) {
+    p.evaluated = true;
+    const lv = kLevel(); if (lv < 1 || !seg || seg.mech === 'guide' || kAct) return;
+    const d = kDef(lv), chance = p.target === 'K' ? (d.self ? d.chance : 0) : (d.other || 0);
+    if (!chance || covered(p) || time - lastKDef < d.gap || Math.random() >= chance) return;
+    const dx = p.tx - p.x, dz = p.tz - p.z, l = Math.hypot(dx, dz) || 1;
+    const bx = p.tx - dx / l * 1.4, bz = p.tz - dz / l * 1.4;
+    p.kClaim = true; p.obj.userData.claim.visible = true; lastKDef = time;
+    kAct = { proj: p, t: 0, hes: d.hesitate, bx, bz, s: bx >= K_POS.x ? 1 : -1, made: false, cancel: false, back: 0 };
+    L('kclaim');
+  }
+  function updateK(dt) {
+    if (!kAct) return;
+    const a = kAct; a.t += dt;
+    if (!a.made && !a.cancel && a.t >= a.hes) {
+      const p = a.proj;
+      if (!p.alive || p.reflected) a.cancel = true;
+      else if (covered(p)) { a.cancel = true; L('kcancel'); }     // o jogador já cobriu: abaixa o braço
+      else {
+        addBarrier(a.bx, a.bz, 'K', a.proj); a.made = true; lastKDef = time; L('kdef'); sfx('barrier');
+        traceT = 0.5;
+      }
+      if (a.cancel) { p.kClaim = false; if (p.alive) p.obj.userData.claim.visible = false; }
+    }
+    if (a.made || a.cancel) a.back += dt;
+    if (a.back > 0.7) kAct = null;
+  }
+
+  // ---------- laço por fase ----------
+  function moveCircle(dt) {
+    const ax = input.axis(); let x = ax.x, z = ax.z; const l = Math.hypot(x, z); if (l > 1) { x /= l; z /= l; }
+    cpos.x = clamp(cpos.x + x * CIRCLE_SPEED * dt, LIM.x0 + CIRCLE_R, LIM.x1 - CIRCLE_R);
+    cpos.z = clamp(cpos.z + z * CIRCLE_SPEED * dt, LIM.z0 + CIRCLE_R, LIM.z1 - CIRCLE_R);
+  }
+  function actionInput() {
+    const act = mouseDown || simAct || input.held('Space'), click = act && !prevAct; prevAct = act;
+    if (phase !== 'play' || !seg) return;
+    if (seg.mech === 'block') {
+      if (click && !slotFree()) L('slots:full');                    // 2 vagas ocupadas: não cria nem gasta a ação
+      else if (click && time - lastBar >= BLOCK.cooldown) { lastBar = time; addBarrier(cpos.x, cpos.z, 'P'); sfx('barrier'); L('barrier'); gest = { t: 0, x: cpos.x, z: cpos.z }; }
+    } else if (seg.mech === 'reflect') {
+      if (click && !drawing && !slotFree()) L('slots:full');      // não começa a desenhar sem vaga
+      if (act && !drawing && slotFree()) { drawing = { pts: [{ x: cpos.x, z: cpos.z }], len: 0, atLimit: false }; setPreview(true); }
+      if (act && drawing) {
+        const last = drawing.pts[drawing.pts.length - 1], d = dist(last, cpos);
+        if (d >= REFL.step) {
+          if (drawing.len + d <= REFL.maxLen) { drawing.pts.push({ x: cpos.x, z: cpos.z }); drawing.len += d; }
+          else if (!drawing.atLimit) {                               // completa até o limite exato e para de acrescentar
+            const r = REFL.maxLen - drawing.len; if (r > 0.05) { drawing.pts.push({ x: last.x + (cpos.x - last.x) * r / d, z: last.z + (cpos.z - last.z) * r / d }); drawing.len = REFL.maxLen; }
+            drawing.atLimit = true;
+          }
+        }
+      }
+      if (!act && drawing) {
+        const last = drawing.pts[drawing.pts.length - 1], d = dist(last, cpos);
+        if (!drawing.atLimit && d > 0.05) {                         // cauda até o círculo, cortada no limite (igual à prévia)
+          const r = Math.min(d, REFL.maxLen - drawing.len);
+          if (r > 0.05) { drawing.pts.push({ x: last.x + (cpos.x - last.x) * r / d, z: last.z + (cpos.z - last.z) * r / d }); drawing.len += r; }
+        }
+        const len = drawing.len, pts = mergeShort(rdp(drawing.pts, REFL.eps), REFL.minSeg);
+        setPreview(false);
+        if (len >= REFL.minLen && pts.length >= 2) addWall(pts);
+      }
+    } else if (seg.mech === 'guide') {
+      const g = seg.guide, pull = rightDown || input.held('KeyE');
+      g.attract = act && g.armed;                                     // só depois do 1º lançamento (segurar antes não adianta, mas vale assim que ele surge)
+      if (g.state === 'idle' && pull && Math.hypot(cpos.x - g.x, cpos.z - g.z) <= GUIDE.grabR) { g.state = 'grab'; g.t = 0; L('guide:grab'); }
+      else if (g.state === 'grab' && !pull) { g.state = 'release'; g.t = 0; L('guide:release'); }
+    }
+  }
+  function updateProjectiles(dt) {
+    for (const p of projectiles) {
+      if (!p.alive) continue;
+      p.age += dt;
+      if (p.homing && !p.through) steer(p, dt);
+      const x1 = p.x + p.vx * dt, z1 = p.z + p.vz * dt;
+      if (p.through) {                                                 // no vazio branco: reto, sem alvo; some longe ou quando o portal fecha
+        p.x = x1; p.z = z1; const g = seg && seg.guide;
+        if (!g || !g.portal || Math.hypot(p.x - g.portal.x, p.z - g.portal.z) > GUIDE.far) { killProjectile(p); continue; }
+        const o = p.obj; o.position.set(p.x, H_PROJ, p.z); o.rotation.y = Math.atan2(p.vx, p.vz); o.userData.spin.rotation.z += dt * 2.2;
+        continue;
+      }
+      if (p.homing && seg && seg.guide && seg.guide.portal && seg.guide.portal.k > 0.8) {   // cruzou a abertura pela face de entrada?
+        const P = seg.guide.portal, d0 = (p.x - P.x) * P.nx + (p.z - P.z) * P.nz, d1 = (x1 - P.x) * P.nx + (z1 - P.z) * P.nz;
+        if (d0 > 0 && d1 <= 0) {
+          const f = d0 / (d0 - d1), u = (p.x + (x1 - p.x) * f - P.x) * P.tx + (p.z + (z1 - p.z) * f - P.z) * P.tz;
+          if (Math.abs(u) <= GUIDE.passW * P.k) { p.x = x1; p.z = z1; passThrough(p); p.obj.position.set(p.x, H_PROJ, p.z); continue; }
+        }
+      }
+      // 1) barreiras (de pé o bastante para cobrir a altura de voo)
+      let hit = false;
+      for (const b of barriers) {
+        if (!b.alive || b.age < BLOCK.rise * 0.5) continue;
+        if (wallHit(p.x, p.z, x1, z1, b.seg)) { killProjectile(p, 9, 0); killBarrier(b); sfx('block'); L(b.owner === 'K' ? 'block:K' : 'block'); hit = true; break; }
+      }
+      if (hit) continue;
+      // 2) paredes: reflexão no plano horizontal
+      let refl = null, wall = null;
+      for (const w of walls) { if (!w.alive || w.obj.scale.y * REFL.h < H_PROJ) continue; for (const s of w.segs) { const r = wallHit(p.x, p.z, x1, z1, s); if (r) { refl = r; wall = w; break; } } if (refl) break; }
+      if (refl) {
+        const vn = p.vx * refl.nx + p.vz * refl.nz;
+        p.vx -= 2 * vn * refl.nx; p.vz -= 2 * vn * refl.nz;
+        p.x = refl.cx + refl.nx * 0.03; p.z = refl.cz + refl.nz * 0.03;
+        // ajuda de mira (pequena): se volta quase exatamente para a estrutura que disparou, segue até ela
+        const s = p.src;
+        if (s && s.alive && seg && seg.structures.includes(s)) {
+          const dx = s.x - p.x, dz = s.z - p.z, l = Math.hypot(dx, dz), c = (p.vx * dx + p.vz * dz) / (l * p.speed);
+          if (l > 1e-6 && c > Math.cos(REFL.assist)) { p.vx = dx / l * p.speed; p.vz = dz / l * p.speed; }
+        }
+        p.reflected = true; p.kClaim = false; p.obj.userData.claim.visible = false; if (p.src) { p.src.busy = false; p.src = null; }
+        killWall(wall); spawnShards(p.x, H_PROJ, p.z, 4, 0); sfx('reflect'); L('reflect');
+        continue;
+      }
+      // 3) alvo (só quem não foi refletido) / estruturas e figura (só refletidos)
+      if (!p.reflected) {
+        const pulled = p.homing && seg && seg.guide && seg.guide.attract;   // atraído pelo círculo: não atinge ninguém no caminho
+        if (!pulled && segDist2(p.tx, p.tz, p.x, p.z, x1, z1) <= HIT_R * HIT_R) { killProjectile(p, 12); impact(p.target); continue; }
+        if (!p.evaluated && Math.hypot(p.tx - p.x, p.tz - p.z) / p.speed <= p.kEval) kEvaluate(p);
+      } else if (seg) {
+        let done = false;
+        for (const s of seg.structures) if (s.alive && segDist2(s.x, s.z, p.x, p.z, x1, z1) <= STRUCT.hitR ** 2) { killProjectile(p, 10); structOff(s); done = true; break; }
+        if (done) continue;
+        if (Math.hypot(x1 - F_POS.x, z1 - F_POS.z) < 1.6) { killProjectile(p, 6); L('figDissolve'); continue; }
+      }
+      p.x = x1; p.z = z1;
+      if (Math.abs(p.x) > BOUND.x || Math.abs(p.z) > BOUND.z) { killProjectile(p); continue; }
+      const o = p.obj; o.position.set(p.x, H_PROJ, p.z); o.rotation.y = Math.atan2(p.vx, p.vz); o.userData.spin.rotation.z += dt * 2.2;
+      if (p.kClaim) { const c = o.userData.claim; c.scale.setScalar(1 + 0.12 * Math.sin(time * 10)); }
+    }
+    projectiles = projectiles.filter(p => p.alive);
+  }
+  function structOff(s) {
+    s.alive = false; s.die = 0; L('structOff'); sfx('struct');
+    spawnShards(s.x, H_PROJ, s.z, 14, 0.6, 2);
+  }
+  function impact(who) {
+    const dmg = who === 'P' ? DMG.P : (kLevel() >= 2 ? DMG.K2 : DMG.K);
+    stab[who] = Math.max(0, stab[who] - dmg); lastHit[who] = time; react[who] = 1; shakeT = 0.18;
+    const c = charPos(who); spawnShards(c.x, 1.0, c.z, 10, 0.5, 1.8);
+    L('impact:' + who); sfx('impact');
+    if (stab[who] <= 0) fail();
+  }
+  function updateWarnings(dt) {
+    for (const w of warnings) {
+      w.t += dt;
+      if (!w.done) {
+        const k = Math.min(1, w.t / Math.max(0.01, w.dur));
+        w.line.material.uniforms.uOp.value = 0.25 + 0.6 * k * (0.75 + 0.25 * Math.sin(w.t * 14));
+        w.pulse.visible = true; w.pulse.quaternion.copy(camera.quaternion); w.pulse.scale.setScalar(0.7 + 0.5 * k + 0.12 * Math.sin(w.t * 16));
+        w.pulse.material.opacity = 0.3 + 0.55 * k;
+        if (w.t >= w.dur) launch(w);
+      } else {
+        if (w.fis && !w.fisOff && w.t - w.dur > 0.35) { w.fisOff = true; w.fis.want = Math.max(0, w.fis.want - 1); }   // a fissura se fecha depois do disparo
+        w.line.material.uniforms.uOp.value = 0.13;                               // durante o voo: bem fraca (para saber onde pôr a barreira)
+        if (!w.proj.alive || w.proj.reflected) w.gone = true;
+      }
+    }
+    warnings = warnings.filter(w => { if (w.gone) { removeWarning(w); return false; } return true; });
+  }
+  function updateSegment(dt) {
+    seg.t += dt; const def = seg.def;
+    if (seg.mech === 'block') {
+      while (seg.shotIdx < def.shots.length && seg.t >= def.shots[seg.shotIdx][0]) { const [, from, tg, v] = def.shots[seg.shotIdx++]; createWarning(from, tg, v); }
+      if (seg.shotIdx >= def.shots.length && !warnings.length && !projectiles.length) toClear();
+    } else if (seg.mech === 'reflect') {
+      for (const s of seg.structures) if (s.alive && !s.busy && seg.t >= s.next) { createWarning(s, s.target, s.speed); s.next = seg.t + s.period; }
+      if (def.figEvery && seg.t >= seg.figNext) { createWarning('fig', seg.figTgt++ % 2 ? 'K' : 'P', 6.5); seg.figNext = seg.t + def.figEvery; }
+      if (seg.structures.every(s => !s.alive)) toClear();
+    } else if (seg.mech === 'guide') { updateGuide(dt); if (phase !== 'play') return; }
+    // regeneração lenta
+    for (const w of ['P', 'K']) if (time - lastHit[w] > REGEN.wait) stab[w] = Math.min(100, stab[w] + REGEN.rate * dt);
+  }
+  function toClear() {
+    phase = 'clear'; pt = 0; setPreview(false);
+    for (const p of projectiles) killProjectile(p, p.through ? 0 : 6); projectiles = [];
+    for (const w of warnings) removeWarning(w); warnings = [];
+    if (seg && seg.guide) { clearGuide(); seg.guide.state = 'closed'; }
+    L('clear');
+  }
+
+  // ---------- transparência localizada ----------
+  // Quem estiver entre a câmera e um elemento interativo (projétil, aviso, estrutura, núcleo/área, círculo) fica translúcido
+  // só enquanto cobrir; nada muda de lugar nem de colisão.
+  const OCC = { op: 0.32, h: { P: 1.75, K: 1.9 }, r: 0.42 };
+  const _p = new THREE.Vector3(), _q = new THREE.Vector3();
+  const charBox = who => {                                           // retângulo do personagem na tela (NDC) e distância à câmera
+    const c = charPos(who), h = OCC.h[who]; let x0 = 9, x1 = -9, y0 = 9, y1 = -9;
+    for (const dx of [-OCC.r, OCC.r]) for (const dz of [-OCC.r, OCC.r]) for (const y of [0, h]) {
+      _p.set(c.x + dx, y, c.z + dz).project(camera); x0 = Math.min(x0, _p.x); x1 = Math.max(x1, _p.x); y0 = Math.min(y0, _p.y); y1 = Math.max(y1, _p.y);
+    }
+    return { x0, x1, y0, y1, d: camera.position.distanceTo(_q.set(c.x, h / 2, c.z)) };
+  };
+  function interactivePoints() {
+    const pts = [];
+    for (const p of projectiles) if (p.alive && !p.through) pts.push([p.x, H_PROJ, p.z]);
+    for (const w of warnings) if (!w.done) pts.push([w.ox, H_PROJ, w.oz]);
+    if (seg) {
+      for (const st of seg.structures) if (st.alive) pts.push([st.x, H_PROJ, st.z]);
+      if (seg.guide && obj.visible) { pts.push([obj.position.x, obj.position.y, obj.position.z], [seg.guide.x, 0.05, seg.guide.z]); }
+      if (seg.guide && portal.visible) pts.push([portal.position.x, H_PROJ, portal.position.z]);
+    }
+    if (circle.visible) pts.push([cpos.x, 0.05, cpos.z]);
+    return pts;
+  }
+  function updateOcclusion(dt) {
+    camera.updateMatrixWorld();
+    const pts = phase === 'play' || phase === 'intro' || phase === 'clear' || phase === 'wait' ? interactivePoints() : [];
+    for (const who of ['P', 'K']) {
+      const b = charBox(who); let cover = false;
+      for (const [x, y, z] of pts) {
+        _p.set(x, y, z); const d = camera.position.distanceTo(_p); if (d < b.d - 0.2) continue;   // está na frente dele: não é coberto
+        _p.project(camera);
+        if (_p.x > b.x0 - 0.01 && _p.x < b.x1 + 0.01 && _p.y > b.y0 - 0.01 && _p.y < b.y1 + 0.01) { cover = true; break; }
+      }
+      const was = occ[who]; occ[who] += ((cover ? OCC.op : 1) - occ[who]) * Math.min(1, dt * 9);
+      if (Math.abs(occ[who] - was) < 1e-4 && dt > 0) continue;
+      for (const m of who === 'P' ? [whiteMat] : kMats) { m.opacity = m.userData.op * occ[who]; m.depthWrite = occ[who] > 0.98; }
+    }
+  }
+
+  // ---------- visuais por quadro ----------
+  function updateVisuals(dt) {
+    // círculo
+    circle.position.x = cpos.x; circle.position.z = cpos.z;
+    circle.visible = phase === 'intro' || phase === 'play' || phase === 'clear' || phase === 'fail';
+    updatePreview();
+    // barreiras
+    barriers = barriers.filter(b => {
+      b.age += dt;
+      if (b.alive) { b.obj.scale.set(1, Math.max(0.001, ease(b.age / BLOCK.rise)), 1); shine(b.obj.userData, b.age); if (b.age >= b.life) killBarrier(b); return true; }
+      b.die += dt; const k = b.die / 0.15; b.obj.scale.set(1 + 0.25 * k, Math.max(0.001, 1 - k), 1 + 0.25 * k); shine(b.obj.userData, b.age, Math.max(0, 1 - k));
+      if (k >= 1) { barPool[b.owner].put(b.obj); return false; } return true;
+    });
+    walls = walls.filter(w => {
+      w.age += dt;
+      if (w.alive) { w.obj.scale.y = Math.max(0.001, ease(w.age / 0.16)); shine(w.obj.userData, w.age); if (w.age >= w.life) killWall(w); return true; }
+      w.die += dt; w.obj.scale.y = Math.max(0.001, 1 - w.die / 0.15); shine(w.obj.userData, w.age, Math.max(0, 1 - w.die / 0.15));
+      if (w.die >= 0.15) { disposeWall(w); return false; } return true;
+    });
+    // estilhaços
+    shards = shards.filter(m => {
+      const u = m.userData; u.age += dt; if (u.age >= u.life) { shardPool.put(m); return false; }
+      u.vy -= 4 * dt; m.position.x += u.vx * dt; m.position.y = Math.max(0.03, m.position.y + u.vy * dt); m.position.z += u.vz * dt;
+      m.rotation.x += u.w * dt; m.rotation.y += u.w * 0.7 * dt; m.scale.setScalar(u.s0 * (1 - u.age / u.life)); return true;
+    });
+    // fissuras: abrem no aviso, pulsam, disparam e se fecham
+    for (const f of Object.values(fissures)) {
+      f.open += ((f.want > 0 ? 1 : 0) - f.open) * Math.min(1, dt * (f.want > 0 ? 6 : 3));
+      if (f.open < 0.01) { f.g.visible = false; continue; }
+      f.g.visible = true; const pu = 1 + 0.06 * Math.sin(time * 12) * f.open;
+      f.g.scale.set(f.open * pu, 0.3 + 0.7 * f.open, 1);
+    }
+    // estruturas
+    if (seg) for (const s of seg.structures) {
+      const o = s.obj, b = o.userData.body;
+      if (s.alive) { o.position.y = H_PROJ + 0.06 * Math.sin(time * 1.3 + s.x); b.rotation.y += dt * 0.5; const w = warnings.find(x => x.src === s && !x.done); o.userData.em.opacity = w ? 0.6 + 0.4 * Math.sin(w.t * 16) : 0.9; }
+      else if (s.die >= 0) {
+        s.die += dt; const k = s.die / 0.6;
+        o.userData.em.color.set('#7a7a80'); o.userData.em.opacity = Math.max(0, 0.7 * (1 - k)) * (Math.sin(s.die * 50) > 0 ? 1 : 0.3);
+        b.scale.set(0.6 * (1 - 0.6 * k), 1.55 * (1 - k), 0.6 * (1 - 0.6 * k)); o.position.y -= dt * 0.8; b.rotation.z += dt * 2;
+        if (k >= 1) { o.visible = false; s.die = -1; b.scale.set(0.6, 1.55, 0.6); }
+      }
+    }
+    updateGuideVisuals();
+    // estabilidade
+    for (const w of ['P', 'K']) {
+      const u = stabRing[w].material.uniforms, fl = Math.max(0, 1 - (time - lastHit[w]) / 0.4);
+      u.uFrac.value = stab[w] / 100; u.uA.value = 0.5 + 0.5 * fl * (Math.sin(time * 40) > 0 ? 1 : 0.3); u.uBase.value = 0.07 + 0.2 * fl;
+      stabRing[w].visible = phase !== 'frag' && phase !== 'fragWait' && phase !== 'end' && phase !== 'endWait';
+    }
+    // traço de luz do K
+    if (traceT > 0 && kAct && kAct.made) {
+      traceT -= dt; const a = KU.arms.find(x => x.s === kAct.s), hp = kWrist(a).localToWorld(new THREE.Vector3(0, -0.1, 0)), pa = traceGeo.attributes.position;
+      pa.setXYZ(0, hp.x, hp.y, hp.z); pa.setXYZ(1, kAct.bx, H_PROJ, kAct.bz); pa.needsUpdate = true; trace.material.opacity = 0.9 * Math.max(0, traceT / 0.5);
+    } else trace.material.opacity = 0;
+    animateChars(dt);
+    // câmera (troca suave entre as duas; tremor curto e sutil num impacto) e transparência de quem cobre algo interativo
+    updateCamera(dt); updateOcclusion(dt);
+    if (shakeT > 0) { shakeT -= dt; const a = 0.035 * shakeT / 0.18; camera.position.x += (Math.random() - 0.5) * a; camera.position.y += (Math.random() - 0.5) * a; }
+  }
+  const _v = new THREE.Vector3();
+  function animateChars(dt) {
+    const lv = kLevel(), firm = lv / 4;
+    for (const w of ['P', 'K']) react[w] = Math.max(0, react[w] - dt / 0.5);
+    // jogador: respira, olha para o círculo, gesticula com a ação, recua no impacto
+    const rp = react.P, low = 1 - stab.P / 100;
+    pHold.rotation.x = 0.22 * Math.sin(rp * Math.PI) ; pHold.position.x = P_POS.x + (rp > 0 ? (Math.random() - 0.5) * 0.06 * rp : 0);
+    PB.torso.rotation.z = -0.1 * low; PB.torso.scale.y = 1 + 0.012 * Math.sin(time * 1.8);
+    const dx = cpos.x - P_POS.x, dz = cpos.z - P_POS.z, ang = Math.atan2(dx, -dz);
+    PB.head.rotation.y = -clamp(ang, -0.7, 0.7) * 0.6; PB.head.rotation.z = -0.18 - 0.08 * low;
+    let pk = 0, ps = cpos.x >= P_POS.x ? 1 : -1, ptgt = _v.set(cpos.x, 0.8, cpos.z);
+    if (gest) { gest.t += dt; const t = gest.t; pk = t < 0.12 ? t / 0.12 : t < 0.32 ? 1 : Math.max(0, 1 - (t - 0.32) / 0.35); ps = gest.x >= P_POS.x ? 1 : -1; ptgt.set(gest.x, 0.8, gest.z); if (t > 0.7) gest = null; }
+    else if (drawing) pk = 0.8;
+    else if (seg && seg.guide && phase === 'play' && seg.guide.state === 'grab') { pk = 0.85; ps = seg.guide.x >= P_POS.x ? 1 : -1; ptgt.set(seg.guide.x, GUIDE.objY, seg.guide.z); }
+    else if (seg && seg.guide && phase === 'play' && seg.guide.attract) pk = 0.6;
+    for (const a of pModel.userData.arms) { a.k = (a.k || 0) + ((a.s === ps ? pk : 0) - (a.k || 0)) * Math.min(1, dt * 12); reachArm(pModel, a.s, ptgt, a.k); }
+    // K: postura vulnerável no começo, mais firme com a autonomia; olha o que vem para ele; gesto da defesa
+    const rk = react.K, lowK = 1 - stab.K / 100;
+    kHold.rotation.x = 0.26 * Math.sin(rk * Math.PI); kHold.position.x = K_POS.x + (rk > 0 ? (Math.random() - 0.5) * 0.07 * rk : 0);
+    KU.torso.rotation.z = -(0.2 * (1 - firm) + 0.1 * lowK) + 0.006 * Math.sin(time * 1.5);
+    KU.torso.scale.y = 1 + 0.012 * Math.sin(time * 1.6 + 1);
+    let look = 0; const inc = projectiles.find(p => p.alive && p.target === 'K' && !p.reflected);
+    if (inc) { const a = Math.atan2(inc.x - K_POS.x, -(inc.z - K_POS.z)); look = clamp(a, -0.8, 0.8); }
+    KU.head.rotation.y += ((-look * 0.7) - KU.head.rotation.y) * Math.min(1, dt * 4);
+    KU.head.rotation.z = -(0.26 * (1 - firm) + 0.1 * lowK) + 0.03 * Math.sin(time * 0.7);
+    for (const a of KU.arms) {
+      let k = 0, tgt = _v.set(a.s * 2 + K_POS.x, 0.6, K_POS.z - 1.5);
+      const kp = seg && seg.guide && seg.guide.state === 'kpull';
+      if (kp && a.s === (seg.guide.kSide || (seg.guide.kSide = seg.guide.x >= K_POS.x ? 1 : -1))) { tgt.set(seg.guide.x, GUIDE.objY, seg.guide.z); k = 0.35 + 0.6 * ease(seg.guide.t / 0.6); }   // gesto de puxar a ponta
+      else if (kAct && kAct.s === a.s) {
+        tgt.set(kAct.bx, 1.2, kAct.bz);
+        if (kAct.made) k = Math.max(0, 1 - kAct.back / 0.7);
+        else if (kAct.cancel) k = Math.max(0, 0.5 - kAct.back);
+        else { const e = ease(kAct.t / kAct.hes); k = 0.25 + 0.4 * e + 0.08 * Math.sin(kAct.t * 11) * (1 - e); }   // hesitante
+      } else if (firm < 0.5) { k = 0.18 * (1 - firm * 2); tgt.set(K_POS.x - a.s * 0.1, 1.0, K_POS.z - 0.6); }   // braços meio encolhidos (vulnerável)
+      a.k = (a.k || 0) + (k - (a.k || 0)) * Math.min(1, dt * 10); reachArm(K, a.s, tgt, a.k);
+    }
+    // figura: respira devagar, inclina a cabeça para o jogador, ergue o braço ao disparar
+    FU.torso.scale.y = 1 + 0.01 * Math.sin(time * 0.9);
+    if (FU.head) { FU.head.rotation.z = -0.12 + 0.03 * Math.sin(time * 0.4); FU.head.rotation.y = 0.06 * Math.sin(time * 0.27); }
+    let fk = 0, fs = 1, ft = _v.set(0, 3, 0);
+    if (figGest) { figGest.t += dt; const t = figGest.t, d = figGest.dur; fk = (t < 0.35 ? t / 0.35 : t < d - 0.4 ? 1 : Math.max(0, (d - t) / 0.4)) * (figGest.soft ? 0.55 : 1); fs = figGest.s; ft.copy(figGest.pt); if (t >= d) figGest = null; }
+    for (const a of FU.arms) { a.k = (a.k || 0) + ((a.s === fs ? fk : 0) - (a.k || 0)) * Math.min(1, dt * 8); reachArm(fig, a.s, ft, a.k); }
+    figMat.uniforms.uGlow.value = 0.25 * fk;
+  }
+
+  // ---------- rótulo ----------
+  let labelOn = false, labelText = '';
+  function updateLabel() {
+    const on = !!seg && (phase === 'play' || phase === 'clear' || (phase === 'intro' && pt > 0.4));
+    const txt = seg ? LABEL[seg.mech][document.body.classList.contains('touch-on') ? 1 : 0] : '';
+    if (txt !== labelText) { label.textContent = txt; labelText = txt; }
+    if (on !== labelOn) { labelOn = on; label.style.display = 'block'; label.style.opacity = on ? '1' : '0'; }
+  }
+
+  function update(dt, paused) {
+    if (!active || paused) return;
+    if (music) { music.update(Math.min(dt, 0.5)); mt = music.time; } else mt += Math.min(dt, 0.05);   // (o relógio da música anda pelo tempo real)
+    dt = Math.min(dt, 0.05); time += dt; pt += dt;
+    const s0 = STEPS[step];                                           // a janela do trecho acabou (a música manda): interrompe e segue
+    if (s0 && s0.k === 'S' && (phase === 'intro' || phase === 'play' || phase === 'clear' || phase === 'fail') && mt >= TL[step].b) cutSegment();
+    switch (phase) {
+      case 'wait': stepWait(dt); break;
+      case 'intro':
+        fade = Math.max(0, fade - dt / T.fadeIn);
+        if (fade <= 0) moveCircle(dt);
+        actionInput(); updateWarnings(dt); updateProjectiles(dt); updateK(dt);
+        if (pt >= T.intro && phase === 'intro') { phase = 'play'; pt = 0; fade = 0; }
+        break;
+      case 'play':
+        moveCircle(dt); actionInput();
+        updateSegment(dt);
+        if (phase === 'play' || phase === 'clear') { updateWarnings(dt); updateProjectiles(dt); updateK(dt); }
+        break;
+      case 'clear':
+        moveCircle(dt); actionInput(); updateK(dt);
+        if (pt >= T.clear) {
+          for (const b of barriers) killBarrier(b);                   // limpa barreiras, paredes e a prévia
+          for (const w of walls) killWall(w);
+          setPreview(false); kAct = null; nextStep();
+        }
+        break;
+      case 'fail': {
+        const left = TL[step].b - mt;
+        if (pt > T.freeze) fade = Math.min(1, fade + dt / T.out);
+        if (pt > T.freeze + T.out && msg.style.display !== 'flex' && left >= RETRY_MIN + T.failMsg) showMsg('Recomeçando o trecho…');
+        if (pt >= T.freeze + T.out + T.failMsg || (pt >= T.freeze + T.out && left < RETRY_MIN + T.failMsg)) {
+          hideMsg();
+          if (left >= RETRY_MIN) { retries++; const i = step; setupSegment(STEPS[i].seg); phase = 'intro'; pt = 0; fade = 1; L(`retry:${i}`); }
+          else { L(`retry:skip:${step}`); cutSegment(); }              // pouca janela: a música segue para o próximo
+        }
+        break;
+      }
+      case 'frag': case 'end':                                         // pausa neutra: dura o trecho da música
+        if (mt >= TL[step].b && pauseDone) pauseDone();
+        break;
+    }
+    if (!active) { setVeil(0); return; }
+    updateVisuals(dt);
+    updateLabel(); setVeil(fade);
+  }
+
+  /** Começa no passo i (0 = apresentação): a música vai para pouco antes dele e toca dali. */
+  function goTo(i) {
+    i = Math.max(0, Math.min(STEPS.length - 1, i | 0));
+    token++; hideMsg(); pauseDone = null; clearAll(); seg = null;
+    step = i; pt = 0; phase = 'wait'; fade = 1;
+    fragmentsDone = STEPS.slice(0, i).filter(s => s.k === 'F').length;
+    const s = STEPS[i];
+    mt = i === 0 ? 0 : Math.max(0, TL[i].a - (s.k === 'S' ? PRE + 0.2 : T.out + 0.05));
+    if (music) music.play(mt);
+    camK = i === 0 ? 1 : 0;                                           // a apresentação abre na câmera de impacto
+    L(`start:${i} ${mt.toFixed(2)}`);
+  }
+  function start(opts = {}) {
+    stopInner();
+    active = true; time = 0; log = []; retries = 0; lastBar = -9; lastKDef = -99;
+    paintWhite();
+    key.position.set(CAMS.game.pos.x + 2, CAMS.game.pos.y + 7, CAMS.game.pos.z + 2); key.target.position.set(0, 0, 0);
+    goTo(opts.step | 0);
+    updateVisuals(0); setVeil(fade);
+  }
+  function stopInner() {
+    token++; clearAll(); seg = null; hideMsg(); setVeil(0); label.style.display = 'none'; label.style.opacity = '0'; labelOn = false;
+    mouseDown = false; simAct = false; rightDown = false; prevAct = false; pauseDone = null;
+  }
+
+  return {
+    scene, camera,
+    start,
+    stop() { stopInner(); active = false; fade = 0; phase = 'idle'; if (music) music.fadeOut(0.8); },
+    update,
+    get active() { return active; }, get fade() { return fade; },
+    get joystick() { return active && !!seg && (phase === 'play' || phase === 'clear' || (phase === 'intro' && fade <= 0) || (phase === 'wait' && camK < 0.02)); },
+    get actionLabel() { return active && seg && phase === 'play' ? ACTION[seg.mech] : null; },
+    get action2Label() { return active && seg && phase === 'play' && seg.mech === 'guide' && seg.guide && (seg.guide.state === 'idle' || seg.guide.state === 'grab' || seg.guide.state === 'release') ? 'Puxar' : null; },
+    prerender,
+    setFragmentHandler(fn) { fragHandler = fn || null; },
+    setFinaleHandler(fn) { finaleHandler = fn || null; },
+    // ---- ganchos de teste ----
+    get step() { return step; }, get stepKind() { return STEPS[step] ? STEPS[step].k : null; },
+    get segIndex() { return STEPS[step] && STEPS[step].k === 'S' ? STEPS[step].seg : -1; },
+    get mech() { return seg ? seg.mech : null; }, get phase() { return phase; },
+    get circle() { return { x: cpos.x, z: cpos.z }; },
+    get projectiles() { return projectiles.map(p => ({ id: p.id, x: p.x, y: H_PROJ, z: p.z, vx: p.vx, vz: p.vz, target: p.target, reflected: p.reflected, alive: p.alive, kClaim: p.kClaim })); },
+    get barriers() { return barriers.map(b => ({ x: b.x, z: b.z, owner: b.owner, y0: H_PROJ - BLOCK.h / 2 * (b.alive ? ease(b.age / BLOCK.rise) : Math.max(0, 1 - b.die / 0.15)), y1: H_PROJ + BLOCK.h / 2 * (b.alive ? ease(b.age / BLOCK.rise) : Math.max(0, 1 - b.die / 0.15)), nx: b.seg.nx, nz: b.seg.nz, age: b.age, life: b.life, alive: b.alive })); },
+    get walls() { return walls.map(w => ({ pts: w.pts.map(p => ({ x: p.x, z: p.z })), alive: w.alive, preview: false })); },
+    get preview() { return drawing ? drawing.pts.map(p => ({ x: p.x, z: p.z })) : null; }, get previewLen() { return drawing ? drawing.len : 0; },
+    get structures() { return seg ? seg.structures.map(s => ({ x: s.x, z: s.z, alive: s.alive })) : []; },
+    get guide() { const g = seg && seg.guide; return g ? { x: g.x, z: g.z, state: g.state, attract: g.attract, armed: g.armed, tension: g.tension, passed: g.passed, portal: g.portal ? { ...g.portal } : null, by: g.by || null } : null; },
+    get through() { return projectiles.filter(p => p.alive && p.through).map(p => ({ x: p.x, z: p.z, vx: p.vx, vz: p.vz, inWhite: !!p.obj.parent && p.obj.parent === ws })); },
+    _pull(down) { rightDown = !!down; },
+    get stab() { return { P: stab.P, K: stab.K }; }, get kLevel() { return kLevel(); }, get fragmentsDone() { return fragmentsDone; },
+    get retries() { return retries; }, get log() { return log.slice(); },
+    _jump(i) { if (active) goTo(i); },
+    /** Teste: leva a música (e o relógio) a t segundos. */
+    _time(t) { mt = t; if (music) music._set(t); },
+    get musicTime() { return mt; }, get camK() { return camK; }, get occ() { return { P: occ.P, K: occ.K }; },
+    _setCircle(x, z) { cpos.x = clamp(x, LIM.x0 + CIRCLE_R, LIM.x1 - CIRCLE_R); cpos.z = clamp(z, LIM.z0 + CIRCLE_R, LIM.z1 - CIRCLE_R); },
+    _action(down) { simAct = !!down; },
+    _fire({ from = 'fig', target = 'K', speed = 6.5, warn = 0 } = {}) { const w = createWarning(from, target, speed, warn); return w.proj ? w.proj.id : null; },
+    _setStab(who, v) { stab[who] = v; if (v <= 0) fail(); },
+    _skipIntro() { if (phase === 'intro') { phase = 'play'; pt = 0; fade = 0; } },
+    GRID, H_PROJ, BLOCK, REFL, P_SLOTS, get slots() { return slotsUsed(); }, GUIDE, K_DEF, STEPS, SEGMENTS, CAMS, TL, MUS, FIN_PLAN,
+  };
+}

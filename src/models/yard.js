@@ -512,7 +512,8 @@ function gnome() {
 // Varal com roupas: dois postes em T, varal ao longo de X, camisa, calça, toalha listrada e meia.
 // As roupas balançam, já inclinadas pelo vento em direção à câmera (ficam mais visíveis).
 // =====================================================================================
-function clothesline() {
+/** frozen (Nevasca): roupas duras, sem balançar, com gelo/neve nas bordas e pingentes nas pontas. */
+function clothesline(frozen = false) {
   const g = group();
   const hx = 2.05, top = 2.9, ly = top - 0.12;
   for (const sx of [-1, 1]) {
@@ -549,6 +550,19 @@ function clothesline() {
     g.add(m);
     return m;
   });
+  if (frozen) {
+    const BOT = { shirt: -0.96, pants: -1.15, towel: -0.98, sock: -0.73 }, W = { shirt: 0.78, pants: 0.66, towel: 0.66, sock: 0.4 };
+    garments.forEach(([key], i) => {
+      const p = parts[i], w = W[key], b = BOT[key];
+      p.rotation.set(-0.12, 0, 0);                                                          // duras, quase retas
+      p.add(at(box(w + 0.06, 0.07, 0.09, '#f4fbff'), 0, -0.04, 0));                         // neve em cima
+      p.add(at(box(w + 0.04, 0.06, 0.08, '#dff3ff'), 0, b + 0.02, 0));                      // gelo na barra
+      for (const s of [-1, 0.2, 1]) if (key !== 'sock' || s === 0.2) p.add(at(cone(0.035, 0.12 + Math.abs(s) * 0.06, '#cfeeff', 5), s * w * 0.38, b - 0.08, 0, Math.PI, 0, 0));   // pingentes
+      for (const sx of [-1, 1]) p.add(at(box(0.05, -b * 0.8, 0.075, '#e8f6ff'), sx * w / 2, b * 0.45, 0));   // geada nas laterais
+    });
+    g.add(limb([-hx, ly + 0.03, 0], [hx, ly + 0.03, 0], 0.03, 0.03, '#f4fbff', 4));          // neve sobre o varal
+    return g;
+  }
   const LEAN = -0.45; // vento soprando para +Z
   g.userData.update = t => {
     for (let i = 0; i < parts.length; i++) {
@@ -644,6 +658,8 @@ function fountain() {
   return g;
 }
 
+/** Nevasca: o mesmo quintal, com o varal congelado. */
+export const YARD_BUILDERS_SNOW = () => ({ ...YARD_BUILDERS, clothesline: () => clothesline(true) });
 export const YARD_BUILDERS = {
   fruit, bare, cactus, sunflowers, ballbush, doghouse, pool, trampoline,
   swing, bike, flamingo, gnome, clothesline, tires, fountain,

@@ -64,6 +64,12 @@ const CSS = `
   font-size: var(--ahud-count); font-weight: bold; white-space: nowrap;
 }
 .ahud-count svg { width: 1.12em; height: 1.12em; flex: none; display: block; }
+/* celular em pé: sem o nome ao lado do ícone (o Voltar ocupa a esquerda) e a linha de cima alta o bastante para a pista não passar por baixo dele */
+@media (max-width: 560px) { .ahud-logo span { display: none; } .ahud-top { min-height: 40px; } }
+/* telas médias: as dicas de teclado quebram linha em vez de sumirem com "…" */
+@media (max-width: 1100px) { .ahud-sub { white-space: normal; text-overflow: clip; } }
+/* no mapa da Carreira o contador de entregas não tem sentido */
+body.on-map .ahud-count { visibility: hidden; }
 .ahud-count b { font-variant-numeric: tabular-nums; }
 
 /* ---------- texto principal (pista / fala), até 2 linhas ---------- */
@@ -339,6 +345,10 @@ export function createHUD(hudEl, stageEl) {
       if (!visible || !Number.isFinite(x) || !Number.isFinite(y)) {
         if (promptOn) { promptOn = false; prompt.classList.remove('on'); }
         return;
+      }
+      if (side === 'up') {                                         // perto da borda: o balão inteiro continua na tela (no celular ele é um botão)
+        const W = prompt.parentElement ? prompt.parentElement.clientWidth : innerWidth;
+        if (x < 160 || x > W - 160 || y < 80) { const w = prompt.offsetWidth || 0, h = prompt.offsetHeight || 0; x = Math.min(Math.max(x, w / 2 + 8), W - w / 2 - 8); y = Math.max(y, h + 8); }
       }
       x = Math.round(x); y = Math.round(y);
       if (side !== promptSide) {

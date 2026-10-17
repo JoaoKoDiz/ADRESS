@@ -1,6 +1,9 @@
 // Bloqueios de rua sorteados a cada partida:
 //   Bairro 3 — 3 a 5 cavaletes de obra (amarelos e pretos);
-//   Bairro 4 — 4 a 6 bloqueios misturando cavaletes, caminhões parados atravessados e buracos no asfalto.
+//   Bairro 4 — 4 a 6 bloqueios misturando cavaletes, caminhões parados na diagonal e buracos no asfalto;
+//   Bairro 7 — só caminhões na diagonal + 3 a 4 ENGARRAFAMENTOS (fila de carros ocupando um trecho inteiro de rua).
+//   O engarrafamento tampa o trecho todo: ninguém passa em frente ao lote do lado norte desse trecho (a casa/prédio dele),
+//   por isso `jammedSlots` lista esses lotes e o jogo nunca os sorteia para as entregas.
 // Nunca isolam nada: o sorteio só é aceito se, pelo grafo de ruas, TODOS os cruzamentos e TODOS os portões
 // continuam alcançáveis a partir da entrada — às vezes só é preciso dar uma volta maior.
 //
@@ -9,18 +12,21 @@
 //   uma das pontas ('L' ou 'R'), cortando só aquela metade: o portão continua acessível pela outra ponta.
 //   Trecho vertical (coluna j, entre as linhas i e i+1): I(j,i) — I(j,i+1). A barreira fica no meio e corta o trecho.
 import * as THREE from 'three';
-import { ROAD, GRID, ENTRANCE, GAS_LIST, roadCenter, SOLIDS } from './layout.js';
-import { mat, box, cyl, cone, at } from './models/kit.js';
+import { ROAD, GRID, ENTRANCE, GAS_LIST, HOUSE_SLOTS, roadCenter, SOLIDS } from './layout.js';
+import { mat, box, cyl, cone, at, dynamic, bakeStatic } from './models/kit.js';
 
 const START = () => [ENTRANCE.road, 0];   // cruzamento da entrada (rua central, borda norte)
 // Por tipo: distância do centro do cruzamento até o bloqueio (trechos horizontais, perto de uma ponta)
 // e meia espessura do obstáculo ao longo da rua. Tudo fica fora do cruzamento e longe do portão (meio do trecho).
+// cross = meia largura do obstáculo ao longo da largura da rua: não vai de ponta a ponta, mas deixa vãos
+// (~1,1 de cada lado) mais estreitos que a van (2,6), então ainda não dá para passar.
 const TYPES = {
-  barrier: { offset: ROAD / 2 + 1.0, half: 0.35 },
-  truck: { offset: ROAD / 2 + 1.9, half: 1.45 },
-  hole: { offset: ROAD / 2 + 2.3, half: 2.1 },
+  barrier: { offset: ROAD / 2 + 1.0, half: 0.35, cross: 2.7 },
+  truck: { offset: ROAD / 2 + 3.0, half: 2.9, cross: 2.9 },
+  hole: { offset: ROAD / 2 + 1.7, half: 1.5, cross: 2.7 },
 };
 
+const BARRIER_W = 5.0;            // largura do cavalete (a rua tem 7,6)
 function stripeTexture() {
   const c = document.createElement('canvas');
   c.width = 256; c.height = 64;
@@ -31,14 +37,14 @@ function stripeTexture() {
   const t = new THREE.CanvasTexture(c);
   t.colorSpace = THREE.SRGBColorSpace;
   t.wrapS = THREE.RepeatWrapping;
-  t.repeat.set((ROAD - 0.6) / 2.2, 1);
+  t.repeat.set(BARRIER_W / 2.2, 1);
   return t;
 }
 
 /** Cavalete de obra atravessando a rua (tábuas listradas ao longo de X, pernas em A, luzinhas). */
 function buildBarrier(stripes) {
   const g = new THREE.Group();
-  const W = ROAD - 0.6;
+  const W = BARRIER_W;
   const boardMat = new THREE.MeshStandardMaterial({ map: stripes, roughness: 0.7 });
   for (const y of [0.55, 1.05]) {
     const b = new THREE.Mesh(new THREE.BoxGeometry(W, 0.34, 0.12), boardMat);
@@ -73,7 +79,7 @@ function buildBarrier(stripes) {
   return g;
 }
 
-/** Caminhão baú parado atravessado na rua (comprimento ao longo do X local). */
+/** Caminhão baú parado na diagonal da rua (comprimento ao longo do X local). */
 const TRUCK_COLORS = ['#f2f2f2', '#3a78d4', '#d8473a', '#efbf2a', '#3c9d55'];
 function buildTruck() {
   const g = new THREE.Group();
@@ -86,10 +92,11 @@ function buildTruck() {
   for (const x of [-2.9, -1.4, 2.4]) for (const zz of [1.2, -1.2]) {
     g.add(at(cyl(0.5, 0.5, 0.4, '#1f2023', 12), x, 0.5, zz, Math.PI / 2, 0, 0));
   }
-  g.add(at(box(6.6, 0.3, 2.0, '#2e3036'), -0.2, 0.55, 0));                      // chassi
+  g.add(at(box(6.6, 0.3, 2.0, '#2e3036'), -0.15, 0.55, 0));                      // chassi
   const lamp = mat('#ff9a1a', { emissive: '#ff7a00', emissiveIntensity: 1 });   // pisca-alerta
   for (const zz of [1.0, -1.0]) { const l = new THREE.Mesh(new THREE.SphereGeometry(0.16, 8, 6), lamp); l.position.set(3.5, 1.2, zz); g.add(l); }
   g.traverse(o => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
+  g.scale.setScalar(0.8);                      // menor: na diagonal não toma a rua de ponta a ponta
   g.userData.cargo = cargo;
   return g;
 }
@@ -112,14 +119,50 @@ function buildHole() {
     g.add(at(cone(0.3, 0.85, '#ff7a1a', 10), x, 0.43, zz));
     g.add(at(cyl(0.19, 0.23, 0.13, '#ffffff', 10), x, 0.48, zz));
   }
+  g.scale.setScalar(0.68);                     // mais estreito que a rua
   g.traverse(o => { if (o.isMesh) o.receiveShadow = true; });
+  return g;
+}
+
+/** Engarrafamento: fila de carros nas duas faixas ao longo de um trecho de rua (ao longo do X local). */
+export const CAR_COLORS = ['#d8473a', '#3a78d4', '#efbf2a', '#3c9d55', '#f2f2f2', '#8a55c4', '#ff8a1e', '#2b2d33', '#e86aa0'];
+export function buildCar() {
+  const g = new THREE.Group();
+  const body = at(box(4.4, 0.9, 1.9, CAR_COLORS[0]), 0, 0.85, 0);
+  g.add(body);
+  g.add(at(box(2.2, 0.8, 1.7, '#dfe6ee'), -0.3, 1.68, 0));                                   // cabine (vidros)
+  g.add(at(box(2.0, 0.08, 1.6, '#7b828c'), -0.3, 2.12, 0));                                  // teto
+  for (const x of [-1.4, 1.4]) for (const zz of [0.95, -0.95]) g.add(at(cyl(0.42, 0.42, 0.3, '#1f2023', 10), x, 0.42, zz, Math.PI / 2, 0, 0));
+  const brake = mat('#ff3b30', { emissive: '#ff1a1a', emissiveIntensity: 1.1 }), head = mat('#fff3c0', { emissive: '#ffe9a0', emissiveIntensity: 0.4 });
+  for (const zz of [0.7, -0.7]) {
+    const r = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.25, 0.4), brake); r.position.set(-2.2, 0.95, zz); g.add(r);   // luzes de freio
+    const f = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.22, 0.4), head); f.position.set(2.2, 0.95, zz); g.add(f);
+  }
+  g.traverse(o => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
+  g.userData.body = body;
+  return g;
+}
+const JAM_CARS = [-5.4, 0, 5.4];                  // 3 carros por faixa (trecho livre: ~16,8)
+function buildJam() {
+  const g = new THREE.Group();
+  g.userData.cars = [];
+  for (const lane of [1, -1]) for (const x of JAM_CARS) {
+    const c = buildCar();
+    c.position.set(x, 0, lane * ROAD / 4);
+    c.rotation.y = lane > 0 ? 0 : Math.PI;       // mão dupla: uma faixa para cada lado
+    dynamic(c.userData.body);                     // (a carroceria troca de cor a cada partida: fica separada)
+    g.add(c); g.userData.cars.push(c);
+  }
+  bakeStatic(g);                                  // rodas, vidros, faróis… dos 6 carros viram poucas malhas
   return g;
 }
 
 const key = (...a) => a.join(',');
 
-/** O conjunto de barreiras deixa tudo alcançável a partir da entrada? */
-function allReachable(blocked) {
+/** O conjunto de barreiras deixa tudo alcançável a partir da entrada? (`skipM`: portões dos trechos engarrafados, que ficam de fora de propósito) */
+let TOPO = { blocked: new Set(), skip: new Set(), exclude: new Set(), heightAt: () => 0 };   // ver layout.roadTopology()
+function allReachable(blocked0, skipM = new Set()) {
+  const blocked = new Set([...TOPO.blocked, ...blocked0]);
   const N = GRID;
   const adj = new Map();
   const link = (a, b) => { (adj.get(a) || adj.set(a, []).get(a)).push(b); (adj.get(b) || adj.set(b, []).get(b)).push(a); };
@@ -130,10 +173,11 @@ function allReachable(blocked) {
   for (let j = 0; j <= N; j++) for (let i = 0; i < N; i++) {        // trechos verticais
     if (!blocked.has(key('V', j, i))) link(key('I', j, i), key('I', j, i + 1));
   }
-  const total = (N + 1) * (N + 1) + N * (N + 1);
+  const total = (N + 1) * (N + 1) + N * (N + 1) - skipM.size - TOPO.skip.size;
   const seen = new Set([key('I', ...START())]);
   const queue = [key('I', ...START())];
   while (queue.length) for (const n of adj.get(queue.shift()) || []) if (!seen.has(n)) { seen.add(n); queue.push(n); }
+  for (const m of skipM) if (seen.has(m)) return false;      // (um portão engarrafado não deveria ser alcançável: garante que o trecho está mesmo fechado)
   return seen.size === total;
 }
 
@@ -141,40 +185,70 @@ export function createBarriers() {
   const stripes = stripeTexture();
   const group = new THREE.Group();
   group.name = 'barriers';
-  const pools = { barrier: [], truck: [], hole: [] };   // modelos reaproveitados entre partidas
+  const pools = { barrier: [], truck: [], hole: [], jam: [] };   // modelos reaproveitados entre partidas
   const build = { barrier: () => buildBarrier(stripes), truck: buildTruck, hole: buildHole };
   let solids = [];
   let current = [];
+  let jamRects = [];
+  let jammed = [];                               // lotes (índices) que ficam sem acesso por causa de um engarrafamento
+  let list = [];                                 // bloqueios da partida (missões do Bairro 3): { id, kind 'H'|'V', j, i, side, x, z, type }
 
   function clear() {
     for (const s of solids) { const i = SOLIDS.indexOf(s); if (i >= 0) SOLIDS.splice(i, 1); }
-    solids = []; current = [];
+    solids = []; current = []; jammed = []; jamRects = []; list = [];
     Object.values(pools).forEach(p => p.forEach(b => { b.visible = false; }));
   }
 
   /** Sorteia de `min` a `max` bloqueios válidos (dos tipos `types`) e os coloca na cena `scene`. */
-  function randomize(scene, { min = 3, max = 5, types = ['barrier'] } = {}) {
+  function randomize(scene, { min = 3, max = 5, types = ['barrier'], jams = null, topo = null } = {}) {
     clear();
+    if (topo) TOPO = topo;
     scene.add(group);
     const N = GRID;
     const cands = [];
-    for (let i = 0; i <= N; i++) for (let j = 0; j < N; j++) cands.push(['H', j, i, 'L'], ['H', j, i, 'R']);
+    for (let i = 0; i <= N; i++) for (let j = 0; j < N; j++) if (!TOPO.exclude.has(key('H', j, i))) cands.push(['H', j, i, 'L'], ['H', j, i, 'R']);
     const gasSegs = new Set(GAS_LIST.map(g => key('V', g.slots[0] % N + 1, Math.floor(g.slots[0] / N))));   // ruas por dentro dos postos
-    for (let j = 0; j <= N; j++) for (let i = 0; i < N; i++) if (!gasSegs.has(key('V', j, i))) cands.push(['V', j, i]);
+    for (let j = 0; j <= N; j++) for (let i = 0; i < N; i++) if (!gasSegs.has(key('V', j, i)) && !TOPO.exclude.has(key('V', j, i)) && !TOPO.blocked.has(key('V', j, i))) cands.push(['V', j, i]);
     const want = min + Math.floor(Math.random() * (max - min + 1));
-    let chosen;
-    for (let tries = 0; tries < 40; tries++) {
-      for (let k = cands.length - 1; k > 0; k--) { const r = Math.floor(Math.random() * (k + 1)); [cands[k], cands[r]] = [cands[r], cands[k]]; }
-      chosen = []; const blocked = new Set(), segs = new Set();
+    const wantJams = jams ? jams.min + Math.floor(Math.random() * (jams.max - jams.min + 1)) : 0;
+    // engarrafamentos: trechos horizontais de rua com lotes ao norte (i ≥ 1); tampam o trecho inteiro
+    const jamCands = [];
+    const gasSlots = new Set(GAS_LIST.flatMap(g => g.slots));          // lote de posto não é destino de entrega: engarrafar ali não adiantaria
+    for (let i = 1; i <= N; i++) for (let j = 0; j < N; j++) if (!gasSlots.has((i - 1) * N + j) && HOUSE_SLOTS.includes((i - 1) * N + j) && !TOPO.exclude.has(key('H', j, i))) jamCands.push([j, i]);
+    const shuf = a => { for (let k = a.length - 1; k > 0; k--) { const r = Math.floor(Math.random() * (k + 1)); [a[k], a[r]] = [a[r], a[k]]; } };
+    let chosen, jamSegs;
+    for (let tries = 0; tries < 60; tries++) {
+      shuf(cands); shuf(jamCands);
+      chosen = []; jamSegs = [];
+      const blocked = new Set(), segs = new Set(), skipM = new Set();
+      for (const [j, i] of jamCands) {
+        if (jamSegs.length === wantJams) break;
+        blocked.add(key('H', j, i, 'L')); blocked.add(key('H', j, i, 'R')); skipM.add(key('M', j, i));
+        if (allReachable(blocked, skipM)) { jamSegs.push([j, i]); segs.add(key('H', j, i)); }
+        else { blocked.delete(key('H', j, i, 'L')); blocked.delete(key('H', j, i, 'R')); skipM.delete(key('M', j, i)); }
+      }
       for (const c of cands) {
         if (chosen.length === want) break;
         const seg = key(c[0], c[1], c[2]);
         if (segs.has(seg)) continue;               // no máximo uma barreira por trecho
         blocked.add(key(...c));
-        if (allReachable(blocked)) { chosen.push(c); segs.add(seg); } else blocked.delete(key(...c));
+        if (allReachable(blocked, skipM)) { chosen.push(c); segs.add(seg); } else blocked.delete(key(...c));
       }
-      if (chosen.length === want) break;
+      if (chosen.length === want && jamSegs.length === wantJams) break;
     }
+    const jamPool = pools.jam;
+    jamSegs.forEach(([j, i], n) => {
+      let b = jamPool[n];
+      if (!b) { b = jamPool[n] = buildJam(); group.add(b); }
+      b.visible = true;
+      b.userData.cars.forEach(c => { c.userData.body.material = mat(CAR_COLORS[Math.floor(Math.random() * CAR_COLORS.length)]); });
+      const x0 = roadCenter(j) + ROAD / 2 + 0.2, x1 = roadCenter(j + 1) - ROAD / 2 - 0.2, z = roadCenter(i);
+      b.position.set((x0 + x1) / 2, TOPO.heightAt((x0 + x1) / 2, z), z);
+      const s = { x0, x1, z0: z - ROAD / 2 - 0.1, z1: z + ROAD / 2 + 0.1 };
+      s.jam = true;                                // (contador de batidas: carro do engarrafamento)
+      SOLIDS.push(s); solids.push(s); jamRects.push(s);
+      jammed.push((i - 1) * N + j);                // o lote ao norte do trecho (sua porta dá para este trecho)
+    });
     const used = { barrier: 0, truck: 0, hole: 0 };
     chosen.forEach((c, n) => {
       const type = types[(n + Math.floor(Math.random() * types.length)) % types.length];
@@ -193,16 +267,19 @@ export function createBarriers() {
         const [, j, i] = c;
         x = roadCenter(j); z = (roadCenter(i) + roadCenter(i + 1)) / 2; alongX = false;
       }
-      b.position.set(x, 0, z);
-      b.rotation.y = (alongX ? Math.PI / 2 : 0) + (type === 'truck' && Math.random() < 0.5 ? Math.PI : 0);
+      b.position.set(x, TOPO.heightAt(x, z), z);
+      b.rotation.y = type === 'truck'
+        ? (Math.random() < 0.5 ? Math.PI / 4 : -Math.PI / 4) + (Math.random() < 0.5 ? Math.PI : 0)   // caminhão parado na diagonal
+        : alongX ? Math.PI / 2 : 0;
       if (type === 'truck') b.userData.cargo.material = mat(TRUCK_COLORS[Math.floor(Math.random() * TRUCK_COLORS.length)]);
-      const half = ROAD / 2 + 0.1;
-      const s = alongX ? { x0: x - T.half, x1: x + T.half, z0: z - half, z1: z + half }
-                       : { x0: x - half, x1: x + half, z0: z - T.half, z1: z + T.half };
+      const s = alongX ? { x0: x - T.half, x1: x + T.half, z0: z - T.cross, z1: z + T.cross }
+                       : { x0: x - T.cross, x1: x + T.cross, z0: z - T.half, z1: z + T.half };
+      s.bar = n;                                   // (contador de batidas e missões das barreiras)
       SOLIDS.push(s); solids.push(s);
+      list.push({ id: n, kind: c[0], j: c[1], i: c[2], side: c[0] === 'H' ? c[3] : null, x, z, type });
     });
     current = chosen;
   }
 
-  return { randomize, clear, get current() { return current; }, get count() { return current.length; } };
+  return { randomize, clear, get current() { return current; }, get count() { return current.length + jammed.length; }, get jammedSlots() { return jammed; }, get jamRects() { return jamRects; }, get list() { return list; } };
 }

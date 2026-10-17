@@ -3,6 +3,7 @@
 // A câmera de jogo olha do SUL para o NORTE (≈57° para baixo): tudo o que identifica uma casa fica na
 // fachada sul, na água sul do telhado, na cumeeira ou no quintal da frente.
 import * as THREE from 'three';
+import { buildReaderSpot } from './reader.js';
 import { mat, mesh, box, cyl, sphere, cone, at, dynamic, bakeStatic } from './kit.js';
 import { LOT, WALK, LOT_ANCHORS as A } from '../layout.js';
 import { ROOF_COL, DOOR_COL, DOOR_DEFAULT, WALL_COL } from '../data.js';
@@ -627,7 +628,7 @@ export function buildLot(house, { yardBuilders } = {}) {
   house.yardItems.forEach((key, i) => {
     const slot = A.yardSlots[i];
     if (!slot) return;
-    const z = key === 'bike' ? A.bikeZ : slot.z;
+    const z = key === 'bike' ? A.bikeZ : (house.yardZ && house.yardZ[key]) || slot.z;
     yardRects.push(key === 'bike'
       ? { x0: slot.x - 2.4, x1: slot.x + 2.4, z0: z - 1.2, z1: LOT }
       : { x0: slot.x - 2.3, x1: slot.x + 2.3, z0: z - 2.3, z1: z + 2.3 });
@@ -639,6 +640,14 @@ export function buildLot(house, { yardBuilders } = {}) {
     if (obj.userData && typeof obj.userData.update === 'function') updaters.push(t => obj.userData.update(t));
   });
 
+  // K: cadeira de balanço com ele lendo jornal (sempre ali; animado)
+  if (house.reader) {
+    const spot = buildReaderSpot(), rd = house.reader;
+    spot.position.set(rd.x, G, rd.z); spot.rotation.y = rd.rot; spot.scale.setScalar(0.9);
+    root.add(spot);
+    updaters.push(t => spot.userData.update(t));
+    yardRects.push({ x0: rd.x - 1.6, x1: rd.x + 1.6, z0: rd.z - 1.6, z1: rd.z + 1.6 });
+  }
   buildGround(root, house, rand, yardRects);
   buildFences(root, house);
   buildHouse(root, house);

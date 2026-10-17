@@ -5,16 +5,35 @@ import * as THREE from 'three';
 import { mat, box, cyl, sphere, cone, at, bakeStatic } from './kit.js';
 import { LOT, WALK, LOT_ANCHORS as A } from '../layout.js';
 import { BALCONY_COL } from '../data.js';
+import { buildLoungerReader } from './reader.js';
 
 const G = 0.12, WALK_TOP = 0.17;
 const X0 = 3.4, X1 = 13.8, Z0 = 1.2, Z1 = A.house.z1;
-const FLOOR = 2.8, FLOORS = 5, H = FLOOR * FLOORS;
-export const APT_HEIGHT = H + 0.6;                        // topo da platibanda (para a câmera e a dica)
+const FLOOR = 2.8;
+/** Andares dos prédios residenciais do bairro atual (5; no Bairro 8, mais altos). Definido por main.js ao trocar de bairro, ANTES de construir a cena. */
+// mixed (Bairro 10): prédios das duas alturas (índice ímpar = 9 andares, par = 5)
+export const APT_BUILD = { floors: 5, mixed: false };
+export const aptFloors = apt => APT_BUILD.mixed && apt ? (apt.index % 2 ? 9 : 5) : APT_BUILD.floors;
+const aptH = apt => FLOOR * aptFloors(apt);
+export const aptHeight = apt => aptH(apt) + 0.6;           // topo da platibanda (para a câmera e a dica)
+export const aptRoofY = apt => G + aptH(apt) + 0.65;
+/** Terraço (coordenadas locais do lote): onde o helicóptero pode pousar. */
+export const APT_ROOF = { x0: X0, x1: X1, z0: Z0, z1: Z1 };
+/** Altura do chão do terraço no ponto local (lx, lz) do lote: o teto, mais o que estiver ali em cima (caixa-d'água, jardim, piscina, painéis). */
+export function aptRoofHeight(apt, lx, lz) {
+  const y = aptRoofY(apt), cx = (X0 + X1) / 2, cz = (Z0 + Z1) / 2;
+  if (apt.atop === 'tank') return Math.hypot(lx - cx, lz - cz) < 2.1 ? y + 4.25 : y;     // pousa na tampa da caixa
+  if (apt.atop === 'garden') return y + 0.3;
+  if (apt.atop === 'pool') return Math.abs(lx - cx) < (X1 - X0 - 2) / 2 && Math.abs(lz - cz) < (Z1 - Z0 - 2.4) / 2 ? y + 0.37 : y;
+  if (apt.atop === 'solar') return lx < X0 + 9.5 && lz < Z0 + 5 ? y + 1.0 : y;
+  return y;
+}
 const CX = (X0 + X1) / 2, W = X1 - X0, D = Z1 - Z0;
 const GLASS = '#4a6a8a', FRAME = '#dcdcdc', DARK = '#3a3d44', CONCRETE = '#c4c0b8';
 const COLS = [X0 + 1.9, CX, X1 - 1.9];                   // três colunas de janelas na frente
 
 export function buildAptLot(apt) {
+  const FLOORS = aptFloors(apt), H = FLOOR * FLOORS;
   const root = new THREE.Group();
   root.name = 'apt:' + apt.name;
   const gray = apt.gray, rail = BALCONY_COL[apt.balcony];
@@ -84,7 +103,7 @@ export function buildAptLot(apt) {
   }
   if (has('fac:mural')) {                                       // grafite colorido na parede do térreo
     const MC = ['#ff3b3b', '#ffd12a', '#2f7fe0', '#2fbf5a', '#ff6fb5'];
-    for (let k = 0; k < 5; k++) root.add(at(box(1.1, 2.0, 0.06, MC[k]), X0 + 0.9 + k * 0.62, G + 1.3, Z1 + 0.05 + k * 0.004, 0, 0, (k % 2 ? 0.25 : -0.25)));
+    for (let k = 0; k < 5; k++) root.add(at(box(1.1, 2.0, 0.06, MC[k]), X0 + 0.9 + k * 0.62, G + 1.3, Z1 + 0.05 + k * 0.012, 0, 0, (k % 2 ? 0.25 : -0.25)));
     root.add(at(sphere(0.5, '#ffd12a', 8, 6), X0 + 2.2, G + 1.9, Z1 + 0.2));
   }
 
@@ -141,14 +160,21 @@ export function buildAptLot(apt) {
     }
   } else if (apt.atop === 'pool') {                             // piscina no terraço
     root.add(at(box(W - 2, 0.35, D - 2.4, '#f2f2f2'), CX, top + 0.18, (Z0 + Z1) / 2));
-    root.add(at(box(W - 3, 0.37, D - 3.4, '#36b6e6'), CX, top + 0.2, (Z0 + Z1) / 2));
-    for (const dx of [-3.5, -1.5]) root.add(at(box(1.0, 0.25, 2.0, '#ffffff'), CX + dx, top + 0.15, Z1 - 0.6));
+    root.add(at(box(W - 3, 0.33, D - 3.4, '#36b6e6'), CX, top + 0.18, (Z0 + Z1) / 2));
+    for (const dx of [-3.5, -1.5]) root.add(at(box(1.0, 0.25, 1.3, '#ffffff'), CX + dx, top + 0.15, Z1 - 0.55));
     root.add(at(cone(1.2, 0.5, '#ff6fa5', 10), CX + 3.5, top + 2.0, Z1 - 0.8));                  // guarda-sol
     root.add(at(cyl(0.05, 0.05, 1.8, '#ffffff', 6), CX + 3.5, top + 0.9, Z1 - 0.8));
+    if (apt.lounger) {                                          // prédio fixo do Bairro 6: o K na 2ª espreguiçadeira (main.js decide se aparece)
+      const lr = buildLoungerReader();
+      lr.position.set(CX - 1.5, top + 0.275, Z1 - 0.6); lr.rotation.y = Math.PI / 2;    // de frente para a piscina (norte); cabeceira na beirada
+      lr.visible = false;
+      root.add(lr);
+    }
   }
 
   root.traverse(o => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
   bakeStatic(root);
-  root.userData.update = () => {};
+  const lr = root.getObjectByName('lounger-reader');
+  root.userData.update = lr ? t => { if (lr.visible) lr.userData.update(t); } : () => {};
   return root;
 }

@@ -2,27 +2,32 @@
 // Tudo é um no-op seguro antes de unlock() ou se o navegador não tiver WebAudio — nada aqui lança exceção.
 
 const MASTER = 0.9;
+let musicVol = 1, sfxVol = 1, musicBus = null, fxHold = false;   // fxHold: efeitos calados (MENU aberto ou aba escondida)
 const ENGINE_MIN = 0.012, ENGINE_RANGE = 0.022;   // volume do motor: parado → velocidade máxima
 const ENGINE_HZ = 42, ENGINE_HZ_RANGE = 63;       // tom do motor (a 2ª onda toca uma oitava abaixo)
 const ENGINE_LP = 250, ENGINE_LP_RANGE = 120;     // filtro passa-baixa abre um pouco com a velocidade
 
 export function createAudio() {
   const Ctor = typeof window !== 'undefined' && (window.AudioContext || window.webkitAudioContext);
-  let ac = null, master = null, eng = null, broken = !Ctor;
+  let ac = null, master = null, eng = null, traf = null, fall = null, trafGain = -1, broken = !Ctor;
   // últimos alvos agendados no motor (evita empilhar automações a cada quadro)
   let engGain = -1, engHz = -1;
 
   const resume = () => {
     try {
-      if (ac && ac.state === 'suspended') { const p = ac.resume(); if (p && p.catch) p.catch(() => {}); }
+      if (ac && ac.state !== 'running' && ac.state !== 'closed') { const p = ac.resume();   // (inclui 'interrupted' do Safari/iOS)
+      if (p && p.catch) p.catch(() => {}); }
     } catch (e) { /* ignora */ }
   };
 
   function build() {
     ac = new Ctor();
     master = ac.createGain();
-    master.gain.value = MASTER;
+    master.gain.value = fxHold ? 0 : MASTER * sfxVol;
     master.connect(ac.destination);
+    musicBus = ac.createGain();                 // músicas tocadas pelo WebAudio (cenas, Grillby's, engarrafamentos)
+    musicBus.gain.value = musicVol;
+    musicBus.connect(ac.destination);
 
     // Motor: dente-de-serra + quadrada (oitava abaixo) → passa-baixa → ganho (começa mudo).
     const o = ac.createOscillator(), o2 = ac.createOscillator();
@@ -34,6 +39,21 @@ export function createAudio() {
     o.connect(f); o2.connect(f); f.connect(g); g.connect(master);
     o.start(); o2.start();
     eng = { o, o2, f, g };
+    // trânsito (Nível 14): um ronco mais grave, mais baixo, que cresce com o carro mais perto
+    const t1 = ac.createOscillator(), t2 = ac.createOscillator(), tf = ac.createBiquadFilter(), tg = ac.createGain();
+    t1.type = 'sawtooth'; t2.type = 'triangle'; t1.frequency.value = 58; t2.frequency.value = 87;
+    tf.type = 'lowpass'; tf.frequency.value = 220; tg.gain.value = 0;
+    t1.connect(tf); t2.connect(tf); tf.connect(tg); tg.connect(master); t1.start(); t2.start();
+    traf = { t1, t2, tg };
+    // cachoeira (Nível 23): ruído contínuo (rosa, em loop) → passa-baixa → ganho pela distância
+    const wl = ac.sampleRate * 3, wb = ac.createBuffer(1, wl, ac.sampleRate), wd = wb.getChannelData(0);
+    let b0 = 0, b1 = 0, b2 = 0;
+    for (let i = 0; i < wl; i++) { const w = Math.random() * 2 - 1; b0 = 0.997 * b0 + w * 0.029; b1 = 0.985 * b1 + w * 0.032; b2 = 0.95 * b2 + w * 0.048; wd[i] = (b0 + b1 + b2 + w * 0.02) * 0.9; }
+    for (let i = 0; i < 2000; i++) { const k = i / 2000; wd[i] = wd[i] * k + wd[wl - 2000 + i] * (1 - k); }   // emenda sem estalo
+    const ws = ac.createBufferSource(), wf = ac.createBiquadFilter(), wg = ac.createGain();
+    ws.buffer = wb; ws.loop = true; ws.loopEnd = (wl - 2000) / ac.sampleRate; wf.type = 'lowpass'; wf.frequency.value = 900; wg.gain.value = 0;
+    ws.connect(wf); wf.connect(wg); wg.connect(master); ws.start();
+    fall = { wf, wg, last: -1 };
   }
 
   /** Nota curta com ataque rápido e decaimento exponencial. `glide` multiplica a frequência ao longo da nota. */
@@ -64,15 +84,191 @@ export function createAudio() {
 
   const safe = fn => (...args) => { if (!ac) return; try { fn(...args); } catch (e) { /* som é opcional */ } };
 
+  // ---- Ursa Menor (Modo Livre): sons exagerados num barramento próprio (compressor evita estourar; end() corta tudo) ----
+  let ub = null;
+  function uT(freq, at, dur, type = 'sine', vol = 0.1, glide = 1) {
+    if (!ac || !ub) return;
+    const t0 = ac.currentTime + at, o = ac.createOscillator(), g = ac.createGain();
+    o.type = type; o.frequency.setValueAtTime(freq, t0);
+    if (glide !== 1) o.frequency.exponentialRampToValueAtTime(Math.max(20, freq * glide), t0 + dur);
+    g.gain.setValueAtTime(0, t0); g.gain.linearRampToValueAtTime(vol, t0 + Math.min(0.03, dur * 0.2)); g.gain.exponentialRampToValueAtTime(0.0008, t0 + dur);
+    o.connect(g); g.connect(ub); o.start(t0); o.stop(t0 + dur + 0.05);
+    o.onended = () => { try { o.disconnect(); g.disconnect(); } catch (e) { /* */ } };
+  }
+  /** swell: o volume sobe até o fim (em vez de cair). */
+  function uN(dur, vol, at = 0, lp = 1600, hp = 0, swell = false) {
+    if (!ac || !ub) return;
+    const len = Math.floor(ac.sampleRate * dur), buf = ac.createBuffer(1, len, ac.sampleRate), d = buf.getChannelData(0);
+    for (let i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * (swell ? Math.pow(i / len, 1.5) : Math.pow(1 - i / len, 2));
+    const s = ac.createBufferSource(), f = ac.createBiquadFilter(), g = ac.createGain();
+    s.buffer = buf; f.type = hp ? 'highpass' : 'lowpass'; f.frequency.value = hp || lp; g.gain.value = vol;
+    s.connect(f); f.connect(g); g.connect(ub); s.start(ac.currentTime + at);
+    s.onended = () => { try { s.disconnect(); f.disconnect(); g.disconnect(); } catch (e) { /* */ } };
+  }
+  const ursa = {
+    begin: safe(() => {
+      if (ub) { try { ub.disconnect(); if (ub._comp) ub._comp.disconnect(); } catch (e) { /* */ } }
+      const comp = ac.createDynamicsCompressor(); comp.threshold.value = -16; comp.ratio.value = 8; comp.attack.value = 0.003; comp.release.value = 0.25;
+      ub = ac.createGain(); ub.gain.value = 0.85; ub.connect(comp); comp.connect(master); ub._comp = comp;
+    }),
+    /** a constelação aparecendo: brilho mágico crescente, sinos cristalinos e um grave enorme */
+    shine: safe(() => {
+      [1318, 1568, 1976, 2349, 2637, 3136, 3951].forEach((f, i) => { uT(f, i * 0.22, 1.4, 'sine', 0.035 + i * 0.004); uT(f * 2.01, i * 0.22 + 0.01, 0.9, 'triangle', 0.012); });
+      uN(2.2, 0.05, 0, 0, 5000, true);
+      uT(44, 1.3, 2.4, 'sine', 0.22, 0.85); uT(66, 1.35, 2.2, 'triangle', 0.1, 0.8); uN(1.8, 0.12, 1.3, 220);
+    }),
+    /** viagem: aceleração, rajadas e passagens cada vez mais fortes */
+    travel: safe(() => {
+      uT(70, 0, 4, 'sawtooth', 0.05, 7); uT(105, 0.1, 3.9, 'square', 0.025, 6);
+      [0, 0.6, 1.1, 1.5, 1.85, 2.15, 2.4, 2.62, 2.82, 3.0, 3.16, 3.3, 3.43, 3.55].forEach((at, i) => {
+        uN(0.45, 0.06 + i * 0.012, at, 900 + i * 220); uT(1400 - i * 30, at, 0.35, 'sine', 0.02 + i * 0.003, 0.3);   // rajada + passagem (efeito Doppler)
+      });
+      uN(4, 0.06, 0, 0, 2500, true);
+    }),
+    /** cada estrela de perto: pulsação grave + energia própria */
+    pulse: safe(i => {
+      uT(48 + i * 7, 0, 0.5, 'sine', 0.22, 0.7); uT(96 + i * 14, 0.05, 0.45, 'triangle', 0.08, 0.8);
+      uT(320 + i * 110, 0, 0.5, ['sawtooth', 'square', 'triangle'][i % 3], 0.03, 1.6 + i * 0.1); uN(0.4, 0.04, 0.02, 0, 3000 + i * 400);
+    }),
+    /** partida de cada estrela: estrondo, estalo de energia e rastro longo */
+    launch: safe(i => {
+      uN(0.9, 0.22, 0, 500 - i * 30); uT(58 - i * 3, 0, 0.9, 'sine', 0.24, 0.5);
+      uN(0.12, 0.12, 0.02, 0, 3500); uT(2200 - i * 140, 0.02, 0.12, 'square', 0.04, 0.5);
+      uT(900 + i * 70, 0.1, 1.6, 'sawtooth', 0.035, 0.18); uT(1300 + i * 90, 0.15, 1.4, 'sine', 0.03, 0.25);
+    }),
+    /** chegada à Terra: rugido crescente e entrada na atmosfera */
+    arrive: safe(() => {
+      uN(3, 0.16, 0, 400, 0, true); uN(3, 0.07, 0, 0, 2000, true); uT(38, 0, 3, 'sawtooth', 0.09, 2.2); uT(57, 0.2, 2.8, 'triangle', 0.08, 2);
+      for (let i = 0; i < 7; i++) uN(0.35, 0.08, 0.4 + i * 0.32, 0, 1800);    // cada estrela atravessando a atmosfera
+    }),
+    /** um impacto: pancada grave, trovão, estilhaços, parede quebrando e um som cômico (o 7º é o maior) */
+    impact: safe(i => {
+      const last = i === 6, k = last ? 1.6 : 1;
+      uN(0.9 * k, 0.28 * k, 0, 700); uT(52 - i * 2, 0, 1.2 * k, 'sine', 0.3, 0.4); uT(78, 0, 0.8 * k, 'triangle', 0.15, 0.5);
+      uN(1.6 * k, 0.14, 0.12, 300);                                             // trovão rolando
+      uN(0.25, 0.1, 0.02, 0, 4200); uN(0.18, 0.07, 0.2, 0, 6000);               // estilhaços
+      for (let j = 0; j < 4; j++) uT(110 + Math.random() * 90, 0.05 + j * 0.07, 0.12, 'square', 0.035, 0.6);   // parede quebrando
+      const comic = [[600, 0.25, 0.4, 'sine'], [300, 0.3, 2.4, 'triangle'], [900, 0.2, 0.3, 'square'], [200, 0.4, 3, 'sine'], [1200, 0.25, 0.5, 'triangle'], [450, 0.35, 2, 'square']][i % 6];
+      uT(comic[0], 0.25, comic[1], comic[3], 0.04, comic[2]);                    // "boing", "bonk", "fiuu"…
+      if (last) { uN(2.4, 0.25, 0.3, 200); uT(30, 0.1, 2.4, 'sawtooth', 0.12, 0.6); [1400, 1100, 800, 500, 300].forEach((f, j) => uT(f, 0.5 + j * 0.12, 0.25, 'triangle', 0.04)); uT(1800, 0.35, 1.2, 'sine', 0.04, 0.12); }
+    }),
+    /** depois: destroços caindo e um "uá-uá" engraçado */
+    debris: safe(() => {
+      for (let j = 0; j < 10; j++) uN(0.07, 0.06, j * 0.09 + Math.random() * 0.05, 0, 2500 + Math.random() * 3000);
+      [[294, 0.0], [277, 0.28], [262, 0.56], [247, 0.84]].forEach(([f, at], j) => uT(f, 0.9 + at, j === 3 ? 0.7 : 0.26, 'sawtooth', 0.04, j === 3 ? 0.92 : 1));
+    }),
+    // ---- Sistema Solar (mesmo barramento) ----
+    /** dia → noite: estrondo grave + sons cósmicos */
+    nightfall: safe(() => {
+      uT(36, 0, 3, 'sine', 0.26, 0.7); uT(54, 0.05, 2.6, 'triangle', 0.12, 0.6); uN(2.2, 0.16, 0, 260);
+      [523, 659, 784, 1046, 1318].forEach((f, i) => uT(f, 0.5 + i * 0.18, 1.8, 'sine', 0.025, 1.02)); uN(3, 0.04, 0.3, 0, 4500, true);
+      uT(220, 0.8, 2.8, 'sawtooth', 0.02, 2.2); uT(330, 1.0, 2.6, 'triangle', 0.02, 0.5);
+    }),
+    /** órbitas: pulsações, vibração e energia crescendo */
+    orbit: safe(() => {
+      for (let k = 0; k < 9; k++) { uT(60 + k * 4, 1.2 + k * 0.3, 0.32, 'sine', 0.12 + k * 0.012, 0.8); uT(440 + k * 55, 1.25 + k * 0.3, 0.25, 'triangle', 0.02 + k * 0.003, 1.3); }
+      uT(90, 1, 3, 'sawtooth', 0.04, 3); uN(3, 0.05, 1, 0, 1800, true);
+    }),
+    /** cada planeta disparando: rajada, rugido e velocidade */
+    dash: safe(i => {
+      uN(0.8, 0.16, 0, 900 - i * 60); uT(70 - i * 4, 0, 1.4, 'sawtooth', 0.09, 1.8); uT(1500 - i * 120, 0, 0.9, 'sine', 0.035, 0.2);
+      uN(1.2, 0.07, 0.1, 0, 2600, true); uT(180 + i * 20, 0.05, 1.6, 'square', 0.02, 0.4);
+    }),
+    /** cada planeta chegando: rugido e assobio que crescem até o impacto (dur s), depois silêncio curto */
+    pApproach: safe((i, dur = 2) => {
+      uN(dur, 0.2, 0, 380 - i * 20, 0, true); uN(dur, 0.07, 0, 0, 2200, true);
+      uT(46 - i * 2, 0, dur, 'sawtooth', 0.09, 1.9); uT(700 + i * 60, 0, dur, 'sine', 0.03, 2.4); uT(140 + i * 12, dur * 0.3, dur * 0.7, 'square', 0.025, 1.8);
+      for (let j = 0; j < 8; j++) uN(0.05, 0.03 + j * 0.008, dur * (0.3 + j * 0.08), 0, 2600 + j * 300);   // fogo estalando
+    }),
+    /** o Sol descendo devagar (dur s): rugido grave prolongado que cresce, fogo crepitando */
+    sunApproach: safe((dur = 4.4) => {
+      const n = Math.round(dur * 9);
+      for (let j = 0; j < n; j++) uN(0.05 + Math.random() * 0.06, 0.04 + j * 0.0025, j * dur / n + Math.random() * 0.05, 0, 2500 + Math.random() * 2500);   // crepitar
+      uN(dur, 0.24, 0, 300, 0, true); uN(dur, 0.08, 0, 0, 1500, true); uT(26, 0, dur, 'sawtooth', 0.16, 2.4); uT(39, 0.3, dur - 0.3, 'square', 0.06, 2.3); uT(110, dur * 0.35, dur * 0.65, 'sawtooth', 0.05, 1.8);
+      uT(18, 0, dur, 'sine', 0.22, 2.8);
+    }),
+    /** o golpe do Sol: o mais intenso de todos (e ainda distinguível) */
+    sunImpact: safe(() => {
+      uN(2.8, 0.42, 0, 900); uT(34, 0, 3, 'sine', 0.38, 0.35); uT(50, 0, 2.6, 'sawtooth', 0.16, 0.4); uT(75, 0.05, 2.2, 'triangle', 0.16, 0.5);
+      uN(3.6, 0.2, 0.25, 260); uN(0.5, 0.14, 0.02, 0, 4500); uN(0.4, 0.1, 0.4, 0, 6500); uN(2, 0.08, 0.6, 0, 1200);
+      for (let j = 0; j < 8; j++) uT(100 + Math.random() * 120, 0.1 + j * 0.09, 0.15, 'square', 0.04, 0.5);
+      [1600, 1300, 1000, 700, 450, 250].forEach((f, j) => uT(f, 0.9 + j * 0.1, 0.22, 'triangle', 0.035));
+    }),
+    // ---- Devolução da Realidade (mesmo barramento) ----
+    rHop: safe(() => { uT(520, 0, 0.12, 'triangle', 0.05, 1.8); uT(780, 0.06, 0.1, 'sine', 0.03, 1.5); }),
+    rStampFall: safe(() => { uN(0.5, 0.12, 0, 0, 1800, true); uT(300, 0, 0.5, 'sawtooth', 0.04, 0.3); }),
+    rStamp: safe((big = 1) => {
+      uN(1.4 * big, 0.4, 0, 500); uT(42, 0, 1.6 * big, 'sine', 0.36, 0.45); uT(64, 0, 1.2, 'square', 0.08, 0.5); uN(0.12, 0.2, 0, 0, 3000);
+      uT(180, 0.05, 0.9, 'triangle', 0.08, 2.6); uT(140, 0.3, 0.6, 'sine', 0.06, 0.6);              // a mola da quadra: boing
+      uN(1.8 * big, 0.12, 0.2, 260);
+    }),
+    rTear: safe(() => { for (let j = 0; j < 14; j++) uN(0.09, 0.07 + j * 0.004, j * 0.055, 0, 2200 + j * 180); uT(90, 0, 1.0, 'sawtooth', 0.05, 0.5); }),
+    rHands: safe(() => { for (let j = 0; j < 10; j++) uN(0.18, 0.08, j * 0.18, 700); uT(60, 0, 2, 'square', 0.06, 1.4); uN(1.2, 0.14, 0.7, 0, 1600); [0.4, 1.1, 1.7].forEach(at => uT(55, at, 0.6, 'sine', 0.24, 0.6)); }),
+    rSuck: safe(() => { uN(2.4, 0.22, 0, 600, 0, true); uT(400, 0, 2.4, 'sawtooth', 0.05, 0.15); uT(800, 0.3, 2, 'sine', 0.04, 0.1); for (let j = 0; j < 8; j++) uT(1600 - j * 120, j * 0.25, 0.4, 'triangle', 0.025, 0.3); uT(30, 0, 2.4, 'sine', 0.2, 1.6); }),
+    rBurst: safe(() => { uN(1.6, 0.4, 0, 1200); uT(48, 0, 1.6, 'sine', 0.34, 0.4); for (let j = 0; j < 16; j++) uT(300 + Math.random() * 900, 0.05 + j * 0.05, 0.12, 'square', 0.03, 0.6); uN(1.2, 0.1, 0.2, 0, 3000); }),
+    rMachine: safe(() => {
+      for (let j = 0; j < 12; j++) { uT(80, j * 0.16, 0.12, 'square', 0.07, 0.7); uN(0.06, 0.06, j * 0.16 + 0.08, 0, 3500); }     // clanc-clanc
+      uT(55, 0.9, 0.7, 'sawtooth', 0.12, 0.6); uN(0.6, 0.3, 1.1, 400); uT(38, 1.1, 1, 'sine', 0.3, 0.5);                       // prensa
+      for (let j = 0; j < 22; j++) uN(0.05, 0.06, 1.5 + j * 0.022, 0, 4000 + j * 60);                                           // fita desenrolando
+      uT(900, 1.5, 0.5, 'sawtooth', 0.03, 2.2);
+    }),
+    rLabel: safe(() => { uN(0.1, 0.2, 0, 0, 2000); uT(260, 0, 0.15, 'square', 0.06, 0.6); uT(1200, 0.05, 0.25, 'sine', 0.04, 1.3); }),
+    rCharge: safe(() => {
+      for (let j = 0; j < 8; j++) { uT(70, j * 0.12, 0.1, 'square', 0.06, 0.8); uN(0.05, 0.05, j * 0.12, 0, 3000); }             // esteira
+      uT(60, 0.6, 1.4, 'sawtooth', 0.14, 4); uT(120, 0.7, 1.3, 'square', 0.05, 4); uN(1.4, 0.18, 0.6, 0, 1200, true); uT(30, 0.6, 1.4, 'sine', 0.2, 1.5);
+    }),
+    rFire: safe(() => {
+      uN(2.4, 0.5, 0, 800); uT(32, 0, 2.6, 'sine', 0.42, 0.3); uT(46, 0, 2.2, 'sawtooth', 0.2, 0.35); uT(70, 0.02, 1.8, 'square', 0.1, 0.4);
+      uN(0.3, 0.25, 0, 0, 4000); uN(2.0, 0.16, 0.3, 0, 1500, true);
+      for (let j = 0; j < 10; j++) { uN(0.18, 0.08 + j * 0.008, 0.6 + j * 0.13, 1500 + j * 200); uT(1800 - j * 100, 0.6 + j * 0.13, 0.15, 'sine', 0.03, 0.3); }   // camadas rompendo
+    }),
+    rHole: safe(() => { uT(90, 0, 1.6, 'sawtooth', 0.06, 0.5); uN(1.5, 0.08, 0, 300, 0, true); uT(40, 0, 1.6, 'sine', 0.16, 0.8); }),
+    rThud: safe(() => { uN(0.08, 0.05, 0, 600); uT(160, 0, 0.1, 'triangle', 0.03, 0.7); }),
+    rOpen: safe(() => {
+      uN(3.4, 0.5, 0, 1000); uT(30, 0, 3.6, 'sine', 0.44, 0.3); uT(44, 0, 3, 'sawtooth', 0.2, 0.4); uT(66, 0.05, 2.6, 'triangle', 0.18, 0.5);
+      uN(0.4, 0.25, 0, 0, 5000); uN(3, 0.18, 0.3, 280);
+      for (let j = 0; j < 24; j++) uT(200 + Math.random() * 1600, 0.2 + j * 0.1, 0.15, ['square', 'triangle', 'sawtooth'][j % 3], 0.03, Math.random() < 0.5 ? 0.4 : 2);
+      for (let j = 0; j < 8; j++) { uN(0.4, 0.14, 0.4 + j * 0.3, 500); uT(50 + j * 6, 0.4 + j * 0.3, 0.6, 'sine', 0.16, 0.6); }   // ondas cósmicas
+    }),
+    rConfetti: safe(() => { for (let j = 0; j < 18; j++) uT(900 + Math.random() * 1400, j * 0.04, 0.08, 'triangle', 0.03, 1.4); uN(0.5, 0.08, 0, 0, 5000); }),
+    rFold: safe(() => { for (let j = 0; j < 6; j++) { uN(0.12, 0.1, j * 0.1, 1800); uT(220 - j * 20, j * 0.1, 0.12, 'square', 0.05, 0.7); } }),
+    rOps: safe(() => { uT(1800, 0, 0.09, 'sine', 0.03, 1.3); uT(2400, 0.1, 0.07, 'sine', 0.02, 0.8); }),
+    /** corta tudo (devolução dos controles) */
+    end: safe(() => {
+      if (!ub) return; const b = ub; ub = null; const now = ac.currentTime;
+      b.gain.cancelScheduledValues(now); b.gain.setValueAtTime(b.gain.value, now); b.gain.linearRampToValueAtTime(0, now + 0.25);
+      setTimeout(() => { try { b.disconnect(); b._comp.disconnect(); } catch (e) { /* */ } }, 400);
+    }),
+  };
+
+  // Efeitos calados com o MENU aberto (jogo pausado) ou a aba escondida (o laço do jogo para e os laços de som ficariam tocando sozinhos).
+  let menuHold = false;
+  const applyHold = () => {
+    fxHold = menuHold || (typeof document !== 'undefined' && document.hidden);
+    try { if (master) master.gain.setTargetAtTime(fxHold ? 0 : MASTER * sfxVol, ac.currentTime, 0.04); } catch (e) { /* ignora */ }
+  };
   // Ao esconder a aba o laço para: silencia o motor para ele não ficar zumbindo sozinho.
   try {
     document.addEventListener('visibilitychange', () => {
+      applyHold();
       if (!eng || !document.hidden) return;
       try { eng.g.gain.setTargetAtTime(0, ac.currentTime, 0.05); engGain = 0; } catch (e) { /* ignora */ }
     });
   } catch (e) { /* ignora */ }
 
   return {
+    /** Contexto e saída principal (para sons com arquivo, como a música dos engarrafamentos). null antes do unlock(). */
+    get ctx() { return ac; },
+    get out() { return master; },
+    /** Saída das músicas (volume da música nas Configurações). */
+    get musicOut() { return musicBus || master; },
+    /** MENU aberto: cala os efeitos (a música continua). */
+    pauseFx(on) { if (menuHold !== !!on) { menuHold = !!on; applyHold(); } },
+    /** Volumes das Configurações (0..1): efeitos (tudo que sai por `out`) e música (`musicOut`). */
+    setVolumes(music, sfx) {
+      musicVol = music; sfxVol = sfx;
+      try { if (master) master.gain.setTargetAtTime(fxHold ? 0 : MASTER * sfxVol, ac.currentTime, 0.02); if (musicBus) musicBus.gain.setTargetAtTime(musicVol, ac.currentTime, 0.02); } catch (e) { /* ignora */ }
+    },
     /** Cria/retoma o AudioContext. Idempotente; chamar no primeiro evento de teclado/ponteiro. */
     unlock() {
       if (broken) return;
@@ -109,6 +305,11 @@ export function createAudio() {
 
     /** Assobio descendo (seta caindo do céu). */
     whistle: safe(() => { tone(1500, 0, 1.25, "sine", 0.05, 0.3); }),
+    /** Laser orbital: zumbido fino descendo do céu / carga do satélite / disparo forte. */
+    ursa,
+    laserZap: safe(() => { tone(2200, 0, 0.7, "sawtooth", 0.03, 0.2); tone(1100, 0.05, 1.2, "sine", 0.05, 0.6); }),
+    laserCharge: safe(() => { tone(180, 0, 2.6, "sawtooth", 0.04, 6); tone(90, 0, 2.6, "square", 0.025, 5); }),
+    laserBlast: safe(() => { noise(2.0, 0.4); tone(60, 0, 2.2, "sawtooth", 0.18, 0.5); tone(900, 0, 1.6, "sawtooth", 0.05, 0.3); }),
 
     /** Estrondo da seta quebrando o telhado. */
     crash: safe(() => { noise(0.7, 0.35); tone(95, 0, 0.5, "sine", 0.22, 0.5); tone(62, 0.03, 0.6, "triangle", 0.14, 0.6); }),
@@ -139,6 +340,22 @@ export function createAudio() {
       tone(1568, 0.36, 0.5, 'sine', 0.03);
     }),
 
+    /** Trânsito: k = 0 (nenhum carro perto) … 1 (carro colado); hz varia um pouco com a velocidade dele. */
+    traffic: safe((k, speed01 = 0.5) => {
+      if (!traf) return;
+      const gain = 0.03 * Math.max(0, Math.min(1, k)), t = ac.currentTime;
+      if (gain === 0 ? trafGain !== 0 : Math.abs(gain - trafGain) > 0.0008) {   // (zero sempre zera: ganhos pequenos não ficam presos)
+        trafGain = gain; traf.tg.gain.setTargetAtTime(gain, t, 0.25); }
+      traf.t1.frequency.setTargetAtTime(52 + 30 * speed01, t, 0.3); traf.t2.frequency.setTargetAtTime(80 + 40 * speed01, t, 0.3);
+    }),
+    /** Cachoeira: k = 0 (longe) … 1 (bem perto). Mais perto, mais alto e mais agudo. */
+    waterfall: safe(k => {
+      if (!fall) return;
+      k = Math.max(0, Math.min(1, k));
+      if (Math.abs(k - fall.last) < 0.004) return;
+      fall.last = k; const t = ac.currentTime;
+      fall.wg.gain.setTargetAtTime(0.42 * k, t, 0.3); fall.wf.frequency.setTargetAtTime(500 + 1600 * k, t, 0.3);
+    }),
     /** Ronco do motor: segue a velocidade (0..1) enquanto `running`; senão desaparece suavemente. */
     engine: safe((running, speed01) => {
       if (!eng) return;

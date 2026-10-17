@@ -1,32 +1,95 @@
 // Carreira: progresso das missões (salvo no navegador), regras de cada missão e desbloqueio das fases.
-// Uma fase é liberada quando as 5 missões da fase anterior estão concluídas; a fase 1 começa liberada.
+// Uma fase é liberada só quando as 5 missões da fase anterior estão concluídas e salvas; a 1 começa liberada.
+// Objetivo cumprido durante a partida = missão PENDENTE; só é salva quando a mesma partida termina com a entrega certa.
+import { MISSIONS, RESERVED } from './missions.js';
 import { HOUSES } from './data.js';
-import { MISSIONS } from './missions.js';
-import { MAP, GRID, HEDGE, ROAD, LOT, WALK, HOUSE_SLOTS, roadCenter, slotOrigin } from './layout.js';
+import { GRID, ROAD, LOT, roadCenter, slotOrigin } from './layout.js';
 
 const KEY = 'adress.career.v1';
 const LEVELS = MISSIONS.length;
+
+// ---- ruas da grade (Níveis 3 e 4): cruzamentos I(j, i) no eixo das ruas j (X) e i (Z) ----
+const STEP = () => roadCenter(1) - roadCenter(0);
+const NODE_HALF = ROAD / 2 + 0.6;                                  // (folga: o centro da van passa por aqui ao virar)
+/** Cruzamento em que está o centro da van (ou null). */
+function nodeAt(x, z) {
+  const j = Math.round((x - roadCenter(0)) / STEP()), i = Math.round((z - roadCenter(0)) / STEP());
+  if (j < 0 || i < 0 || j > GRID || i > GRID || Math.abs(x - roadCenter(j)) > NODE_HALF || Math.abs(z - roadCenter(i)) > NODE_HALF) return null;
+  return { j, i, k: j + ',' + i };
+}
+// Barreira (barriers.list): lado A = oeste/norte, lado B = leste/sul. Cada lado tem um cruzamento "de saída" (âncora).
+const BAR_ZONE = 9.5, BAR_GAP = 0.6;
+function barZone(b, x, z) {
+  const H = b.kind === 'H', lat = H ? z - roadCenter(b.i) : x - roadCenter(b.j), u = H ? x - b.x : z - b.z;
+  if (Math.abs(lat) > ROAD / 2 + 0.6 || Math.abs(u) < BAR_GAP || Math.abs(u) > BAR_ZONE) return null;
+  return u < 0 ? 'A' : 'B';
+}
+const barAnchor = (b, side) => side === 'A' ? b.j + ',' + b.i : b.kind === 'H' ? (b.j + 1) + ',' + b.i : b.j + ',' + (b.i + 1);
+const edgesOf = path => { const e = new Set(); for (let k = 1; k < path.length; k++) if (path[k] !== path[k - 1]) e.add([path[k - 1], path[k]].sort().join('|')); return e; };
+const hasOwn = (a, b) => [...a].some(e => !b.has(e));              // a usa algum trecho que b não usa
+// Nível 4, "Olhe antes de seguir": a van parada logo antes de um cruzamento, de frente para ele (não no meio dele)
+const LOOK_NEAR = ROAD / 2 - 2.0 + 2.4, LOOK_FAR = ROAD / 2 + 8;    // distância do centro da van ao centro do cruzamento
+function approachOf(x, z, heading) {
+  const j = Math.round((x - roadCenter(0)) / STEP()), i = Math.round((z - roadCenter(0)) / STEP());
+  if (j < 0 || i < 0 || j > GRID || i > GRID) return null;
+  const dx = x - roadCenter(j), dz = z - roadCenter(i), c = Math.cos(heading), s = Math.sin(heading);
+  let side = null;
+  if (Math.abs(dx) < ROAD / 2 + 0.6 && Math.abs(dz) >= LOOK_NEAR && Math.abs(dz) <= LOOK_FAR && -Math.sign(dz) * s > 0.5) side = dz < 0 ? 'N' : 'S';
+  else if (Math.abs(dz) < ROAD / 2 + 0.6 && Math.abs(dx) >= LOOK_NEAR && Math.abs(dx) <= LOOK_FAR && -Math.sign(dx) * c > 0.5) side = dx < 0 ? 'W' : 'E';
+  return side ? { j, i, k: j + ',' + i, side } : null;
+}
+/** Ainda no trecho de rua que chega ao cruzamento pelo lado a.side (sem exigir estar de frente). */
+function inArm(a, x, z) {
+  const dx = x - roadCenter(a.j), dz = z - roadCenter(a.i), V = a.side === 'N' || a.side === 'S';
+  const lat = V ? dx : dz, u = V ? dz : dx, sg = a.side === 'N' || a.side === 'W' ? -1 : 1;
+  return Math.abs(lat) < ROAD / 2 + 0.6 && u * sg > 0 && Math.abs(u) <= LOOK_FAR + 1;
+}
+// Nível 5: voltas em volta de uma quadra (a pé e de van). Cada quadra (lote) tem LAP_N checkpoints invisíveis ao longo dos
+// 4 lados (o ponto mais perto do contorno do lote); a volta é a soma dos passos de um checkpoint ao vizinho, com sinal
+// (ir e voltar na mesma esquina se anula). Fecha quando a soma chega a ±LAP_N: deu a volta toda e voltou ao início.
+const LAP_N = 16;
+const angDiff = (a, b) => { let d = (a - b) % (Math.PI * 2); if (d > Math.PI) d -= Math.PI * 2; if (d < -Math.PI) d += Math.PI * 2; return d; };
+/** Distância (com sinal: < 0 dentro) ao contorno do lote s e posição no contorno (0..1, sentido horário a partir do canto noroeste). */
+function perim(s, x, z) {
+  const o = slotOrigin(s), x0 = o.x, z0 = o.z, x1 = o.x + LOT, z1 = o.z + LOT;
+  let px = Math.max(x0, Math.min(x, x1)), pz = Math.max(z0, Math.min(z, z1)), d;
+  if (px === x && pz === z) {                                       // dentro: o lado mais perto
+    const m = Math.min(x - x0, x1 - x, z - z0, z1 - z); d = -m;
+    if (m === x - x0) px = x0; else if (m === x1 - x) px = x1; else if (m === z - z0) pz = z0; else pz = z1;
+  } else d = Math.hypot(x - px, z - pz);
+  const t = pz === z0 ? px - x0 : px === x1 ? LOT + pz - z0 : pz === z1 ? 2 * LOT + x1 - px : 3 * LOT + z1 - pz;
+  return { d, t: t / (4 * LOT) };
+}
+/** Avança as voltas de todas as quadras perto de (x, z); devolve as quadras em que uma volta acabou de fechar. */
+function lapStep(map, x, z, inside, jump) {   // (devolve [{ s, dir }]; dir = ±1, sentido da volta)
+  const done = [];
+  for (let s = 0; s < GRID * GRID; s++) {
+    let st = map.get(s);
+    if (jump) { if (st) st.sec = null; continue; }
+    const p = perim(s, x, z);
+    if (p.d < -inside || p.d > ROAD + 3) continue;                    // longe desta quadra: fica como estava
+    if (!st) map.set(s, st = { sec: null, w: 0, laps: 0 });
+    const sec = Math.floor(p.t * LAP_N) % LAP_N;
+    if (st.sec === null) { st.sec = sec; st.w = 0; continue; }
+    let d = sec - st.sec; if (d > LAP_N / 2) d -= LAP_N; if (d < -LAP_N / 2) d += LAP_N;
+    st.sec = sec;
+    if (Math.abs(d) > 2) { st.w = 0; continue; }                     // voltou por outro ponto: a volta recomeça daqui
+    st.w += d;
+    if (Math.abs(st.w) >= LAP_N) { done.push({ s, dir: Math.sign(st.w) }); st.w = 0; st.laps++; }
+  }
+  return done;
+}
+const TURN_HALF = NODE_HALF + 2;                                    // zona das manobras no cruzamento (com folga)
+const armOf = (j, i, x, z) => { const dx = x - roadCenter(j), dz = z - roadCenter(i); return Math.abs(dx) > Math.abs(dz) ? (dx > 0 ? 'E' : 'W') : (dz > 0 ? 'S' : 'N'); };
 
 const CSS = `
 .career-toast { position: fixed; left: 50%; top: 128px; z-index: 26; transform: translate(-50%, -10px); opacity: 0;
   padding: .55em 1.2em; border-radius: 999px; background: #1f7a3a; color: #fff; pointer-events: none;
   font: 800 clamp(14px, 1.3vw, 19px) "Trebuchet MS","Segoe UI",system-ui,sans-serif; box-shadow: 0 6px 18px rgba(0,0,0,.3);
-  transition: opacity .25s, transform .25s; }
+  transition: opacity .25s, transform .25s; width: max-content; max-width: min(92vw, 720px); text-align: center; box-sizing: border-box; }
+@media (max-width: 560px) { .career-toast { top: 152px; border-radius: 18px; } }
 .career-toast.on { opacity: 1; transform: translate(-50%, 0); }
 `;
-
-// ruas do bairro: GRID+1 horizontais (h0..) e GRID+1 verticais (v0..)
-const IN_MAP = v => v > HEDGE && v < MAP - HEDGE;
-function streetsAt(x, z) {
-  const out = [];
-  for (let i = 0; i <= GRID; i++) {
-    const c = roadCenter(i);
-    if (Math.abs(z - c) < ROAD / 2 && IN_MAP(x)) out.push('h' + i);
-    if (Math.abs(x - c) < ROAD / 2 && IN_MAP(z)) out.push('v' + i);
-  }
-  return out;
-}
-const corners4 = () => [[0, 0], [GRID, 0], [0, GRID], [GRID, GRID]].map(([a, b]) => [roadCenter(a), roadCenter(b)]);   // esquinas externas
 
 export function createCareer() {
   const style = document.createElement('style');
@@ -54,164 +117,372 @@ export function createCareer() {
   try {
     if (!localStorage.getItem(KEY + '.l4v2')) { progress[3][1] = 0; progress[3][3] = 0; save(); localStorage.setItem(KEY + '.l4v2', '1'); }
   } catch (e) { /* ignora */ }
+  // níveis reordenados (Veneza 12 → 10, Travessia 10 → 11, Trilhos 11 → 12): o progresso salvo acompanha o cenário, uma vez
+  try {
+    if (!localStorage.getItem(KEY + '.reorder10') && progress[11]) {
+      const [tra, tri, ven] = [progress[9], progress[10], progress[11]].map(r => r.slice());
+      progress[9] = ven; progress[10] = tra; progress[11] = tri; save(); localStorage.setItem(KEY + '.reorder10', '1');
+    }
+  } catch (e) { /* ignora */ }
+  // a lua passou do Bairro 17 para o 20 (17–19 ficam reservados): o progresso salvo acompanha o cenário, uma vez
+  try {
+    if (!localStorage.getItem(KEY + '.lua20')) {
+      progress[19] = progress[16].slice(); progress[16] = progress[16].map(() => 0); save(); localStorage.setItem(KEY + '.lua20', '1');
+    }
+  } catch (e) { /* ignora */ }
   // a 5ª missão do Nível 3 mudou ("Uma Última Volta" → "Manobras Enjoativas"): zera o progresso antigo dela uma vez
   try {
     if (!localStorage.getItem(KEY + '.dizzy')) { progress[2][4] = 0; save(); localStorage.setItem(KEY + '.dizzy', '1'); }
   } catch (e) { /* ignora */ }
 
+  // Missões dos Níveis 1 e 2 trocadas (e as dos Níveis 3 e 4 removidas): zera só o progresso dessas 4 linhas, uma vez.
+  try {
+    if (!localStorage.getItem(KEY + '.m2')) {
+      for (let l = 0; l < 4; l++) progress[l] = progress[l].map(() => 0);
+      save(); localStorage.setItem(KEY + '.m2', '1');
+    }
+  } catch (e) { /* ignora */ }
+  // Desbloqueio estrito (uma vez): apaga os desbloqueios guardados antes (KEY.unlocks) e a liberação de teste ligada pela senha
+  // antiga (KEY.all); a partir daqui o acesso vem só das missões salvas.
+  try {
+    if (!localStorage.getItem(KEY + '.m3')) {
+      localStorage.removeItem(KEY + '.unlocks'); localStorage.removeItem(KEY + '.all'); localStorage.setItem(KEY + '.m3', '1');
+    }
+  } catch (e) { /* ignora */ }
+
+  // Missões novas dos Níveis 3 e 4: começam incompletas (zera essas 2 linhas uma vez).
+  try {
+    if (!localStorage.getItem(KEY + '.m4')) {
+      for (const l of [2, 3]) progress[l] = progress[l].map(() => 0);
+      save(); localStorage.setItem(KEY + '.m4', '1');
+    }
+  } catch (e) { /* ignora */ }
+
   const done = (l, i) => progress[l][i] >= MISSIONS[l][i].goal;
-  const levelDone = l => MISSIONS[l].every((m, i) => done(l, i));
-  // senha do cadeado no mapa: todos os bairros abertos, mesmo sem as missões (fica salvo)
+  const levelDone = l => MISSIONS[l].some(m => m.id) && MISSIONS[l].every((m, i) => done(l, i));   // sem missões cadastradas = nunca
+  // liberação de desenvolvimento (caixa no painel do cadeado): todos os bairros abertos, mesmo sem as missões (fica salvo)
   let allOpen = false;
   try { allOpen = localStorage.getItem(KEY + '.all') === '1'; } catch (e) { /* ignora */ }
-  const unlocked = l => allOpen || l === 0 || levelDone(l - 1);
+  const prevLevel = l => { let p = l - 1; while (p > 0 && RESERVED.includes(p)) p--; return p; };   // os reservados não contam
+  const unlocked = l => !RESERVED.includes(l) && (allOpen || l === 0 || levelDone(prevLevel(l)));
 
-  /** Atualiza o progresso (só aumenta). Avisa quando a missão é concluída e quando a próxima fase abre. */
-  function setProgress(l, i, value) {
-    const m = MISSIONS[l][i];
-    if (!m || !m.id) return;
-    const v = Math.min(m.goal, value);
-    if (v <= progress[l][i]) return;
-    const wasDone = levelDone(l);
-    progress[l][i] = v;
+  /** Confirma as missões cumpridas na partida que acabou de terminar com a entrega certa: salva (só aumenta; o que já estava
+   *  concluído não conta de novo), avisa e, com as 5 do bairro salvas, o próximo fica desbloqueado (vem do progresso salvo). */
+  function confirm(l, ids) {
+    const wasDone = levelDone(l), names = [];
+    MISSIONS[l].forEach((m, i) => { if (m.id && ids.has(m.id) && progress[l][i] < m.goal) { progress[l][i] = m.goal; names.push(m.name); } });
+    if (!names.length) return;
     save();
-    if (v >= m.goal) {
-      toast(`✔ Missão concluída: ${m.name}`);
-      if (!wasDone && levelDone(l) && l + 1 < LEVELS) setTimeout(() => toast(`🔓 Bairro ${l + 2} desbloqueado!`), 3400);
-    }
+    toast(names.length === 1 ? `✔ Missão concluída: ${names[0]}` : `✔ Missões concluídas: ${names.join(', ')}`);
+    let nx = l + 1; while (RESERVED.includes(nx)) nx++;
+    if (!wasDone && levelDone(l) && nx < LEVELS && !allOpen) setTimeout(() => toast(`🔓 Bairro ${nx + 1} desbloqueado!`), 3400);
   }
-  const add = (l, i, n = 1) => setProgress(l, i, progress[l][i] + n);
-  const idx = (l, id) => MISSIONS[l].findIndex(m => m.id === id);
 
-  // estatísticas da partida atual
-  let level = -1, active = false;
-  let seen, entries, lastStreet, corners, wrongAt, hintCounted;
-  let roosters, fuels;
-  let passes, prevHere, sinceDelivery, streaks, wind, slotWrong, prevSlots = new Set(), thisSlots = new Set(), slotsLevel = -1;
+  // tentativa atual (Carreira): o que foi cumprido fica PENDENTE e só é salvo se esta partida terminar com a entrega certa
+  let level = -1, active = false, pending = new Set(), hintUsed = false;
+  // Bairro 1, "Volta no bairro": cada rua externa é dividida em 8 trechos; vale com 6 de 8 em cada lado (folga nas esquinas)
+  const LAP_BINS = 8, LAP_NEED = 6;
+  let lapBins = null;
+  const lapDone = () => lapBins && Object.values(lapBins).every(b => b.filter(Boolean).length >= LAP_NEED);
+  // Bairro 3: desvios em volta de cada barreira, batidas por barreira, entregas fora da indicação
+  let legs = new Map(), barHits = new Map(), barHitN = 0, offRoute = new Set();
+  // Bairro 4: entregas/abastecer, intervalo entre entregas, marcha à ré, paradas antes dos cruzamentos
+  let deliveries = 0, fueled = false, fuelStops = 0, lastDelT = null, lastH = null, rev = null, look = null, stopAt = null, lookSet = new Set(), prevPos = null;
+  // Bairro 5: manobra no cruzamento em andamento, voltas de van por quadra, voltas a pé (recomeça a cada vez que desce da van)
+  let man = null, vanLaps = new Map(), footLaps = new Map(), prevFoot = null;
+  // Bairro 6: passagens por trecho de rua, voltas para o oito, retorno à entrada depois de uma entrega falsa
+  let lastNode = null, streets = new Map(), eightLaps = new Map(), lastLap = null, needEntrance = false;
+  // Bairro 7: batidas em veículos, espera atrás do engarrafamento, recuo diante do caminhão
+  let vehHits = 0, jamWait = null, jamArmed = null, backOff = null;
 
   return {
     get progress() { return progress; },
     isDone: done,
     isUnlocked: unlocked,
+    /** Missão k do nível l cumprida nesta partida, ainda sem a entrega certa (tela de missões). */
+    isPending: (l, k) => active && l === level && !!MISSIONS[l][k] && pending.has(MISSIONS[l][k].id),
     get allUnlocked() { return allOpen; },
-    /** Senha certa no cadeado: desbloqueia todos os bairros. */
-    unlockAll() {
-      allOpen = true;
-      try { localStorage.setItem(KEY + '.all', '1'); } catch (e) { /* ignora */ }
-      toast('🔓 Todos os bairros desbloqueados!');
-    },
     completedCount: l => MISSIONS[l].filter((m, i) => done(l, i)).length,
+    /** O bairro l tem missões cadastradas? (os modelos vazios não têm id) */
+    hasMissions: l => MISSIONS[l].some(m => m.id),
+    /** Bairro l com todas as missões concluídas (sem missões cadastradas = não). */
+    levelComplete: l => levelDone(l),
 
-    /** Nova partida da Carreira na fase l (ou fim do acompanhamento com l < 0). */
+    // ---- painel de desenvolvimento (cadeado): só missões e progressão da Carreira ----
+    /** Liberação de desenvolvimento (todos os bairros abertos), independente das missões. */
+    setAllOpen(on) {
+      allOpen = !!on;
+      try { if (allOpen) localStorage.setItem(KEY + '.all', '1'); else localStorage.removeItem(KEY + '.all'); } catch (e) { /* ignora */ }
+    },
+    /** Todas as missões de todos os bairros voltam a ficar incompletas (inclusive o que estava pendente nesta partida) e a
+     *  liberação de teste é desligada: só o Bairro 1 fica aberto. */
+    resetAll() {
+      this.setCompleted(new Set()); this.setAllOpen(false);
+      try { localStorage.removeItem(KEY + '.unlocks'); } catch (e) { /* ignora */ }
+    },
+    /** Os bairros em sel ficam com todas as missões concluídas; os outros (com missões), todas incompletas; sem missões
+     *  cadastradas nunca contam como concluídos. Os desbloqueios saem daí pela regra de sempre (5 missões salvas de um bairro
+     *  liberam o próximo). */
+    setCompleted(sel) {
+      progress = MISSIONS.map((ms, l) => ms.map(m => (m.id && sel.has(l) ? m.goal : 0)));
+      pending = new Set();
+      save();
+    },
+
+    /** Nova partida da Carreira na fase l: tudo que foi cumprido na tentativa anterior (e não salvo) é descartado. */
     startMatch(l) {
-      level = l; active = l >= 0;
-      seen = new Set(); entries = new Map(); lastStreet = null; corners = new Set(); wrongAt = new Map(); hintCounted = false;
-      passes = new Map(); prevHere = []; sinceDelivery = new Set(); streaks = []; wind = new Map(); slotWrong = new Map();
-      roosters = new Set(); fuels = 0;
-      // "Eu Conheço Essa Casa": lotes com 3+ entregas erradas na partida anterior (da mesma fase)
-      prevSlots = slotsLevel === l ? thisSlots : new Set();
-      thisSlots = new Set(); slotsLevel = l;
+      level = l; active = l >= 0; pending = new Set(); hintUsed = false;
+      legs = new Map(); barHits = new Map(); barHitN = 0; offRoute = new Set();
+      deliveries = 0; fueled = false; fuelStops = 0; lastDelT = null; lastH = null; rev = null; look = null; stopAt = null; lookSet = new Set(); prevPos = null;
+      man = null; vanLaps = new Map(); footLaps = new Map(); prevFoot = null;
+      lastNode = null; streets = new Map(); eightLaps = new Map(); lastLap = null; needEntrance = false;
+      vehHits = 0; jamWait = null; jamArmed = null; backOff = null;
+      lapBins = { n: new Array(LAP_BINS).fill(false), s: new Array(LAP_BINS).fill(false), w: new Array(LAP_BINS).fill(false), e: new Array(LAP_BINS).fill(false) };
     },
-    stop() { active = false; },
+    /** Fim do acompanhamento (saiu da partida): descarta o que estava pendente. */
+    stop() { active = false; pending = new Set(); },
 
-    /** A cada quadro dirigindo: ruas percorridas, entradas em ruas e esquinas do contorno. */
-    tick(x, z, heading) {
+    /** A cada quadro dirigindo (Carreira). ctx = { speed (da van; < 0 = ré), time (s no cronômetro), bars (barriers.list) }. */
+    tick(x, z, heading = 0, ctx = {}) {
       if (!active) return;
-      const here = streetsAt(x, z);
-      here.forEach(s => { seen.add(s); sinceDelivery.add(s); if (!prevHere.includes(s)) passes.set(s, (passes.get(s) || 0) + 1); });
-      prevHere = here;
-      // "entrar" numa rua = estar nela andando ao longo dela (cruzar uma rua não conta)
-      const c = Math.abs(Math.cos(heading)), s = Math.abs(Math.sin(heading));
-      const aligned = here.find(id => (id[0] === 'h' && c >= 0.7) || (id[0] === 'v' && s >= 0.7));
-      if (aligned && aligned !== lastStreet) { entries.set(aligned, (entries.get(aligned) || 0) + 1); lastStreet = aligned; }
-      const CORNERS = corners4();
-      CORNERS.forEach(([cx, cz], k) => { if (Math.hypot(x - cx, z - cz) < ROAD / 2 + 1) corners.add(k); });
-      if (level === 0 && corners.size === 4) setProgress(0, idx(0, 'lap'), 1);      // Volta no Quarteirão
-      // Manobras Enjoativas (Nível 3): voltas em torno de um mesmo lote, contadas pelo ângulo acumulado da van
-      // em volta do centro do lote enquanto ela está nas ruas ao redor dele (afastar-se zera a contagem daquele lote)
-      if (level === 2) {
-        const ring = LOT / 2 + WALK + ROAD;
-        for (const s of HOUSE_SLOTS) {
-          const o = slotOrigin(s), lcx = o.x + LOT / 2, lcz = o.z + LOT / 2;
-          if (Math.max(Math.abs(x - lcx), Math.abs(z - lcz)) > ring) { wind.delete(s); continue; }
-          const a = Math.atan2(z - lcz, x - lcx);
-          const w = wind.get(s);
-          if (!w) { wind.set(s, { acc: 0, prev: a }); continue; }
-          let d = a - w.prev;
-          while (d > Math.PI) d -= 2 * Math.PI;
-          while (d < -Math.PI) d += 2 * Math.PI;
-          w.acc += d; w.prev = a;
-          const laps = Math.floor(Math.abs(w.acc) / (2 * Math.PI));
-          if (laps > 0) setProgress(2, idx(2, 'dizzy'), laps);
+      const jump = prevPos && Math.hypot(x - prevPos.x, z - prevPos.z) > 6;   // teletransporte (não é movimento da van)
+      if (level === 2 && ctx.bars && !pending.has('twoDetours')) {         // Dois desvios
+        const n = nodeAt(x, z);
+        for (const b of ctx.bars) {
+          let st = legs.get(b.id);
+          if (!st) legs.set(b.id, st = { zone: null, leg: null, last: null });
+          const zone = jump ? null : barZone(b, x, z);
+          if (jump) { st.zone = null; st.leg = null; continue; }
+          if (zone) {
+            if (st.leg && st.leg.from !== zone) {                          // chegou ao outro lado da barreira
+              const path = st.leg.path.slice(), anc = barAnchor(b, zone);
+              if (path[path.length - 1] !== anc) path.push(anc);
+              const leg = { from: st.leg.from, to: zone, edges: edgesOf(path) };
+              if (leg.edges.size >= 2) {                                   // (um desvio de verdade: dá a volta pela quadra)
+                const o = st.last;                                         // voltou por um caminho diferente do da ida?
+                if (o && o.from === leg.to && o.to === leg.from && hasOwn(leg.edges, o.edges) && hasOwn(o.edges, leg.edges)) pending.add('twoDetours');
+                st.last = leg;
+              }
+            }
+            st.leg = null; st.zone = zone;
+          } else {
+            if (st.zone && !st.leg) st.leg = { from: st.zone, path: [barAnchor(b, st.zone)] };
+            st.zone = null;
+            if (st.leg && n && st.leg.path[st.leg.path.length - 1] !== n.k) st.leg.path.push(n.k);
+          }
         }
       }
+      if (level === 3) {
+        const t = ctx.time || 0, sp = Math.abs(ctx.speed || 0), n = nodeAt(x, z);
+        // Marcha à ré: de um cruzamento ao seguinte andando de ré de verdade (o deslocamento, não a tecla)
+        if (jump) rev = null;
+        else if (!pending.has('reverse') && prevPos) {
+          const along = (x - prevPos.x) * Math.cos(heading) + (z - prevPos.z) * Math.sin(heading);
+          if (rev) { if (along < 0) rev.dist += -along; else rev.fwd += along; }
+          if (rev && rev.fwd > 0.6) rev = null;                            // andou para a frente: a ré recomeça
+          if (n) {
+            if (rev && rev.node !== n.k) {
+              const [aj, ai] = rev.node.split(',').map(Number);
+              if (Math.abs(aj - n.j) + Math.abs(ai - n.i) === 1 && rev.dist >= STEP() - 2 * NODE_HALF - 2) pending.add('reverse');
+              rev = null;
+            }
+            if (!rev && along <= 0.001) rev = { node: n.k, dist: 0, fwd: 0 };
+            else if (rev) { rev.dist = 0; rev.fwd = 0; }                    // ainda no cruzamento de partida
+          }
+        }
+        // Olhe antes de seguir: 3 s parada logo antes do cruzamento e depois atravessa (sai por outro lado)
+        if (jump) { look = null; stopAt = null; }
+        else if (look) {
+          const dx = x - roadCenter(look.j), dz = z - roadCenter(look.i);
+          if (Math.abs(dx) < ROAD / 2 && Math.abs(dz) < ROAD / 2) look.inside = true;
+          else if (look.inside && (Math.abs(dx) > ROAD / 2 + 1 || Math.abs(dz) > ROAD / 2 + 1)) {
+            if (armOf(look.j, look.i, x, z) !== look.side) { lookSet.add(look.k); if (lookSet.size >= 3) pending.add('lookStop'); }
+            look = null; stopAt = null;
+          } else if (!look.inside && !inArm(look, x, z)) { look = null; stopAt = null; }   // foi embora sem atravessar
+        }
+        if (!look && !jump) {
+          const a = sp < 0.5 ? approachOf(x, z, heading) : null;
+          if (!a) stopAt = null;
+          else if (!stopAt || stopAt.k !== a.k || stopAt.side !== a.side) stopAt = { ...a, t0: t };
+          else if (t - stopAt.t0 >= 3) look = { ...a, inside: false };
+        }
+      }
+      if (level === 4) {
+        // Curva de ré / Meia-volta: o que a van fez dentro de um cruzamento (do momento em que entra até sair)
+        const zj = Math.round((x - roadCenter(0)) / STEP()), zi = Math.round((z - roadCenter(0)) / STEP());
+        const inZone = !jump && zj >= 0 && zi >= 0 && zj <= GRID && zi <= GRID && Math.abs(x - roadCenter(zj)) <= TURN_HALF && Math.abs(z - roadCenter(zi)) <= TURN_HALF;
+        const zk = inZone ? zj + ',' + zi : null;
+        if (man && man.k !== zk) {                                        // saiu do cruzamento: avalia a manobra
+          if (!jump) {
+            const out = armOf(man.j, man.i, x, z), V = a => a === 'N' || a === 'S';
+            if (man.bwd <= 0.3 && Math.abs(angDiff(heading, man.h0)) >= 150 * Math.PI / 180) pending.add('uTurn');   // só para a frente
+            if (V(out) !== V(man.arm) && man.bwd >= 3 && Math.abs(man.bwdTurn) >= 50 * Math.PI / 180 && man.last < 0) pending.add('revTurn');
+          }
+          man = null;
+        }
+        if (zk && !man) man = { k: zk, j: zj, i: zi, arm: armOf(zj, zi, prevPos ? prevPos.x : x, prevPos ? prevPos.z : z), h0: prevPos ? prevPos.h : heading, bwd: 0, bwdTurn: 0, last: 0 };
+        else if (man && prevPos) {
+          const along = (x - prevPos.x) * Math.cos(heading) + (z - prevPos.z) * Math.sin(heading), dh = angDiff(heading, prevPos.h);
+          if (along < -0.002 && (ctx.speed || 0) < 0) { man.bwd += -along; man.bwdTurn += dh; man.last = -1; }   // de ré de verdade
+          else if (along > 0.002) man.last = 1;
+        }
+        // Cinco voltas: 5 circuitos da van em volta da MESMA quadra (em qualquer sentido, não precisam ser seguidos)
+        for (const q of lapStep(vanLaps, x, z, 0.5, jump)) if (vanLaps.get(q.s).laps >= 5) pending.add('fiveLaps');
+      }
+      if (level === 5) {
+        // Turista do bairro: passagens completas por um trecho de rua (de um cruzamento ao vizinho), por trecho
+        const n = jump ? null : nodeAt(x, z);
+        if (jump) lastNode = null;
+        else if (n && n.k !== (lastNode && lastNode.k)) {
+          if (lastNode && Math.abs(lastNode.j - n.j) + Math.abs(lastNode.i - n.i) === 1) {
+            const key = [lastNode.k, n.k].sort().join('|'), c = (streets.get(key) || 0) + 1; streets.set(key, c);
+            if (c >= 5) pending.add('tourist');
+          }
+          lastNode = n;
+        }
+        // Oito no asfalto: volta numa quadra e, em seguida, volta na quadra vizinha na diagonal, no sentido oposto
+        for (const q of lapStep(eightLaps, x, z, 0.5, jump)) {
+          const p = lastLap, dq = p ? [Math.abs(p.s % GRID - q.s % GRID), Math.abs(Math.floor(p.s / GRID) - Math.floor(q.s / GRID))] : null;
+          if (p && dq[0] === 1 && dq[1] === 1 && p.dir === -q.dir) pending.add('eight');
+          lastLap = q;
+        }
+        if (jump) lastLap = null;
+        // Esqueci uma coisa: depois de uma entrega falsa, chegar à área da entrada antes da próxima entrega
+        const e = ctx.entrance;
+        if (needEntrance && e && Math.abs(x - e.x) <= ROAD && z <= roadCenter(0) + ROAD / 2 + 1.5) { pending.add('forgot'); needEntrance = false; }
+      }
+      if (level === 6 && !jump) {
+        const t = ctx.time || 0, sp = Math.abs(ctx.speed || 0), c = Math.cos(heading), s = Math.sin(heading);
+        // Preso no trânsito: 15 s parada atrás de um engarrafamento, de frente para ele; depois chega ao outro lado por um desvio
+        const behind = r => {                                             // lado (−1 oeste / +1 leste) em que a van espera, ou 0
+          const zc = (r.z0 + r.z1) / 2; if (Math.abs(z - zc) > ROAD / 2 + 0.6) return 0;
+          if (x > r.x1 && x < r.x1 + 10 && c < -0.7) return 1;
+          if (x < r.x0 && x > r.x0 - 10 && c > 0.7) return -1;
+          return 0;
+        };
+        const otherSide = (r, side) => { const zc = (r.z0 + r.z1) / 2; return Math.abs(z - zc) <= ROAD / 2 + 0.6 && (side > 0 ? x < r.x0 && x > r.x0 - 12 : x > r.x1 && x < r.x1 + 12); };
+        const jams = ctx.jams || [];
+        if (jamArmed && otherSide(jamArmed.r, jamArmed.side)) { pending.add('stuck'); jamArmed = null; }
+        let w = null; for (const r of jams) { const sd = behind(r); if (sd) { w = { r, side: sd }; break; } }
+        if (!w || sp >= 0.5 || (jamWait && Math.hypot(x - jamWait.x, z - jamWait.z) > 0.5)) jamWait = null;   // mexeu: a espera recomeça
+        if (w && sp < 0.5 && (!jamWait || jamWait.r !== w.r || jamWait.side !== w.side)) jamWait = { ...w, t0: t, x, z };
+        else if (jamWait && t - jamWait.t0 >= 15) jamArmed = { r: w.r, side: w.side };
+        // Melhor recuar: de frente para um caminhão na rua dele, recua (de ré, sem virar) até o cruzamento anterior
+        const trucks = (ctx.bars || []).filter(b => b.type === 'truck');
+        const near = b => {                                               // van na rua do caminhão, de frente para ele: { dir para o caminhão, âncora }
+          const H = b.kind === 'H', lat = H ? z - roadCenter(b.i) : x - roadCenter(b.j), u = H ? x - b.x : z - b.z;
+          if (Math.abs(lat) > ROAD / 2 + 0.6 || Math.abs(u) < 2 || Math.abs(u) > STEP()) return null;
+          const dx = H ? -Math.sign(u) : 0, dz = H ? 0 : -Math.sign(u);
+          return { b, dx, dz, u: Math.abs(u), anchor: barAnchor(b, u < 0 ? 'A' : 'B'), facing: c * dx + s * dz };
+        };
+        if (backOff) {
+          const n = near(backOff.b), node = nodeAt(x, z), along = prevPos ? (x - prevPos.x) * c + (z - prevPos.z) * s : 0;
+          if (along < 0) backOff.bwd += -along; else backOff.fwd += along;
+          if (node && node.k === backOff.anchor && backOff.bwd >= 1.5) { if (c * backOff.dx + s * backOff.dz >= 0.8) pending.add('backOff'); backOff = null; }
+          else if (!n || n.facing < 0.8 || backOff.fwd > 1.2) backOff = null;   // virou, saiu da rua ou andou para a frente
+        }
+        if (!backOff) for (const b of trucks) { const n = near(b); if (n && n.u <= 10 && n.facing >= 0.8) { backOff = { b, dx: n.dx, dz: n.dz, anchor: n.anchor, bwd: 0, fwd: 0 }; break; } }
+      }
+      prevPos = { x, z, h: heading };
+      if (level === 0 && !pending.has('lap')) {                          // Volta no bairro: as 4 ruas externas
+        const a = roadCenter(0), b = roadCenter(GRID), near = c => (v => Math.abs(v - c) < ROAD / 2 + 1.5);
+        const bin = v => Math.floor((v - a) / (b - a) * LAP_BINS);
+        const mark = (side, v) => { const k = bin(v); if (k >= 0 && k < LAP_BINS) lapBins[side][k] = true; };
+        if (near(a)(z)) mark('n', x); if (near(b)(z)) mark('s', x);
+        if (near(a)(x)) mark('w', z); if (near(b)(x)) mark('e', z);
+        if (lapDone()) pending.add('lap');
+      }
+    },
+    /** A pé (Carreira): Bairro 2, "Conheça a praça"; Bairro 5, "Uma volta a pé" (contornar uma quadra inteira). */
+    walk(x, z, plaza) {
+      if (!active) return;
+      if (level === 4) {
+        const jump = prevFoot && Math.hypot(x - prevFoot.x, z - prevFoot.z) > 4;
+        if (lapStep(footLaps, x, z, 1.2, jump).length) pending.add('walkLap');
+        prevFoot = { x, z };
+      }
+      if (level !== 1 || !plaza) return;
+      if (x > plaza.x0 + 1 && x < plaza.x1 - 1 && z > plaza.z0 + 1 && z < plaza.z1 - 1) pending.add('plaza');
     },
 
-    /** Depois de cada tentativa de entrega. indicated = era a casa da pista atual; stepBefore = pistas seguidas antes. */
-    visit(h, success, indicated, stepBefore, game) {
+    /** Depois de cada tentativa de entrega. indicated = era a casa da pista vigente. Na entrega certa (success), confirma
+     *  e salva as missões cumpridas nesta partida; ctx = { time (s no cronômetro), bumps (batidas da van) }. */
+    visit(h, success, indicated, stepBefore, game, ctx = {}) {
       if (!active) return;
-      const house = HOUSES[h];
-      const slot = game.slotOf[h], target = game.route[stepBefore];      // casa que a pista apontava
-      const falseHint = stepBefore < game.route.length - 1;              // a pista apontava uma casa errada
-      if (!success) wrongAt.set(h, (wrongAt.get(h) || 0) + 1);
-      // sequências de entregas erradas seguidas na mesma casa (uma entrega certa interrompe)
-      if (!success && streaks.length && streaks[streaks.length - 1].h === h) streaks[streaks.length - 1].n++;
-      else streaks.push({ h, slot, n: success ? 0 : 1 });
-      const detour = sinceDelivery.size;                                  // ruas diferentes desde a última entrega
-      sinceDelivery = new Set();
+      if (level === 2 && !success && !indicated) {                        // Fora da rota: 2 casas diferentes fora da indicação
+        offRoute.add(h); if (offRoute.size >= 2) pending.add('offRoute');
+      }
+      if (level === 6 && game) {
+        const H = HOUSES[h], target = game.route && game.route[stepBefore];
+        if (target != null && h !== target && H.kind === 'house' && H.tags.includes('fountain') && ((game.clues && game.clues[stepBefore]) || []).includes('fountain')) pending.add('wrongFountain');   // (a pista cita a fonte)   // Fonte errada
+        if (target != null && game.slotOf) {                              // Não era aqui?: lote vizinho pelos lados do indicado
+          const a = game.slotOf[target], b = game.slotOf[h], ra = Math.floor(a / GRID), rb = Math.floor(b / GRID);
+          if (Math.abs(ra - rb) + Math.abs(a % GRID - b % GRID) === 1) pending.add('nextDoor');
+        }
+        if (success && vehHits === 0) pending.add('noTouch');            // Sem encostar
+      }
+      if (level === 5 && game) {
+        const H = HOUSES[h], clue = (game.clues && game.clues[stepBefore]) || [], target = game.route && game.route[stepBefore];
+        if (H.kind === 'house' && ((clue.includes('roof:red') && H.roof === 'blue') || (clue.includes('roof:blue') && H.roof === 'red'))) pending.add('colors');   // Confundi as cores
+        if (H.kind === 'house' && target != null && HOUSES[target].kind !== 'house') pending.add('houseOrBuilding');   // Casa ou prédio?
+        needEntrance = !success;                                         // Esqueci uma coisa: nova tentativa a cada entrega falsa
+        lastLap = null;                                                  // (o oito é contínuo)
+      }
+      const again = h === lastH; lastH = h;                               // tocar de novo na mesma casa não é outra entrega (posto/tempo)
+      if (fueled && !again) { fuelStops++; fueled = false; }               // abasteceu entre a entrega anterior e esta (1× por intervalo)
+      if (!again) deliveries++;
+      if (level === 3 && !again) {
+        const t = ctx.time || 0;
+        if (fuelStops >= 1) pending.add('fuelStop');                      // Parada para abastecer: entrega → posto → entrega
+        if (lastDelT !== null && t - lastDelT <= 45) pending.add('quick'); // Entrega próxima: até 45 s desde a anterior
+        lastDelT = t;
+      }
+      if (level === 4 && fuelStops >= 2) pending.add('twoStops');         // Duas paradas: em 2 intervalos diferentes
       if (level === 0) {
-        if (!success && !indicated) setProgress(0, idx(0, 'wrongWay'), 1);       // Duplo Erro
-        if (success) {
-          if (stepBefore >= 4) setProgress(0, idx(0, 'firstShift'), 1);           // Primeiro Turno
-          setProgress(0, idx(0, 'streets'), seen.size);                           // Conhecendo a Vizinhança
-          if (Math.max(0, ...entries.values()) < 4) setProgress(0, idx(0, 'noRepeat'), 1);   // Sem Voltar Atrás
-        }
-      } else if (level === 1) {
-        if (house.roof === 'blue') add(1, idx(1, 'blue'));                        // Telhado Azul
-        if (!success && house.roof === 'red') setProgress(1, idx(1, 'redWrong'), 1);
-        if (!success && house.f.includes('fountain')) add(1, idx(1, 'fountain'));
-        if (!success && house.f.includes('trampoline')) setProgress(1, idx(1, 'trampoline'), wrongAt.get(h));   // Insistir no Pulo
-      } else if (level === 2) {
-        if (!success) setProgress(2, idx(2, 'tenSame'), wrongAt.get(h));      // Dez Vezes é Demais
-        if (success) setProgress(2, idx(2, 'tourist'), Math.max(0, ...passes.values()));   // Turista do Bairro
-        if (falseHint && h !== target) {                                       // Não Era Aqui? (lote vizinho do indicado)
-          const t = game.slotOf[target];
-          const row = s => Math.floor(s / GRID), col = s => s % GRID;
-          if (Math.abs(row(t) - row(slot)) + Math.abs(col(t) - col(slot)) === 1) setProgress(2, idx(2, 'nextDoor'), 1);
-        }
-        const OPP = { 0: 15, 15: 0, 3: 12, 12: 3 };                             // Do Outro Lado
-        const a = streaks[streaks.length - 2], b = streaks[streaks.length - 1];
-        if (a && b && a.n >= 3 && b.n >= 3 && OPP[a.slot] === b.slot) setProgress(2, idx(2, 'opposite'), 1);
-      } else if (level === 3) {
-        const tHouse = HOUSES[target];
-        const color = x => x.kind === 'shop' ? x.awning : x.roof;                                           // toldo do prédio / telhado
-        if (falseHint && color(tHouse) === 'blue' && color(house) === 'red') setProgress(3, idx(3, 'colors'), 1);   // Confundi as Cores
-        if (!success && house.f.includes('rooster') && wrongAt.get(h) >= 3) {                                // Viciado em Galos
-          roosters.add(h);
-          setProgress(3, idx(3, 'roosters'), roosters.size);
-        }
-        if (h !== target && tHouse.f.includes('fountain') && house.f.includes('fountain')) setProgress(3, idx(3, 'fountainSwap'), 1);
-        if (!success) {                                                                                       // Eu Conheço Essa Casa
-          const n = (slotWrong.get(slot) || 0) + 1;
-          slotWrong.set(slot, n);
-          if (n >= 3) { thisSlots.add(slot); setProgress(3, idx(3, 'knowHouse'), prevSlots.has(slot) ? 2 : 1); }
-        }
+        pending.add('firstDelivery');                                    // Primeira entrega: qualquer entrega (certa ou falsa)
+        if (!success && !indicated) pending.add('wrongAddress');         // Endereço errado: numa casa diferente da indicada
       }
-
+      if (!success) return;
+      if (level === 0) {
+        pending.add('rightAddress');
+        if ((ctx.time || 0) >= 600) pending.add('noRush');               // Sem pressa: 10 min no cronômetro
+      } else if (level === 1) {
+        pending.add('biggerHood');
+        if (!hintUsed) pending.add('noHint');                            // Sem ajuda: sem o botão DICA (T)
+        if (Math.floor(ctx.time || 0) <= 180) pending.add('fast');       // Entrega rápida: até 03:00
+        if ((ctx.bumps || 0) === 0) pending.add('noBump');               // Sem esbarrar
+      } else if (level === 2) {
+        if (barHitN === 0) pending.add('careful');                       // Cuidado com as barreiras
+      }
+      confirm(level, pending);
+      active = false; pending = new Set();
     },
 
-    /** A van abasteceu no posto (não é uma entrega). */
-    refuel() {
+    /** A van abasteceu no posto (não é uma entrega). Depois da 1ª entrega, marca o intervalo atual (Bairros 4 e 5): conta
+     *  quando a próxima entrega acontecer; abastecer de novo no mesmo intervalo não conta outra vez. */
+    refuel() { if (active && deliveries > 0) fueled = true; },
+
+    /** Batida contada pelo contador (uma por contato; main.js). Bairro 3: batidas nas barreiras (b.bar = índice). */
+    bump(b, total, vehicle = false) {
+      if (active && level === 6 && vehicle) vehHits++;                  // Bairro 7: carro de engarrafamento ou caminhão
+      if (!active || level !== 2 || !b || b.bar == null) return;
+      barHitN++;
+      const n = (barHits.get(b.bar) || 0) + 1; barHits.set(b.bar, n);
+      if (n >= 3) pending.add('stubborn');                               // Barreira teimosa: 3 batidas na mesma
+      if (total > 0 && barHits.size >= total) pending.add('allBars');    // Teste de resistência: todas as da partida
+    },
+
+    /** O motorista desceu da van (L). Bairro 4, "Estacione de ré": parada diante da entrada de um prédio comercial, com a
+     *  traseira voltada para ela. shops = [{ x (porta), z (frente do lote) }]; as fachadas dão para o sul (+Z). */
+    exitVan(x, z, heading, speed, shops = []) {
       if (!active) return;
-      fuels++;
-      if (level === 3) setProgress(3, idx(3, 'expensive'), fuels);                                       // É Muito Caro!
+      footLaps = new Map(); prevFoot = null;                             // Bairro 5: cada descida é uma tentativa nova da volta a pé
+      if (level !== 3 || Math.abs(speed) > 0.5) return;
+      if (Math.sin(heading) < Math.cos(40 * Math.PI / 180)) return;     // frente para o sul (±40°): traseira para a fachada
+      if (shops.some(p => Math.abs(x - p.x) <= 4.5 && z - p.z >= 1.2 && z - p.z <= ROAD - 1.2)) pending.add('reversePark');
     },
 
-    /** O jogador usou a dica (conta no máximo uma vez por partida). */
-    hint() {
-      if (!active || hintCounted) return;
-      hintCounted = true;
-      if (level === 1) add(1, idx(1, 'hint'));
-    },
+    /** O jogador usou a DICA (botão ou T). */
+    hint() { if (active) hintUsed = true; },
   };
 }

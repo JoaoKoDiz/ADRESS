@@ -1,0 +1,397 @@
+// K (casa fixa do Bairro 1): sentado numa cadeira de balanço de madeira no quintal, lendo jornal
+// e balançando bem de leve. Não liga para entregas (main.js não mostra morador na porta; as falas são do narrador).
+// Estilo low-poly (sombreamento chapado), como a referência. Frente do personagem/cadeira = +X local.
+import * as THREE from 'three';
+import { mesh, mat, at, box, sphere, cone, dynamic } from './kit.js';
+import { limb, torsoS, mitten, bigShoe, buildGlasses } from './driver.js';
+import { createGait } from '../gait.js';
+
+const C = {
+  skin: '#f3cfa8', hair: '#e3c45c', hairD: '#c9a743', red: '#c01212', white: '#f2f1ec', pants: '#4a0b10',
+  shoe: '#f4f4f1', sole: '#260407', frame: '#3a2115', eye: '#1d1210', brow: '#4a2a16', mouth: '#5a2e22',
+  wood: '#9a6a3e', woodD: '#74482a',
+};
+const M = Object.fromEntries(Object.entries(C).map(([k, c]) => [k, mat(c, { flatShading: false })]));   // sombreamento suave (forma nova)
+const JACKET = mat(C.red, { side: THREE.DoubleSide, flatShading: false });          // casaco aberto: o lado de dentro aparece na abertura
+const lowBall = (r, m, sx = 1, sy = 1, sz = 1) => { const o = mesh(new THREE.SphereGeometry(r, 30, 20), m); o.scale.set(sx, sy, sz); return o; };
+
+/** Jornal: textura de capa (manchete, foto, colunas) e de miolo (só colunas). */
+function paperTexture(front) {
+  const cv = document.createElement('canvas'); cv.width = 256; cv.height = 280;
+  const g = cv.getContext('2d');
+  g.fillStyle = '#efece2'; g.fillRect(0, 0, 256, 280);
+  g.fillStyle = '#9a978d';
+  let y = 14;
+  if (front) {
+    g.fillStyle = '#222'; g.font = 'bold 30px Georgia, serif'; g.textAlign = 'center';
+    g.fillText('DIÁRIO', 128, 40); g.font = 'bold 15px Georgia, serif'; g.fillText('DA VILA ADRESS', 128, 60);
+    g.fillRect(14, 70, 228, 3);
+    g.fillStyle = '#7d8a96'; g.fillRect(16, 84, 104, 70);           // foto
+    g.fillStyle = '#9a978d';
+    for (let i = 0; i < 6; i++) g.fillRect(130, 86 + i * 12, 108 - (i % 3) * 14, 6);
+    y = 168;
+  }
+  for (; y < 266; y += 12) for (const x of [16, 134]) g.fillRect(x, y, 104 - ((y / 12) % 4) * 9, 6);
+  const t = new THREE.CanvasTexture(cv); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 4;
+  return t;
+}
+let paperMats = null;
+const getPaperMats = () => paperMats || (paperMats = {
+  front: new THREE.MeshStandardMaterial({ map: paperTexture(true), roughness: 0.9 }),
+  inner: new THREE.MeshStandardMaterial({ map: paperTexture(false), roughness: 0.9 }),
+});
+
+/** Cadeira de balanço de madeira (frente +X, base dos balanços em y = 0). */
+function rockingChair() {
+  const g = new THREE.Group();
+  const W = M.wood, D = M.woodD;
+  g.add(at(box(0.7, 0.07, 0.78, W), 0.02, 0.33, 0));                            // assento
+  for (const z of [-0.36, 0.36]) {
+    // balanços: arco de círculo (raio R) com o ponto mais baixo em y = 0
+    const R = 2.4, arc = 0.72;
+    g.add(at(mesh(new THREE.TorusGeometry(R, 0.045, 5, 18, arc), D), 0, R + 0.045, z, 0, 0, -Math.PI / 2 - arc / 2));
+    for (const x of [-0.27, 0.3]) g.add(at(box(0.06, 0.26, 0.06, D), x, 0.19, z));   // pés até os balanços
+    g.add(at(box(0.62, 0.05, 0.09, W), 0.0, 0.64, z * 1.12));                     // braço da cadeira
+    g.add(at(box(0.05, 0.3, 0.05, D), 0.27, 0.49, z * 1.12));                      // apoio da frente do braço
+  }
+  const back = new THREE.Group(); back.position.set(-0.33, 0.36, 0); back.rotation.z = 0.2; g.add(back);   // encosto inclinado para trás
+  for (const z of [-0.36, 0.36]) back.add(at(box(0.07, 1.05, 0.07, D), 0, 0.52, z));
+  back.add(at(box(0.08, 0.12, 0.84, W), 0, 1.04, 0));
+  back.add(at(box(0.06, 0.07, 0.76, W), 0, 0.28, 0));
+  for (const z of [-0.22, 0, 0.22]) back.add(at(box(0.04, 0.72, 0.1, W), 0.01, 0.66, z));
+  return g;
+}
+
+/** Cabeça (raio r, centro na origem, rosto para +X): loiro, óculos, expressão séria. */
+function readerHead(r, { sun = false } = {}) {
+  const h = new THREE.Group();
+  h.add(lowBall(r, M.skin, 1, 0.98, 1.02));
+  const face = (y, z) => Math.sqrt(Math.max(0, r * r - y * y - z * z));            // x da superfície do rosto
+  h.add(at(lowBall(r * 0.15, M.skin, 1, 0.9, 1), face(-0.06 * r, 0) + 0.01, -0.06 * r, 0));   // nariz
+  for (const s of [-1, 1]) {
+    h.add(at(lowBall(r * 0.17, M.skin, 0.55, 1, 0.7), -0.03 * r, -0.02 * r, s * r * 0.97)); // orelha
+    const ez = s * r * 0.38, ey = r * 0.12;
+    h.add(at(lowBall(r * 0.1, M.eye, 0.35, 1.15, 0.85), face(ey, ez) - 0.005, ey, ez)); // olho
+    // sobrancelhas grossas, retas e um pouco franzidas (sério)
+    const by = r * 0.42, bz = s * r * 0.36;
+    const brow = at(mesh(new THREE.CapsuleGeometry(r * 0.05, r * 0.28, 6, 12), M.brow), face(by, bz) + 0.008, by, bz, Math.PI / 2 + s * 0.22, -s * 0.3, 0); brow.scale.set(1, 1, 1.15); h.add(brow);
+  }
+  h.add(buildGlasses(r, { ey: r * 0.12, ez: r * 0.38, R: r * 0.26, tube: r * 0.036, frame: M.frame, octo: true, earY: 0.0,
+    lens: sun ? mat('#141619', { side: THREE.DoubleSide, roughness: 0.2, metalness: 0.3, flatShading: false }) : null }));   // óculos octogonais (de sol no terraço)
+  h.add(at(mesh(new THREE.CapsuleGeometry(r * 0.022, r * 0.3, 4, 10), M.mouth), face(-r * 0.42, 0) - 0.004, -r * 0.42, 0, Math.PI / 2, 0, 0));  // boca reta
+  // cabelo loiro: calota (puxada para trás, testa livre, sem franja) + nuca + mechas nos lados (formas chapadas)
+  h.add(at(mesh(new THREE.SphereGeometry(r * 1.07, 28, 14, 0, Math.PI * 2, 0, 1.25), M.hair), -r * 0.04, r * 0.04, 0, 0, 0, 0.42));
+  h.add(mesh(new THREE.SphereGeometry(r * 1.05, 28, 14, -1.5, 3.0, 1.0, 0.95), M.hairD));
+  for (const s of [-1, 1]) for (const [x, y] of [[0.25, 0.25], [-0.15, 0.2]]) {
+    const t = cone(r * 0.2, r * 0.5, M.hairD, 14);
+    t.position.set(x * r, y * r, s * r * 0.92); t.rotation.set(s * (Math.PI - 0.4), 0, 0); h.add(t);
+  }
+  return h;
+}
+
+/** Sentado na cadeira (frente +X). Retorna { group, head, paper } para animar. */
+function readerSeated() {
+  const g = new THREE.Group();
+  // pernas: quadril no assento, coxas para a frente, canelas para baixo, tênis brancos com sola quase preta
+  g.add(at(lowBall(0.27, M.pants, 1.05, 0.62, 1.15), -0.04, 0.47, 0));
+  for (const s of [-1, 1]) {
+    const thigh = new THREE.Group(); thigh.position.set(-0.04, 0.47, s * 0.14); thigh.rotation.z = Math.PI / 2 + 0.06; g.add(thigh);
+    thigh.add(limb(0.15, 0.13, 0.3, M.pants));
+    const knee = new THREE.Group(); knee.position.y = -0.3; knee.rotation.z = -Math.PI / 2 + 0.12; thigh.add(knee);
+    knee.add(limb(0.13, 0.12, 0.27, M.pants));
+    const foot = new THREE.Group(); foot.position.y = -0.27; foot.rotation.z = -0.18; knee.add(foot);
+    bigShoe(foot, M.shoe, M.sole);                                                // calçado maior (mesmo tênis branco de sola escura)
+  }
+  // tronco: camisa branca + casaco vermelho aberto no meio (zíper aberto), gola
+  const torso = new THREE.Group(); torso.position.set(-0.06, 0.53, 0); torso.rotation.z = 0.14; g.add(torso);   // encostado
+  torso.add(torsoS(M.white));
+  const jacket = torsoS(JACKET, 0.32); jacket.scale.multiplyScalar(1.05); jacket.position.y = -0.03; torso.add(jacket);
+  for (const s of [-1, 1]) {
+    torso.add(at(box(0.05, 0.62, 0.04, M.white), 0.235, 0.32, s * 0.1, 0, 0, 0.05));   // dentes do zíper (claros) nas bordas
+    torso.add(at(box(0.12, 0.2, 0.1, M.red), 0.17, 0.63, s * 0.14, s * 0.5, 0, -0.5));  // gola do casaco
+  }
+  // braços: mangas do casaco puxadas até o meio do antebraço (dobra grossa), segurando o jornal na frente do peito
+  const hands = [], arms = [];
+  for (const s of [-1, 1]) {
+    const sh = new THREE.Group(); sh.position.set(0, 0.56, s * 0.31); sh.rotation.set(-s * 0.12, 0, 0.55); torso.add(sh);
+    sh.add(limb(0.14, 0.12, 0.27, M.red));
+    sh.add(limb(0.085, 0.075, 0.28, M.skin));
+    const elbow = new THREE.Group(); elbow.position.y = -0.28; elbow.rotation.set(s * 0.25, 0, 1.25); sh.add(elbow);
+    elbow.add(limb(0.12, 0.11, 0.06, M.red));                                      // manga dobrada
+    elbow.add(at(mesh(new THREE.TorusGeometry(0.1, 0.042, 10, 22), M.red), 0, -0.08, 0, Math.PI / 2, 0, 0));
+    elbow.add(limb(0.072, 0.06, 0.2, M.skin));
+    const wrist = new THREE.Group(); wrist.position.y = -0.2; elbow.add(wrist);
+    wrist.add(mitten(M.skin));
+    hands.push(wrist); arms.push({ s, sh, elbow });
+  }
+  const head = new THREE.Group(); head.position.y = 0.7; torso.add(head);
+  head.add(at(limb(0.11, 0.115, 0.1, M.skin), 0, 0.1, 0));                      // pescoço curto e largo
+  const face = readerHead(0.47); face.position.y = 0.49; head.add(face);
+  head.rotation.z = -0.34;                                                         // olhando para baixo, para o jornal
+  // jornal aberto entre as mãos (duas páginas em V); posto onde as mãos realmente estão
+  g.updateMatrixWorld(true);
+  const inv = new THREE.Matrix4().copy(g.matrixWorld).invert();
+  const hp = hands.map(w => w.localToWorld(new THREE.Vector3(0, -0.07, 0)).applyMatrix4(inv));
+  const paper = new THREE.Group();
+  paper.position.copy(hp[0]).add(hp[1]).multiplyScalar(0.5);
+  paper.rotation.z = 0.3;                                                          // inclinado para ele ler
+  paper.position.x += 0.07 * Math.cos(0.3); paper.position.y += 0.07 * Math.sin(0.3);   // as mãos ficam do lado de dentro (seguram o jornal por trás)
+  g.add(paper);
+  const half = Math.abs(hp[1].z - hp[0].z) / 2 + 0.04, PW = half * 1.6, PH = 0.74;   // jornal maior
+  const pm = getPaperMats(), pages = [];
+  for (const s of [-1, 1]) {
+    const page = new THREE.Group(); page.rotation.y = -s * 0.28; paper.add(page); pages.push(page);  // dobra no meio; as bordas vêm na direção dele (o miolo fica de frente para ele)
+    const outer = new THREE.Mesh(new THREE.PlaneGeometry(PW, PH), s > 0 ? pm.front : pm.inner);   // lado de fora: capa (manchete) numa página, contracapa na outra
+    outer.rotation.y = Math.PI / 2; outer.position.set(0.004, 0.02, s * PW / 2); page.add(outer);
+    const inner = new THREE.Mesh(new THREE.PlaneGeometry(PW, PH), pm.inner);       // lado de dentro (ele lê)
+    inner.rotation.y = -Math.PI / 2; inner.position.set(-0.004, 0.02, s * PW / 2); page.add(inner);
+  }
+  // empurra o jornal para a frente até nenhuma parte das mãos atravessar as páginas (as mãos ficam por trás, segurando)
+  const handVerts = [], v = new THREE.Vector3(), m = new THREE.Matrix4();
+  const outers = pages.map(pg => pg.children[0]);
+  const nrm = new THREE.Vector3(Math.cos(paper.rotation.z), Math.sin(paper.rotation.z), 0);
+  for (let it = 0; it < 40; it++) {
+    g.updateMatrixWorld(true);
+    let worst = 0;
+    for (const w of hands) w.traverse(o => {
+      if (!o.isMesh) return;
+      const pos = o.geometry.attributes.position;
+      for (const pl of outers) {
+        m.copy(pl.matrixWorld).invert().multiply(o.matrixWorld);
+        for (let i = 0; i < pos.count; i++) {
+          v.fromBufferAttribute(pos, i).applyMatrix4(m);           // no plano da página: z = distância para fora
+          if (Math.abs(v.x) < PW / 2 + 0.02 && Math.abs(v.y) < PH / 2 + 0.02) worst = Math.max(worst, v.z + 0.015);
+        }
+      }
+    });
+    if (worst <= 0) break;
+    paper.position.addScaledVector(nrm, Math.min(0.03, worst + 0.003));
+  }
+  return { group: g, head, paper, torso, arms, pages, PW };
+}
+
+/** Cadeira + leitor, com a animação (balanço leve + leitura). Origem no chão, frente +X. */
+export function buildReaderSpot() {
+  const root = dynamic(new THREE.Group());
+  root.name = 'reader-spot';
+  const R = 2.4 + 0.045;
+  const pivot = new THREE.Group(); pivot.position.y = R; root.add(pivot);         // balança em volta do centro do arco dos balanços
+  const content = new THREE.Group(); content.position.y = -R; pivot.add(content);
+  content.add(rockingChair());
+  const rd = readerSeated();
+  content.add(rd.group);
+  root.traverse(o => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = false; } });
+  // pose "lendo" e pose "jornal de lado" (dobrado em cima do braço da cadeira, do lado direito dele, +Z); k = 0..1 entre elas
+  const hold = { pos: rd.paper.position.clone(), q: rd.paper.quaternion.clone() };
+  const aside = { pos: new THREE.Vector3(0.02, 0.69, 0.47),
+    q: new THREE.Quaternion().setFromEuler(new THREE.Euler(Math.PI, 0, Math.PI / 2)) };   // deitado no braço, por fora da cadeira
+  const ARM_HOLD = rd.arms.map(a => ({ sh: a.sh.rotation.clone(), el: a.elbow.rotation.clone() }));
+  const ARM_REST = rd.arms.map(a => ({ sh: new THREE.Euler(-a.s * 0.05, 0, 0.3), el: new THREE.Euler(0, 0, 0.95) }));
+  let k = 0, goal = 0, lastT = null;
+  const ease = x => x * x * (3 - 2 * x);
+  /** true: coloca o jornal de lado (para conversar); false: volta a ler. */
+  root.userData.person = rd.group;                                                 // (o K sozinho, sem a cadeira: o fundo noturno dos menus o esconde)
+  root.userData.setAside = on => { goal = on ? 1 : 0; };
+  root.userData.asideDone = () => k === goal;
+  root.userData.update = t => {
+    const dt = lastT === null ? 0 : Math.min(0.1, Math.max(0, t - lastT)); lastT = t;
+    k = goal > k ? Math.min(goal, k + dt / 1.1) : Math.max(goal, k - dt / 1.1);
+    const e = ease(k), read = 1 - e;
+    pivot.rotation.z = 0.035 * Math.sin(t * 1.4);                                  // balanço bem leve
+    rd.head.rotation.y = 0.12 * Math.sin(t * 0.55) * read - 0.55 * e;              // lendo: os olhos correm pelas colunas; conversando: olha para quem chegou
+    rd.head.rotation.x = 0.03 * Math.sin(t * 0.37);
+    rd.head.rotation.z = -0.34 * read - 0.05 * e;
+    const turn = Math.max(0, Math.sin(t * 0.21) - 0.96) * 25 * read;               // de vez em quando ajeita o jornal
+    // jornal: sai das mãos num arco curto, fecha a dobra e fica deitado no braço da cadeira
+    rd.paper.position.lerpVectors(hold.pos, aside.pos, e);
+    rd.paper.position.y += (0.01 * Math.sin(t * 1.1) + turn * 0.02) * read + Math.sin(e * Math.PI) * 0.25;
+    rd.paper.quaternion.slerpQuaternions(hold.q, aside.q, e);
+    if (read > 0.999) rd.paper.rotation.x = turn * 0.08;
+    rd.pages[0].rotation.y = 0.28 + (Math.PI - 0.56) * e;                          // a página da esquerda dobra por cima da outra
+    rd.arms.forEach((a, i) => {
+      const h = ARM_HOLD[i], r = ARM_REST[i];
+      a.sh.rotation.set(h.sh.x + (r.sh.x - h.sh.x) * e, 0, h.sh.z + (r.sh.z - h.sh.z) * e);
+      a.elbow.rotation.set(h.el.x + (r.el.x - h.el.x) * e, 0, h.el.z + (r.el.z - h.el.z) * e);
+    });
+    rd.torso.scale.y = 1 + 0.01 * Math.sin(t * 1.9);                               // respiração
+  };
+  return root;
+}
+
+/**
+ * K reclinado numa espreguiçadeira (terraço do prédio fixo do Bairro 6), de óculos de sol, sem jornal.
+ * Origem no tampo da espreguiçadeira (comprimento ao longo de X, cabeceira em −X), frente = +X. Inclui o encosto levantado.
+ */
+export function buildLoungerReader() {
+  const root = dynamic(new THREE.Group());
+  root.name = 'lounger-reader';
+  const g = new THREE.Group(); g.scale.setScalar(0.9); root.add(g);
+  // encosto levantado (almofada branca inclinada na cabeceira)
+  g.add(at(box(1.0, 0.09, 0.98, mat('#ffffff')), -0.62, 0.32, 0, 0, 0, -0.62));
+  // quadril e pernas esticadas para a frente (pés para cima)
+  g.add(at(lowBall(0.27, M.pants, 1.05, 0.62, 1.15), -0.12, 0.17, 0));
+  for (const s of [-1, 1]) {
+    const thigh = new THREE.Group(); thigh.position.set(-0.12, 0.16, s * 0.14); thigh.rotation.z = Math.PI / 2 + 0.04; g.add(thigh);
+    thigh.add(limb(0.15, 0.13, 0.3, M.pants));
+    const knee = new THREE.Group(); knee.position.y = -0.3; knee.rotation.z = -0.06; thigh.add(knee);
+    knee.add(limb(0.13, 0.12, 0.27, M.pants));
+    const foot = new THREE.Group(); foot.position.y = -0.27; knee.add(foot);
+    bigShoe(foot, M.shoe, M.sole);                                                // calçado maior (mesmo tênis branco de sola escura)
+  }
+  // tronco deitado no encosto: camisa branca + casaco vermelho aberto
+  const torso = new THREE.Group(); torso.position.set(-0.16, 0.22, 0); torso.rotation.z = 0.95; g.add(torso);
+  torso.add(torsoS(M.white));
+  const jacket = torsoS(JACKET, 0.32); jacket.scale.multiplyScalar(1.05); jacket.position.y = -0.03; torso.add(jacket);
+  for (const s of [-1, 1]) {
+    torso.add(at(box(0.05, 0.62, 0.04, M.white), 0.235, 0.32, s * 0.1, 0, 0, 0.05));
+    torso.add(at(box(0.12, 0.2, 0.1, M.red), 0.17, 0.63, s * 0.14, s * 0.5, 0, -0.5));
+    // braços relaxados ao lado do corpo, mangas dobradas
+    const sh = new THREE.Group(); sh.position.set(0, 0.56, s * 0.31); sh.rotation.set(-s * 0.2, 0, -0.15); torso.add(sh);
+    sh.add(limb(0.14, 0.12, 0.27, M.red));
+    sh.add(limb(0.085, 0.075, 0.28, M.skin));
+    const elbow = new THREE.Group(); elbow.position.y = -0.28; elbow.rotation.set(-s * 0.1, 0, 0.35); sh.add(elbow);
+    elbow.add(limb(0.12, 0.11, 0.06, M.red));
+    elbow.add(at(mesh(new THREE.TorusGeometry(0.1, 0.042, 10, 22), M.red), 0, -0.08, 0, Math.PI / 2, 0, 0));
+    elbow.add(limb(0.072, 0.06, 0.2, M.skin));
+    const wrist = new THREE.Group(); wrist.position.y = -0.2; elbow.add(wrist);
+    wrist.add(mitten(M.skin));
+  }
+  const head = new THREE.Group(); head.position.y = 0.7; torso.add(head);
+  head.add(at(limb(0.11, 0.115, 0.1, M.skin), 0, 0.1, 0));                      // pescoço curto e largo
+  const face = readerHead(0.47, { sun: true }); face.position.y = 0.49; head.add(face);
+  head.rotation.z = -0.55;                                                     // olha para a frente, por cima dos pés (para o sol)
+  root.traverse(o => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = false; } });
+  root.userData.update = t => {
+    torso.scale.y = 1 + 0.012 * Math.sin(t * 1.6);                               // respiração tranquila
+    head.rotation.y = 0.05 * Math.sin(t * 0.3);
+  };
+  return root;
+}
+
+/**
+ * K sentado num banco da igreja, de óculos normais, sem jornal, mãos nas pernas. Só fica sentado (sem animação).
+ * Origem no chão, no meio do assento; frente = +X. `seatY` = altura do assento.
+ */
+export function buildPewReader(seatY = 0.62) {
+  const root = new THREE.Group();
+  root.name = 'pew-reader';
+  const S = 0.9, g = new THREE.Group(); g.scale.setScalar(S); root.add(g);
+  const HY = (seatY + 0.14 * S) / S;                                               // altura do quadril (coxas apoiadas no assento)
+  g.add(at(lowBall(0.27, M.pants, 1.05, 0.62, 1.15), 0.02, HY, 0));
+  for (const s of [-1, 1]) {
+    const thigh = new THREE.Group(); thigh.position.set(0.02, HY, s * 0.14); thigh.rotation.z = Math.PI / 2 + 0.04; g.add(thigh);
+    thigh.add(limb(0.15, 0.13, 0.32, M.pants));
+    const knee = new THREE.Group(); knee.position.y = -0.32; knee.rotation.z = -Math.PI / 2 + 0.04; thigh.add(knee);
+    const shin = HY - 0.17;                                                         // canela até o chão
+    knee.add(limb(0.13, 0.11, shin, M.pants));
+    const foot = new THREE.Group(); foot.position.y = -shin; foot.rotation.z = -0.04; knee.add(foot);
+    bigShoe(foot, M.shoe, M.sole);                                                // calçado maior (mesmo tênis branco de sola escura)
+  }
+  // tronco reto (encostado de leve): camisa branca + casaco vermelho aberto
+  const torso = new THREE.Group(); torso.position.set(-0.04, HY + 0.06, 0); torso.rotation.z = 0.06; g.add(torso);
+  torso.add(torsoS(M.white));
+  const jacket = torsoS(JACKET, 0.32); jacket.scale.multiplyScalar(1.05); jacket.position.y = -0.03; torso.add(jacket);
+  for (const s of [-1, 1]) {
+    torso.add(at(box(0.05, 0.62, 0.04, M.white), 0.235, 0.32, s * 0.1, 0, 0, 0.05));
+    torso.add(at(box(0.12, 0.2, 0.1, M.red), 0.17, 0.63, s * 0.14, s * 0.5, 0, -0.5));
+    // braços descansando: mãos em cima das coxas, mangas dobradas
+    const sh = new THREE.Group(); sh.position.set(0, 0.56, s * 0.31); sh.rotation.set(-s * 0.05, 0, 0.22); torso.add(sh);
+    sh.add(limb(0.14, 0.12, 0.27, M.red));
+    sh.add(limb(0.085, 0.075, 0.28, M.skin));
+    const elbow = new THREE.Group(); elbow.position.y = -0.28; elbow.rotation.set(s * 0.12, 0, 1.2); sh.add(elbow);
+    elbow.add(limb(0.12, 0.11, 0.06, M.red));
+    elbow.add(at(mesh(new THREE.TorusGeometry(0.1, 0.042, 10, 22), M.red), 0, -0.08, 0, Math.PI / 2, 0, 0));
+    elbow.add(limb(0.072, 0.06, 0.2, M.skin));
+    const wrist = new THREE.Group(); wrist.position.y = -0.2; elbow.add(wrist);
+    wrist.add(mitten(M.skin));
+  }
+  const head = new THREE.Group(); head.position.y = 0.7; torso.add(head);
+  head.add(at(limb(0.11, 0.115, 0.1, M.skin), 0, 0.1, 0));                      // pescoço curto e largo
+  const face = readerHead(0.47); face.position.y = 0.49; head.add(face);           // óculos redondos normais (sem lente escura)
+  head.rotation.z = -0.1;                                                           // olha para a frente (para o altar)
+  root.traverse(o => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = false; } });
+  root.userData.head = head; root.userData.torso = torso;           // (olhares e gestos nas conversas)
+  return root;
+}
+
+/** K em pé (mesma aparência do banco da igreja), virado para +X, braços ao lado do corpo. */
+export function buildStandingReader() {
+  const seatY = 0;
+  const root = new THREE.Group();
+  root.name = 'standing-reader';
+  const S = 0.9, g = new THREE.Group(); g.scale.setScalar(S); root.add(g);
+  const HY = 0.32 + 0.42 + 0.17, legs = [];                                                    // quadril: coxa + canela + pé
+  g.add(at(lowBall(0.27, M.pants, 1.05, 0.62, 1.15), 0.02, HY, 0));
+  for (const s of [-1, 1]) {
+    const thigh = new THREE.Group(); thigh.position.set(0.02, HY, s * 0.14); thigh.rotation.z = 0; g.add(thigh); legs.push(thigh);
+    thigh.add(limb(0.15, 0.13, 0.32, M.pants));
+    const knee = new THREE.Group(); knee.position.y = -0.32; knee.rotation.z = 0; thigh.add(knee); thigh.userData.knee = knee;
+    const shin = 0.42;
+    knee.add(limb(0.13, 0.11, shin, M.pants));
+    const foot = new THREE.Group(); foot.position.y = -shin; foot.rotation.z = 0; knee.add(foot); thigh.userData.foot = foot;
+    bigShoe(foot, M.shoe, M.sole);                                                // calçado maior (mesmo tênis branco de sola escura)
+  }
+  // tronco reto (encostado de leve): camisa branca + casaco vermelho aberto
+  const torso = new THREE.Group(); torso.position.set(-0.04, HY + 0.06, 0); torso.rotation.z = 0; g.add(torso);
+  torso.add(torsoS(M.white));
+  const jacket = torsoS(JACKET, 0.32); jacket.scale.multiplyScalar(1.05); jacket.position.y = -0.03; torso.add(jacket);
+  const arms = [];                                                                   // (braços: para alcançar algo, reachArm)
+  for (const s of [-1, 1]) {
+    torso.add(at(box(0.05, 0.62, 0.04, M.white), 0.235, 0.32, s * 0.1, 0, 0, 0.05));
+    torso.add(at(box(0.12, 0.2, 0.1, M.red), 0.17, 0.63, s * 0.14, s * 0.5, 0, -0.5));
+    // braços descansando: mãos em cima das coxas, mangas dobradas
+    const sh = new THREE.Group(); sh.position.set(0, 0.55, s * 0.345); sh.rotation.set(-s * 0.13, 0, 0.05); torso.add(sh);   // ombro na borda do casaco, braço solto e um pouco afastado
+    arms.push({ s, sh, rest: sh.quaternion.clone() });
+    sh.add(limb(0.14, 0.12, 0.27, M.red));
+    sh.add(limb(0.085, 0.075, 0.28, M.skin));
+    const elbow = new THREE.Group(); elbow.position.y = -0.28; elbow.rotation.set(0, 0, 0.26); sh.add(elbow); arms[arms.length - 1].elbow = elbow; arms[arms.length - 1].erest = elbow.quaternion.clone();
+    elbow.add(limb(0.12, 0.11, 0.06, M.red));
+    elbow.add(at(mesh(new THREE.TorusGeometry(0.1, 0.042, 10, 22), M.red), 0, -0.08, 0, Math.PI / 2, 0, 0));
+    elbow.add(limb(0.072, 0.06, 0.2, M.skin));
+    const wrist = new THREE.Group(); wrist.position.y = -0.2; wrist.rotation.z = 0.08; elbow.add(wrist); arms[arms.length - 1].wrist = wrist;
+    wrist.add(mitten(M.skin));
+  }
+  const head = new THREE.Group(); head.position.y = 0.7; torso.add(head); head.name = 'k-head';
+  head.add(at(limb(0.11, 0.115, 0.1, M.skin), 0, 0.1, 0));                      // pescoço curto e largo
+  const face = readerHead(0.47); face.position.y = 0.49; head.add(face);           // óculos redondos normais (sem lente escura)
+  head.rotation.z = 0;
+  root.userData.arms = arms; root.userData.torso = torso;
+  root.traverse(o => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = false; } });
+  root.userData.legs = legs; if (!root.userData.head) root.userData.head = root.getObjectByName('k-head');
+  root.userData.body = g;
+  return root;
+}
+
+/** K em pé andando (gait.js: pés plantados, joelhos, braços em oposição, tronco). travel = distância andada no quadro (mundo).
+ *  Chamar com travel 0 por alguns quadros faz ele parar suavemente. */
+export function walkK(root, dt, travel) {
+  const u = root.userData;
+  if (!u.gait) u.gait = createGait({ legs: u.legs.map(t => ({ hip: t, knee: t.userData.knee, foot: t.userData.foot })), arms: u.arms },
+    { L1: 0.32, L2: 0.42, hip: 0.91, ankle: 0.17, stride: 0.66, open: 0.13, fwd: 0.05, elbow: 0.26, wrist: 0.08 });
+  const o = u.gait.update(dt, travel / 0.9);
+  u.body.position.set(0, o.bob * 0.9, o.sway * 0.9);
+  u.torso.rotation.set(-o.sway * 2, -o.twist * 1.2, -o.lean);
+  u.head.rotation.set(o.sway * 1.5, o.twist * 0.4, o.lean * 0.8);
+  return o.amt;
+}
+
+/** Leva a mão do braço (s = 1 direito, −1 esquerdo) até um ponto do mundo (k = 0..1 mistura com o braço solto).
+ *  IK de 2 ossos (ombro + cotovelo); o cotovelo dobra para fora e para baixo. */
+const _t = new THREE.Vector3(), _d = new THREE.Vector3(), _n = new THREE.Vector3(), _q = new THREE.Quaternion(), _q2 = new THREE.Quaternion(), _qi = new THREE.Quaternion();
+const DOWN = new THREE.Vector3(0, -1, 0);
+export function reachArm(root, s, world, k = 1) {
+  const a = root.userData.arms && root.userData.arms.find(x => x.s === s); if (!a) return;
+  if (k <= 0.001) { a.sh.quaternion.copy(a.rest); a.elbow.quaternion.copy(a.erest); return; }
+  root.updateMatrixWorld(true);
+  const torso = root.userData.torso; _t.copy(world); torso.worldToLocal(_t);
+  _d.copy(_t).sub(a.sh.position);
+  const A = 0.28, B = 0.32, dist = Math.min(A + B - 0.01, Math.max(0.12, _d.length())); _d.normalize();
+  const alpha = Math.acos(Math.min(1, Math.max(-1, (A * A + dist * dist - B * B) / (2 * A * dist))));
+  const inner = Math.acos(Math.min(1, Math.max(-1, (A * A + B * B - dist * dist) / (2 * A * B))));
+  _n.set(0, 0, s).cross(_d); if (_n.lengthSq() < 1e-4) _n.set(1, 0, 0); _n.normalize();   // eixo de dobra: o cotovelo vai para fora/baixo
+  _q.setFromUnitVectors(DOWN, _d); _q2.setFromAxisAngle(_n, alpha); _q.premultiply(_q2);
+  a.sh.quaternion.copy(a.rest).slerp(_q, k);
+  _qi.copy(_q).invert(); _n.applyQuaternion(_qi);                                     // eixo no espaço do braço
+  _q2.setFromAxisAngle(_n, -(Math.PI - inner));
+  a.elbow.quaternion.copy(a.erest).slerp(_q2, k);
+}

@@ -3,9 +3,12 @@
 // e os moradores (criados sob demanda na primeira visita).
 import * as THREE from 'three';
 import {
-  HEDGE, ROAD, LOT, WALK, MAP, GRID, PLAZA, lotX, lotZ, slotOrigin, roadCenter, ENTRANCE, LOT_ANCHORS, SOLIDS,
+  HEDGE, ROAD, LOT, WALK, MAP, GRID, PLAZA, lotX, lotZ, slotOrigin, slotY, roadCenter, ENTRANCE, LOT_ANCHORS, SOLIDS, TERRAIN, CANAL, RAIL, VENICE, FAVELA, FLUX, FARMLAND, SPOTS, SNOWV, GARDV, MOONV, FORESTV, MEDV,
 } from './layout.js';
 import { HOUSES } from './data.js';
+import { buildTerrain } from './terrain.js';
+import { buildMoonScene } from './models/moon.js';
+import { FRAME } from './moonFrame.js';
 import { buildGasStation } from './models/gas.js';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { mat, mesh, box, cyl, cone, sphere, at, bakeStatic, dynamic, textTexture } from './models/kit.js';
@@ -14,6 +17,9 @@ import { mat, mesh, box, cyl, cone, sphere, at, bakeStatic, dynamic, textTexture
 const SKY = '#bfe3f2';
 // grama de fora do bairro (a cidade usa uma versão amarelada e seca)
 const GREEN_GRASS = { grass: '#7fb158', patches: ['#79ab53', '#86b85e'], shadow: '#669347' };
+const LAGOON = { grass: '#3f8fb0', patches: ['#468fb0', '#3a88a8'], shadow: '#367f9e' };   // Veneza: laguna em volta
+const MOON_GROUND = { grass: '#a9adb3', patches: ['#9fa3a9', '#b3b6bb'], shadow: '#8f9399' };   // Órbita: regolito
+const SNOW_GROUND = { grass: '#e9eef2', patches: ['#e2e9ef', '#f2f5f8'], shadow: '#cdd6de' };   // Nevasca
 const DRY_GRASS = { grass: '#a9ab5e', patches: ['#b3a95c', '#9fa457'], shadow: '#8d8f4c' };
 let GRASS = GREEN_GRASS.grass, GRASS_PATCHES = GREEN_GRASS.patches, GRASS_SHADOW = GREEN_GRASS.shadow;
 const ASPHALT = '#5d6470', CENTER_LINE = '#f2d45c', ZEBRA = '#ece8dc', MANHOLE = '#4b525c', MANHOLE_RIM = '#6b727d';
@@ -49,30 +55,39 @@ function plane(w, d, color) {
 }
 
 // ---------- Chão ----------
-function buildGround() {
+function buildGround(venice = false) {
   const g = new THREE.Group();
   const rand = rng(7);
   const cx = (ENTRANCE.x0 + ENTRANCE.x1) / 2;
 
   // grama até o horizonte
-  g.add(at(plane(1600, 1600, GRASS), MAP / 2, -0.04, MAP / 2));
+  const CY = CANAL && CANAL.canyon ? { X0: CANAL.x0, X1: CANAL.x1, ZN: -320, ZS: MAP + 44 } : null;   // Cachoeira: o desfiladeiro fica aberto
+  if (!CY) g.add(at(plane(4000, 4000, GRASS), MAP / 2, -0.04, MAP / 2));
+  else {
+    const L = 2000 + CY.X0, R = 2000 - CY.X1 + MAP;
+    g.add(at(plane(L, 4000, GRASS), CY.X0 - L / 2, -0.04, MAP / 2), at(plane(R, 4000, GRASS), CY.X1 + R / 2, -0.04, MAP / 2));
+    g.add(at(plane(CY.X1 - CY.X0, 2000, GRASS), (CY.X0 + CY.X1) / 2, -0.04, CY.ZN - 1000), at(plane(CY.X1 - CY.X0, 2000, GRASS), (CY.X0 + CY.X1) / 2, -0.04, CY.ZS + 1000));
+  }
   // manchas de grama fora do bairro (quebram a monotonia)
   const disc = new THREE.CylinderGeometry(1, 1, 0.02, 9);
   for (let i = 0; i < 70; i++) {
     const x = -90 + rand() * (MAP + 180), z = -80 + rand() * (MAP + 170);
     if (x > -4 && x < MAP + 4 && z > -4 && z < MAP + 4) continue;
     if (Math.abs(x - cx) < ROAD && z < 0) continue;
-    const m = at(mesh(disc, GRASS_PATCHES[i % 2]), x, -0.03, z, 0, rand() * 3, 0);
+    if (CY && x > CY.X0 - 4 && x < CY.X1 + 4) continue;
+    const m = at(mesh(disc, GRASS_PATCHES[i % 2]), x, -0.03 + (i % 2) * 0.008, z, 0, rand() * 3, 0);   // (as 2 cores em alturas separadas)
     m.scale.set(2 + rand() * 4, 1, 1.5 + rand() * 3);
     g.add(m);
   }
 
   // asfalto dentro da sebe (os lotes com suas calçadas ficam por cima)
   // (vai um pouco por baixo da sebe para não aparecer grama entre a sebe e a rua)
-  g.add(at(plane(MAP - 0.6, MAP - 0.6, ASPHALT), MAP / 2, 0, MAP / 2));
+  if (CY) g.add(at(plane(CY.X0 - 0.3, MAP - 0.6, ASPHALT), (0.3 + CY.X0) / 2, 0, MAP / 2), at(plane(MAP - 0.3 - CY.X1, MAP - 0.6, ASPHALT), (CY.X1 + MAP - 0.3) / 2, 0, MAP / 2));
+  else g.add(at(plane(MAP - 0.6, MAP - 0.6, FAVELA ? '#b3a993' : FARMLAND ? '#86b85c' : SNOWV ? '#eef3f7' : MOONV ? '#b9bcc0' : GARDV ? '#86c25e' : MEDV ? '#9d9676' : FORESTV ? (FORESTV.work ? '#a9b27a' : FORESTV.modern ? '#86c25e' : '#b3a458') : ASPHALT), MAP / 2, MEDV ? -0.02 : 0, MAP / 2));   // (Medieval: abaixo da grama em y 0 do burgo, que antes disputava a mesma altura e piscava)   // Colheita: grama (estradas de terra à parte)   // Morro: chão de cimento (as ruas são desenhadas à parte)
   // estrada de acesso: continua para fora pela abertura na sebe norte
+  if (venice) return g;                        // Veneza: só água (sem estrada de acesso, faixas, faixa de pedestres nem bueiros)
   const OUT = 420;
-  g.add(at(plane(ROAD, OUT + 0.3, ASPHALT), cx, 0, 0.3 - (OUT + 0.3) / 2));
+  g.add(at(plane(ROAD, OUT + 0.3, MEDV ? '#8f8a7c' : ASPHALT), cx, 0, 0.3 - (OUT + 0.3) / 2));   // Medieval: estrada de terra batida até o portão
   for (const x of [ENTRANCE.x0 - 0.3, ENTRANCE.x1]) g.add(slab(x, -OUT, x + 0.3, 0, CURB, 0.12, 0.14));
 
   // faixas amarelas tracejadas no eixo de cada rua, só entre os cruzamentos (como na versão 2D)
@@ -82,15 +97,16 @@ function buildGround() {
     const start = a + (len - (n * DASH + (n - 1) * GAP)) / 2;
     for (let k = 0; k < n; k++) along(start + k * (DASH + GAP) + DASH / 2);
   };
-  for (let i = 0; i <= GRID; i++) {
+  for (let i = 0; i <= (SPOTS ? -1 : GRID); i++) {   // (o Morro não tem grade de ruas)
     const c = roadCenter(i);
     for (let j = 0; j < GRID; j++) {
       const a = lotX(j) - WALK + 1, b = lotX(j) + LOT + WALK - 1;
-      dashes(a, b, m => g.add(at(box(DASH, 0.02, LW, CENTER_LINE), m, 0.01, c)));   // ruas leste–oeste
-      dashes(a, b, m => g.add(at(box(LW, 0.02, DASH, CENTER_LINE), c, 0.01, m)));   // ruas norte–sul
+      const cyH = CY && CANAL.cols.includes(j), cyV = CY && c > CY.X0 && c < CY.X1;   // Cachoeira: nada no abismo (a ponte tem faixa própria)
+      if (!cyH && !(FLUX && (i === FLUX.north || i === FLUX.south))) dashes(a, b, m => g.add(at(box(DASH, 0.02, LW, CENTER_LINE), m, 0.01, c)));   // ruas leste–oeste (a avenida tem faixas próprias)
+      if (!cyV) dashes(a, b, m => g.add(at(box(LW, 0.02, DASH, CENTER_LINE), c, 0.01, m)));   // ruas norte–sul
     }
   }
-  dashes(-120, -1.2, m => g.add(at(box(LW, 0.02, DASH, CENTER_LINE), cx, 0.01, m)));
+  if (!MEDV) dashes(-120, -1.2, m => g.add(at(box(LW, 0.02, DASH, CENTER_LINE), cx, 0.01, m)));
 
   // sombra "falsa" da sebe do lado de fora (oeste e norte): a grama de fora não recebe sombras reais
   g.add(slab(-0.65, 0, 0.3, MAP, GRASS_SHADOW, -0.012, 0.01));
@@ -98,14 +114,14 @@ function buildGround() {
   g.add(slab(ENTRANCE.x1 + 0.3, -1.0, MAP, 0.3, GRASS_SHADOW, -0.012, 0.01));
 
   // faixa de pedestres na entrada
-  for (let x = ENTRANCE.x0 + 0.7; x < ENTRANCE.x1 - 0.5; x += 0.95) g.add(slab(x, 0.15, x + 0.5, HEDGE - 0.15, ZEBRA, 0.02));
+  for (let x = ENTRANCE.x0 + 0.7; x < (MEDV ? -1 : ENTRANCE.x1 - 0.5); x += 0.95) g.add(slab(x, 0.15, x + 0.5, HEDGE - 0.15, ZEBRA, 0.02));
 
   // bueiros (planos, não são obstáculos)
   const holes = [
     [roadCenter(0) + 1.9, lotZ(1) + 6], [lotX(1) + 5, roadCenter(2) - 1.9], [roadCenter(3) - 1.9, lotZ(2) + 11],
     [lotX(3) + 12, roadCenter(4) + 1.9], [roadCenter(4) + 1.9, lotZ(0) + 9], [lotX(0) + 13, roadCenter(1) + 1.9],
   ];
-  for (const [x, z] of holes) {
+  for (const [x, z] of SPOTS ? [] : holes) {
     g.add(at(cyl(0.62, 0.62, 0.03, MANHOLE_RIM, 10), x, 0.012, z));
     g.add(at(cyl(0.5, 0.5, 0.03, MANHOLE, 10), x, 0.022, z));
   }
@@ -124,6 +140,9 @@ function buildHedge() {
     [0, MAP - HEDGE, MAP, MAP, [-1, 1]],                                  // sul: face interna e externa
     [0, HEDGE, HEDGE, MAP - HEDGE, [1]], [MAP - HEDGE, HEDGE, MAP, MAP - HEDGE, [-1]], // oeste, leste
   ];
+  if (CANAL && CANAL.canyon) for (const k of [2, 1]) {                       // Cachoeira: a sebe não atravessa o desfiladeiro
+    const [x0, z0, x1, z1, f] = segs[k]; segs.splice(k, 1, [x0, z0, CANAL.x0, z1, f], [CANAL.x1, z0, x1, z1, f]);
+  }
   let n = 0;
   for (const [x0, z0, x1, z1, faces] of segs) {
     const alongX = x1 - x0 > z1 - z0;
@@ -155,7 +174,7 @@ function buildHedge() {
 
   // pilares do portal (sobre a sebe, fora da pista)
   for (const x of [ENTRANCE.x0 - 0.5, ENTRANCE.x1 + 0.5]) {
-    g.add(at(box(1.0, 2.3, 1.0, STONE), x, 1.15, HEDGE / 2));
+    g.add(at(box(1.04, 2.3, 1.0, STONE), x, 1.15, HEDGE / 2));
     g.add(at(box(1.2, 0.2, 1.2, STONE_CAP), x, 2.4, HEDGE / 2));
     g.add(at(cyl(0.12, 0.2, 0.2, WOOD_DARK, 8), x, 2.6, HEDGE / 2));
     g.add(at(mesh(new THREE.IcosahedronGeometry(0.3, 1), mat(LAMP, { emissive: '#ffe9a0', emissiveIntensity: 0.5 })), x, 2.9, HEDGE / 2));
@@ -197,6 +216,10 @@ function buildOutskirts(ground) {
     if (x > -6 - r && x < MAP + 6 + r && z > -6 - r && z < MAP + 8 + r) return false; // longe da sebe
     if (z > MAP && z < MAP + 9 + r) return false;         // ao sul: não pode cobrir a sebe vista pela câmera
     if (Math.abs(x - cx) < ROAD / 2 + 2 + r && z < 0) return false; // estrada de acesso livre
+    if (FAVELA && FAVELA.outside.busy(x, z, r)) return false;       // Morro: fora do casario e dos terraços do entorno
+    if (MEDV && MEDV.extra && x > MEDV.extra.area.x0 - r && x < MEDV.extra.area.x1 + r && z > MEDV.extra.area.z0 - r && z < MEDV.extra.area.z1 + r) return false;   // Medieval: igreja, oficina e casas fora da muralha
+    if (CANAL && CANAL.canyon && x > CANAL.x0 - 8 - r && x < CANAL.x1 + 8 + r) return false;   // Cachoeira: desfiladeiro
+    if (CANAL && CANAL.canyon && CANAL.rock.some(b => x > b.x0 - r - 2 && x < b.x1 + r + 2 && z > b.z0 - r - 2 && z < b.z1 + r + 2)) return false;   // e o maciço da cachoeira (com os degraus dos lados)
     return true;
   };
   const edgeDist = (x, z) => Math.hypot(Math.max(-x, 0, x - MAP), Math.max(-z, 0, z - MAP));
@@ -252,10 +275,81 @@ function buildOutskirts(ground) {
     }
     fakeShadow(x, z, 0.5 * s, 1.2 * s);
   }
+  if (CANAL && CANAL.canyon) {                    // Cachoeira: mata nas duas margens do desfiladeiro, fora do bairro (ao norte e entre a sebe e o maciço)
+    const C = CANAL, ccx = (C.x0 + C.x1) / 2, rockAt = (x, z, m) => C.rock.some(b => x > b.x0 - m && x < b.x1 + m && z > b.z0 - m && z < b.z1 + m);
+    const okC = (x, z, r) => !(x > C.x0 - 2.4 - r * 0.4 && x < C.x1 + 2.4 + r * 0.4)          // tronco fora do desfiladeiro (a copa pode passar da cerca)
+      && (z < -8 - r || z > MAP + 9 + r) && !(Math.abs(x - cx) < ROAD / 2 + 2 + r && z < 0)   // longe da sebe e da estrada de acesso
+      && !rockAt(x, z, r + 1.5) && free(x, z, r);
+    const tree = (x, y, z, s, pine, n) => {        // tronco apoiado no chão (y)
+      if (pine) {
+        g.add(at(cyl(0.22 * s, 0.3 * s, 1.2 * s, TRUNK, 6), x, y + 0.6 * s, z));
+        g.add(at(cone(1.9 * s, 2.6 * s, PINE[n % 2], 7), x, y + 2.2 * s, z));
+        g.add(at(cone(1.4 * s, 2.2 * s, PINE[(n + 1) % 2], 7), x, y + 3.5 * s, z));
+      } else {
+        g.add(at(cyl(0.26 * s, 0.36 * s, 2.0 * s, TRUNK, 6), x, y + 1.0 * s, z));
+        const c = LEAVES[n % LEAVES.length];
+        const b1 = at(mesh(blob, c), x, y + 2.7 * s, z, rand() * 3, rand() * 3, 0); b1.scale.setScalar(1.7 * s);
+        const b2 = at(mesh(blob, LEAVES[(n + 1) % LEAVES.length]), x + 0.9 * s, y + 2.3 * s, z + 0.4 * s, rand() * 3, 0, rand() * 3); b2.scale.setScalar(1.15 * s);
+        const b3 = at(mesh(blob, c), x - 0.7 * s, y + 3.4 * s, z - 0.3 * s, 0, rand() * 3, rand() * 3); b3.scale.setScalar(1.05 * s);
+        g.add(b1, b2, b3);
+      }
+    };
+    let n = 0, tr = 0;
+    while (n < 300 && tr++ < 40000) {
+      const side = rand() < 0.5 ? -1 : 1, d = 2.6 + Math.pow(rand(), 1.7) * 48, x = side < 0 ? C.x0 - d : C.x1 + d;
+      const z = rand() < 0.85 ? -10 - rand() * 300 : MAP + 9 + rand() * 40;
+      const s = 0.95 + rand() * 0.75, r = 2.2 * s, pine = rand() < 0.55;
+      if (!okC(x, z, r)) continue;
+      placed.push([x, z, r]); n++;
+      SOLIDS.push({ x0: x - r * 0.3, z0: z - r * 0.3, x1: x + r * 0.3, z1: z + r * 0.3 });   // tronco (a van bate)
+      tree(x, 0, z, s, pine, n);
+      fakeShadow(x, z, (pine ? 2.6 : 2.7) * s, (pine ? 1.6 : 1.9) * s);
+    }
+    for (let k = 0, tb = 0; k < 90 && tb++ < 20000;) {   // arbustos entre as árvores
+      const side = rand() < 0.5 ? -1 : 1, d = 2.2 + rand() * 40, x = side < 0 ? C.x0 - d : C.x1 + d, z = rand() < 0.85 ? -10 - rand() * 300 : MAP + 9 + rand() * 40;
+      const s = 0.7 + rand() * 0.6, r = 1.1 * s;
+      if (!okC(x, z, r)) continue;
+      placed.push([x, z, r]); k++;
+      SOLIDS.push({ x0: x - r * 0.3, z0: z - r * 0.3, x1: x + r * 0.3, z1: z + r * 0.3 });
+      const b = at(mesh(blob, LEAVES[(k + 1) % LEAVES.length]), x, 0.55 * s, z, rand() * 3, rand() * 3, 0);
+      b.scale.set(1.2 * s, 0.85 * s, 1.1 * s); g.add(b);
+      fakeShadow(x, z, 0.5 * s, 1.2 * s);
+    }
+    // mata no alto do maciço (dos dois lados do rio do alto) e dos degraus de pedra: cada tronco no chão do seu patamar, longe das
+    // beiradas e de qualquer patamar mais alto (sem colisão: lá em cima a van não chega)
+    const R0 = C.rock[0], tops = [{ ...R0, x1: ccx - 22 }, { ...R0, x0: ccx + 22 }].concat(C.rock.slice(1));
+    const higher = (b, x, z, m) => C.rock.some(o => o.top > b.top && x > o.x0 - m && x < o.x1 + m && z > o.z0 - m && z < o.z1 + m);
+    for (const b of tops) {
+      const want = Math.round((b.x1 - b.x0) * (b.z1 - b.z0) / (b.top > 50 ? 58 : b.top > 30 ? 74 : 95)), mine = [];
+      for (let k = 0, t = 0; k < want && t < want * 30; t++) {
+        const s = 1.5 + rand() * 1.2, m = 1.2 + s * 1.3, x = b.x0 + m + rand() * (b.x1 - b.x0 - 2 * m), z = b.z0 + m + rand() * (b.z1 - b.z0 - 2 * m);
+        if (higher(b, x, z, m) || mine.some(([px, pz, pr]) => Math.hypot(px - x, pz - z) < pr + s * 1.6)) continue;
+        mine.push([x, z, s * 1.6]); tree(x, b.top, z, s, rand() < 0.6, k); k++;
+      }
+    }
+  }
   return g;
 }
 
 // ---------- Luz ----------
+/** Sol fixo no céu: na direção de quem acaba de entrar no bairro (sul, +Z), ~18° acima do horizonte. */
+function buildSun() {
+  const cv = document.createElement('canvas'); cv.width = cv.height = 256;
+  const g = cv.getContext('2d'), c = 128;
+  const glow = g.createRadialGradient(c, c, 0, c, c, c);
+  glow.addColorStop(0, 'rgba(255,253,235,1)'); glow.addColorStop(0.17, 'rgba(255,247,200,1)');   // disco
+  glow.addColorStop(0.2, 'rgba(255,240,170,0.75)'); glow.addColorStop(0.45, 'rgba(255,236,160,0.22)');   // brilho em volta
+  glow.addColorStop(1, 'rgba(255,236,160,0)');
+  g.fillStyle = glow; g.fillRect(0, 0, 256, 256);
+  const tex = new THREE.CanvasTexture(cv); tex.colorSpace = THREE.SRGBColorSpace;
+  const sun = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, fog: false, depthWrite: false, toneMapped: false }));
+  const el = THREE.MathUtils.degToRad(18), D = 1200;
+  sun.position.set(MAP / 2, D * Math.sin(el), MAP / 2 + D * Math.cos(el));
+  sun.scale.setScalar(260);
+  sun.name = 'sun';
+  return sun;
+}
+
 function buildLights(scene) {
   const hemi = new THREE.HemisphereLight('#e6f3ff', '#8aa66a', 1.7);
   scene.add(hemi);
@@ -351,9 +445,31 @@ function buildPlaza() {
   return g;
 }
 
+/** Obstáculos de quem anda a pé dentro da praça (a van já é barrada pela praça inteira): coreto, árvores, canteiros, bancos, postes, cerquinha. */
+export function plazaFootSolids() {
+  const P = PLAZA; if (!P) return [];
+  const cx = (P.x0 + P.x1) / 2, cz = (P.z0 + P.z1) / 2, w = P.x1 - P.x0, d = P.z1 - P.z0, out = [];
+  const circ = (x, z, r) => out.push({ x0: x - r, x1: x + r, z0: z - r, z1: z + r, r, cx: x, cz: z });
+  const rect = (x0, x1, z0, z1) => out.push({ x0, x1, z0, z1 });
+  circ(cx, cz, 4.9);                                                           // coreto (base e colunas)
+  for (const [sx, sz] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) {
+    const qx = cx + sx * w / 4, qz = cz + sz * d / 4;
+    circ(qx, qz, 2.6);                                                         // canteiro
+    for (const [tx, tz] of [[sx * 7.5, sz * 3.5], [sx * 3.5, sz * 7.5]]) circ(qx + tx, qz + tz, 0.45);   // troncos
+    const bx = cx + sx * 9.5, bz = cz + sz * 2.6;
+    rect(bx - 1.6, bx + 1.6, bz - 0.55, bz + 0.55);                            // banco (assento + encosto)
+    circ(cx + sx * 2.4, cz + sz * (d / 2 - 2.2), 0.15);                        // poste
+    const len = w / 2 - 3.2, fx = cx + sx * (1.6 + len / 2 + 0.2), fz = cz + sz * (d / 2 - 1.0);
+    rect(fx - len / 2, fx + len / 2, fz - 0.08, fz + 0.08);                    // cerquinha (aberta nos caminhos)
+    const gx = cx + sx * (w / 2 - 1.0), gz = cz + sz * (1.6 + len / 2 + 0.2);
+    rect(gx - 0.08, gx + 0.08, gz - len / 2, gz + len / 2);
+  }
+  return out;
+}
+
 // ---------- API ----------
-export function createWorld({ renderer, buildLot, buildResident, yardBuilders, pool = [...Array(16).keys()], dry = false }) {
-  const pal = dry ? DRY_GRASS : GREEN_GRASS;
+export function createWorld({ renderer, buildLot, buildResident, yardBuilders, pool = [...Array(16).keys()], dry = false, venice = false, snow = false, moon = false, farm = false }) {
+  const pal = venice ? LAGOON : moon ? MOON_GROUND : snow ? SNOW_GROUND : dry ? DRY_GRASS : GREEN_GRASS;
   GRASS = pal.grass; GRASS_PATCHES = pal.patches; GRASS_SHADOW = pal.shadow;
   if (renderer) {
     renderer.toneMapping = THREE.NeutralToneMapping;
@@ -362,23 +478,34 @@ export function createWorld({ renderer, buildLot, buildResident, yardBuilders, p
   }
 
   const scene = new THREE.Scene();
-  scene.background = new THREE.Color(SKY);
+  scene.background = new THREE.Color(moon ? '#05070d' : SKY);   // Órbita: céu escuro
   // névoa leve na cor do céu: o horizonte fica suave na câmera atrás da van (main.js a afasta na visão geral)
-  scene.fog = new THREE.Fog(SKY, 3000, 3200);
-  buildLights(scene);
+  scene.fog = new THREE.Fog(moon ? '#05070d' : SKY, 3000, 3200);
+  const lights = buildLights(scene);
+  scene.add(buildSun());
+  // Órbita: tudo da lua fica num grupo cuja matriz (esfera → mundo) o jogo refaz a cada quadro (moonFrame.js)
+  const moonRoot = moon ? new THREE.Group() : null;
+  if (moonRoot) { moonRoot.name = 'moon-root'; moonRoot.matrixAutoUpdate = false; scene.add(moonRoot); }
+  const home = moonRoot || scene;
 
   const solidsStart = SOLIDS.length;          // os troncos das árvores de fora entram em SOLIDS aqui
-  const ground = buildGround();
-  const outskirts = buildOutskirts(ground);
+  const ground = moon ? new THREE.Group() : buildGround(venice);
+  const outskirts = moon || farm ? new THREE.Group() : buildOutskirts(ground);   // Colheita: em volta são plantações (farmOutside.js)
+  if (venice || moon || farm) SOLIDS.length = solidsStart;              // Veneza: sem árvores de fora (laguna)
   const extraSolids = SOLIDS.slice(solidsStart);
   scene.add(baked(ground, false, true));
   // A grama de fora do bairro não recebe sombras (nada relevante projeta nela; as árvores de fora usam sombras
   // falsas): economiza o filtro de sombra em boa parte da tela — ~15% do tempo de GPU na UHD integrada.
   const outside = new Set([GRASS, ...GRASS_PATCHES, GRASS_SHADOW].map(c => mat(c)));
   ground.traverse(o => { if (o.isMesh && outside.has(o.material)) o.receiveShadow = false; });
-  scene.add(baked(buildHedge(), true, true));
-  scene.add(baked(outskirts, false, false));
+  if (!venice && !moon) { if (!MEDV && !(FORESTV && FORESTV.modern) && !GARDV) scene.add(baked(buildHedge(), true, true)); scene.add(baked(outskirts, false, false)); }   // Medieval: no lugar da sebe, a muralha (terrain.js); Modernista: o muro do condomínio (models/modern.js); Jardins: o muro com a portaria (models/garden.js)   // Veneza: só laguna em volta
   if (PLAZA) scene.add(baked(buildPlaza(), true, true));
+  if (MOONV) {                                  // Órbita: a esfera (só recebe sombra) e o cenário fundido
+    const ms = buildMoonScene(new THREE.Group(), MOONV), gr = ms.getObjectByName('moon-ground');
+    const fl = ms.getObjectByName('moon-flat');
+    ms.remove(gr); home.add(gr); ms.remove(fl); home.add(baked(fl, false, true));
+    home.add(baked(ms, true, true));
+  } else if (TERRAIN.kind !== 'flat' || CANAL || RAIL || VENICE || FLUX || FARMLAND || SNOWV || GARDV || FORESTV || MEDV) scene.add(baked(buildTerrain(), true, true));   // Bairros 9, 10 e 11
 
   // os 16 lotes, construídos uma única vez (cada casa mantém sua identidade; só muda de lugar)
   // (só as casas deste bairro: `pool`; o array é indexado pelo índice da casa)
@@ -386,7 +513,7 @@ export function createWorld({ renderer, buildLot, buildResident, yardBuilders, p
   for (const h of pool) {
     const lot = buildLot(HOUSES[h], { yardBuilders });
     lot.name = 'lot:' + h;
-    scene.add(lot);
+    home.add(lot);
     lots[h] = lot;
   }
 
@@ -395,7 +522,7 @@ export function createWorld({ renderer, buildLot, buildResident, yardBuilders, p
   // As partes animadas (dynamic) continuam dentro dos grupos dos lotes.
   const neighborhood = new THREE.Group();
   neighborhood.name = 'neighborhood';
-  scene.add(neighborhood);
+  home.add(neighborhood);
   const staticParts = [];
   pool.forEach(h => { const lot = lots[h]; staticParts[h] = (() => {
     const parts = [];
@@ -416,6 +543,8 @@ export function createWorld({ renderer, buildLot, buildResident, yardBuilders, p
   let present = new Set(pool);         // casas/prédios que estão nesta partida (Bairro 5 sorteia quais entram)
   function mergeLots() {
     clearMerged();
+    const keep = moonRoot && moonRoot.matrix.clone();     // Órbita: funde no referencial da lua (sem a rotação do quadro)
+    if (moonRoot) { moonRoot.matrix.identity(); moonRoot.updateMatrixWorld(true); }
     const buckets = new Map();
     for (const h of pool) {
       if (hidden.has(h) || !present.has(h)) continue;
@@ -437,6 +566,7 @@ export function createWorld({ renderer, buildLot, buildResident, yardBuilders, p
       m.matrixAutoUpdate = false;
       neighborhood.add(m);
     }
+    if (moonRoot) { moonRoot.matrix.copy(keep); moonRoot.updateMatrixWorld(true); }
     if (!ok) clearMerged();               // geometrias incompatíveis: volta a desenhar lote por lote
     for (const h of pool) for (const m of staticParts[h]) m.visible = !ok;
   }
@@ -452,8 +582,18 @@ export function createWorld({ renderer, buildLot, buildResident, yardBuilders, p
     for (const h of pool) lots[h].visible = present.has(h) && !hidden.has(h);
     for (let s = 0; s < layout.length; s++) {
       if (layout[s] < 0) continue;                // lote sem casa (praça, posto)
-      const o = slotOrigin(s);
-      lots[layout[s]].position.set(o.x, 0, o.z);
+      const o = slotOrigin(s), lot = lots[layout[s]];
+      if (MOONV) {                                  // Órbita: módulo na esfera, de frente para a rua do laço
+        const sp = SPOTS.spots[s]; FRAME.pose(lot, sp.n, sp.f, 0); lot.userData.res = { n: sp.resN, f: sp.f };
+        continue;
+      }
+      if (SPOTS) {                                  // Morro/Colheita: construção no ponto, virada para a rua, o beco ou a estrada
+        const sp = SPOTS.spots[s], ry = Math.atan2(sp.fx, sp.fz);
+        lot.position.set(sp.px ?? sp.cx, sp.y, sp.pz ?? sp.cz); lot.rotation.y = ry;
+        lot.userData.res = sp.res || { x: sp.cx + sp.fx * 4.4, z: sp.cz + sp.fz * 4.4, ry };
+        continue;
+      }
+      lot.position.set(o.x, slotY(s), o.z);   // Bairro 9: lotes no alto
     }
     mergeLots();
   }
@@ -463,12 +603,15 @@ export function createWorld({ renderer, buildLot, buildResident, yardBuilders, p
     if (!r) {
       r = residents[h] = buildResident(h);
       r.visible = false;
-      scene.add(r);
+      home.add(r);
     }
     if (current && current !== r) current.visible = false;
     const lot = lots[h];
     // y = 0 do lote: o próprio morador se eleva sobre o caminho de pedras
-    r.position.set(lot.position.x + LOT_ANCHORS.residentSpot.x, 0, lot.position.z + LOT_ANCHORS.residentSpot.z);
+    const rs = lot.userData.res;                  // Morro: na frente da porta, virado para fora
+    if (rs && rs.n) FRAME.pose(r, rs.n, rs.f, 0);   // Órbita: em pé na esfera, virado para a rua
+    else if (rs) { r.position.set(rs.x, lot.position.y, rs.z); r.rotation.y = rs.ry; }
+    else r.position.set(lot.position.x + LOT_ANCHORS.residentSpot.x, lot.position.y, lot.position.z + LOT_ANCHORS.residentSpot.z);
     if (current !== r || currentH !== h || currentMood !== mood) {
       r.userData.setMood && r.userData.setMood(mood);
       currentMood = mood;
@@ -492,6 +635,8 @@ export function createWorld({ renderer, buildLot, buildResident, yardBuilders, p
 
   return {
     scene,
+    moonRoot,
+    sunLight: lights.sun,
     setLayout,
     showResident,
     hideResident,

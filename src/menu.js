@@ -7,7 +7,10 @@ const CSS = `
 .menu-btn:hover { filter: brightness(1.15); }
 .menu-panel { position: absolute; left: clamp(10px, 1.4vw, 20px); bottom: calc(clamp(10px, 1.6vh, 20px) + 3.6em); z-index: 4;
   min-width: 290px; padding: 16px 18px; border-radius: 16px; background: #fff3d6; border: 3px solid #e6cc98; color: #3a2a1a;
-  font: 15px "Trebuchet MS","Segoe UI",system-ui,sans-serif; box-shadow: 0 10px 30px rgba(0,0,0,.3); display: none; }
+  font: 15px "Trebuchet MS","Segoe UI",system-ui,sans-serif; box-shadow: 0 10px 30px rgba(0,0,0,.3); display: none;
+  max-width: calc(100% - 2 * clamp(10px, 1.4vw, 20px)); max-height: calc(100% - 2 * clamp(10px, 1.6vh, 20px) - 3.8em); overflow-y: auto; box-sizing: border-box; }   /* telas baixas/estreitas: rola em vez de ser cortado */
+body.title-on .menu-panel { display: none; }
+body.on-map .menu-btn, body.on-map .menu-panel { visibility: hidden; }
 .menu-panel.open { display: block; }
 .menu-panel h3 { margin: 0 0 12px; font-size: 17px; color: #e8661a; letter-spacing: .06em; }
 .menu-row { display: flex; align-items: center; justify-content: space-between; gap: 14px; cursor: pointer; user-select: none; padding: 6px 0; }
@@ -15,6 +18,13 @@ const CSS = `
 .menu-sw::after { content: ""; position: absolute; top: 3px; left: 3px; width: 20px; height: 20px; border-radius: 50%; background: #fff; transition: left .15s; }
 .menu-row.on .menu-sw { background: #e3262e; }
 .menu-row.on .menu-sw::after { left: 23px; }
+.menu-fx { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 6px 10px; padding: 4px 0 6px 14px; font-size: 14px; color: #6a5a40; }
+.menu-fx .seg { display: flex; flex-wrap: wrap; border: 2px solid #3a2a1a; border-radius: 12px; overflow: hidden; flex: 1 1 220px; }
+.menu-fx .seg span { flex: 1 1 auto; }
+.menu-fx .seg span { text-align: center; }
+.menu-fx .seg span { padding: 3px 10px; cursor: pointer; user-select: none; font-weight: 700; font-size: 13px; color: #3a2a1a; background: #fff; }
+.menu-fx .seg span.on { background: #e3262e; color: #fff; }
+.menu-fx.off { opacity: .45; }
 .menu-keys { margin-top: 12px; font-size: 13px; color: #8a7355; line-height: 1.6; }
 `;
 
@@ -23,7 +33,8 @@ export function createMenu(stageEl) {
   style.textContent = CSS;
   document.head.appendChild(style);
 
-  let explodeWrong = true, unstoppable = false;
+  let explodeWrong = true, unstoppable = false, wrongFx = 'boom';   // wrongFx: 'boom' (explosão) | 'laser' (laser orbital) | 'ursa' (Ursa Menor) | 'solar' (Sistema Solar) | 'reality' (Devolução da Realidade)
+  try { const v = localStorage.getItem('adress.wrongFx'); if (v === 'laser' || v === 'ursa' || v === 'solar' || v === 'reality') wrongFx = v; } catch (e) { /* ignora */ }
   try { unstoppable = localStorage.getItem('adress.unstoppable') === '1'; } catch (e) { /* ignora */ }
   try { const v = localStorage.getItem('adress.explodeWrong'); if (v !== null) explodeWrong = v === '1'; } catch (e) { /* ignora */ }
 
@@ -33,27 +44,35 @@ export function createMenu(stageEl) {
   panel.className = 'menu-panel';
   panel.innerHTML = `<h3>OPÇÕES</h3>
     <div class="menu-row" data-opt="explode"><span>Casa explode na entrega errada</span><span class="menu-sw"></span></div>
+    <div class="menu-fx"><span>Efeito</span><span class="seg"><span data-fx="boom">Explosão</span><span data-fx="laser">Laser orbital</span><span data-fx="ursa">Ursa Menor</span><span data-fx="solar">Sistema Solar</span><span data-fx="reality">Devolução da Realidade</span></span></div>
     <div class="menu-row" data-opt="ghost"><span>Van imparável (atravessa e destrói tudo)</span><span class="menu-sw"></span></div>
     <div class="menu-keys">F: disparar o míssil da van (a rodada reinicia)<br>H: helicóptero (Espaço sobe, Shift desce) · T: dica<br>C: câmera · M: missões (Carreira) · Esc: fechar</div>`;
   const row = panel.querySelector('[data-opt="explode"]');
   const rowG = panel.querySelector('[data-opt="ghost"]');
-  const paint = () => { row.classList.toggle('on', explodeWrong); rowG.classList.toggle('on', unstoppable); };
+  const fxRow = panel.querySelector('.menu-fx'), fxBtns = [...panel.querySelectorAll('[data-fx]')];
+  const paint = () => { row.classList.toggle('on', explodeWrong); rowG.classList.toggle('on', unstoppable);
+    fxRow.classList.toggle('off', !explodeWrong); fxBtns.forEach(b => b.classList.toggle('on', b.dataset.fx === wrongFx)); };
+  fxBtns.forEach(b => b.addEventListener('click', () => {
+    wrongFx = b.dataset.fx; paint();
+    try { localStorage.setItem('adress.wrongFx', wrongFx); } catch (e) { /* ignora */ }
+  }));
   rowG.addEventListener('click', () => {
     unstoppable = !unstoppable; paint();
     try { localStorage.setItem('adress.unstoppable', unstoppable ? '1' : '0'); } catch (e) { /* ignora */ }
   });
   paint();
 
-  const toggle = () => panel.classList.toggle('open');
+  let canOpen = () => true;                                         // (main.js: só durante a partida)
+  const toggle = () => { if (document.body.classList.contains('extra-on') || (!panel.classList.contains('open') && !canOpen())) { panel.classList.remove('open'); return; } panel.classList.toggle('open'); };   // nos níveis extras o MENU não existe
   for (const el of [btn, panel]) el.addEventListener('mousedown', e => e.preventDefault()); // não rouba o foco do teclado
   btn.addEventListener('click', () => { btn.blur(); toggle(); });
   row.addEventListener('click', () => {
     explodeWrong = !explodeWrong; paint();
     try { localStorage.setItem('adress.explodeWrong', explodeWrong ? '1' : '0'); } catch (e) { /* ignora */ }
   });
-  addEventListener('keydown', e => { if (e.code === 'Escape') toggle(); });
+  addEventListener('keydown', e => { if (e.code === 'Escape' && !e.repeat) toggle(); });   // (segurar Esc não fica abrindo e fechando)
   stageEl.appendChild(btn);
   stageEl.appendChild(panel);
 
-  return { get explodeWrong() { return explodeWrong; }, get unstoppable() { return unstoppable; } };
+  return { setGate(fn) { canOpen = fn; }, close() { panel.classList.remove('open'); }, get isOpen() { return panel.classList.contains('open'); }, get explodeWrong() { return explodeWrong; }, get unstoppable() { return unstoppable; }, get wrongFx() { return wrongFx; } };
 }

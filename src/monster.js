@@ -3,10 +3,13 @@
 // bar (barra de chefe) → kill (ataque inevitável) → dead ("VOCÊ MORREU") → done (main reinicia a partida).
 import * as THREE from 'three';
 import { mat, box, sphere, cone, cyl, at } from './models/kit.js';
-import { MAP } from './layout.js';
+import { MAP, VAN_START } from './layout.js';
 
-const CX = MAP / 2, CZ = MAP / 2;
-const OUT = { x: MAP / 2, z: -48 };          // onde a van para, fora do bairro
+let CX = MAP / 2, CZ = MAP / 2;              // meio do bairro (onde o monstro sobe)
+const OUT = { x: MAP / 2, z: -48 };          // onde a van para, fora do bairro (em frente à entrada)
+let EX = MAP / 2;                            // x da rua da entrada
+/** O tamanho do bairro muda (configureGrid): recalcula na hora. */
+function recenter() { CX = CZ = MAP / 2; EX = OUT.x = VAN_START.x || MAP / 2; }
 const RISE_FROM = -230;
 
 const CSS = `
@@ -176,12 +179,12 @@ export function createMonster(scene, stageEl, audio) {
   }
 
   function start(v) {
-    van = v;
+    van = v; recenter();
     const x0 = v.x, z0 = v.z;
     // se estiver dentro do bairro, passa pela rua central até a entrada; senão vai direto
     const inside = x0 > 0 && x0 < MAP && z0 > 0 && z0 < MAP;
-    path = inside ? [{ x: CX, z: Math.min(z0, MAP - 6) }, { x: CX, z: 4 }, OUT] : [OUT];
-    if (inside && Math.abs(x0 - CX) < 1) path.shift();
+    path = inside ? [{ x: EX, z: Math.min(z0, MAP - 6) }, { x: EX, z: 4 }, OUT] : [OUT];
+    if (inside && Math.abs(x0 - EX) < 1) path.shift();
     startHeading = v.heading;
     monster.visible = false;
     monster.position.set(CX, RISE_FROM, CZ);
@@ -207,6 +210,9 @@ export function createMonster(scene, stageEl, audio) {
   }
 
   return {
+    /** Leva o monstro e o robô para a cena do bairro atual (antes ficavam só na cena do 1º bairro criado). */
+    attach(sc) { sc.add(monster, robot.root); },
+    get object() { return monster; },
     start,
     update(dt, input) {
       if (phase === 'idle' || phase === 'done') return phase;
@@ -278,12 +284,12 @@ export function createMonster(scene, stageEl, audio) {
     },
     reset() {
       robotOn = false; formT = 0; robot.root.visible = false; if (van) van.object.visible = true; setTip('');
-      phase = 'idle'; t = 0; shake = 0;
+      phase = 'idle'; t = 0; shake = 0; recenter();
       monster.visible = false; monster.position.set(CX, RISE_FROM, CZ); monster.rotation.x = 0;
       head.rotation.z = 0; arms.forEach(a => { a.rotation.x = 0; a.rotation.z = 0; });
       wrap.classList.remove('on'); dead.classList.remove('on'); flash.style.opacity = '0'; fill.style.width = '0%';
     },
-    get phase() { return phase; },
+    get robotOn() { return robotOn; }, get phase() { return phase; },
     get robot() { return robotOn; },
     get active() { return phase !== 'idle' && phase !== 'done'; },
   };

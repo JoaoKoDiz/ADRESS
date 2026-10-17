@@ -5,38 +5,78 @@
 // Missões por fase (nível). id liga a missão à regra em career.js; goal = quanto precisa para concluir.
 // Fases sem missões definidas usam o modelo (sem id: não avançam ainda).
 const PLACEHOLDER = () => Array.from({ length: 5 }, () => ({ id: null, name: 'MISSÃO', desc: 'Descrição breve da missão.', goal: 5 }));
-export const LEVEL_NAMES = ['Primeiros Dias', 'Olhos Abertos', 'Entregador Teimoso', 'Péssimo Senso de Direção', '', ''];
+export const LEVEL_NAMES = ['Raízes', 'Horizontes', 'Constância', 'Veredas', 'Ofício', 'Mirante', 'Altitude', 'Ápice', 'Encostas', 'Veneza', 'Travessia', 'Trilhos', 'Morro', 'Fluxo', 'Colheita', 'Nevasca', 'Jardins', 'Modernista', 'Penumbra', 'Lua', 'Operário', 'Bosque', 'Cachoeira', 'Medieval'];   // (mesmos nomes da seleção do Livre; antes 'Veneza' estava no 8, Encostas)
+/** Bairro 18: espaço reservado para níveis futuros (não dá para jogar; não travam o desbloqueio do 20). */
+export const RESERVED = [];   // (18 = Modernista, 21 = Operário, 22 = Bosque, 23 = Cachoeira; nenhum reservado agora)   // (o 17 é Jardins, o 19 é o Penumbra)
 export const MISSIONS = [
+  // Na Carreira, cumprir o objetivo só deixa a missão PENDENTE; ela é salva quando a mesma partida termina com a entrega
+  // certa (career.js). Abandonar/reiniciar/fechar descarta o que foi cumprido naquela tentativa.
   [
-    { id: 'firstShift', name: 'Primeiro Turno', desc: 'Complete uma partida inteira, realizando as 4 entregas erradas e a 5ª entrega correta.', goal: 1 },
-    { id: 'streets', name: 'Conhecendo a Vizinhança', desc: 'Passe por pelo menos 5 (das 10) ruas no bairro, antes de concluir a entrega correta.', goal: 5 },
-    { id: 'noRepeat', name: 'Sem Voltar Atrás', desc: 'Complete uma partida sem entrar quatro vezes na mesma rua.', goal: 1 },
-    { id: 'lap', name: 'Volta no Quarteirão', desc: 'Dê uma volta completa no bairro antes da quinta entrega.', goal: 1 },
-    { id: 'wrongWay', name: 'Duplo Erro', desc: 'Faça uma entrega incorreta da forma errada (entregue para a casa errada, mesmo que se trate de uma dica falsa).', goal: 1 },
+    { id: 'firstDelivery', name: 'Primeira entrega', desc: 'Faça uma entrega em qualquer casa.', goal: 1 },
+    { id: 'rightAddress', name: 'Endereço certo', desc: 'Conclua uma partida entregando na casa correta.', goal: 1 },
+    { id: 'lap', name: 'Volta no bairro', desc: 'Contorne todo o bairro pelas ruas externas antes de concluir a partida.', goal: 1 },
+    { id: 'wrongAddress', name: 'Endereço errado', desc: 'Faça uma entrega em uma casa diferente da indicada pela dica.', goal: 1 },
+    { id: 'noRush', name: 'Sem pressa', desc: 'Passe 10 minutos na mesma partida.', goal: 1 },
   ],
   [
-    { id: 'blue', name: 'Telhado Azul', desc: 'Faça 3 entregas em casas com telhados azuis (podendo ser ao longo de partidas diferentes).', goal: 3 },
-    { id: 'redWrong', name: 'Telhado Vermelho Errado', desc: 'Faça uma entrega falsa em uma casa com telhado vermelho.', goal: 1 },
-    { id: 'fountain', name: 'Fonte Pequena', desc: 'Faça duas entregas falsas em uma casa com uma fonte pequena (podendo ser ao longo de partidas diferentes).', goal: 2 },
-    { id: 'trampoline', name: 'Insistir no Pulo', desc: 'Insista em fazer uma entrega falsa na mesma casa que tenha um pula-pula, 4 vezes, na mesma partida.', goal: 4 },
-    { id: 'hint', name: 'Pequena Dica', desc: 'Use a dica 3 vezes (em partidas diferentes).', goal: 3 },
+    { id: 'biggerHood', name: 'Bairro maior', desc: 'Conclua uma partida no Bairro 2.', goal: 1 },
+    { id: 'plaza', name: 'Conheça a praça', desc: 'Saia da van e entre na praça central.', goal: 1 },
+    { id: 'noHint', name: 'Sem ajuda', desc: 'Conclua uma partida sem usar o botão de dica.', goal: 1 },
+    { id: 'fast', name: 'Entrega rápida', desc: 'Conclua uma partida em até 3 minutos.', goal: 1 },
+    { id: 'noBump', name: 'Sem esbarrar', desc: 'Conclua uma partida sem bater em casas, árvores ou postes.', goal: 1 },
   ],
   [
-    { id: 'tenSame', name: 'Dez Vezes é Demais', desc: 'Faça 10 entregas falsas propositalmente na mesma casa durante uma única partida.', goal: 10 },
-    { id: 'tourist', name: 'Turista do Bairro', desc: 'Passe pela mesma rua 10 vezes antes de realizar a entrega correta.', goal: 10 },
-    { id: 'nextDoor', name: 'Não Era Aqui?', desc: 'Faça uma entrega em uma das 4 casas imediatamente ao lado daquela indicada pela dica falsa.', goal: 1 },
-    { id: 'opposite', name: 'Do Outro Lado', desc: 'Insista 3 vezes na entrega errada, em uma das 4 casas dos cantos do bairro, e repita isso logo em seguida, na casa no canto oposto.', goal: 1 },
-    { id: 'dizzy', name: 'Manobras Enjoativas', desc: 'Dê 5 voltas completas em torno de uma mesma casa.', goal: 5 },
+    { id: 'twoDetours', name: 'Dois desvios', desc: 'Vá de um lado ao outro de uma barreira e retorne usando um caminho diferente.', goal: 1 },
+    { id: 'stubborn', name: 'Barreira teimosa', desc: 'Bata três vezes na mesma barreira, afastando-se entre as batidas.', goal: 1 },
+    { id: 'allBars', name: 'Teste de resistência', desc: 'Bata em todas as barreiras da partida.', goal: 1 },
+    { id: 'offRoute', name: 'Fora da rota', desc: 'Faça entregas em duas casas diferentes, ambas fora das indicações das dicas.', goal: 1 },
+    { id: 'careful', name: 'Cuidado com as barreiras', desc: 'Conclua uma partida sem bater em nenhuma barreira.', goal: 1 },
   ],
   [
-    { id: 'colors', name: 'Confundi as Cores', desc: 'Ao receber uma dica falsa para um prédio comercial ou casa de cor azul, entregue propositalmente em um prédio comercial ou casa de telhado vermelho.', goal: 1 },
-    { id: 'roosters', name: 'Viciado em Galos', desc: 'Insista 3 entregas falsas em duas casas diferentes que tenham um galo de metal no telhado, na mesma partida.', goal: 2 },
-    { id: 'fountainSwap', name: 'Fonte Errada', desc: 'Quando a dica indicar uma casa com fonte pequena, entregue propositalmente em outra casa que também tenha uma fonte.', goal: 1 },
-    { id: 'expensive', name: 'É Muito Caro!', desc: 'Abasteça duas vezes no posto de gasolina na mesma partida (pare embaixo da cobertura, ao lado das bombas, e aperte E).', goal: 2 },
-    { id: 'knowHouse', name: 'Eu Conheço Essa Casa', desc: 'Insista 3 entregas incorretas propositalmente em uma casa, na mesma posição, em 2 partidas diferentes (uma em seguida da outra).', goal: 2 },
+    { id: 'fuelStop', name: 'Parada para abastecer', desc: 'Abasteça a van entre duas entregas.', goal: 1 },
+    { id: 'reversePark', name: 'Estacione de ré', desc: 'Estacione diante de um prédio comercial, com a traseira voltada para a entrada, e desça da van.', goal: 1 },
+    { id: 'reverse', name: 'Marcha à ré', desc: 'Percorra de ré uma rua inteira, de um cruzamento ao seguinte.', goal: 1 },
+    { id: 'lookStop', name: 'Olhe antes de seguir', desc: 'Pare por 3 segundos antes de atravessar três cruzamentos diferentes.', goal: 1 },
+    { id: 'quick', name: 'Entrega próxima', desc: 'Faça duas entregas consecutivas com até 45 segundos entre elas.', goal: 1 },
   ],
-  PLACEHOLDER(),   // Bairro 5
-  PLACEHOLDER(),   // Bairro 6 (a cidade)
+  [
+    { id: 'twoStops', name: 'Duas paradas', desc: 'Abasteça entre entregas em dois momentos diferentes da mesma partida.', goal: 1 },
+    { id: 'revTurn', name: 'Curva de ré', desc: 'Faça uma curva em um cruzamento dirigindo de ré.', goal: 1 },
+    { id: 'uTurn', name: 'Meia-volta', desc: 'Faça um retorno de 180° em um cruzamento, sem usar a marcha à ré.', goal: 1 },
+    { id: 'walkLap', name: 'Uma volta a pé', desc: 'Saia da van e contorne uma quadra inteira a pé antes de concluir a partida.', goal: 1 },
+    { id: 'fiveLaps', name: 'Cinco voltas', desc: 'Dê cinco voltas completas ao redor da mesma quadra, na mesma partida.', goal: 1 },
+  ],
+  [
+    { id: 'colors', name: 'Confundi as cores', desc: 'Ao receber uma dica que envolva um telhado vermelho, entregue em qualquer casa com um telhado azul, ou vice-versa.', goal: 1 },
+    { id: 'tourist', name: 'Turista do bairro', desc: 'Passe pela mesma rua 5 vezes antes de concluir a partida.', goal: 1 },
+    { id: 'houseOrBuilding', name: 'Casa ou prédio?', desc: 'Quando a dica indicar um prédio, entregue propositalmente em uma casa.', goal: 1 },
+    { id: 'eight', name: 'Oito no asfalto', desc: 'Contorne duas quadras diagonalmente vizinhas, formando um oito com a van.', goal: 1 },
+    { id: 'forgot', name: 'Esqueci uma coisa', desc: 'Após uma entrega falsa, volte à entrada do bairro antes de fazer outra entrega.', goal: 1 },
+  ],
+  [
+    { id: 'wrongFountain', name: 'Fonte errada', desc: 'Quando a dica indicar uma casa com fonte pequena, entregue propositalmente em outra casa que também tenha uma fonte.', goal: 1 },
+    { id: 'nextDoor', name: 'Não era aqui?', desc: 'Faça uma entrega em uma das 4 casas imediatamente ao lado daquela indicada pela dica.', goal: 1 },
+    { id: 'stuck', name: 'Preso no trânsito', desc: 'Fique parado por 15 segundos atrás de um pequeno trânsito antes de pegar o desvio.', goal: 1 },
+    { id: 'backOff', name: 'Melhor recuar', desc: 'Diante de um caminhão bloqueando a rua, recue até o cruzamento anterior sem virar a van.', goal: 1 },
+    { id: 'noTouch', name: 'Sem encostar', desc: 'Conclua uma partida sem encostar nos carros dos pequenos trânsitos nem nos caminhões.', goal: 1 },
+  ],
+  PLACEHOLDER(),   // Bairro 8 (como o 7, em 8×8)
+  PLACEHOLDER(),   // Bairro 9 (Encostas)
+  PLACEHOLDER(),   // Nível 10 (Veneza)
+  PLACEHOLDER(),   // Bairro 11 (Travessia)
+  PLACEHOLDER(),   // Bairro 12 (Trilhos)
+  PLACEHOLDER(),   // Bairro 13 (Morro)
+  PLACEHOLDER(),   // Bairro 14 (Fluxo)
+  PLACEHOLDER(),   // Bairro 15 (Colheita)
+  PLACEHOLDER(),   // Bairro 16 (Nevasca)
+  PLACEHOLDER(),   // Bairro 17 (Jardins)
+  PLACEHOLDER(),   // Bairro 18 (Modernista)
+  PLACEHOLDER(),   // Bairro 19 (Penumbra)
+  PLACEHOLDER(),   // Bairro 20 (Lua)
+  PLACEHOLDER(),   // Bairro 21 (Operário)
+  PLACEHOLDER(),   // Bairro 22 (Bosque)
+  PLACEHOLDER(),   // Bairro 23 (Cachoeira)
+  PLACEHOLDER(),   // Bairro 24 (Medieval)
 ];
 
 const CSS = `
@@ -52,6 +92,7 @@ const CSS = `
 .missions-count { padding: .35em .9em; border-radius: 999px; background: #ffe2b8; font-weight: 800; font-size: clamp(15px, 1.4vw, 21px); color: #5a3c1e; }
 .missions-close { padding: .45em 1em; border: 3px solid #fff; border-radius: 999px; background: #3a2a1a; color: #fff3d6; cursor: pointer;
   font: 800 clamp(13px, 1.1vw, 16px) "Trebuchet MS","Segoe UI",system-ui,sans-serif; }
+@media (max-width: 560px) { .missions-head { flex-wrap: wrap; } .missions-title { flex: 1 0 100%; font-size: 20px; } .missions-close { white-space: nowrap; } }
 .missions-list { flex: 1; display: flex; flex-direction: column; justify-content: space-around; gap: clamp(8px, 1.4vh, 16px); }
 .mission { display: flex; flex-direction: column; gap: 4px; }
 .mission-name { font-weight: 900; font-size: clamp(18px, 1.8vw, 26px); }
@@ -60,6 +101,7 @@ const CSS = `
 .mission-bar { flex: 1; height: clamp(14px, 1.8vh, 20px); border-radius: 999px; background: #bdb6a8; overflow: hidden; }
 .mission-fill { height: 100%; width: 0%; background: #3c9d55; border-radius: 999px; }
 .mission-num { min-width: 3.2em; text-align: right; font-weight: 800; font-size: clamp(14px, 1.25vw, 18px); color: #5a3c1e; }
+.mission-pend { font-weight: 700; font-size: clamp(12px, 1.05vw, 15px); color: #c2570c; }
 `;
 
 /** Botão "MISSÕES (x/5)" no canto superior direito da área do jogo (fora da barra do topo). */
@@ -114,20 +156,23 @@ export function createMissions(store) {
   let open = false;
   function render(i) {
     const ms = MISSIONS[i], prog = store.progress[i];
-    title.textContent = `MISSÕES · BAIRRO ${i + 1}${LEVEL_NAMES[i] ? ' — ' + LEVEL_NAMES[i].toUpperCase() : ''}`;
+    title.textContent = `MISSÕES · ${i === 9 ? 'NÍVEL' : 'BAIRRO'} ${i + 1}${LEVEL_NAMES[i] ? ' — ' + LEVEL_NAMES[i].toUpperCase() : ''}`;
     count.textContent = `${ms.filter((m, k) => prog[k] >= m.goal).length}/${ms.length}`;
     list.innerHTML = ms.map((m, k) => {
       const p = prog[k] || 0;
       const pct = Math.max(0, Math.min(100, p / m.goal * 100));
+      const pend = p < m.goal && store.isPending && store.isPending(i, k);   // cumprida nesta partida: falta terminar com a entrega certa
       return `<div class="mission">
         <div class="mission-name">${m.name}</div>
         <div class="mission-desc">${m.desc}</div>
         <div class="mission-row"><div class="mission-bar"><div class="mission-fill" style="width:${pct}%"></div></div>
         <div class="mission-num">${Math.min(p, m.goal)}/${m.goal}</div></div>
+        ${pend ? '<div class="mission-pend">Pendente: conclua esta partida com a entrega certa para salvar.</div>' : ''}
       </div>`;
     }).join('');
   }
   function close() { open = false; el.classList.remove('open'); }
+  addEventListener('keydown', e => { if (open && e.key === 'Escape') { e.stopImmediatePropagation(); e.preventDefault(); close(); } }, true);   // Esc fecha a lista (e não abre o MENU por baixo)
 
   return {
     /** Abre as missões do bairro i (0..4). */

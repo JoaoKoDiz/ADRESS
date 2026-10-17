@@ -6,7 +6,10 @@ import { mat, cone, cyl, box, at } from './models/kit.js';
 import { HOUSES, ROOF_COL } from './data.js';
 import { LOT_ANCHORS, slotOrigin } from './layout.js';
 import { GROUND_Y } from './models/house.js';
-import { APT_HEIGHT } from './models/apt.js';
+import { TERRAIN } from './layout.js';
+import { aptHeight } from './models/apt.js';
+import { futTopY } from './models/fut.js';
+import { moonTopY } from './models/moon.js';
 
 const A = LOT_ANCHORS, HS = A.house;
 const HX = (HS.x0 + HS.x1) / 2, HZ = (HS.z0 + HS.z1) / 2, HALF = (HS.z1 - HS.z0) / 2;
@@ -143,14 +146,17 @@ export function createHintArrow(scene, audio) {
 
   return {
     /** Solta a seta sobre a casa `h`, que está no lote `slot`. */
-    drop(h, slot) {
+    /** top: altura real do topo do lote (para tipos sem altura conhecida aqui: Medieval, Jardins, Operário, Modernista…). */
+    drop(h, slot, top = null) {
       this.clear();
       house = h;
       const o = slotOrigin(slot);
       cx = o.x + HX; cz = o.z + HZ;
       roofColor = ROOF_COL[HOUSES[h].roof] || '#8f8a82';      // prédios: laje cinza
       const kind = HOUSES[h].kind;
-      surf = kind === 'apt' ? GROUND_Y + APT_HEIGHT + 0.1 : kind === 'shop' ? GROUND_Y + 6.7 : ROOF_SURF;
+      surf = kind === 'apt' ? GROUND_Y + aptHeight(HOUSES[h]) + 0.1 : kind === 'fut' ? GROUND_Y + futTopY(HOUSES[h]) + 0.1 : kind === 'shop' ? GROUND_Y + 6.7 : kind === 'ware' ? GROUND_Y + 8.4 : kind === 'ven' ? 0.15 + 3 * HOUSES[h].floors + 0.9 : kind === 'fav' ? 2.8 * HOUSES[h].floors + 0.2 : kind === 'mod' ? GROUND_Y + 14.4 : kind === 'farm' ? (HOUSES[h].type === 'barn' ? 8.0 : HOUSES[h].type === 'shed' ? 5.4 : 4.9) : kind === 'moon' ? moonTopY(HOUSES[h]) : ROOF_SURF;
+      surf += TERRAIN.h(cx, cz);                              // Bairro 9: lotes no alto da encosta
+      if (top != null && !['house', 'apt', 'fut', 'shop', 'ware', 'ven', 'fav', 'mod', 'farm', 'moon'].includes(kind)) surf = top;   // (antes a seta afundava dentro de prédios altos)
       tan = kind === 'house' ? TAN : 0; slope = kind === 'house' ? THETA : 0;
       arrow.position.set(cx, START_Y, cz);
       arrow.rotation.set(0, 0, 0);
@@ -220,6 +226,7 @@ export function createHintArrow(scene, audio) {
     get timeSinceLanding() { return phase === 'stuck' ? t : phase === 'leave' || phase === 'gone' ? 99 : 0; },
     get active() { return phase === 'fall' || phase === 'stuck'; },
     get shake() { return shake; },
+    get arrowY() { return arrow.position.y; }, get surf() { return surf; },   // (testes)
     arrow,
     /** Leva a seta e os efeitos para a cena do bairro ativo. */
     attach(scene) { scene.add(arrow); scene.add(fx); },
