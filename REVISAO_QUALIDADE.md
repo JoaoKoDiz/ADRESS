@@ -1,6 +1,6 @@
 # Revisão de qualidade do ADRESS (17/10/2026)
 
-**Última atualização:** 17/10 01:02 (horário de Brasília)
+**Última atualização:** 17/10 01:42 (horário de Brasília)
 
 ## Ponto de partida
 - Estado salvo antes da revisão: commit `7b8aba7` (tag local `pre-revisao-qualidade`; o envio da tag ao GitHub foi recusado, a branch tem o commit).
@@ -106,6 +106,16 @@ Corrigidas as faces coplanares e peças enterradas/atravessando que a auditoria 
 - Jardineira do prédio contemporâneo flutuando; espreguiçadeiras do terraço com piscina para fora da platibanda e água acima da borda; itens do pátio dos galpões 6 cm enterrados. [C]
 - Manchas de grama fora do bairro e grafite dos prédios em alturas separadas. [C]
 - Reteste do detector (Penumbra, Modernista, Operário, Fluxo): restam só empates com folga de 1–5 cm (ruído do renderizador sem GPU), nenhum dos itens corrigidos.
+
+### Desempenho (auditoria por bairro + correções seguras, sem mudar aparência)
+Medição: chamadas de desenho por bairro (média ~407 no passe principal; picos na Penumbra 1686, Fluxo 767, Nevasca 703, Bairro 8 640) e CPU do update (< 3 ms/quadro em todos; picos periódicos só no Bosque).
+- [E] Bosque: o teste das copas que ficam transparentes varria as 22.655 copas a cada 0,08 s (picos de até 6,6 ms); agora pula as que estão longe do segmento câmera→alvo. A camada de copas transparentes desenhava sempre as 22.655 instâncias escondidas; agora desenha só as do momento (4–13). Quadro ~17% mais rápido no renderizador sem GPU; fotos conferidas. (`c8693b7`)
+- [E] Nevasca: neve dos telhados e detalhes de inverno de cada casa fundidos como o resto do lote: chamadas de desenho (com sombra) 1739 → 855, mesmos triângulos; fotos conferidas. (`c8693b7`)
+- [E] Engarrafamentos: peças dos 6 carros fundidas (a carroceria, que muda de cor, fica separada): Bairro 7 922 → 563, Bairro 8 1106 → 847 (com sombra); foto conferida. (`e968da3`)
+- [C] Penumbra: poças de luz e faróis compartilham material/geometria (centenas de materiais a menos; mesmas chamadas). (`…`)
+- [E] Veículos (trânsito, tratores, Operário, bondes) deixaram de varrer a lista de obstáculos inteira a cada quadro (`ensureSolid`); contagem de obstáculos idêntica ao build anterior em 4 bairros, sem duplicados.
+- [E] A pé: obstáculos das casas e quintais calculados só quando a composição muda (antes, centenas de objetos novos por quadro). Testes de alcance dos quintais iguais.
+Não feito (mudaria visual ou é estrutural): instanciar o trânsito e os enfeites da Penumbra, reduzir luzes da Penumbra, galinhas/K da cadeira.
 
 ## Em andamento / próximos passos (identificados, pendentes)
 Prioridade aproximada:
