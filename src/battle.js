@@ -40,7 +40,7 @@ const CAM_T = 1.0;                                                    // duraç�
 const CIRCLE_R = 0.36, CIRCLE_SPEED = 6.5, CIRCLE_HOME = { x: 0, z: 5.5 };
 const WARN = 1.0;                                                     // aviso antes de cada disparo (s)
 const DMG = { P: 20, K: 34, K2: 28 }, REGEN = { wait: 5, rate: 4 };   // estabilidade: dano por impacto e regeneração lenta
-const BLOCK = { r: 0.65, w: 1.3, h: 0.72, rise: 0.16, life: 1.8, cooldown: 0.18 };
+const BLOCK = { r: 0.65, w: 1.3, h: 0.72, rise: 0.16, life: 1.8, cooldown: 0.18 };   // life: só as placas do K; as do jogador não expiram
 const P_SLOTS = 2;                                                  // barreiras do jogador ao mesmo tempo (Bloquear + Refletir juntos)
 // brilho das barreiras: pulso forte ao surgir (~0,3 s) e depois um brilho contínuo mais fraco até sumir
 const GLOW = { surf: 0.46, surfPulse: 0.32, line: 0.95, glow: 0.55, glowPulse: 1.5, up: 0.05, down: 0.28 };
@@ -48,7 +48,7 @@ const glowPulse = age => age < GLOW.up ? age / GLOW.up : Math.max(0, 1 - (age - 
 // Refletir: lei pura v' = v − 2(v·n)n; única exceção (assist): se a volta passa a ≤ REFL.assist (0,09 rad ≈ 5°) da
 // estrutura que disparou, segue até ela (parede quase perpendicular, ex. desenhada no joystick). Com o teclado as retas
 // saem a 0°/45°/90° e devolvem exatas.
-const REFL = { step: 0.3, maxLen: 7.0, eps: 0.15, minSeg: 0.45, h: 1.6, life: 3.5, minLen: 0.6, assist: 0.09 };
+const REFL = { step: 0.3, maxLen: 7.0, eps: 0.15, minSeg: 0.45, h: 1.6, minLen: 0.6, assist: 0.09 };   // paredes não expiram
 const STRUCT = { hitR: 0.95 };
 // Conduzir: turn = giro máximo dos projéteis (rad/s; perseguem como mísseis, sem fila de posições); grabR = distância do
 // círculo ao pé do objeto para agarrar; pull = quanto puxar até romper; objY = altura do objeto; formT = abertura do portal;
@@ -251,15 +251,10 @@ const WGRID_F = `uniform vec2 uC; varying vec2 vP;
 void main(){ vec2 w = max(fwidth(vP), vec2(1e-4)); vec2 g = abs(fract(vP - 0.5) - 0.5) / w;
   float line = 1.0 - min(min(g.x, g.y) / 1.2, 1.0); float a = line * 0.5 * exp(-length(vP - uC) / 22.0);
   if (a < 0.004) discard; gl_FragColor = vec4(vec3(0.55), a); }`;
-// figura: preta com um contorno (fresnel) cinza-escuro, para a silhueta existir no preto
-const RIM_V = `varying vec3 vN; varying vec3 vV; void main(){ vec4 w = modelMatrix * vec4(position, 1.0); vN = normalize(mat3(modelMatrix) * normal); vV = cameraPosition - w.xyz; gl_Position = projectionMatrix * viewMatrix * w; }`;
-const RIM_F = `uniform vec3 uRim; uniform float uGlow; varying vec3 vN; varying vec3 vV;
-void main(){ float f = 1.0 - max(dot(normalize(vN), normalize(vV)), 0.0); float r = pow(f, 2.0) * 1.2 + uGlow * pow(f, 1.2);
-  gl_FragColor = vec4(uRim * r, 1.0); }`;
 
 export function createBattle(ctx) {
   const { input, audio, stage } = ctx;
-  const scene = new THREE.Scene(); scene.background = new THREE.Color('#000000');
+  const scene = new THREE.Scene(); scene.background = new THREE.Color('#0b0b0e');   // quase preto: a figura (#000000) aparece só pela silhueta
   const camera = new THREE.PerspectiveCamera(CAMS.impact.fov, 16 / 9, 0.05, 300);
   scene.add(new THREE.HemisphereLight('#ffffff', '#202020', 0.45));
   const key = new THREE.DirectionalLight('#ffffff', 1.7); scene.add(key); scene.add(key.target);
@@ -346,7 +341,8 @@ export function createBattle(ctx) {
   const KU = K.userData;
   const kWrist = a => a.elbow.children[a.elbow.children.length - 1];
   // figura: a aparência escura do extra 1 (maior), com contorno
-  const figMat = new THREE.ShaderMaterial({ vertexShader: RIM_V, fragmentShader: RIM_F, uniforms: { uRim: { value: new THREE.Color(0.2, 0.2, 0.235) }, uGlow: { value: 0 } } });
+  // figura: preto puro #000000 em toda a superfície (sem luz, sombra, brilho nem contorno); só a silhueta contra o fundo
+  const figMat = new THREE.MeshBasicMaterial({ color: '#000000', toneMapped: false, fog: false });
   const fig = buildFigureBody(); fig.traverse(o => { if (o.isMesh) { o.material = figMat; o.castShadow = false; } }); smoothCharacter(fig);
   fig.scale.set(...F_SCALE); fig.rotation.y = FACE_PZ; fig.position.copy(F_POS); scene.add(fig);
   const FU = fig.userData;
@@ -630,13 +626,24 @@ export function createBattle(ctx) {
     const d = incomingDir(x, z, proj), tx = -d.z, tz = d.x, hw = BLOCK.w / 2;
     const seg = { ax: x - tx * hw, az: z - tz * hw, bx: x + tx * hw, bz: z + tz * hw, tx, tz, nx: d.x, nz: d.z, len: BLOCK.w };
     const obj = barPool[owner].get(); obj.position.set(x, H_PROJ, z); obj.rotation.set(0, Math.atan2(d.x, d.z), 0); obj.scale.set(1, 0.001, 1); obj.visible = true; scene.add(obj);
-    const b = { x, z, owner, seg, age: 0, life: BLOCK.life, alive: true, die: -1, obj };
+    const b = { x, z, owner, seg, age: 0, life: owner === 'P' ? Infinity : BLOCK.life, alive: true, die: -1, obj, n: owner === 'P' ? ++placeN : 0 };   // do jogador: só some ao ser atingida ou substituída
     barriers.push(b);
     return b;
   }
   /** Vagas do jogador em uso: placas do Bloquear + paredes do Refletir ainda de pé (as defesas do K não contam). */
   const slotsUsed = () => barriers.filter(o => o.alive && o.owner === 'P').length + walls.filter(o => o.alive).length;
-  const slotFree = () => slotsUsed() < P_SLOTS;
+  // Barreiras do jogador não expiram. Com as 2 vagas ocupadas, a nova substitui a POSICIONADA POR ÚLTIMO (A, B → C: fica A, C;
+  // → D: fica A, D) — a mais antiga fica. Vale para placas e paredes juntas; chamado no instante da criação.
+  let placeN = 0;
+  function makeRoom() {
+    for (;;) {
+      const live = barriers.filter(o => o.alive && o.owner === 'P').concat(walls.filter(o => o.alive));
+      if (live.length < P_SLOTS) return;
+      const last = live.reduce((a, o) => o.n > a.n ? o : a);
+      if (last.segs) killWall(last); else killBarrier(last);
+      L('replace');
+    }
+  }
   function killBarrier(b) { if (!b.alive) return; b.alive = false; b.die = 0; }
   function addWall(pts) {
     const segs = [], pos = [], lin = [], h = REFL.h;
@@ -658,7 +665,7 @@ export function createBattle(ctx) {
     const halo = new THREE.Mesh(gg, glow); halo.renderOrder = 2;
     g.add(new THREE.Mesh(pg, surf), new THREE.LineSegments(lg, line), halo); g.scale.y = 0.001; scene.add(g);
     g.userData = { surf, line, glow };
-    const w = { pts: pts.map(p => ({ x: p.x, z: p.z })), segs, age: 0, life: REFL.life, alive: true, die: -1, obj: g };
+    const w = { pts: pts.map(p => ({ x: p.x, z: p.z })), segs, age: 0, life: Infinity, alive: true, die: -1, obj: g, n: ++placeN };
     walls.push(w);
     sfx('barrier'); L('wall');
     return w;
@@ -939,11 +946,9 @@ export function createBattle(ctx) {
     const act = mouseDown || simAct || input.held('Space'), click = act && !prevAct; prevAct = act;
     if (phase !== 'play' || !seg) return;
     if (seg.mech === 'block') {
-      if (click && !slotFree()) L('slots:full');                    // 2 vagas ocupadas: não cria nem gasta a ação
-      else if (click && time - lastBar >= BLOCK.cooldown) { lastBar = time; addBarrier(cpos.x, cpos.z, 'P'); sfx('barrier'); L('barrier'); pose.setGuard(true); }
+      if (click && time - lastBar >= BLOCK.cooldown) { lastBar = time; makeRoom(); addBarrier(cpos.x, cpos.z, 'P'); sfx('barrier'); L('barrier'); pose.setGuard(true); }
     } else if (seg.mech === 'reflect') {
-      if (click && !drawing && !slotFree()) L('slots:full');      // não começa a desenhar sem vaga
-      if (act && !drawing && slotFree()) { drawing = { pts: [{ x: cpos.x, z: cpos.z }], len: 0, atLimit: false }; setPreview(true); }
+      if (act && !drawing) { drawing = { pts: [{ x: cpos.x, z: cpos.z }], len: 0, atLimit: false }; setPreview(true); }   // começar a desenhar não remove nada (a troca é ao soltar)
       if (act && drawing) {
         const last = drawing.pts[drawing.pts.length - 1], d = dist(last, cpos);
         if (d >= REFL.step) {
@@ -962,7 +967,7 @@ export function createBattle(ctx) {
         }
         const len = drawing.len, pts = mergeShort(rdp(drawing.pts, REFL.eps), REFL.minSeg);
         setPreview(false);
-        if (len >= REFL.minLen && pts.length >= 2) addWall(pts);
+        if (len >= REFL.minLen && pts.length >= 2) { makeRoom(); addWall(pts); }
       }
     } else if (seg.mech === 'guide') {
       const g = seg.guide, pull = rightDown || input.held('KeyE');
@@ -1226,7 +1231,6 @@ export function createBattle(ctx) {
     let fk = 0, fs = 1, ft = _v.set(0, 3, 0);
     if (figGest) { figGest.t += dt; const t = figGest.t, d = figGest.dur; fk = (t < 0.35 ? t / 0.35 : t < d - 0.4 ? 1 : Math.max(0, (d - t) / 0.4)) * (figGest.soft ? 0.55 : 1); fs = figGest.s; ft.copy(figGest.pt); if (t >= d) figGest = null; }
     for (const a of FU.arms) { a.k = (a.k || 0) + ((a.s === fs ? fk : 0) - (a.k || 0)) * Math.min(1, dt * 8); reachArm(fig, a.s, ft, a.k); }
-    figMat.uniforms.uGlow.value = 0.25 * fk;
   }
 
   // ---------- rótulo ----------
