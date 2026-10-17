@@ -343,6 +343,21 @@ document.title = 'OK ' + A.dialog.text + ' errs=' + JSON.stringify(window.__errs
 - **Caminhada** (`src/gait.js`, `createGait`): pés plantados por IK de 2 ossos (quadril → joelho → tornozelo), o pé recua no apoio exatamente o que o corpo anda (não desliza), calcanhar sobe no fim do apoio, pé levanta e a ponta sobe antes de apoiar, joelhos dobram, braços em oposição (cotovelo dobra mais quando o braço vai à frente), quique, giro do quadril/contra-giro do tronco, inclinação leve; ritmo = distância realmente andada (`walker` passa o deslocamento após a colisão: andar contra a parede não gira as pernas); ciclo/s = 1,2 + 0,33·v (local), passo máximo `stride`; em velocidade alta vira um trote leve (tempo no ar). Entrada/saída do passo suaves (`amt`). Jogador: `walker.js` (`animate`). K: `walkK(root, dt, travel)` em `reader.js` (saída do K na missa e no extra 1).
 - **Superfícies lisas em todos os personagens** (`smoothCharacter` em `models/kit.js`: esferas, cilindros, cones, toros, cápsulas e tornos com ~2× segmentos e materiais facetados trocados pela versão suave; caixas continuam caixas): moradores (`resident.js`, antes do `bakeStatic`), clientes do Grillby's (`buildNPC`), R e figura (extra 1 e batalha). Moradores medievais/missa: `PEOPLE_MAT` liso e mais segmentos em `G`. Bonés com mais segmentos (copa e aba).
 
+## 7d. Revisão de qualidade (17/10) — o que mudou no comportamento
+
+Relatório completo em `REVISAO_QUALIDADE.md`. Resumo do que um novo chat precisa saber:
+- **MENU (Esc)** só abre durante o jogo (`MENU_STATES_OK` + `menu.setGate`) e **pausa** a partida. Ctrl/Alt/Cmd + tecla não disparam ações (`input.js`).
+- **Colisão a pé** (`walkSolids` em `main.js`): cercas dos lotes de casa (entra-se pelo portão) e miolo dos objetos do quintal (`lotFootExtras`, `YARD_CORE`); muro baixo e térreo dos residenciais (`aptFootExtras`); praça do Bairro 2 (`plazaFootSolids` em `world.js`); pracinhas do Fluxo/Penumbra liberadas a pé com árvores/bancos/carros (`fluxParkFoot`; o bloco da pracinha virou `vanOnly`); mesas da praça roxa de Veneza (`veniceTables`); postes da Penumbra (`night.poles`); bancos públicos com caixa girada (layout.js); lojinhas/pilares da Rialto (`rialtoOpen` em `VENICE.walkable`); sebes do jardim medieval.
+- **Casas giradas**: `walkBox` agora é caixa orientada (`src/obb.js`: `obbBox`/`obbHits`; `b.obb` em `walker.js`) no Medieval, Bosque, Nevasca, Jardins e Modernista.
+- **Igreja** (`CHURCH_SOLIDS`): paredes em 13 + contrafortes, ábside em degraus, plataforma do altar sólida. Bairro 24: sem o piso extra a 0,11 (o chão interno do mundo do Medieval fica em −0,02).
+- **Helicóptero** acima de 6,5: `van.setGhost(v, lista)` colide só com o que é mais alto que ele (`heliTall`: contemporâneos, galpões, igrejas, castelo/torres/casas do Medieval).
+- **Bondes** param para o personagem a pé (não conta para o dilema); barcos de Veneza esperam a lancha; cancelas dos Jardins/Modernista seguram aberto com a van perto.
+- **Partida nova**: zera `game.delivered`, devolve os montes de neve e põe a câmera atrás da van no padrão.
+- **Memória**: `disposeTree` (kit.js) libera trânsito e enfeites da Penumbra ao recriar (objetos com `userData.keep` ficam).
+- **Carreira**: tocar de novo na mesma casa não conta como outra entrega (`lastH` em `career.js`); "Fonte errada" exige pista com fonte.
+- **Celular**: Shop em uma coluna (em pé) / 3 colunas com altura mínima (deitado); HUD sem o nome ADRESS em telas ≤ 560 px; seleção do Livre com setas abaixo da grade; área segura (entalhe) nos botões fixos (`template.html`).
+- Ganchos de teste novos: `ADRESS.FORESTV`, `ADRESS.VENICE`, `ADRESS.TERRAIN`; `churchDbg()` mostra `on`/`ct`.
+
 ## 8. Pendências / próximos passos conhecidos
 
 - Missões dos Níveis 5 e 6: aguardando o dono mandar.

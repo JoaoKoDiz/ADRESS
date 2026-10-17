@@ -573,6 +573,12 @@ function heliTall(alt) {
   }
   const ch = churchSolids.length ? churchSolids : MEDV && MEDV.extra && MEDV.extra.church ? MEDV.extra.church.solids : null;
   if (ch) ch.forEach((b, i) => { if ((i < 4 ? 68 : 30) > y) heliTallOut.push(b); });   // fachada e torres (as 4 primeiras caixas) / nave
+  if (MEDV) {                                                                  // Medieval: castelo, torres do portão e casas (mesmas alturas da câmera)
+    const V = MEDV, C = V.castle;
+    if (V.HIGHH + 26 > y) heliTallOut.push({ x0: C.x0, x1: C.x1, z0: C.z0, z1: C.z1 });
+    if (14 > y) heliTallOut.push({ x0: 108, x1: 125.2, z0: -12, z1: 4 }, { x0: 133.6, x1: 151, z0: -12, z1: 4 });
+    for (const sp of V.spots) if (sp.y + (sp.shop ? 9.5 : 9) > y) heliTallOut.push(sp.walkBox);
+  }
   return heliTallOut;
 }
 // Veneza: cada conjunto de mesa + 4 cadeiras (raio ~1,9) da praça roxa — mesmas posições de terrain.js
