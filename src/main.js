@@ -1685,9 +1685,7 @@ function setupMedStory() {
       }
       b3.userData.bell.rotation.set(0.05, 0, 0.17);
       medChurch.add(b3, b4); medChurch.userData.newBells = [b3, b4];
-      // piso de dentro um pouco mais alto (o chão do Bairro 24 aparecia por cima do piso original)
-      const fl = new THREE.MeshStandardMaterial({ color: '#7c6450', roughness: 1, emissive: '#7c6450', emissiveIntensity: 0.06 });
-      for (const [x0, x1, z0, z1] of [[-11.8, 11.8, -44, -3], [-4.5, 4.5, -3, 2.6]]) { const m = new THREE.Mesh(new THREE.PlaneGeometry(x1 - x0, z1 - z0), fl); m.rotation.x = -Math.PI / 2; m.position.set((x0 + x1) / 2, 0.11, (z0 + z1) / 2); m.receiveShadow = true; medChurch.add(m); }
+      // (o piso extra a 0,11 escondia o tapete; com o chão do Bairro 24 rebaixado em world.js o piso original aparece inteiro)
     }
     medChurch.position.set(C.cx, 0, C.cz); medChurch.rotation.y = C.ry; world.scene.add(medChurch);
     const pave = new THREE.MeshStandardMaterial({ color: '#8f8a7c', roughness: 1 });
