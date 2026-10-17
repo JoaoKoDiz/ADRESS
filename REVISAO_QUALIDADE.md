@@ -151,6 +151,7 @@ Verificado sem problema pela revisão: fluxos completos de interface (Livre, Car
 - [E] Teclas aleatórias (900 quadros por bairro, teclas seguradas/soltas e apertadas fora de hora — E, L, H, F, C, T, M, Esc, Shift, Espaço — e van levada à porta no meio): 24 bairros no Livre + Bairros 1–7 na Carreira. 0 erros de JavaScript, nenhuma posição/câmera inválida (NaN), todos os estados (míssil, fades, diálogo, a pé) voltam ao jogo.
 - [E] Câmera com o helicóptero voando baixo entre os prédios (Bairros 6, 8 e 9; 18 poses, subindo/virando): nenhum objeto entre a câmera e a van.
 - [C] Toque no balão "E — …" durante o arraste da câmera no celular: o toque no balão é capturado antes e vira um E (já tratado). Pinça para zoom no celular não existe — seria um controle novo, fora do escopo.
+- [E] Memória visitando os 24 bairros duas vezes seguidas: as cenas ficam guardadas (≈6.100 geometrias/300 texturas na GPU com todas visitadas) e a 2ª volta fica praticamente estável. O pouco que ainda sobe são prédios que aparecem pela primeira vez numa composição sorteada (enviados à GPU no primeiro uso) — tem teto, não é vazamento. Trocar entre dois bairros repetidamente não acumula.
 - Câmera na Rialto: tentei caixas para as lojinhas, mas como a ponte é diagonal e a câmera só usa caixas alinhadas aos eixos, elas cobriam o corredor do meio e a câmera encolhia à toa. Desfeito; segue como limitação.
 - Porta da oficina do Medieval: continua sem colisão de propósito — abre/fecha nas cenas da história secundária (fora do escopo), e uma colisão nela pode prender o personagem ou o K nessas cenas.
 
@@ -159,7 +160,7 @@ Prioridade aproximada:
 1. Helicóptero: o maciço da Cachoeira ainda é atravessado acima de 6,5 (castelo/torres/casas do Medieval, igrejas, galpões e contemporâneos já colidem).
 2. Encaixe: poça de luz da Penumbra e degraus da Cachoeira (a conferir).
 4. Menores: porta da oficina do Medieval sem sólido; veículos de laço (tratores, carros do Bosque, limpa-neve, carroças) se atravessam depois de 6 s esperando — é a saída anti-travamento atual; trocar exige outra lógica de prioridade.
-5. Ciclo de vida: mundos de todos os bairros visitados ficam guardados (a memória cresce visitando muitos bairros na mesma sessão). Descartar mundos mexe em vários sistemas presos a cada bairro (cancelas, efeitos, vida medieval); não alterado — risco registrado.
+5. Ciclo de vida: mundos de todos os bairros visitados ficam guardados (medido: cresce até todos os 24 estarem em memória e depois estabiliza). Descartar mundos mexe em vários sistemas presos a cada bairro; não alterado.
 
 Observado e mantido (não é defeito): na Nevasca (ponto 6) e no Medieval (ponto 10) o ponto de entrega fica a menos de 0,55 da quina de um obstáculo; a van entrega normalmente.
 
