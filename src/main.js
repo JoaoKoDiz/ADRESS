@@ -1082,7 +1082,7 @@ function syncNoVan() {
 }
 const title = createTitle({
   onFree: () => { if (state === 'title' && !title.starting) openLevelSelect(); },   // Livre: primeiro escolhe o bairro
-  onCareer: () => { if (state !== 'title' || title.starting) return; noVan() || !titleDriver ? title.fadeOut(enterMap) : titleDriver.drive(() => title.fadeOut(enterMap)); },   // (não durante a decolagem do Livre: os dois caminhos rodavam juntos)     // dá a partida e vai para o mapa da Carreira (sem a van no menu: só o fade)
+  onCareer: () => { if (state !== 'title') return;   /* (go() em title.js já marca starting; o estado bloqueia durante a decolagem do Livre) */ noVan() || !titleDriver ? title.fadeOut(enterMap) : titleDriver.drive(() => title.fadeOut(enterMap)); },   // (não durante a decolagem do Livre: os dois caminhos rodavam juntos)     // dá a partida e vai para o mapa da Carreira (sem a van no menu: só o fade)
   onShop: () => { if (state === 'title') openShop(); },       // Shop: layout inicial (cores grátis; itens em breve)
   onPlay: el => { syncNoVan(); if (noVan()) { if (titleDriver) titleDriver.stop(); } else { titleDriver = titleDriver || createTitleDriver(el, audio); titleDriver.start(); }
     if (flagOn(MASS_KEY) && !flagOn(NOTICE_KEY)) { try { localStorage.setItem(NOTICE_KEY, '1'); } catch (e) { /* */ } title.notify('A história continua. Quatro novos lugares estão disponíveis no Modo Livre.'); } },   // uma vez, depois do temporal
