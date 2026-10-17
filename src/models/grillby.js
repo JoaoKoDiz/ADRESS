@@ -25,7 +25,7 @@ export function buildGrillbyLot() {
   const W = 12, D = 8, H = 3.8, Z0 = -5, ZF = Z0 + D;                          // corpo: x −6…6, z −5…3, frente em z = 3
   // chão nevado do lote + caminho limpo da porta até a rua
   add(box(17.2, 0.12, 17.2, SNOWC), 0, 0.06, 0);
-  add(box(1.9, 0.04, 15.5 - ZF, '#b7c1ca'), 3.3, 0.14, (ZF + 15.5) / 2);            // até a beira da rua (passa da borda do lote)
+  add(box(1.9, 0.12, 15.5 - ZF, '#b7c1ca'), 3.3, 0.1, (ZF + 15.5) / 2);   // (desce até a rua: fora do lote não fica no ar)            // até a beira da rua (passa da borda do lote)
   for (const [x, z, s] of [[-7.2, 6.8, 1.2], [-5.4, 7.6, 0.9], [7.4, 6.4, 1.0], [-7.4, -6.6, 1.4], [7.3, -6.9, 1.3]]) { const m = sphere(s, SNOW2, 8, 5); m.scale.y = 0.45; add(m, x, 0.1, z); }
   // pinheiros atrás, nas laterais (como na referência)
   for (const [x, z, s] of [[-7.4, -3.8, 1], [7.5, -4.2, 0.9], [-6.9, -7.4, 0.8]]) {

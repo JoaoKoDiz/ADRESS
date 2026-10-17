@@ -101,6 +101,13 @@ function buildHill(g) {
   const x2 = rc(4) + hr;
   bandWithGaps(g, x2, W, rc(6) + hr, rc(7) - hr, T.H1, T.H2, gapsAt(6));
   block(g, x2, W, rc(7) - hr, W, T.H1, T.H2);
+  // a calçada dos lotes da beira (0,4 além do lote) ficava no ar sobre a rua de baixo: o paredão avança 0,4 só embaixo dos lotes
+  for (let j = 0; j < GRID; j++) {
+    const ab = i => [rc(j) + hr - (gapsAt(i).includes(j) ? 0 : WALK), rc(j + 1) - hr + (gapsAt(i).includes(j + 1) ? 0 : WALK)];   // (não invade ladeiras/escadarias)
+    block(g, ...ab(4), rc(4) + hr - WALK, rc(4) + hr, 0, T.H1);
+    if (j >= 4) block(g, ...ab(6), rc(6) + hr - WALK, rc(6) + hr, T.H1, T.H2);
+  }
+  for (const i of [6, 7]) block(g, x2 - WALK, x2, rc(i) + hr - WALK, rc(i + 1) - hr + WALK, T.H1, T.H2);
   for (const r of T.ramps) rampMesh(g, r);
   for (const s of T.stairs) stairsMesh(g, s);
   // muretas nas bordas dos desníveis (onde a rua termina num paredão) e em volta do alto
