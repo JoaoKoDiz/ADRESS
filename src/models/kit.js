@@ -26,6 +26,7 @@ function cachedGeo(key, make) {
 export function disposeTree(root) {
   const geos = new Set(geoCache.values()), mats = new Set(matCache.values());
   root.traverse(o => {
+    if (o.userData.keep) return;                                  // (geometria/material compartilhados por quem criou)
     if (o.geometry && !o.isSprite && !geos.has(o.geometry)) o.geometry.dispose();
     for (const m of Array.isArray(o.material) ? o.material : o.material ? [o.material] : []) if (!mats.has(m)) m.dispose();
   });

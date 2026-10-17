@@ -91,6 +91,7 @@ export function createNight() {
   const regions = [...Array(REGIONS)].map(() => ({ k: 1, mats: [], sprites: [] }));
   let blackout = null, nextBlackout = 14;
   const panels = [];                                 // { mats:[…], ads, cur, timer, mesh }
+const POLE_GEO = new THREE.CylinderGeometry(0.11, 0.14, 5.6, 6), POLE_MAT = new THREE.MeshStandardMaterial({ color: '#3a3d46', roughness: 0.6 });
   const poles = [];                                  // postes da composição atual (main.js: obstáculos de quem anda a pé)
   const lights = [];                                 // fontes de luz (postes, painéis, letreiros): as mais perto viram luz de verdade
   const pool = [...Array(12)].map(() => new THREE.PointLight('#ffffff', 0, 34, 1.3));   // poucas luzes dinâmicas (sempre as mesmas 12)
@@ -105,7 +106,7 @@ export function createNight() {
 
   function addLamp(x, z) {
     poles.push({ x0: x - 0.15, x1: x + 0.15, z0: z - 0.15, z1: z + 0.15, r: 0.15, cx: x, cz: z });   // (colisão a pé)
-    const r = regionOf(x, z, M), pole = new THREE.Mesh(new THREE.CylinderGeometry(0.11, 0.14, 5.6, 6), new THREE.MeshStandardMaterial({ color: '#3a3d46', roughness: 0.6 }));
+    const r = regionOf(x, z, M), pole = new THREE.Mesh(POLE_GEO, POLE_MAT); pole.userData.keep = true;   // (geometria/material únicos para todos os postes)
     pole.position.set(x, 2.8, z); root.add(pole);
     const bulb = new THREE.Mesh(new THREE.SphereGeometry(0.36, 8, 6), reg(r, new THREE.MeshBasicMaterial({ color: '#ffe0a0', toneMapped: false })));
     bulb.position.set(x, 5.25, z); root.add(bulb);
