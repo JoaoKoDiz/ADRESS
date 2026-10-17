@@ -10,7 +10,7 @@
 //    semáforo ganha a vez (brecha menor e, esperando mais, os carros da avenida param antes do cruzamento); quem entra à
 //    direita na avenida vai para a faixa de perto; nos retornos das pontas a fila anda junto (o vão só tem lugar para um).
 import * as THREE from 'three';
-import { GRID, ROAD, roadCenter, FLUX, CANAL, GAS_LIST, WARE_LIST, SOLIDS } from './layout.js';
+import { GRID, ROAD, roadCenter, FLUX, CANAL, GAS_LIST, WARE_LIST, SOLIDS, ensureSolid } from './layout.js';
 import { buildCar, CAR_COLORS } from './barriers.js';
 import { mat, box, cyl, at, bakeStatic, disposeTree } from './models/kit.js';
 
@@ -267,7 +267,7 @@ export function createTraffic(audio) {
         }
         place(c);
       }
-      for (const c of cars) if (SOLIDS.indexOf(c.solid) < 0) SOLIDS.push(c.solid);
+      for (const c of cars) ensureSolid(c.solid);
       // som: o carro mais perto
       if (ear && audio && audio.traffic) {
         let best = 1e9, bv = 0;

@@ -5,7 +5,7 @@
 // motorista a pé e de outro veículo olhando o PRÓPRIO caminho à frente (inclusive dentro da curva). Ninguém trava de vez: esperando
 // outro veículo além do limite, passa assim mesmo por um instante. São sólidos (SOLIDS) para a van e para quem anda.
 import * as THREE from 'three';
-import { SOLIDS, HEDGE } from './layout.js';
+import { SOLIDS, HEDGE, ensureSolid } from './layout.js';
 import { WORK } from './workPlan.js';
 import { buildWorkVehicle } from './models/work.js';
 
@@ -166,7 +166,7 @@ export function createWorkTraffic(audio) {
         }
         if (t.pc.kind === 'lane' && t.s > t.len / 2 + 0.5) { const n = t.pc.e.from; if (n.occ === t) n.occ = null; }   // saiu do cruzamento
         place(t);
-        if (SOLIDS.indexOf(t.solid) < 0) SOLIDS.push(t.solid);
+        ensureSolid(t.solid);
       }
       if (ear && audio && audio.traffic) {
         let best = 1e9;

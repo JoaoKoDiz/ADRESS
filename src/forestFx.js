@@ -72,8 +72,10 @@ export function createForestFx() {
         const M = new THREE.Matrix4().compose(v.set(x, y, z), q, sv.set(a, b * 0.92, c2)); mats.push(M);
         op.setMatrixAt(i, M); gh.setMatrixAt(i, zero); col.set(cc); op.setColorAt(i, col); gh.setColorAt(i, col);
       });
+      gh.count = 0;                                                   // (só as copas transparentes do momento, compactadas no começo)
       op.castShadow = true; op.receiveShadow = true; gh.frustumCulled = false; root.add(op, gh);
-      crowns = { op, gh, mats, data: cr, owner, ghost: new Set(), zero };
+      const rr = cr.map(c => Math.max(c[3], c[4], c[5]) * 0.95), maxR = rr.reduce((a, b) => Math.max(a, b), 0);
+      crowns = { op, gh, mats, data: cr, owner, ghost: new Set(), zero, rr, maxR, cols: cr.map(c => new THREE.Color(c[6])) };
       // ---- tapetes de folhas sob as árvores (manchas laranja/terrosas no chão; nunca na pista nem nos lotes) ----
       const disc = new THREE.CircleGeometry(1, 9); disc.rotateX(-Math.PI / 2);
       // raio até onde o chão continua no nível do tronco: não passa da borda do patamar, das ladeiras (e do recorte delas)
@@ -143,20 +145,27 @@ export function createForestFx() {
       if (dest) segs.push([cam, dest]);
       // (a árvore inteira: se só a copa do meio sumisse, as copinhas do lado ficariam soltas no ar)
       const now = new Set(), D = crowns.data;
+      const mr = crowns.maxR, S2 = segs.map(([A, B]) => ({ A, dx: B.x - A.x, dy: B.y - A.y, dz: B.z - A.z,   // caixa de cada segmento (+ maior raio): pula as copas longe
+        x0: Math.min(A.x, B.x) - mr, x1: Math.max(A.x, B.x) + mr, z0: Math.min(A.z, B.z) - mr, z1: Math.max(A.z, B.z) + mr }));
+      for (const g of S2) g.L2 = g.dx * g.dx + g.dy * g.dy + g.dz * g.dz || 1;
       for (let i = 0; i < D.length; i++) {
         if (now.has(i)) continue;
-        const c = D[i], r = Math.max(c[3], c[4], c[5]) * 0.95;
-        for (const [A, B] of segs) {
-          const dx = B.x - A.x, dy = B.y - A.y, dz = B.z - A.z, L2 = dx * dx + dy * dy + dz * dz || 1;
-          const u = Math.max(0, Math.min(1, ((c[0] - A.x) * dx + (c[1] - A.y) * dy + (c[2] - A.z) * dz) / L2));
-          if (Math.hypot(A.x + dx * u - c[0], A.y + dy * u - c[1], A.z + dz * u - c[2]) < r) { for (const j of crowns.owner[i]) now.add(j); break; }
+        const c = D[i], r = crowns.rr[i];
+        for (const g of S2) {
+          if (c[0] < g.x0 || c[0] > g.x1 || c[2] < g.z0 || c[2] > g.z1) continue;
+          const A = g.A, u = Math.max(0, Math.min(1, ((c[0] - A.x) * g.dx + (c[1] - A.y) * g.dy + (c[2] - A.z) * g.dz) / g.L2));
+          const ex = A.x + g.dx * u - c[0], ey = A.y + g.dy * u - c[1], ez = A.z + g.dz * u - c[2];
+          if (ex * ex + ey * ey + ez * ez < r * r) { for (const j of crowns.owner[i]) now.add(j); break; }
         }
       }
       let ch = false;
-      for (const i of crowns.ghost) if (!now.has(i)) { crowns.op.setMatrixAt(i, crowns.mats[i]); crowns.gh.setMatrixAt(i, crowns.zero); ch = true; }
-      for (const i of now) if (!crowns.ghost.has(i)) { crowns.op.setMatrixAt(i, crowns.zero); crowns.gh.setMatrixAt(i, crowns.mats[i]); ch = true; }
+      for (const i of crowns.ghost) if (!now.has(i)) { crowns.op.setMatrixAt(i, crowns.mats[i]); ch = true; }
+      for (const i of now) if (!crowns.ghost.has(i)) { crowns.op.setMatrixAt(i, crowns.zero); ch = true; }
       crowns.ghost = now;
-      if (ch) { crowns.op.instanceMatrix.needsUpdate = true; crowns.gh.instanceMatrix.needsUpdate = true; }
+      if (ch) {
+        let k = 0; for (const i of now) { crowns.gh.setMatrixAt(k, crowns.mats[i]); crowns.gh.setColorAt(k, crowns.cols[i]); k++; }
+        crowns.gh.count = k; crowns.op.instanceMatrix.needsUpdate = true; crowns.gh.instanceMatrix.needsUpdate = true; if (crowns.gh.instanceColor) crowns.gh.instanceColor.needsUpdate = true;
+      }
     },
   };
 }

@@ -84,6 +84,14 @@ export const VAN_START = { x: 0, z: HEDGE + ROAD / 2 + 0.2, heading: Math.PI / 2
 // Obstáculos (AABB no plano XZ), nesta ordem: os lotes com casa (na ordem de HOUSE_SLOTS), a praça (se houver),
 // a sebe (5 pedaços, com a abertura da entrada livre) e, adicionados depois, os troncos das árvores de fora.
 export const SOLIDS = [];
+/** Garante que um sólido móvel (carros, tratores, bondes) está em SOLIDS, sem varrer a lista a cada quadro:
+ *  lembra a posição; só procura de novo se a lista mudou (refeita ou com remoções antes dele). */
+export function ensureSolid(b) {
+  if (SOLIDS[b._si] === b) return;
+  const k = SOLIDS.indexOf(b);
+  if (k >= 0) { b._si = k; return; }
+  b._si = SOLIDS.length; SOLIDS.push(b);
+}
 
 /** Troca a grade do bairro e refaz os obstáculos-base (lotes, praça e sebe). */
 export function configureGrid(kind) {

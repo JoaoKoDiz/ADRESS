@@ -4,7 +4,7 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { box, cyl, at, mat, bakeStatic, textTexture } from './models/kit.js';
-import { RAIL, SOLIDS } from './layout.js';
+import { RAIL, SOLIDS, ensureSolid } from './layout.js';
 
 const STEEL = '#8d949b', GROOVE = '#3f444b', CREAM = '#f3e6c8', RED = '#9e3a26', GLASS = '#2e4a63';
 const GAUGE = 0.72, LEN = 8.0, HALF_W = 1.2;
@@ -184,7 +184,7 @@ export function createTrain() {
           else if (T.dir < 0 && T.s0 <= 0) { T.s0 = 0; T.dir = 1; T.wait = T.line.wait; T.v = 0; }
         }
         T.place();
-        if (SOLIDS.indexOf(T.solid) < 0) SOLIDS.push(T.solid);
+        ensureSolid(T.solid);
       }
     },
   };

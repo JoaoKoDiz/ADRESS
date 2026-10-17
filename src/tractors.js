@@ -2,7 +2,7 @@
 // (sobra espaço para a van ultrapassar). Como os carros do Nível 14: mantêm distância de outro trator à frente, param
 // diante da van ou do motorista a pé e retomam quando há passagem. São sólidos para a van.
 import * as THREE from 'three';
-import { SOLIDS, FARMLAND, TERRAIN } from './layout.js';
+import { SOLIDS, FARMLAND, TERRAIN, ensureSolid } from './layout.js';
 import { buildTractor } from './models/farm.js';
 
 const SIDE = 2.3, LEN = 3.6;
@@ -69,7 +69,7 @@ export function createTractors(audio) {
         t.v = t.v < want ? Math.min(want, t.v + 2 * dt) : Math.max(want, t.v - 6 * dt);
         t.s += t.v * dt;
         this.place(t);
-        if (SOLIDS.indexOf(t.solid) < 0) SOLIDS.push(t.solid);
+        ensureSolid(t.solid);
       }
       if (ear && audio && audio.traffic) {
         let best = 1e9;

@@ -24,6 +24,7 @@ export function buildSnowLot(h, opts) {
   for (const sgn of [1, -1]) snow.add(at(box(W - 0.2, 0.16, l, SNOWC), (HS.x0 + HS.x1) / 2, ridgeY - Math.sin(th) * l / 2, HZ + sgn * Math.cos(th) * l / 2, sgn * th, 0, 0));
   snow.add(at(box(W - 0.2, 0.22, 0.5, SNOWC), (HS.x0 + HS.x1) / 2, ridgeY + 0.04, HZ));
   winterExtras(snow, SNOW_EXTRAS[h.index] || [], HS, hw.yardItems.length);                // boneco de neve, trenó, esquis, pá, lenha, pingentes, luzes
+  bakeStatic(snow);                                                  // (neve e detalhes de inverno: poucas malhas por material, como o resto do lote)
   wrap.userData = lot.userData;                                      // animações do lote (fumaça da chaminé etc.)
   wrap.name = 'snowlot';
   return wrap;
