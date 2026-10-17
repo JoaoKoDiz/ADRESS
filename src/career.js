@@ -186,7 +186,7 @@ export function createCareer() {
   // Bairro 3: desvios em volta de cada barreira, batidas por barreira, entregas fora da indicação
   let legs = new Map(), barHits = new Map(), barHitN = 0, offRoute = new Set();
   // Bairro 4: entregas/abastecer, intervalo entre entregas, marcha à ré, paradas antes dos cruzamentos
-  let deliveries = 0, fueled = false, fuelStops = 0, lastDelT = null, rev = null, look = null, stopAt = null, lookSet = new Set(), prevPos = null;
+  let deliveries = 0, fueled = false, fuelStops = 0, lastDelT = null, lastH = null, rev = null, look = null, stopAt = null, lookSet = new Set(), prevPos = null;
   // Bairro 5: manobra no cruzamento em andamento, voltas de van por quadra, voltas a pé (recomeça a cada vez que desce da van)
   let man = null, vanLaps = new Map(), footLaps = new Map(), prevFoot = null;
   // Bairro 6: passagens por trecho de rua, voltas para o oito, retorno à entrada depois de uma entrega falsa
@@ -232,7 +232,7 @@ export function createCareer() {
     startMatch(l) {
       level = l; active = l >= 0; pending = new Set(); hintUsed = false;
       legs = new Map(); barHits = new Map(); barHitN = 0; offRoute = new Set();
-      deliveries = 0; fueled = false; fuelStops = 0; lastDelT = null; rev = null; look = null; stopAt = null; lookSet = new Set(); prevPos = null;
+      deliveries = 0; fueled = false; fuelStops = 0; lastDelT = null; lastH = null; rev = null; look = null; stopAt = null; lookSet = new Set(); prevPos = null;
       man = null; vanLaps = new Map(); footLaps = new Map(); prevFoot = null;
       lastNode = null; streets = new Map(); eightLaps = new Map(); lastLap = null; needEntrance = false;
       vehHits = 0; jamWait = null; jamArmed = null; backOff = null;
@@ -413,7 +413,7 @@ export function createCareer() {
       }
       if (level === 6 && game) {
         const H = HOUSES[h], target = game.route && game.route[stepBefore];
-        if (target != null && h !== target && H.kind === 'house' && H.tags.includes('fountain') && HOUSES[target].tags.includes('fountain')) pending.add('wrongFountain');   // Fonte errada
+        if (target != null && h !== target && H.kind === 'house' && H.tags.includes('fountain') && ((game.clues && game.clues[stepBefore]) || []).includes('fountain')) pending.add('wrongFountain');   // (a pista cita a fonte)   // Fonte errada
         if (target != null && game.slotOf) {                              // Não era aqui?: lote vizinho pelos lados do indicado
           const a = game.slotOf[target], b = game.slotOf[h], ra = Math.floor(a / GRID), rb = Math.floor(b / GRID);
           if (Math.abs(ra - rb) + Math.abs(a % GRID - b % GRID) === 1) pending.add('nextDoor');
@@ -427,9 +427,10 @@ export function createCareer() {
         needEntrance = !success;                                         // Esqueci uma coisa: nova tentativa a cada entrega falsa
         lastLap = null;                                                  // (o oito é contínuo)
       }
-      if (fueled) { fuelStops++; fueled = false; }                         // abasteceu entre a entrega anterior e esta (1× por intervalo)
-      deliveries++;
-      if (level === 3) {
+      const again = h === lastH; lastH = h;                               // tocar de novo na mesma casa não é outra entrega (posto/tempo)
+      if (fueled && !again) { fuelStops++; fueled = false; }               // abasteceu entre a entrega anterior e esta (1× por intervalo)
+      if (!again) deliveries++;
+      if (level === 3 && !again) {
         const t = ctx.time || 0;
         if (fuelStops >= 1) pending.add('fuelStop');                      // Parada para abastecer: entrega → posto → entrega
         if (lastDelT !== null && t - lastDelT <= 45) pending.add('quick'); // Entrega próxima: até 45 s desde a anterior

@@ -577,6 +577,7 @@ export function createShop() {
   buildSide(); buildMain(); paintView();
   return {
     open() {
+      wheelSel = look.wheel; rackSel = look.rack; decalSel = look.decal; buildMain();   // a prévia volta ao equipado (nada fica de uma visita sem salvar)
       el.classList.add('on');
       if (!pv) makePreview();
       pose(); paintView(); itemPreview();

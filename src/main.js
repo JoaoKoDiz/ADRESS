@@ -1084,7 +1084,7 @@ function confirmLevel(l) {
 let careerMap = null;
 const inMap = () => state === 'mapIn' || state === 'map' || state === 'mapOut';
 /** Último bairro da Carreira já desbloqueado (a van começa ao lado dele). */
-const lastUnlocked = () => { let l = 0; while (l + 1 < MISSIONS.length && career.isUnlocked(l + 1)) l++; return l; };
+const lastUnlocked = () => { let l = 0; for (let i = 1; i < MISSIONS.length; i++) if (career.isUnlocked(i)) l = i; return l; };   // (o maior aberto, mesmo com buracos no painel de teste)
 function enterMap() {
   if (titleDriver) titleDriver.stop();
   careerMap = careerMap || createCareerMap(stage, audio);
