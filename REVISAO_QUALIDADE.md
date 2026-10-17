@@ -1,6 +1,6 @@
 # Revisão de qualidade do ADRESS (17/10/2026)
 
-**Última atualização:** 16/10 23:55 (horário de Brasília)
+**Última atualização:** 17/10 00:02 (horário de Brasília)
 
 ## Ponto de partida
 - Estado salvo antes da revisão: commit `7b8aba7` (tag local `pre-revisao-qualidade`; o envio da tag ao GitHub foi recusado, a branch tem o commit).
@@ -82,9 +82,20 @@ Legenda: **[E]** verificado em execução (jogo rodando no Chromium) · **[C]** 
 - [C] Tela do "Sair" ganhou "Voltar ao jogo" (antes ficava sem saída). `title.js`.
 - [E] Reteste completo de alcance das portas: 24 bairros × 2 sorteios, sem regressão.
 
+### Lote da meia-noite
+- [E] Fluxo/Penumbra: pracinhas e estacionamentos agora são "só a van" (como no Operário): a pé dá para entrar; árvores, bancos, carros parados e postes dos outdoors têm colisão. Teste nos dois bairros: centros livres, 8/8 árvores e 8/8 carros bloqueiam, o personagem para no banco. (`5c13859`)
+- [E] Veneza: mesas/cadeiras/sombrinhas da praça roxa com colisão a pé; todas as 12 zonas das praças continuam alcançáveis a pé (inclusive a outra praça pela Rialto). (`veneza mesas`)
+- [E] Medieval: sebes do jardim barram quem está a pé; entra-se pelo arco de rosas (testado).
+- [E] Helicóptero acima de 6,5: continua passando por cima de casas e árvores, mas para na fachada de prédio contemporâneo, galpão ou igreja mais alto que ele; subindo acima, passa. Testado no Fluxo. (`f53e530`) `van.js` (`setGhost(v, lista)`), `main.js` (`heliTall`).
+- [E] Carreira (auditoria de missões): tocar de novo na mesma casa não conta mais como outra entrega — antes "Entrega próxima" (Bairro 4) saía tocando duas vezes a mesma campainha, e o mesmo valia para "Parada para abastecer" e "Duas paradas". Reteste: não fica mais pendente. "Fonte errada" passa a exigir que a pista cite a fonte (como diz a descrição). (`a2b11dd`)
+- [C] Shop: reabrir mostra o que está equipado (antes ficava a última prévia não salva). Mapa da Carreira começa no maior bairro aberto (antes parava no primeiro buraco quando o painel de teste deixava bairros alternados).
+- [E] Conferência visual (fotos) das Encostas, Morro, Nevasca e Bosque depois das mudanças de terreno: normal.
+
+Auditoria de missões/persistência (somente leitura, outro agente): nenhum defeito grave; migrações rodam uma vez, todo `JSON.parse`/localStorage protegido (testado com valores corrompidos), pendentes descartados corretamente, sem listeners duplicados. Mantido sem mudar (interpretação, decisão do dono): "Endereço errado"/"Fora da rota" aceitam uma casa que foi a indicada num passo anterior.
+
 ## Em andamento / próximos passos (identificados, pendentes)
 Prioridade aproximada:
-1. Helicóptero acima de 6,5 atravessa prédios altos que não são residenciais/futuristas (contemporâneos, galpões, igreja, torres). É o comportamento previsto ("passa por cima de tudo"), mas visualmente atravessa; corrigir muda a mecânica — fica para decisão.
+1. Helicóptero: torres/castelo do Medieval e o maciço da Cachoeira ainda são atravessados acima de 6,5 (não têm altura registrada).
 2. Encaixe: poça de luz da Penumbra e degraus da Cachoeira (a conferir).
 3. Interface: toque no balão E durante arraste da câmera, pinça/zoom no celular.
 4. Menores: porta da oficina do Medieval sem sólido; veículos de laço (tratores, carros do Bosque, limpa-neve, carroças) se atravessam depois de 6 s esperando — é a saída anti-travamento atual; trocar exige outra lógica de prioridade.
