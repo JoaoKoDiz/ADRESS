@@ -1,6 +1,6 @@
 # Revisão de qualidade do ADRESS (17/10/2026)
 
-**Última atualização:** 17/10 00:36 (horário de Brasília)
+**Última atualização:** 17/10 01:02 (horário de Brasília)
 
 ## Ponto de partida
 - Estado salvo antes da revisão: commit `7b8aba7` (tag local `pre-revisao-qualidade`; o envio da tag ao GitHub foi recusado, a branch tem o commit).
@@ -97,6 +97,15 @@ Auditoria de missões/persistência (somente leitura, outro agente): nenhum defe
 Dirigir, dica, entrega errada e certa, descer/subir, câmera geral, helicóptero, MENU, míssil: **nenhum erro de página, nenhum NaN, nenhum estado travado** em nenhum bairro. Único problema real:
 - [E] Pousar o helicóptero no meio do casario (Medieval, Morro) podia deixar a van presa dentro de casas/enchimento (2 de 8 pousos no Medieval). Agora, ao descer abaixo da altura de passagem, se a van estiver dentro de algo ela vai para o ponto livre mais perto (com folga). Teste de pouso em cima de casas: Bairro 1 3/3 livres; Morro 3/3 sem sobreposição (antes 0/3). `main.js` (`unstickVan`). (`a1dcf64`)
 - [E] Helicóptero no Medieval com as novas alturas (castelo, torres, casas): voo de 10 s a 10 m sem terminar dentro de nenhuma casa e sem erros. Não verificado se encostou em alguma no trajeto.
+
+### 2ª auditoria de encaixe visual (detector de empate de profundidade nos 24 bairros + leitura dos modelos) — `ec4ed38`
+Corrigidas as faces coplanares e peças enterradas/atravessando que a auditoria confirmou em foto:
+- Penumbra: painéis laterais furados pelas janelas, janelas acesas e vitrines escondidas atrás do vidro, neon coplanar, painel vertical atravessando sacadas, marquise atravessando a sacada (agora usa a marquise do próprio prédio). [E] foto conferida.
+- Portas coplanares: prédio contemporâneo, casas de Veneza (persianas), bondinho, casa da Colheita; ripas da porta do galpão da fazenda. [C]
+- Modernista: pilares do muro e gramado dos lotes. Lojas: postes do outdoor. Operário: laje das oficinas, barrado e telhados vizinhos sobrepostos. Guarita dos Jardins, pórtico da Rialto, pilares do portal, chassi do caminhão. [C]
+- Jardineira do prédio contemporâneo flutuando; espreguiçadeiras do terraço com piscina para fora da platibanda e água acima da borda; itens do pátio dos galpões 6 cm enterrados. [C]
+- Manchas de grama fora do bairro e grafite dos prédios em alturas separadas. [C]
+- Reteste do detector (Penumbra, Modernista, Operário, Fluxo): restam só empates com folga de 1–5 cm (ruído do renderizador sem GPU), nenhum dos itens corrigidos.
 
 ## Em andamento / próximos passos (identificados, pendentes)
 Prioridade aproximada:
