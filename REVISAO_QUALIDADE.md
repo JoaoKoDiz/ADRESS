@@ -145,6 +145,12 @@ Verificado sem problema pela revisão: fluxos completos de interface (Livre, Car
 - [E] Efeitos da entrega errada (Laser, Ursa Menor, Sistema Solar, Devolução da Realidade): liberam na GPU o que criaram a cada execução, inclusive as texturas dos shaders do Sol/planetas (antes acumulavam geometrias/texturas a cada casa). Medido: Sistema Solar 412/6 → 433/27 durante → 411/6 depois (geometrias/texturas); Laser e Ursa estáveis entre rodadas. Começar partida nova cancela qualquer efeito em andamento.
 - [E] Helicóptero acima de 6,5 para no maciço e nos degraus de pedra da Cachoeira (antes atravessava).
 
+### Robustez e regressão (07:00–08:00)
+- [E] Dados salvos: com o localStorage bloqueado (exceção em todo acesso), com JSON quebrado em todas as chaves e com valores absurdos (cores inválidas, modelos fora da lista, volumes em texto), o jogo abre, entrega no Livre e entra na Carreira sem erro; os valores inválidos voltam ao padrão. Nada a corrigir.
+- [E] Teste de fumaça nos 24 bairros (Livre: dirigir, dica, entrega errada/certa, a pé, câmera, helicóptero, MENU, míssil) + Carreira (Bairros 1 e 4 até o mapa) com o build atual: 0 erros de JavaScript. As 2 falhas de entrega do teste (Colheita casa 278, Jardins casa 336) são as mesmas da rodada anterior e vêm do posicionamento do teste (porteira fechada / casa só a pé), não do jogo.
+- Câmera na Rialto: tentei caixas para as lojinhas, mas como a ponte é diagonal e a câmera só usa caixas alinhadas aos eixos, elas cobriam o corredor do meio e a câmera encolhia à toa. Desfeito; segue como limitação.
+- Porta da oficina do Medieval: continua sem colisão de propósito — abre/fecha nas cenas da história secundária (fora do escopo), e uma colisão nela pode prender o personagem ou o K nessas cenas.
+
 ## Em andamento / próximos passos (identificados, pendentes)
 Prioridade aproximada:
 1. Helicóptero: o maciço da Cachoeira ainda é atravessado acima de 6,5 (castelo/torres/casas do Medieval, igrejas, galpões e contemporâneos já colidem).
@@ -178,4 +184,6 @@ Observado e mantido (não é defeito): na Nevasca (ponto 6) e no Medieval (ponto
 - `9c6d01d` — Colheita/Jardins (encaixe).
 - `b484e59` — menus no celular.
 - `ae07633`, `9ee58b4` — cercas e objetos de quintal/térreo a pé.
+- `7b69307` — Livre: monstro, casa destruída, entulho, helicóptero na Cachoeira.
+- `f18eded` — efeitos da entrega errada liberam memória.
 - bancos/postes, Encostas/Grillby's, paredões, área segura/Sair, postes compartilhados, câmera na partida nova (ver `git log`).
