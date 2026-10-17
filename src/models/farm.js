@@ -167,7 +167,7 @@ export function buildFarmScene(g, F) {
   for (const s of F.segs) {
     const [ax, az] = s.a, [bx, bz] = s.b, len = Math.hypot(bx - ax, bz - az), ry = Math.atan2(bx - ax, bz - az);
     add(box(RW, 0.06, len, DIRT), (ax + bx) / 2, 0.035, (az + bz) / 2, 0, ry, 0);
-    for (const o of [-1.6, 1.6]) add(box(0.6, 0.065, len, '#a8845a'), (ax + bx) / 2 + Math.cos(ry) * o, 0.04, (az + bz) / 2 - Math.sin(ry) * o, 0, ry, 0);   // trilhas das rodas
+    for (const o of [-1.6, 1.6]) add(box(0.6, 0.065, len, '#a8845a'), (ax + bx) / 2 + Math.cos(ry) * o, 0.06, (az + bz) / 2 - Math.sin(ry) * o, 0, ry, 0);   // trilhas das rodas
   }
   for (const r of F.roads) for (const [x, z] of r) add(cyl(RW / 2, RW / 2, 0.06, DIRT, 18), x, 0.034, z);
   seed = 99;

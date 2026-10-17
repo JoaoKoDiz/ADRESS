@@ -386,7 +386,7 @@ export function buildGardenScene(g, V) {
       for (let k = 0; k < 8; k++) { const q = k * Math.PI / 4; add(cyl(0.15, 0.15, 3, '#f4f1ea', 6), a.x + Math.cos(q) * 3.8, 2.1, a.z + Math.sin(q) * 3.8); }
       add(cone(5, 2.2, '#b5402f', 8), a.x, 4.7, a.z); add(sphere(0.3, '#e8b02a', 6, 4), a.x, 5.9, a.z);
     } else if (a.k === 'playground') {                         // escorregador, balanço, gangorra, caixa de areia
-      add(box(9, 0.04, 9, '#e6d39a'), a.x, 0.04, a.z);
+      add(box(9, 0.04, 9, '#e6d39a'), a.x, 0.07, a.z);
       add(box(1.4, 2.2, 1.4, '#3f8ad0'), a.x - 4, 1.1, a.z - 3); add(box(1.2, 0.12, 3.2, '#e0402a'), a.x - 2.6, 1.0, a.z - 3, 0, 0, -0.55);
       for (const dx of [-1.2, 1.2]) add(box(0.14, 2.6, 0.14, '#f2c23a'), a.x + 3 + dx, 1.3, a.z - 3); add(box(2.6, 0.14, 0.14, '#f2c23a'), a.x + 3, 2.6, a.z - 3);
       for (const dx of [-0.5, 0.5]) add(box(0.5, 0.08, 0.3, '#e0402a'), a.x + 3 + dx, 0.7, a.z - 3);
@@ -405,7 +405,7 @@ export function buildGardenScene(g, V) {
   // ---- lago: água (mais escura no meio), borda de pedras, passeio, juncos, vitórias-régias e a casinha dos patos ----
   const L = V.lake, shape = pts => { const s = new THREE.Shape(pts.map(([x, z]) => new THREE.Vector2(x, -z))); const geo = new THREE.ShapeGeometry(s, 4); geo.rotateX(-Math.PI / 2); return geo; };
   g.add(at(mesh(shape(L.shore), mat('#4aa3d8', { roughness: 0.35 })), 0, 0.05, 0));
-  g.add(at(mesh(shape(L.inner), mat('#3a8cc6', { roughness: 0.35 })), 0, 0.06, 0));
+  g.add(at(mesh(shape(L.inner), mat('#3a8cc6', { roughness: 0.35 })), 0, 0.08, 0));   // (3 cm acima da água de fora: sem tremulação)
   strip(L.shore, 0.8, '#b8b0a2', { h: 0.34, y: 0.17 }, true);
   strip(L.promenade, 2.2, PATH, { h: 0.06, y: 0.05 }, true);
   { const [px] = L.promenade.reduce((a, p) => p[0] > a[0] ? p : a, [-1e9, 0]); add(box(78 - px + 0.6, 0.06, 2.4, PATH), (px + 78) / 2, 0.05, V.PZ); }   // passeio ↔ abertura oeste do parque
