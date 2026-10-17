@@ -2760,7 +2760,7 @@ function update(dt, t) {
       break;
   }
 
-  const wdt = menuPause ? 0 : dt;                 // MENU aberto: o mundo (trânsito, moradores, bondes, barcos, efeitos) também espera
+  const wdt = menuPause || missions.isOpen ? 0 : dt;   // MENU ou lista de missões aberta: o mundo (trânsito, moradores, bondes, barcos, efeitos) também espera
   if (state !== 'drive') van.relax(wdt);          // torre de caixas do bagageiro: para de balançar quando a van não está sendo dirigida
   world.update(t, wdt);
   if (neighborhood === 'rail8') train.update(wdt, van, walker.visible ? walker : null);

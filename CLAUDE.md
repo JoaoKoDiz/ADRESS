@@ -357,7 +357,7 @@ Relatório completo em `REVISAO_QUALIDADE.md`. Resumo do que um novo chat precis
 - **Carreira**: tocar de novo na mesma casa não conta como outra entrega (`lastH` em `career.js`); "Fonte errada" exige pista com fonte.
 - **Celular**: Shop em uma coluna (em pé) / 3 colunas com altura mínima (deitado); HUD sem o nome ADRESS em telas ≤ 560 px; seleção do Livre com setas abaixo da grade; área segura (entalhe) nos botões fixos (`template.html`).
 - Ganchos de teste novos: `ADRESS.FORESTV`, `ADRESS.VENICE`, `ADRESS.TERRAIN`; `churchDbg()` mostra `on`/`ct`.
-- **MENU aberto** também pausa o mundo (`wdt` = 0 no bloco do mundo em `update`; a câmera usa o `dt` real) e cala os efeitos sonoros (`audio.pauseFx`). Aba escondida também cala os efeitos (ouvinte em `audio.js`). A música não muda.
+- **MENU aberto** (e a lista de missões) também pausa o mundo (`wdt` = 0 no bloco do mundo em `update`; a câmera usa o `dt` real) e cala os efeitos sonoros (`audio.pauseFx`). Aba escondida também cala os efeitos (ouvinte em `audio.js`). A música não muda.
 - **Livre**: monstro/robô vão para a cena do bairro atual (`monster.attach`); casa destruída não aceita entrega e, se estava na rota, a rota é sorteada de novo (`wreck`); entulho/míssil na altura do patamar (`slotY`). Efeitos da entrega errada liberam a GPU (`disposeFx` em `laser.js`). Helicóptero alto colide com o maciço da Cachoeira (`CANAL.rock` em `heliTall`).
 - Gancho novo: `ADRESS.CANAL`; `monster.object`.
 
