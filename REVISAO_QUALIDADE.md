@@ -1,6 +1,6 @@
 # Revisão de qualidade do ADRESS (17/10/2026)
 
-**Última atualização:** 17/10 00:02 (horário de Brasília)
+**Última atualização:** 17/10 00:36 (horário de Brasília)
 
 ## Ponto de partida
 - Estado salvo antes da revisão: commit `7b8aba7` (tag local `pre-revisao-qualidade`; o envio da tag ao GitHub foi recusado, a branch tem o commit).
@@ -92,6 +92,11 @@ Legenda: **[E]** verificado em execução (jogo rodando no Chromium) · **[C]** 
 - [E] Conferência visual (fotos) das Encostas, Morro, Nevasca e Bosque depois das mudanças de terreno: normal.
 
 Auditoria de missões/persistência (somente leitura, outro agente): nenhum defeito grave; migrações rodam uma vez, todo `JSON.parse`/localStorage protegido (testado com valores corrompidos), pendentes descartados corretamente, sem listeners duplicados. Mantido sem mudar (interpretação, decisão do dono): "Endereço errado"/"Fora da rota" aceitam uma casa que foi a indicada num passo anterior.
+
+### Teste de fumaça (24 bairros × 2, Livre; Carreira Bairros 1 e 4) — outro agente, em execução
+Dirigir, dica, entrega errada e certa, descer/subir, câmera geral, helicóptero, MENU, míssil: **nenhum erro de página, nenhum NaN, nenhum estado travado** em nenhum bairro. Único problema real:
+- [E] Pousar o helicóptero no meio do casario (Medieval, Morro) podia deixar a van presa dentro de casas/enchimento (2 de 8 pousos no Medieval). Agora, ao descer abaixo da altura de passagem, se a van estiver dentro de algo ela vai para o ponto livre mais perto (com folga). Teste de pouso em cima de casas: Bairro 1 3/3 livres; Morro 3/3 sem sobreposição (antes 0/3). `main.js` (`unstickVan`). (`a1dcf64`)
+- [E] Helicóptero no Medieval com as novas alturas (castelo, torres, casas): voo de 10 s a 10 m sem terminar dentro de nenhuma casa e sem erros. Não verificado se encostou em alguma no trajeto.
 
 ## Em andamento / próximos passos (identificados, pendentes)
 Prioridade aproximada:
