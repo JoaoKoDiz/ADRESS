@@ -599,6 +599,7 @@ function heliTall(alt) {
     if (14 > y) heliTallOut.push({ x0: 108, x1: 125.2, z0: -12, z1: 4 }, { x0: 133.6, x1: 151, z0: -12, z1: 4 });
     for (const sp of V.spots) if (sp.y + (sp.shop ? 9.5 : 9) > y) heliTallOut.push(sp.walkBox);
   }
+  if (CANAL && CANAL.rock) for (const b of CANAL.rock) if (b.top > y) heliTallOut.push(b);   // Cachoeira: maciço e degraus de pedra
   return heliTallOut;
 }
 // Veneza: cada conjunto de mesa + 4 cadeiras (raio ~1,9) da praça roxa — mesmas posições de terrain.js
@@ -873,7 +874,7 @@ function useNeighborhood(kind) {
   neighborhood = kind;
   world.scene.add(van.object);
   world.scene.add(walker.object); walker.show(false);
-  hint.attach(world.scene); boom.attach(world.scene);
+  hint.attach(world.scene); boom.attach(world.scene); monster.attach(world.scene);
   if (kind === 'rail8') { world.scene.add(train.object); train.reset(); }
   if (kind === 'flux10' || kind === 'night10' || kind === 'canyon10') world.scene.add(traffic.object); else { traffic.detach(); traffic.silence(); }
   if (kind === 'canyon10') canyonFx.attach(world.scene); else canyonFx.detach();
@@ -990,7 +991,7 @@ const reality = createReality(audio, stage, renderer);
 let fxCine = laser;                                    // efeito cinematográfico em andamento (laser ou Ursa Menor)
 const laserVoids = [];
 let laserRet = 'drive';
-function clearLaserVoids() { laser.cancel(); ursa.cancel(); solar.cancel(); reality.cancel(); for (const m of laserVoids) if (m.parent) m.parent.remove(m); laserVoids.length = 0; }
+function clearLaserVoids() { laser.cancel(); ursa.cancel(); solar.cancel(); reality.cancel(); for (const m of laserVoids) { if (m.parent) m.parent.remove(m); disposeTree(m); } laserVoids.length = 0; }
 /** Área ocupada pela construção (quadra inteira; galpão = 2 lotes + a rua entre eles). */
 function laserArea(slot) {
   const sp = SPOTS ? SPOTS.spots[slot] : null;
@@ -1412,6 +1413,7 @@ function findNearHouse() {
   let best = FORESTV && FORESTV.work ? 3.9 : MEDV ? 4.8 : DELIVERY_RADIUS, found = -1;   // Operário: só a unidade bem em frente (os portões geminados ficam a 8)
   for (const h of game.pool) {
     if (SPOTS && SPOTS.spots[game.slotOf[h]] && SPOTS.spots[game.slotOf[h]].foot) continue;   // Morro (becos/escadarias) e Jardins (entrada pelo parque): só a pé
+    if (boom.isDestroyed(h)) continue;                                // (entulho não recebe entrega)
     const p = doorPoint(game.slotOf[h]);
     const d = Math.hypot(van.x - p.x, van.z - p.z);
     if (d < best) { best = d; found = h; }
@@ -1445,7 +1447,13 @@ function wreck(dt) {
     const lots = HOUSE_SLOTS.length, treesFrom = lots + (PLAZA ? 1 : 0) + GAS_LIST.length * GAS_PARTS.length + 5;   // ordem de SOLIDS (layout.js)
     if (i < lots) {                                 // lote: a casa explode (uma vez por rodada)
       const slot = HOUSE_SLOTS[i], h = game.layout[slot];
-      if (h >= 0 && !boom.isDestroyed(h)) boom.explode(h, slot);
+      if (h >= 0 && !boom.isDestroyed(h)) {
+        boom.explode(h, slot);
+        if (game.route && game.route.slice(game.step).includes(h)) {   // destruiu uma casa que ainda estava na rota: nova rota com as que sobraram (senão a partida travava)
+          const avail = game.pool.filter(x => !boom.isDestroyed(x) && !jamBlocked(x));
+          if (avail.length >= ROUTE_LEN) { game.newDelivery(avail); hint.clear(); hintUsed = false; hintStep = -1; hintCount = 0; }
+        }
+      }
     } else if (!smashCool.has(i)) {                 // sebe ou árvore
       smashCool.set(i, 0.35);
       const tree = i >= treesFrom;
@@ -3090,7 +3098,7 @@ renderer.setAnimationLoop(now => {
 // ---------- Ganchos para testes automatizados ----------
 window.ADRESS = {
   THREE, renderer, game, van, rig, hud, input, audio, hint, boom, menu, music, heli, monster,
-  get world() { return world; }, get FORESTV() { return FORESTV; }, get VENICE() { return VENICE; }, get TERRAIN() { return TERRAIN; },
+  get world() { return world; }, get FORESTV() { return FORESTV; }, get VENICE() { return VENICE; }, get CANAL() { return CANAL; }, get TERRAIN() { return TERRAIN; },
   get neighborhood() { return neighborhood; },
   barriers, SOLIDS, doorPoint, slotOrigin, GAS_CANOPY, GAS_ISLANDS,
   get gas() { return GAS_LIST; },

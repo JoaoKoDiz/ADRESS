@@ -28,6 +28,20 @@ export const add = (mat) => Object.assign(mat, { blending: THREE.AdditiveBlendin
 export const BEAM_GEO = new THREE.CylinderGeometry(1, 1, 1, 18, 1, true).translate(0, 0.5, 0);
 /** Prisma quadrado (camada vermelha do tamanho exato da quadra): meia-largura 1 em x e z. */
 const BOX_GEO = new THREE.CylinderGeometry(Math.SQRT2, Math.SQRT2, 1, 4, 1, true).rotateY(Math.PI / 4).translate(0, 0.5, 0);
+BEAM_GEO.userData.keep = BOX_GEO.userData.keep = true;   // compartilhadas entre execuções
+
+/** Libera na GPU o que um efeito criou (geometrias, materiais e suas texturas), menos o marcado com keep. */
+export function disposeFx(root) {
+  if (!root) return;
+  root.traverse(o => {
+    if (o.geometry && !o.geometry.userData.keep) o.geometry.dispose();
+    for (const m of Array.isArray(o.material) ? o.material : o.material ? [o.material] : []) {
+      if (m.userData.keep) continue;
+      for (const k of ['map', 'alphaMap', 'emissiveMap']) if (m[k] && !m[k].userData.keep) m[k].dispose();
+      m.dispose();
+    }
+  });
+}
 
 // ---------------- cena espacial ----------------
 function buildSpace(moonTarget) {
@@ -226,7 +240,7 @@ export function createLaser(audio) {
         const charge = ease((u - 11) / 4);
         S.emitter.scale.setScalar(1 + charge * 1.2 + Math.sin(t * 30) * 0.1 * charge); S.emGlow.scale.setScalar(5 + charge * 14);
       }
-      if (t >= T_END) { const done = r.onEnd; r.B.g.parent && r.B.g.parent.remove(r.B.g); run = null; done && done(); return false; }
+      if (t >= T_END) { const done = r.onEnd; r.B.g.parent && r.B.g.parent.remove(r.B.g); disposeFx(r.B.g); run = null; done && done(); return false; }
       return true;
     },
     /** Câmera do jogo nas partes do bairro (0–3 s e 19–23 s). Chamar depois de rig.update (para voltar suave à pose dela). */
@@ -245,7 +259,7 @@ export function createLaser(audio) {
       if (cam.far < 1500) { cam.far = 1600; cam.updateProjectionMatrix(); }
     },
     /** Para tudo (partida nova / troca de bairro). */
-    cancel() { if (run) { run.B.g.parent && run.B.g.parent.remove(run.B.g); run = null; } },
+    cancel() { if (run) { run.B.g.parent && run.B.g.parent.remove(run.B.g); disposeFx(run.B.g); run = null; } },
     get time() { return run ? run.t : -1; },
   };
 }

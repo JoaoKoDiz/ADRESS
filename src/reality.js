@@ -11,7 +11,7 @@
 //            "DEVOLVIDO" esmaga: fica uma cratera em forma de caixa, com fita e uma etiqueta no fundo.
 //   23–25 s  bandeirinha "Ops."; a câmera volta para a van e os controles voltam.
 import * as THREE from 'three';
-import { glowTexture, add } from './laser.js';
+import { glowTexture, add, disposeFx } from './laser.js';
 import { textTexture } from './models/kit.js';
 
 const V = (x, y, z) => new THREE.Vector3(x, y, z);
@@ -328,7 +328,7 @@ export function createReality(audio, stageEl, renderer) {
         if (e.kind === 'ring') { const k = clamp01(e.life / e.max); e.m.scale.setScalar(1 + e.s * k); e.m.material.opacity = (1 - k) * 0.9; }
         else if (e.kind === 'spin') { const k = clamp01(e.life / e.max); e.m.rotation.y += dt * 6; e.m.scale.setScalar(e.s * Math.sin(k * Math.PI) + 0.01); }
         else if (e.kind === 'fly') { e.v.y -= 20 * dt; e.m.position.addScaledVector(e.v, dt); e.m.rotation.x += e.w * dt; e.m.rotation.y += e.w * dt; if (e.m.position.y < 0.1) { e.m.position.y = 0.1; e.v.set(0, 0, 0); } }
-        if (e.life > e.max) { G.remove(e.m); r.fx.splice(j, 1); }
+        if (e.life > e.max) { G.remove(e.m); disposeFx(e.m); r.fx.splice(j, 1); }
       }
       r.shake = Math.max(0, r.shake - dt * 3);
       if (t >= T_END) { call('end'); const done = r.onEnd; this.cancel(true); done && done(); return false; }
@@ -442,10 +442,11 @@ export function createReality(audio, stageEl, renderer) {
     cancel(finished = false) {
       if (!run) return;
       const r = run;
-      for (const e of r.fx) r.G.remove(e.m);
+      for (const e of r.fx) { r.G.remove(e.m); disposeFx(e.m); }
       if (r.G.parent) r.G.parent.remove(r.G);
-      if (r.clone && r.clone.parent) r.clone.parent.remove(r.clone);
+      if (r.clone && r.clone.parent) r.clone.parent.remove(r.clone);   // (clone divide geometrias com o bairro: não libera)
       if (r.rt) r.rt.dispose();
+      disposeFx(r.G); if (S && S.scene) disposeFx(S.scene);
       crack.style.display = 'none'; S = null;
       if (!finished) call('end');
       run = null;

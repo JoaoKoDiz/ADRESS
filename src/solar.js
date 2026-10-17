@@ -10,7 +10,7 @@
 //            de laranja; impacto: cúpula de fogo, coluna de energia, destroços, ondas e tremor (main.js: onSun).
 //   20–25 s  de perto, a quadra arrasada (poeira, brasas, fragmentos caindo); a luz volta e a câmera volta à van.
 import * as THREE from 'three';
-import { glowTexture, add, BEAM_GEO } from './laser.js';
+import { glowTexture, add, BEAM_GEO, disposeFx } from './laser.js';
 
 const V = (x, y, z) => new THREE.Vector3(x, y, z);
 const ease = x => (x <= 0 ? 0 : x >= 1 ? 1 : x * x * (3 - 2 * x));
@@ -274,7 +274,7 @@ export function createSolar(audio) {
           if (!e.rest) { e.v.y -= 22 * dt; e.m.position.addScaledVector(e.v, dt); e.m.rotation.x += e.w * dt; e.m.rotation.z += e.w * 0.7 * dt; if (e.m.position.y < 0.2 && e.v.y < 0) { e.m.position.y = 0.2; e.rest = true; } }
           e.m.visible = end > 0.05; e.m.scale.setScalar(Math.max(0.01, end));
         }
-        if ((e.kind !== 'debris' && e.life > e.max) || end <= 0) { r.G.remove(e.m); r.fx.splice(j, 1); }
+        if ((e.kind !== 'debris' && e.life > e.max) || end <= 0) { r.G.remove(e.m); disposeFx(e.m); r.fx.splice(j, 1); }
       }
       r.shake = Math.max(0, r.shake - dt * (t > SUN_HIT ? 2.2 : 3));
       if (t >= T_END) { call('end'); const done = r.onEnd; this.cancel(); done && done(); return false; }
@@ -353,10 +353,11 @@ export function createSolar(audio) {
     cancel() {
       if (!run) return;
       const r = run; light(r, 0, 0);
-      for (const e of r.fx) r.G.remove(e.m);
+      for (const e of r.fx) { r.G.remove(e.m); disposeFx(e.m); }
       if (r.G.parent) r.G.parent.remove(r.G);
       if (r.sky.parent) r.sky.parent.remove(r.sky);
       if (r.fxRoot.parent) r.fxRoot.parent.remove(r.fxRoot);
+      disposeFx(r.G); disposeFx(r.sky); disposeFx(r.fxRoot);
       call('end'); run = null;
     },
   };

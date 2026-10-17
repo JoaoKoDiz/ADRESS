@@ -3,7 +3,7 @@
 import * as THREE from 'three';
 import { mat, box, cyl, cone, at, dynamic, bakeStatic } from './models/kit.js';
 import { HOUSES, ROOF_COL, WALL_COL } from './data.js';
-import { LOT, LOT_ANCHORS, slotOrigin } from './layout.js';
+import { LOT, LOT_ANCHORS, slotOrigin, slotY } from './layout.js';
 import { GROUND_Y } from './models/house.js';
 
 const HS = LOT_ANCHORS.house;
@@ -31,9 +31,9 @@ export function createBoom(scene, getWorld, audio) {
   function own(m) { m.userData.own = true; return m; }
 
   /** Escombros no lugar da casa (grama queimada, pilha de entulho, paredes quebradas, fogo, fumaça). */
-  function buildRubble(h, o) {
+  function buildRubble(h, o, gy = 0) {
     const g = new THREE.Group();
-    g.position.set(o.x, 0, o.z);
+    g.position.set(o.x, gy, o.z);   // (gy: lote no alto de um patamar/faixa — antes o entulho ficava enterrado)
     const roof = ROOF_COL[HOUSES[h].roof];
     const K = HOUSES[h].kind, small = K === 'row' ? 2.6 : K === 'wsh' ? 4.6 : K === 'mvh' ? 3.6 : K === 'mvs' ? 4.8 : 0;   // Operário: só a unidade (as vizinhas da fileira ficam inteiras)
     if (small) g.add(at(box(small * 2, 0.2, small * 2.4, '#6f6a60'), HX, 0.1, HZ));
@@ -67,7 +67,7 @@ export function createBoom(scene, getWorld, audio) {
     fx.add(g);
   }
 
-  function spawnDebris(cx, cy, cz, h, count, power) {
+  function spawnDebris(cx, cy, cz, h, count, power, floor = 0) {
     const roof = ROOF_COL[HOUSES[h].roof];
     for (let i = 0; i < count; i++) {
       const col = i % 4 === 0 ? WALL_COL : i % 4 === 1 ? '#8a5a36' : roof;
@@ -76,7 +76,7 @@ export function createBoom(scene, getWorld, audio) {
       m.position.set(cx + rnd(-2, 2), cy, cz + rnd(-2, 2));
       fx.add(m);
       const a = Math.random() * Math.PI * 2, sp = rnd(6, 16) * power;
-      parts.push({ m, vx: Math.cos(a) * sp, vz: Math.sin(a) * sp, vy: rnd(10, 26) * power, rx: rnd(-10, 10), rz: rnd(-10, 10), rest: false });
+      parts.push({ m, vx: Math.cos(a) * sp, vz: Math.sin(a) * sp, vy: rnd(10, 26) * power, rx: rnd(-10, 10), rz: rnd(-10, 10), rest: false, floor });
     }
   }
 
@@ -125,9 +125,10 @@ export function createBoom(scene, getWorld, audio) {
     const cx = o.x + HX, cz = o.z + HZ;
     W().setHidden(h, true);
     fx = (pinAt && pinAt(cx, cz)) || fxMain;
-    buildRubble(h, o);
-    spawnFireball(cx, 3, cz, 1);
-    spawnDebris(cx, 4, cz, h, 70, 1);
+    const gy = fx === fxMain ? slotY(slot) || 0 : 0;                 // (na Lua o efeito já vai preso à esfera)
+    buildRubble(h, o, gy);
+    spawnFireball(cx, 3 + gy, cz, 1);
+    spawnDebris(cx, 4 + gy, cz, h, 70, 1, gy);
     fx = fxMain;
     shake = 1.6;
     audio.boom && audio.boom();
@@ -155,7 +156,7 @@ export function createBoom(scene, getWorld, audio) {
       p.vy -= GRAV * dt;
       p.m.position.x += p.vx * dt; p.m.position.y += p.vy * dt; p.m.position.z += p.vz * dt;
       p.m.rotation.x += p.rx * dt; p.m.rotation.z += p.rz * dt;
-      if (p.vy < 0 && p.m.position.y <= GROUND_Y + 0.2) { p.m.position.y = GROUND_Y + 0.2; p.rest = true; p.restT = 0; }
+      if (p.vy < 0 && p.m.position.y <= (p.floor || 0) + GROUND_Y + 0.2) { p.m.position.y = (p.floor || 0) + GROUND_Y + 0.2; p.rest = true; p.restT = 0; }
     }
     // cacos parados afundam no chão e somem depois de alguns segundos (não acumulam draw calls)
     for (let i = parts.length - 1; i >= 0; i--) {
@@ -212,6 +213,7 @@ export function createBoom(scene, getWorld, audio) {
     const fx0 = Math.cos(v.heading), fz0 = Math.sin(v.heading);
     for (let h = 0; h < slotOf.length; h++) {
       if (slotOf[h] === undefined) continue;          // casa fora deste bairro
+      if (destroyed.has(h)) continue;                 // já destruída
       const o = slotOrigin(slotOf[h]);
       const dx = o.x + HX - v.x, dz = o.z + HZ - v.z, d = Math.hypot(dx, dz);
       if (d < nearD) { nearD = d; near = h; }
@@ -250,7 +252,7 @@ export function createBoom(scene, getWorld, audio) {
         mPhase = 'fly'; mT = 0;
         const o = slotOrigin(targetSlot);
         p0.copy(missile.position);
-        p2.set(o.x + HX, 4.5, o.z + HZ);
+        p2.set(o.x + HX, 4.5 + (slotY(targetSlot) || 0), o.z + HZ);
         p1.set((p0.x + p2.x) / 2, Math.max(p0.y, p2.y) + 14, (p0.z + p2.z) / 2);
         flyDur = Math.max(0.6, p0.distanceTo(p2) / MISSILE_SPEED);
         prev.copy(p0);

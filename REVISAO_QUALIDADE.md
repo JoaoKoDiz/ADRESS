@@ -138,9 +138,15 @@ Encontrou 2 regressões minhas além da do botão Carreira — corrigidas e rete
 - Desfeita a mudança "teclado nas Configurações" (`501699b`): os controles do painel não recebem foco por projeto, então não tinha efeito útil.
 Verificado sem problema pela revisão: fluxos completos de interface (Livre, Carreira até voltar ao mapa com missões salvas, Shop, Configurações, cadeado), alcance a pé de todas as portas nos 24 bairros comparado ao build antigo (nenhuma perdida), caixa e frente do K, praça do Bairro 2, porta do Grillby's, igreja e oficina do Bairro 24, Rialto, pouso no terraço do Bairro 6 e L, dica, e o restante das mudanças de código.
 
+### Recursos do Modo Livre (auditoria: helicóptero, míssil, explosões, monstro, efeitos)
+- [E] Monstro/robô do fim: eram presos à cena do 1º bairro criado; em qualquer outro bairro visitado depois o chefe ficava invisível. Agora vão para a cena do bairro atual (`monster.attach`). Teste: Bairros 1, 13 e 24, monstro na cena certa.
+- [E] Casa destruída deixava "Entregar" e contava entrega. Agora é ignorada; destruir de van uma casa que ainda estava na rota sorteia rota nova com as que sobraram (antes a partida podia travar).
+- [C] Entulho, bola de fogo, destroços e alvo do míssil na altura do patamar (Encostas, Morro, Nevasca…), antes ficavam no nível 0, dentro do morro. O míssil não mira casa já destruída.
+- [C] Efeitos da entrega errada (Laser, Ursa Menor, Sistema Solar, Devolução da Realidade): liberam na GPU o que criaram a cada execução (antes acumulavam geometrias/texturas a cada casa).
+
 ## Em andamento / próximos passos (identificados, pendentes)
 Prioridade aproximada:
-1. Helicóptero: torres/castelo do Medieval e o maciço da Cachoeira ainda são atravessados acima de 6,5 (não têm altura registrada).
+1. Helicóptero: o maciço da Cachoeira ainda é atravessado acima de 6,5 (castelo/torres/casas do Medieval, igrejas, galpões e contemporâneos já colidem).
 2. Encaixe: poça de luz da Penumbra e degraus da Cachoeira (a conferir).
 3. Interface: toque no balão E durante arraste da câmera, pinça/zoom no celular.
 4. Menores: porta da oficina do Medieval sem sólido; veículos de laço (tratores, carros do Bosque, limpa-neve, carroças) se atravessam depois de 6 s esperando — é a saída anti-travamento atual; trocar exige outra lógica de prioridade.

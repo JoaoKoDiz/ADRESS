@@ -8,7 +8,7 @@
 //   23–25 s   os efeitos somem, a câmera volta para a van e os controles voltam.
 // Escalas de cinema (nada de distâncias reais). Sons em audio.ursa.*.
 import * as THREE from 'three';
-import { glowTexture, add, BEAM_GEO } from './laser.js';
+import { glowTexture, add, BEAM_GEO, disposeFx } from './laser.js';
 
 const V = (x, y, z) => new THREE.Vector3(x, y, z);
 const ease = x => (x <= 0 ? 0 : x >= 1 ? 1 : x * x * (3 - 2 * x));
@@ -201,7 +201,7 @@ export function createUrsa(audio, stageEl) {
             const f = r['fall' + i], k = (t - fall) / 0.3; f.position.set((Math.random() - 0.5) * 0.4, 260 * (1 - k), 0);
           }
           if (t >= ti && r.hits <= i) {
-            r.hits = i + 1; if (r['fall' + i]) { r.G.remove(r['fall' + i]); }
+            r.hits = i + 1; if (r['fall' + i]) { r.G.remove(r['fall' + i]); disposeFx(r['fall' + i]); }
             call('impact', i); this._boom(i); r.shake = i === 6 ? 2.2 : 1.1;
             r.onImpact && r.onImpact(i);
           }
@@ -218,7 +218,7 @@ export function createUrsa(audio, stageEl) {
             if (!e.rest) { e.v.y -= g * dt; e.m.position.addScaledVector(e.v, dt); e.m.rotation.x += e.w * dt; e.m.rotation.z += e.w * 0.7 * dt; if (e.m.position.y < 0.2 && e.v.y < 0) { e.m.position.y = 0.2; e.rest = true; } }
             e.m.visible = end > 0.05; e.m.scale.setScalar(Math.max(0.01, end));
           }
-          if ((e.kind !== 'debris' && e.life > e.max) || end <= 0) { r.G.remove(e.m); r.fx.splice(j, 1); }
+          if ((e.kind !== 'debris' && e.life > e.max) || end <= 0) { r.G.remove(e.m); disposeFx(e.m); r.fx.splice(j, 1); }
         }
         r.shake = Math.max(0, r.shake - dt * 3.5);
       }
@@ -262,9 +262,10 @@ export function createUrsa(audio, stageEl) {
     },
     cancel() {
       if (!run) return;
-      for (const e of run.fx) run.G.remove(e.m);
+      for (const e of run.fx) { run.G.remove(e.m); disposeFx(e.m); }
       if (run.G.parent) run.G.parent.remove(run.G);
       if (run.sky.g.parent) run.sky.g.parent.remove(run.sky.g);
+      disposeFx(run.G); disposeFx(run.sky.g);
       label.style.display = 'none'; call('end');
       run = null;
     },

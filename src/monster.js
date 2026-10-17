@@ -210,6 +210,9 @@ export function createMonster(scene, stageEl, audio) {
   }
 
   return {
+    /** Leva o monstro e o robô para a cena do bairro atual (antes ficavam só na cena do 1º bairro criado). */
+    attach(sc) { sc.add(monster, robot.root); },
+    get object() { return monster; },
     start,
     update(dt, input) {
       if (phase === 'idle' || phase === 'done') return phase;
