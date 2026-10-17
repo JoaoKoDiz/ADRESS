@@ -87,7 +87,7 @@ export function buildShopLot(shop) {
       root.add(at(box(1.3, 0.5, 0.06, '#8f949c'), x, top + 0.45, z + 0.61));
     }
   } else if (shop.top === 'billboard') {
-    for (const x of [CX - 2.2, CX + 2.2]) root.add(at(box(0.25, 2.6, 0.25, DARK), x, top + 1.3, Z0 + 3.5));
+    for (const x of [CX - 2.2, CX + 2.2]) root.add(at(box(0.25, 2.6, 0.2, DARK), x, top + 1.3, Z0 + 3.5));
     root.add(at(box(6.4, 2.8, 0.25, '#f4f1ea'), CX, top + 3.6, Z0 + 3.5));
     const ad = new THREE.Mesh(new THREE.PlaneGeometry(6.0, 2.4), new THREE.MeshStandardMaterial({ map: adTexture(), roughness: 0.8 }));
     ad.position.set(CX, top + 3.6, Z0 + 3.64);

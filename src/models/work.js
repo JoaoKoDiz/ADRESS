@@ -60,7 +60,7 @@ function windowAt(P, x, y, z, s = 1) {
 /** Telhado de duas águas do ADRESS (cumeeira ao longo de x, em z = hz): laje escura, fileiras de telhas, juntas na água da
  *  frente e cumeeira. Sem beiral nas laterais: as unidades vizinhas continuam o mesmo telhado. */
 function gableRoof(g, w, top, hz, half, rise, col) {
-  const T = 0.2, TH = Math.atan2(rise, half), COS = Math.cos(TH), SIN = Math.sin(TH), RIDGE = top + rise, dark = shade(col, -0.42), RW = w + 0.02;
+  const T = 0.2, TH = Math.atan2(rise, half), COS = Math.cos(TH), SIN = Math.sin(TH), RIDGE = top + rise, dark = shade(col, -0.42), RW = w;   // (largura exata: telhados vizinhos não se sobrepõem)
   for (const front of [true, false]) {
     const f = new THREE.Group(), len = (half + (front ? 0.2 : 0.5)) / COS;
     f.position.set(0, RIDGE + T * COS, hz + (front ? 1 : -1) * T * SIN);
@@ -76,7 +76,7 @@ function gableRoof(g, w, top, hz, half, rise, col) {
     }
     g.add(f);
   }
-  g.add(at(box(RW + 0.04, 0.34, 0.34, dark), 0, RIDGE + T / COS - 0.04, hz, Math.PI / 4, 0, 0));
+  g.add(at(box(RW, 0.34, 0.34, dark), 0, RIDGE + T / COS - 0.04, hz, Math.PI / 4, 0, 0));
 }
 /** Cerca de estacas brancas (pontudas) de x0 a x1 em z, com as duas travessas por trás. */
 function pickets(P, g, x0, x1, z) {
@@ -100,7 +100,7 @@ export function buildRowLot(h) {
   for (let i = 0; i < 3; i++) P(box(1.2, 0.07, 0.82, C.path), DX, G + 0.02, ZF + 0.85 + i * 0.95);
   // casa: paredes, barrado, pilastras nas divisas (separam as unidades na fachada), friso entre os andares
   walls(P, g, h.fac, W, G, TOP, ZB, ZF);
-  P(box(W, 0.28, ZF - ZB + 0.1, C.trim), 0, G + 0.14, HZ);
+  P(box(W + 0.1, 0.28, ZF - ZB + 0.1, C.trim), 0, G + 0.14, HZ);
   for (const sx of [-1, 1]) P(box(0.3, WH, 0.16, C.pilaster), sx * (W / 2 - 0.15), G + WH / 2, ZF + 0.06);
   if (h.floors === 2) P(box(W, 0.16, 0.14, C.pilaster), 0, G + 2.9, ZF + 0.06);
   // oitões e telhado (cor do telhado = pista)
@@ -165,10 +165,10 @@ function buildWorkshopLot(h) {
   P(box(W, 0.16, 0.3, C.trim), 0, 0.08, D / 2 - 0.15);                                    // meio-fio do pátio
   if (!shop) for (const [x, z, r] of [[-1.6, ZF + 3.2, 0.9], [1.4, ZF + 4.4, 0.6]]) P(cyl(r, r, 0.02, '#8a857a', 10), x, 0.15, z);   // manchas de óleo
   walls(P, g, h.fac, W, G, G + H, ZB, ZF);
-  P(box(W, 0.28, ZF - ZB + 0.1, C.trim), 0, G + 0.14, (ZB + ZF) / 2);                    // barrado
+  P(box(W + 0.1, 0.28, ZF - ZB + 0.1, C.trim), 0, G + 0.14, (ZB + ZF) / 2);                    // barrado
   for (const sx of [-1, 1]) P(box(0.34, H + 0.4, 0.2, C.pilaster), sx * (W / 2 - 0.17), G + H / 2 + 0.2, ZF + 0.1);
   P(box(W, 0.6, 0.3, C.pilaster), 0, G + H + 0.25, ZF + 0.12);                           // platibanda
-  P(box(W - 0.2, 0.16, ZF - ZB, '#7a7f86'), 0, G + H + 0.05, (ZB + ZF) / 2);
+  P(box(W - 0.2, 0.16, ZF - ZB - 0.2, '#7a7f86'), 0, G + H + 0.05, (ZB + ZF) / 2 + 0.1);
   P(box(W, 0.7, 0.2, facCol(h.fac)), 0, G + H + 0.3, ZB + 0.1);
   if (!shop) {                                                                              // portão largo de enrolar + porta do escritório
     P(box(6.6, 3.4, 0.1, C.frame), -2.8, G + 1.7, ZF + 0.04);

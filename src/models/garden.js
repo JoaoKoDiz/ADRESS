@@ -321,7 +321,7 @@ export function buildGardenScene(g, V) {
     add(box(1.6, 3.6, 1.8, CAP), x, 1.8, HD / 2); add(box(1.9, 0.25, 2.1, BASE), x, 3.72, HD / 2);
     add(cyl(0.14, 0.2, 0.3, '#3b2c1e', 8), x, 4.0, HD / 2); add(sphere(0.32, '#fff3b0', 8, 6, { emissive: '#ffe9a0', emissiveIntensity: 0.6 }), x, 4.35, HD / 2);
   }
-  add(box(B.x1 - B.x0, 0.3, B.z1 - B.z0, BASE), bx, 0.15, bz);                               // guarita
+  add(box(B.x1 - B.x0 + 0.1, 0.3, B.z1 - B.z0 + 0.1, BASE), bx, 0.15, bz);                               // guarita
   add(box(B.x1 - B.x0, 2.9, B.z1 - B.z0, '#f4f1ea'), bx, 1.6, bz);
   add(box(0.08, 1.3, 4.2, HC.glass), B.x0 - 0.02, 1.9, bz); add(box(3.2, 1.3, 0.08, HC.glass), bx, 1.9, B.z0 - 0.02);   // vidros (rua e chegada)
   add(box(0.1, 0.1, 4.4, '#ffffff'), B.x0 - 0.06, 1.22, bz); add(box(3.4, 0.1, 0.1, '#ffffff'), bx, 1.22, B.z0 - 0.06);

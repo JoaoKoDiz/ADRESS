@@ -142,9 +142,9 @@ const POLE_GEO = new THREE.CylinderGeometry(0.11, 0.14, 5.6, 6), POLE_MAT = new 
   }
   /** Marquise iluminada sobre a entrada (luz quente por baixo e no chão). */
   function addMarquee(x, z, w, r) {
-    const top = new THREE.Mesh(new THREE.BoxGeometry(w, 0.22, 1.5), new THREE.MeshStandardMaterial({ color: '#2a2d34', roughness: 0.6 })); top.position.set(x, 3.15, z + 0.75); root.add(top);
-    const lit = new THREE.Mesh(new THREE.PlaneGeometry(w - 0.3, 1.2), reg(r, new THREE.MeshBasicMaterial({ color: '#ffe2a8', toneMapped: false }))); lit.rotation.x = Math.PI / 2; lit.position.set(x, 3.03, z + 0.75); root.add(lit);
-    const edge = new THREE.Mesh(new THREE.BoxGeometry(w, 0.1, 0.06), reg(r, new THREE.MeshBasicMaterial({ color: '#ffd070', toneMapped: false }))); edge.position.set(x, 3.15, z + 1.52); root.add(edge);
+    // (usa a marquise que o prédio já tem: 3,4 × 1,6, y 2,62..2,82 — antes uma caixa extra atravessava a sacada do 1º andar)
+    const lit = new THREE.Mesh(new THREE.PlaneGeometry(w - 0.3, 1.2), reg(r, new THREE.MeshBasicMaterial({ color: '#ffe2a8', toneMapped: false }))); lit.rotation.x = Math.PI / 2; lit.position.set(x, 2.605, z + 0.8); root.add(lit);
+    const edge = new THREE.Mesh(new THREE.BoxGeometry(w, 0.1, 0.06), reg(r, new THREE.MeshBasicMaterial({ color: '#ffd070', toneMapped: false }))); edge.position.set(x, 2.72, z + 1.63); root.add(edge);
     groundGlow(x, z + 2.5, '#ffd090', 9, 0.5, r, 1.3, 0.8);
     lights.push({ x, y: 2.6, z: z + 2, c: '#ffd59a', i: 14, r });
   }
@@ -192,31 +192,31 @@ const POLE_GEO = new THREE.CylinderGeometry(0.11, 0.14, 5.6, 6), POLE_MAT = new 
         if (H.kind === 'shop') {                                                           // vitrine acesa + letreiro na fachada
           const rg = regionOf(o.x + 8.6, o.z + 9, M);
           const vit = new THREE.Mesh(new THREE.PlaneGeometry(9.2, 2.6), reg(rg, new THREE.MeshBasicMaterial({ color: '#ffd28a', transparent: true, opacity: 0.32, blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false })));
-          vit.position.set(o.x + 8.6, 1.5, o.z + 8.57); root.add(vit); vit.material.opacity = vit.material.userData.op = 0.6;
+          vit.position.set(o.x + 8.6, 1.5, o.z + 8.66); root.add(vit); vit.material.opacity = vit.material.userData.op = 0.6;
           addBlade(o.x + 13.6, 4.4, o.z + 9.2, pickAds(1, rnd)[0], rg);
           lights.push({ x: o.x + 8.6, y: 2, z: o.z + 11, c: '#ffc880', i: 10, r: rg });
           const col = NEON[Math.floor(rnd() * NEON.length)], sg = new THREE.Mesh(new THREE.PlaneGeometry(3.6, 0.9), reg(rg, new THREE.MeshBasicMaterial({ map: signTexture(SIGNS[Math.floor(rnd() * SIGNS.length)], col), toneMapped: false })));
-          sg.position.set(o.x + 8.6, 5.25, o.z + 8.58); root.add(sg);
+          sg.position.set(o.x + 8.6, 5.25, o.z + 8.66); root.add(sg);
           groundGlow(o.x + 8.6, o.z + LOT + 2, '#ffc070', 11, 0.45, rg, 1.4, 0.8);
         } else if (H.kind === 'house') {                                                   // casas: luz da entrada, caminho iluminado e algumas janelas acesas
           const rg = regionOf(o.x + 8.6, o.z + 10, M);
           const lampM = new THREE.Sprite(reg(rg, new THREE.SpriteMaterial({ map: glowTex(), color: '#ffcf80', blending: THREE.AdditiveBlending, transparent: true, depthWrite: false, opacity: 0.9 })));
           lampM.scale.setScalar(1.8); lampM.position.set(o.x + 9.6, 2.5, o.z + 8.7); root.add(lampM);
           groundGlow(o.x + 8.6, o.z + 11, '#ffd090', 9, 0.42, rg, 0.9, 1.4);
-          for (const wx of [5.7, 11.5]) if (rnd() < 0.55) { const pl = new THREE.Mesh(WIN_GEO, winMat(rg, '#ffd890')); pl.position.set(o.x + wx, 1.75, o.z + 8.54); pl.scale.set(1.2, 1.1, 1); root.add(pl); }
+          for (const wx of [5.7, 11.5]) if (rnd() < 0.55) { const pl = new THREE.Mesh(WIN_GEO, winMat(rg, '#ffd890')); pl.position.set(o.x + wx, 1.42, o.z + 8.65); pl.scale.set(1.2, 1.1, 1); root.add(pl); }
         } else if (H.kind === 'apt') {                                                     // prédios: painéis nas paredes de trás/laterais
           const top = 2.8 * 5 + 0.12, cx = o.x + 8.6, rg = regionOf(cx, o.z + 9, M);
-          addMarquee(cx, o.z + 8.5, 4, rg);                                                // marquise da entrada
+          addMarquee(cx, o.z + 8.5, 3.4, rg);                                                // marquise da entrada
           const WC = ['#ffd890', '#fff0c0', '#ffb870', '#cfe2ff'];
           for (let f = 1; f < 5; f++) for (const wx of [3.4 + 1.9, 8.6, 13.8 - 1.9]) if (rnd() < (nearAve ? 0.55 : 0.35)) {   // janelas acesas (irregulares)
-            const wm = winMat(rg, WC[Math.floor(rnd() * 4)]), pl = new THREE.Mesh(WIN_GEO, wm); pl.position.set(o.x + wx, 0.12 + f * 2.8 + 1.45, o.z + 8.5 + 0.04); root.add(pl);
+            const wm = winMat(rg, WC[Math.floor(rnd() * 4)]), pl = new THREE.Mesh(WIN_GEO, wm); pl.position.set(o.x + wx, 0.12 + f * 2.8 + 1.45, o.z + 8.63); root.add(pl);
           }
           if (r === ROW + 1) addPanel(cx, top * 0.6, o.z + 1.2 - 0.06, 10, 5.6, 0, -1, pickAds(1 + Math.floor(rnd() * 3), rnd), false);   // parede de trás, virada para a avenida
-          if (nearAve && rnd() < 0.55) addPanel(o.x + (c < mid ? 13.0 : 4.2), 2.8 * 2.6, o.z + 8.5 + 0.35, 1.5, 6.2, 0, 1, pickAds(1, rnd), true);   // vertical na fachada (2 andares, na quina)
+          if (nearAve && rnd() < 0.55) addPanel(o.x + (c < mid ? 13.0 : 4.2), 2.8 * 2.6, o.z + 8.5 + 1.2, 1.5, 6.2, 0, 1, pickAds(1, rnd), true);   // vertical na fachada (2 andares, na quina)
           if ((nearAve && rnd() < 0.7) || central || (!nearAve && rnd() < 0.18)) {
-            const east = c < mid, x = o.x + (east ? 13.8 + 0.06 : 3.4 - 0.06);
+            const east = c < mid, x = o.x + (east ? 13.8 + 0.12 : 3.4 - 0.12);
             addPanel(x, top * 0.55, o.z + 4.85, central ? 5.6 : 4, central ? 10 : 7, east ? 1 : -1, 0, pickAds(central ? 3 : 1, rnd), true);
-            if (central) { const x2 = o.x + (east ? 3.4 - 0.06 : 13.8 + 0.06); addPanel(x2, top * 0.55, o.z + 4.85, 5.6, 10, east ? -1 : 1, 0, pickAds(2, rnd), true); }
+            if (central) { const x2 = o.x + (east ? 3.4 - 0.12 : 13.8 + 0.12); addPanel(x2, top * 0.55, o.z + 4.85, 5.6, 10, east ? -1 : 1, 0, pickAds(2, rnd), true); }
           }
         }
       }

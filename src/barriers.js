@@ -92,7 +92,7 @@ function buildTruck() {
   for (const x of [-2.9, -1.4, 2.4]) for (const zz of [1.2, -1.2]) {
     g.add(at(cyl(0.5, 0.5, 0.4, '#1f2023', 12), x, 0.5, zz, Math.PI / 2, 0, 0));
   }
-  g.add(at(box(6.6, 0.3, 2.0, '#2e3036'), -0.2, 0.55, 0));                      // chassi
+  g.add(at(box(6.6, 0.3, 2.0, '#2e3036'), -0.15, 0.55, 0));                      // chassi
   const lamp = mat('#ff9a1a', { emissive: '#ff7a00', emissiveIntensity: 1 });   // pisca-alerta
   for (const zz of [1.0, -1.0]) { const l = new THREE.Mesh(new THREE.SphereGeometry(0.16, 8, 6), lamp); l.position.set(3.5, 1.2, zz); g.add(l); }
   g.traverse(o => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });

@@ -82,7 +82,7 @@ export function buildFarmLot(h) {
     const w = 9, d = 7, H = 3.2, fz = bz + d / 2 + 0.5;                        // frente em z ≈ -0.5
     P(box(w, H, d, wall), bx, H / 2, bz + 0.5);
     gableRoof(root, { cx: bx, cz: bz + 0.5, y: H, len: w, depth: d, rise: 1.9, over: 0.5, color: roof, wall });
-    P(box(1.1, 2.1, 0.1, '#6b4428'), bx, 1.05, fz + 0.05);
+    P(box(1.1, 2.1, 0.14, '#6b4428'), bx, 1.05, fz + 0.07);
     for (const s of [-1, 1]) { P(box(1.3, 1.1, 0.1, '#2e3a46'), bx + s * 2.7, 1.8, fz + 0.06); P(box(1.5, 0.14, 0.14, '#f4f1ea'), bx + s * 2.7, 1.2, fz + 0.1); }
     P(box(w + 0.2, 0.2, d + 0.2, '#a99f8f'), bx, 0.1, bz + 0.5);
     if (h.porch) {                                                         // varanda: piso, pilares e cobertura
@@ -104,7 +104,7 @@ export function buildFarmLot(h) {
     P(box(w, H, d, wall), bx, H / 2, bz);
     gableRoof(root, { cx: bx, cz: bz, y: H, len: w, depth: d, rise: 1.2, over: 0.4, color: roof, wall });
     P(box(5.2, 3.4, 0.12, '#d8d2c4'), bx, 1.7, fz + 0.06);
-    for (let y = 0.3; y < 3.4; y += 0.35) P(box(5.2, 0.05, 0.14, '#a9a397'), bx, y, fz + 0.1);
+    for (let y = 0.3; y < 3.4; y += 0.35) P(box(5.16, 0.05, 0.14, '#a9a397'), bx, y, fz + 0.1);
     for (let x = -5; x <= 5; x += 1) P(box(0.06, H, 0.06, '#7d838b'), bx + x, H / 2, fz + 0.04);
   }
   // plantação e extras

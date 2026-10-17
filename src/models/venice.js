@@ -87,7 +87,7 @@ export function buildVeniceLot(h) {
   const H = narrow(root, xD, W, h.floors, col, sh, { arch: h.arch, door: true });
   const cx = LOT / 2, fz = VEN_Z1;
   // porta em arco, degraus de pedra até o cais, doca de madeira e postes de amarrar
-  add(box(1.3, 2.1, 0.1, '#5b3a22'), cx, 1.2, fz + 0.06); add(cyl(0.65, 0.65, 0.1, '#5b3a22', 10), cx, 2.25, fz + 0.06, Math.PI / 2, 0, 0);
+  add(box(1.3, 2.1, 0.1, '#5b3a22'), cx, 1.2, fz + 0.1); add(cyl(0.65, 0.65, 0.1, '#5b3a22', 10), cx, 2.25, fz + 0.1, Math.PI / 2, 0, 0);
   for (let k = 0; k < 3; k++) add(box(2.4, 0.15, 0.6, '#e2dacb'), cx, 0.22 - k * 0.0, fz + 0.4 + k * 0.6);
   add(box(3.0, 0.18, 2.6, WOOD), cx, 0.12, LOT + 1.0);                                         // doca (sobre a água)
   for (const s of [-1, 1]) add(box(0.25, 1.3, 0.25, '#5a3c22'), cx + s * 1.4, 0.3, LOT + 2.2);

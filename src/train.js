@@ -67,8 +67,8 @@ export function buildTram() {
   }
   for (const sz of [-1, 1]) {
     for (let x = -LEN / 2 + 1.3; x < LEN / 2 - 1.0; x += 1.15) if (Math.abs(x) > 0.7) add(box(0.9, 0.85, 0.05, GLASS), x, 2.2, sz * 1.16);   // janelas grandes
-    add(box(1.0, 1.75, 0.05, '#7a2e20'), 0, 1.4, sz * 1.16);                          // portas laterais (no meio)
-    add(box(0.04, 1.7, 0.06, '#e2c98f'), 0, 1.4, sz * 1.18);
+    add(box(1.0, 1.75, 0.05, '#7a2e20'), 0, 1.4, sz * 1.18);                          // portas laterais (no meio)
+    add(box(0.04, 1.7, 0.06, '#e2c98f'), 0, 1.4, sz * 1.2);
     add(box(LEN - 0.4, 0.08, 0.05, '#d9b56a'), 0, 1.33, sz * 1.16);                  // friso dourado
   }
   for (const x of [-LEN / 2 + 1.4, LEN / 2 - 1.4]) for (const z of [-GAUGE, GAUGE]) add(cyl(0.32, 0.32, 0.14, '#202022', 10), x, 0.32, z, Math.PI / 2, 0, 0);   // rodinhas nos trilhos

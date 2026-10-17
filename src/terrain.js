@@ -289,7 +289,7 @@ function buildVenice(g) {
   }
   const yTop = 0.15 + R.rise;
   rg.add(at(box(R.w, 0.7, 3.0, '#f2ead8'), 0, yTop + 3.6, 0));                                   // pórtico central
-  for (const sx of [-1, 1]) rg.add(at(box(0.9, 3.4, 3.0, '#f2ead8'), sx * (R.w / 2 - 0.45), yTop + 1.7, 0));
+  for (const sx of [-1, 1]) rg.add(at(box(0.96, 3.4, 3.0, '#f2ead8'), sx * (R.w / 2 - 0.46), yTop + 1.7, 0));
   rg.add(at(box(R.w + 0.4, 0.9, 3.6, '#b5532f'), 0, yTop + 4.3, 0));
   signPost(g, 'PONTE DE RIALTO', V.rialto.cx + 32 * R.ux * -1 + 4, V.rialto.cz - 32 * R.uz + 2, Math.PI / 4, '#7a2f2a');
   for (const b of V.bridges) deckSteps(g, 'x', b.x0, b.x1, b.z, b.w, b.rise, 10, '#e2dacb');     // pontes menores

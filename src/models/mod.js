@@ -36,13 +36,13 @@ export function buildModLot(h) {
   glassPanel(5.4, 13.2, lo.h + 0.5, MOD_H - 0.3, up.z1 + 0.02, 5);
   for (let f = 1; f < 3; f++) add(box(13.2 - 5.4, 0.14, 0.2, frame), 9.3, G + lo.h + f * FLOOR, up.z1 + 0.05);   // lajes aparentes
   add(new THREE.Mesh(new THREE.BoxGeometry(0.12, up.h - 0.8, 4.4), glass), up.x1 + 0.02, G + lo.h + up.h / 2, 3.6);   // faixa lateral
-  add(box(1.6, 2.3, 0.14, '#2c3b4c'), A.doorX, G + 1.15, lo.z1 + 0.06);                   // porta de vidro escuro
+  add(box(1.6, 2.3, 0.18, '#2c3b4c'), A.doorX, G + 1.15, lo.z1 + 0.08);                   // porta de vidro escuro
   // marquise simples sobre a entrada
   add(box(5.2, 0.22, 2.4, CANOPY[h.canopy]), A.doorX, G + 3.0, lo.z1 + 1.2);
   // vasos e jardineiras
   for (const x of [A.doorX - 2.3, A.doorX + 2.3]) { add(box(0.8, 0.7, 0.8, '#4a4f56'), x, G + 0.35, lo.z1 + 0.9); add(sphere(0.55, '#3f8f3a', 8, 6), x, G + 1.15, lo.z1 + 0.9); }
-  add(box(3.6, 0.5, 0.7, '#4a4f56'), 11.6, G + lo.h + 0.55, up.z1 + 0.45 + 0.4);               // jardineira na faixa do 2º volume
-  for (let k = 0; k < 4; k++) add(sphere(0.32, '#57a84a', 7, 5), 10.3 + k * 0.85, G + lo.h + 0.95, up.z1 + 0.85);
+  add(box(3.6, 0.5, 0.7, '#4a4f56'), 11.1, G + lo.h + 0.25, up.z1 + 0.42);               // jardineira na faixa do 2º volume
+  for (let k = 0; k < 4; k++) add(sphere(0.32, '#57a84a', 7, 5), 9.8 + k * 0.85, G + lo.h + 0.65, up.z1 + 0.42);
   // topo
   const yT = G + MOD_H + 0.4, cx = (up.x0 + up.x1) / 2, cz = (up.z0 + up.z1) / 2;
   if (h.top === 'trees') for (const x of [cx - 2.5, cx + 2.5]) {

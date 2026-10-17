@@ -13,7 +13,7 @@ const glassMat = () => mat(GLASS, { roughness: 0.2, metalness: 0.15, emissive: '
 export function buildModernLot(h) {
   const g = new THREE.Group(), P = (m, x, y, z, rx = 0, ry = 0, rz = 0) => g.add(at(m, x, y, z, rx, ry, rz));
   const G = 0.12, fac = MDH_COL.fac[h.fac];
-  P(box(17.2, 0.12, 17.2, LAWN), 0, 0.06, 0);
+  P(box(17.0, 0.12, 17.1, LAWN), 0, 0.06, -0.05);
   for (const [x, z, w, d] of [[0, 8.45, 17.2, 0.3], [-8.45, 0, 0.3, 17.2], [8.45, 0, 0.3, 17.2]]) P(box(w, 0.16, d, '#e2e0da'), x, 0.08, z);   // meio-fio do jardim aberto
   const vol = (x0, x1, z0, z1, y0, y1, c = fac, roof = true) => {
     P(box(x1 - x0, y1 - y0, z1 - z0, c), (x0 + x1) / 2, G + (y0 + y1) / 2, (z0 + z1) / 2);
@@ -129,7 +129,7 @@ function buildCondoWall(add, V) {
     add(box(lx, WALL_H, lz, WALLC), cx, WALL_H / 2, cz);
     add(box(alongX ? lx : lx + 0.2, 0.14, alongX ? lz + 0.2 : lz, CAPC), cx, WALL_H + 0.07, cz);
     // pilares a cada ~12, salientes só para fora (por dentro, a face fica rente à colisão)
-    const out = Math.sign((alongX ? cz : cx) - V.MAP / 2) * 0.15, n = Math.max(1, Math.round(len / 12)), a0 = alongX ? w.x0 : w.z0;
+    const out = Math.sign((alongX ? cz : cx) - V.MAP / 2) * 0.14, n = Math.max(1, Math.round(len / 12)), a0 = alongX ? w.x0 : w.z0;
     for (let k = 0; k <= n; k++) {
       const u = Math.min(a0 + len - 0.45, Math.max(a0 + 0.45, a0 + len * k / n));
       add(box(alongX ? 0.9 : lx + 0.3, WALL_H + 0.3, alongX ? lz + 0.3 : 0.9, PIL), alongX ? u : cx + out, (WALL_H + 0.3) / 2, alongX ? cz + out : u);

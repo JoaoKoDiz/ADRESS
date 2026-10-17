@@ -75,7 +75,7 @@ function buildGround(venice = false) {
     if (x > -4 && x < MAP + 4 && z > -4 && z < MAP + 4) continue;
     if (Math.abs(x - cx) < ROAD && z < 0) continue;
     if (CY && x > CY.X0 - 4 && x < CY.X1 + 4) continue;
-    const m = at(mesh(disc, GRASS_PATCHES[i % 2]), x, -0.03, z, 0, rand() * 3, 0);
+    const m = at(mesh(disc, GRASS_PATCHES[i % 2]), x, -0.03 + (i % 2) * 0.008, z, 0, rand() * 3, 0);   // (as 2 cores em alturas separadas)
     m.scale.set(2 + rand() * 4, 1, 1.5 + rand() * 3);
     g.add(m);
   }
@@ -174,7 +174,7 @@ function buildHedge() {
 
   // pilares do portal (sobre a sebe, fora da pista)
   for (const x of [ENTRANCE.x0 - 0.5, ENTRANCE.x1 + 0.5]) {
-    g.add(at(box(1.0, 2.3, 1.0, STONE), x, 1.15, HEDGE / 2));
+    g.add(at(box(1.04, 2.3, 1.0, STONE), x, 1.15, HEDGE / 2));
     g.add(at(box(1.2, 0.2, 1.2, STONE_CAP), x, 2.4, HEDGE / 2));
     g.add(at(cyl(0.12, 0.2, 0.2, WOOD_DARK, 8), x, 2.6, HEDGE / 2));
     g.add(at(mesh(new THREE.IcosahedronGeometry(0.3, 1), mat(LAMP, { emissive: '#ffe9a0', emissiveIntensity: 0.5 })), x, 2.9, HEDGE / 2));
