@@ -34,7 +34,7 @@ BEAM_GEO.userData.keep = BOX_GEO.userData.keep = true;   // compartilhadas entre
 export function disposeFx(root) {
   if (!root) return;
   root.traverse(o => {
-    if (o.geometry && !o.geometry.userData.keep) o.geometry.dispose();
+    if (o.geometry && !o.isSprite && !o.geometry.userData.keep) o.geometry.dispose();   // (sprites dividem uma geometria global)
     for (const m of Array.isArray(o.material) ? o.material : o.material ? [o.material] : []) {
       if (m.userData.keep) continue;
       for (const k of ['map', 'alphaMap', 'emissiveMap']) if (m[k] && !m[k].userData.keep) m[k].dispose();

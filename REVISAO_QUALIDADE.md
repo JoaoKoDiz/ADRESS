@@ -166,6 +166,14 @@ Verificado sem problema pela revisão: fluxos completos de interface (Livre, Car
 - [E] Ainda no MENU aberto: carros, tratores, bondes, barcos, moradores do Medieval, galinhas, bichos do Morro, cancelas e efeitos continuavam se mexendo (só a van parava). Agora o mundo também espera; a câmera continua normal. Teste: Fluxo, Trilhos, Medieval e Veneza — nada se move com o MENU aberto e tudo volta ao fechar. O mesmo vale para a lista de missões (M) na Carreira (testado no Fluxo).
 - Verificado sem problema [E]: nenhum acúmulo de nós de áudio depois de 10 trocas de bairro; Voltar silencia tudo; descer da van zera o motor; pousar no chão para o rotor; efeitos cancelados cortam o próprio som; nada fica mudo para sempre depois de pausar.
 
+### 2ª revisão de regressões (commits `7b69307`..`da346e1`, outro agente, build antigo lado a lado)
+Encontrou 3 regressões minhas — corrigidas e retestadas com os mesmos testes:
+- [E] Voltar com o MENU aberto deixava os efeitos mudos nos menus e no mapa (o MENU ficava "aberto" escondido). Agora o silêncio só vale nos estados de jogo e o Voltar fecha o MENU.
+- [E] Com o MENU/missões abertos logo depois de uma explosão ou da seta da DICA, a câmera tremia sem parar (o tremor não diminuía). Agora o tremor espera junto com o mundo.
+- [E] A música dos engarrafamentos não sumia mais com a lista de missões aberta (o fade usava o tempo do mundo). Fades de som voltaram a usar o tempo real.
+Ajustes das suspeitas: sprites e texturas reaproveitadas do Sistema Solar não são mais liberadas a cada partícula (evita reenvio à GPU); buracos/cratera dos efeitos liberam também as texturas; destruir uma casa da rota com menos de 5 casas de pé recomeça a partida (antes a rota ficava com um destino impossível).
+Conferido sem problema: cenas que pausam pelo MENU (resgate, missa, montagem) não são afetadas pela pausa do mundo; aproximação da igreja segue o tempo da música; monstro nos Bairros 1, 13, 23, 24; Veneza termina a saída; Lua sem chefe.
+
 ## Em andamento / próximos passos (identificados, pendentes)
 Prioridade aproximada:
 1. Helicóptero: o maciço da Cachoeira ainda é atravessado acima de 6,5 (castelo/torres/casas do Medieval, igrejas, galpões e contemporâneos já colidem).

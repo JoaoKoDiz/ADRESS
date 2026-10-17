@@ -112,7 +112,7 @@ export function createSolar(audio) {
     smoke: glowTexture('rgba(110,96,82,0.85)', 'rgba(80,68,58,0.45)'),
     ember: glowTexture('rgba(255,230,150,1)', 'rgba(255,90,20,0.7)'),
     flash: glowTexture('rgba(255,255,255,1)', 'rgba(255,200,120,0.6)'),
-  }) && TEX.fire;
+  }) && Object.values(TEX).forEach(t => { t.userData.keep = true; }) || TEX.fire;   // (reaproveitadas entre execuções: disposeFx não as libera)
 
   /** dia ↔ noite (k: 0 dia, 1 noite) e luz alaranjada do Sol chegando (s: 0…1) */
   function light(r, k, s) {

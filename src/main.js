@@ -12,7 +12,7 @@ import { buildMedLot } from './models/medieval.js';
 import { createMedievalLife } from './medievalLife.js';
 import { buildCar, CAR_COLORS } from './barriers.js';
 import { MAP, doorPoint, slotOrigin, DELIVERY_RADIUS, DELIVERY_MAX_SPEED, VAN, VAN_START, LOT_ANCHORS, SOLIDS, ENTRANCE, HEDGE, GRID, PLAZA, HOUSE_SLOTS, configureGrid, roadCenter, setGasStations, GAS_LIST, GAS_CANOPY, GAS_ISLANDS, GAS_PARTS, TERRAIN, CANAL, VENICE, RAIL, FAVELA, FLUX, FARMLAND, SPOTS, SNOWV, MOONV, GARDV, FORESTV, MEDV, slotPlaceTags, roadTopology, WARE_LIST, WALK as L_WALK, LOT as L_LOT, ROAD as L_ROAD, slotY as L_slotY } from './layout.js';
-import { createLaser } from './laser.js';
+import { createLaser, disposeFx } from './laser.js';
 import { createUrsa } from './ursa.js';
 import { createSolar } from './solar.js';
 import { buildGrillbyLot } from './models/grillby.js';
@@ -991,7 +991,7 @@ const reality = createReality(audio, stage, renderer);
 let fxCine = laser;                                    // efeito cinematográfico em andamento (laser ou Ursa Menor)
 const laserVoids = [];
 let laserRet = 'drive';
-function clearLaserVoids() { laser.cancel(); ursa.cancel(); solar.cancel(); reality.cancel(); for (const m of laserVoids) { if (m.parent) m.parent.remove(m); disposeTree(m); } laserVoids.length = 0; }
+function clearLaserVoids() { laser.cancel(); ursa.cancel(); solar.cancel(); reality.cancel(); for (const m of laserVoids) { if (m.parent) m.parent.remove(m); disposeFx(m); } laserVoids.length = 0; }
 /** Área ocupada pela construção (quadra inteira; galpão = 2 lotes + a rua entre eles). */
 function laserArea(slot) {
   const sp = SPOTS ? SPOTS.spots[slot] : null;
@@ -1270,6 +1270,7 @@ function goBack() {
   } else if (state === 'extra') {
     endExtra(false);                                    // sair do nível extra: volta ao painel Jogar (nada é salvo)
   } else if (IN_GAME.includes(state)) {
+    menu.close();                                       // (o MENU não fica aberto escondido nos menus)
     startNewRound();
     game.delivered = 0;
     if (gameMode === 'career') { careerMap = careerMap || createCareerMap(stage, audio); careerMap.enter(); careerMap.setLocked(l => !career.isUnlocked(l)); fade = 1; setState('mapIn'); }
@@ -1452,6 +1453,7 @@ function wreck(dt) {
         if (game.route && game.route.slice(game.step).includes(h)) {   // destruiu uma casa que ainda estava na rota: nova rota com as que sobraram (senão a partida travava)
           const avail = game.pool.filter(x => !boom.isDestroyed(x) && !jamBlocked(x));
           if (avail.length >= ROUTE_LEN) { game.newDelivery(avail); hint.clear(); hintUsed = false; hintStep = -1; hintCount = 0; }
+          else if (!allDestroyed()) { restartMsg = 'Poucas casas de pé! A partida vai reiniciar…'; setState('fadeOut'); }   // (sem destinos possíveis: recomeça, como na entrega certa)
         }
       }
     } else if (!smashCool.has(i)) {                 // sebe ou árvore
@@ -2506,7 +2508,7 @@ function update(dt, t) {
   if (state !== 'title' && state !== 'levelSelect' && state !== 'levelFly' && state !== 'shop' && !(state === 'fadeOut' && endToMap) && input.toggleCamera()) rig.toggle();
 
   const menuPause = menu.isOpen && MENU_STATES_OK.includes(state);   // MENU aberto: a partida espera de verdade (antes a van seguia andando e entregando com o cronômetro parado)
-  audio.pauseFx(menu.isOpen);                     // MENU aberto: os efeitos (motor, trânsito, chuva, cachoeira…) calam; a música continua
+  audio.pauseFx(menu.isOpen && MENU_OPEN_OK.includes(state));                     // MENU aberto: os efeitos (motor, trânsito, chuva, cachoeira…) calam; a música continua
   if (menuPause) { van.stop(); nearHouse = -1; }
   else switch (state) {
     case 'drive': {
@@ -2847,9 +2849,9 @@ function update(dt, t) {
   if (MOONV && !heli.on && !heli.flying) van.object.position.y = van.simY;   // Órbita: a altura da gravidade baixa (saltinhos)
   boom.update(wdt);
   { const foot = state === 'walk';              // quem está perto: a van ou, a pé, o personagem
-    jamSound.update(wdt, IN_GAME.includes(state) && [6, 7, 10].includes(gameMode === 'career' ? careerLevel : freeLevel) && !missions.isOpen && !menu.isOpen,   // Bairros 7, 8 e 11 (Travessia)
+    jamSound.update(dt, IN_GAME.includes(state) && [6, 7, 10].includes(gameMode === 'career' ? careerLevel : freeLevel) && !missions.isOpen && !menu.isOpen,   // Bairros 7, 8 e 11 (Travessia)
       barriers.jamRects, foot ? walker.x : van.x, foot ? walker.z : van.z);
-    cityAmb.update(wdt, (IN_GAME.includes(state) || foot || state === 'fadeIn') && (neighborhood === 'city7' || neighborhood === 'city8'), jamSound.debug.level / 0.7); }   // Bairros 7 e 8: cidade ao fundo (abaixa com a música dos engarrafamentos)
+    cityAmb.update(dt, (IN_GAME.includes(state) || foot || state === 'fadeIn') && (neighborhood === 'city7' || neighborhood === 'city8'), jamSound.debug.level / 0.7); }   // Bairros 7 e 8: cidade ao fundo (abaixa com a música dos engarrafamentos)
   // entregando (campainha/diálogo) ou com o balão "E — Entregar" à vista: a câmera se volta para a casa
   const focusH = (state === 'ring' || state === 'dialog') ? pending : state === 'drive' ? nearHouse : -1;
   const onFoot = state === 'walk' || state === 'chat' || state === 'grill' || (footDelivery && (state === 'ring' || state === 'dialog'));   // (Grillby's: na transição a câmera fica no personagem)              // a câmera segue o personagem a pé
@@ -2873,7 +2875,7 @@ function update(dt, t) {
   if (!sunSprite || sunSprite.parent !== world.scene) grabSun();
   if (sunSprite) sunSprite.position.set(rig.camera.position.x, 0, rig.camera.position.z).add(SUN_OFS);   // sol acompanha a câmera (fica sempre no mesmo lugar do céu, por mais longe que se dirija)
   const shake = Math.max(hint.shake, boom.shake);
-  if (shake > 0) {                                       // tremor da câmera no impacto
+  if (shake > 0 && wdt > 0) {                            // tremor da câmera no impacto (parado com o MENU/missões abertos)
     const s = shake * shake * 0.9;
     rig.camera.position.x += (Math.random() - 0.5) * s;
     rig.camera.position.y += (Math.random() - 0.5) * s;
