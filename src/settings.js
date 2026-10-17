@@ -117,7 +117,7 @@ export function createSettings({ onChange, onClose } = {}) {
   window.addEventListener('keydown', e => {
     if (!open) return;
     e.stopImmediatePropagation();
-    if (!/^F\d+$/.test(e.key) && !e.ctrlKey && !e.metaKey && !['Tab', 'Enter', ' ', 'ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Home', 'End'].includes(e.key)) e.preventDefault();   // (teclado navega nos controles do painel)   // F5/F11 e atalhos do navegador continuam funcionando
+    if (!/^F\d+$/.test(e.key) && !e.ctrlKey && !e.metaKey) e.preventDefault();   // F5/F11 e atalhos do navegador continuam funcionando   // F5/F11 e atalhos do navegador continuam funcionando
     if (e.key === 'Escape' && !e.repeat) { const cur = el.querySelector('.st-sub.on').dataset.v; cur === 'main' ? close() : view('main'); }
   }, true);
 

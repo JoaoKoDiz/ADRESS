@@ -12,7 +12,7 @@ export function createInput(onFirstKey) {
   });
   addEventListener('keyup', e => keys.delete(e.code));
   addEventListener('blur', () => { keys.clear(); vkeys.clear(); vaxis.x = vaxis.z = 0; });
-  addEventListener('contextmenu', () => keys.clear());   // o menu do navegador engole o keyup: nada fica preso
+  addEventListener('contextmenu', e => setTimeout(() => { if (!e.defaultPrevented) keys.clear(); }));   // só se o menu do navegador abriu de fato (arrastar a câmera com o botão direito não solta as teclas)   // o menu do navegador engole o keyup: nada fica preso
   addEventListener('pointerdown', () => onFirstKey && onFirstKey());
 
   const any = (...codes) => codes.some(c => keys.has(c) || vkeys.has(c));

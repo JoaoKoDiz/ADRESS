@@ -522,7 +522,8 @@ const boom = createBoom(world.scene, () => world, audio);
 boom.attachHatch(van.object);
 const menu = createMenu(stage);
 const MENU_STATES_OK = ['drive', 'ring', 'dialog', 'fuel', 'walk', 'missile', 'chat', 'inside'];   // o MENU só abre durante a partida (Esc nos menus não deixa um painel escondido aberto)
-menu.setGate(() => MENU_STATES_OK.includes(state));
+const MENU_OPEN_OK = [...MENU_STATES_OK, 'gstory', 'mstory', 'chseq'];   // (cenas que pausam pelo MENU: resgate, missa, montagem da igreja)
+menu.setGate(() => MENU_OPEN_OK.includes(state));
 const heli = createHeli(van, audio);        // tecla H: vira helicóptero
 // Helicóptero: o topo de cada prédio residencial (Bairro 6) é um chão onde dá para pousar
 heli.setGround((x, z) => {
