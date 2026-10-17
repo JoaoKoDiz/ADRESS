@@ -1,6 +1,6 @@
 # Revisão de qualidade do ADRESS (17/10/2026)
 
-**Última atualização:** 17/10 02:52 (horário de Brasília)
+**Última atualização:** 17/10 05:48 (horário de Brasília)
 
 ## Ponto de partida
 - Estado salvo antes da revisão: commit `7b8aba7` (tag local `pre-revisao-qualidade`; o envio da tag ao GitHub foi recusado, a branch tem o commit).
@@ -13,7 +13,12 @@
 - Testes usam perfil de navegador temporário (localStorage separado): o progresso real não é tocado.
 
 ## Atualização intermediária (05:50)
-- Há uma mensagem agendada para esta sessão às 05:45; o resumo só sai se a sessão estiver ativa. Este arquivo é sempre atualizado e enviado ao GitHub (branch `claude/adress-game-access-28eyb7`).
+**Resumo para o dono (05:48):**
+- ~60 commits pequenos desde `7b8aba7`, todos na branch `claude/adress-game-access-28eyb7`; jogo republicado no artifact principal (versão 182).
+- Feito e verificado em execução: colisões a pé (cercas, quintais, praça, igreja, casas giradas, Rialto, pracinhas), encaixe de superfícies em ~30 pontos, piscina/bondes/pouso do helicóptero que prendiam o jogador, casas de beco do Morro que nunca recebiam entrega, Shop/menus/HUD no celular, desempenho (Bosque, Nevasca, engarrafamentos), achados de 6 auditorias independentes.
+- **Atenção:** 3 regressões criadas por mim no 1º commit da noite (botão Carreira travava o painel; arrastar a câmera soltava as teclas; MENU não pausava algumas cenas) foram achadas pela revisão independente e **corrigidas** (`748f5cb`, `ef79c5c`).
+- Pausa: a sessão ficou parada de ~03:00 a 05:45 (sem trabalho nesse intervalo); retomada agora.
+- Próximo: nova rodada de busca (outras áreas) até ~13:00.
 
 ## Correções concluídas
 
