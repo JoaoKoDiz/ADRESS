@@ -559,6 +559,18 @@ function walkSolids() {
   }
   return out;
 }
+let wasHigh = false;
+/** A van (3 círculos R 1,25) está dentro de algum sólido? Se estiver, vai para o ponto livre mais perto (espiral até 30). */
+function unstickVan() {
+  const inside = (x, z, hd, R = 1.25) => { const c = Math.cos(hd), sn = Math.sin(hd);
+    return [-1.5, 0, 1.5].some(k => { const px = x + c * k, pz = z + sn * k;
+      return SOLIDS.some(b => px > b.x0 - R && px < b.x1 + R && pz > b.z0 - R && pz < b.z1 + R && (b.r ? Math.hypot(px - b.cx, pz - b.cz) < b.r + R : true)); }); };
+  if (!inside(van.x, van.z, van.heading)) return;
+  for (let d = 1; d <= 30; d += 1) for (let k = 0; k < 24; k++) {
+    const a = k * Math.PI / 12, x = van.x + Math.cos(a) * d, z = van.z + Math.sin(a) * d;
+    for (const hd of [van.heading, van.heading + Math.PI / 2]) if (!inside(x, z, hd, 3.2)) { van.teleport(x, z, hd); return; }   // folga larga: não cai num vão fechado
+  }
+}
 // Helicóptero acima de 6,5 passa por cima de casas, cercas e árvores, mas não atravessa o que é mais alto que ele:
 // prédios contemporâneos, galpões e as igrejas (os residenciais/futuristas já viram "chão" — dá para pousar neles)
 const HELI_TALL = { mod: 15.5, ware: 8.8 };
@@ -2812,6 +2824,7 @@ function update(dt, t) {
   }
   hint.update(dt);
   heli.update(dt, state === 'drive' && heli.on ? input.lift() : 0);
+  { const hi = heli.high; if (wasHigh && !hi && heli.flying && !menu.unstoppable) unstickVan(); wasHigh = hi; }   // descendo do alto no meio do casario: sai do que estiver por baixo
   if (MOONV && !heli.on && !heli.flying) van.object.position.y = van.simY;   // Órbita: a altura da gravidade baixa (saltinhos)
   boom.update(dt);
   { const foot = state === 'walk';              // quem está perto: a van ou, a pé, o personagem
