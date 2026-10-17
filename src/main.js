@@ -89,6 +89,7 @@ import justUsUrl from '../assets/just-us.mp3';
 import justUsLoopUrl from '../assets/just-us-loop.mp3';
 import { createMenuMusic } from './menuMusic.js';
 import { createBattle, BATTLE_CP_KEY } from './battle.js';
+import { createBattleMusic } from './battleMusic.js';
 import { SNOW_LOOP_URL, SNOW_LOOP_SECS } from './menuTrackUrl.js';
 import { createVoidMusic } from './voidMusic.js';
 import sansUrl from '../assets/sans.mp3';
@@ -2038,15 +2039,23 @@ function endExtra(toTitle) {
 // ---------- Batalha (depois do 4º nível extra, Sacrifício) ----------
 // Cena própria (battle.js). Entrada: no futuro, direto do fim do extra 4 (startBattle({ direct: true }), sem voltar ao menu);
 // por enquanto só pelo teste do cadeado (o cartão Sacrifício na página dos extras). Nada é salvo no progresso.
-const battle = createBattle({ input, audio, renderer, stage, onFinish: () => endBattle(true) });
+// Música: a adaptação de "Finale" (battleMusic.js, assets/finale-batalha.mp3); a posição dela é o relógio da batalha.
+const battleMusic = createBattleMusic({ getVolume: () => settings.prefs.music });
+const battle = createBattle({ input, audio, renderer, stage, music: battleMusic, onFinish: () => endBattle(true) });
 function startBattle(opts = {}) {
-  const go = () => {
+  battleMusic.load();                                    // prepara o áudio antes da apresentação
+  const begin = () => {
     if (titleDriver) titleDriver.stop();
     title.hide(); document.body.classList.add('extra-on');
-    talkBox.hide(); music.suspend(true, 0.8);
+    talkBox.hide();
+    music.suspend(true, 0.2); menuMusic.stop(0.2); voidMusic.fadeOut(0.2);   // encerra a faixa anterior (sem sobrepor)
     battle.camera.aspect = rig.camera.aspect; battle.camera.updateProjectionMatrix();
-    battle.start(opts); renderer.compile(battle.scene, battle.camera);
+    battle.start(opts); renderer.compile(battle.scene, battle.camera);   // (a trilha começa aqui, do início da apresentação)
     fade = 1; setState('battle');
+  };
+  const go = () => {                                     // espera a faixa ficar pronta (até 8 s; sem ela, segue pelo relógio próprio)
+    if (battleMusic.ready) { begin(); return; }
+    const t0 = performance.now(), iv = setInterval(() => { if (battleMusic.ready || performance.now() - t0 > 8000) { clearInterval(iv); begin(); } }, 100);
   };
   document.body.classList.add('extra-on'); menu.close();   // nada da interface pisca ao carregar
   if (opts.direct || state !== 'levelSelect') { go(); return; }
@@ -3118,7 +3127,7 @@ window.ADRESS = {
   moonPlace(p, f) { van.teleport(0, 0, 0); FRAME.reset(new THREE.Vector3(...p).normalize(), new THREE.Vector3(...f), 0, 0); moonAnchor.x = moonAnchor.z = 0; FRAME.toSphere(0, 0, vanSph.p); moonUpdate(0, true); },
   get moonVan() { return { p: vanSph.p.toArray().map(v => +v.toFixed(3)), f: vanSph.f.toArray().map(v => +v.toFixed(3)), y: +van.simY.toFixed(2) }; },
   FRAME, MOONV: () => MOONV,
-  massStory, MASS_KEY, extra, startExtra, battle, startBattle, endBattle, screenShatter, voidMusic, menuMusic, rainFx, rainAudio, menuBg, get menuNight() { return !!nightSaved; }, get rainOn() { return rainOn(); }, menuWorld, lockCP: n => STORY_CP.apply(n), lockCPcur: () => STORY_CP.current(), devMissions: DEV_MISSIONS, get parcelVisible() { return !!parcel.parent; },
+  massStory, MASS_KEY, extra, startExtra, battle, battleMusic, startBattle, endBattle, screenShatter, voidMusic, menuMusic, rainFx, rainAudio, menuBg, get menuNight() { return !!nightSaved; }, get rainOn() { return rainOn(); }, menuWorld, lockCP: n => STORY_CP.apply(n), lockCPcur: () => STORY_CP.current(), devMissions: DEV_MISSIONS, get parcelVisible() { return !!parcel.parent; },
   laser, ursa, solar, reality, startLaser,
   get church() { return church; }, get venK() { return venK; }, startVeniceTalk, churchStage, get greenBell() { return greenBell; }, get churchBell() { return churchBell; },
   churchReveal() { if (churchOn && !churchShown) { approach.phase = 'revealed'; revealChurch(true); } },
