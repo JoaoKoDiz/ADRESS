@@ -1059,8 +1059,8 @@ export function buildMedScene(g, V, MAP, HEDGE) {
     pv.gravel.band(180, G.z0 - 0.6, 180, 236.5, 1.8, y + 0.02); pv.gravel.disc(180, 236.5, 0.9, y + 0.02, 12);
     pv.gravel.band(180, 236.5, G.bench.x + 1.4, G.bench.z, 1.6, y + 0.021); pv.gravel.disc(G.bench.x + 1.2, G.bench.z, 1.6, y + 0.022, 14);
     pv.gravel.band(180, 236.5, 184.5, 244.5, 1.4, y + 0.02); pv.gravel.disc(184.5, 244.5, 1.6, y + 0.021, 14);
-    for (const [a, b] of [[G.x0, 178.9], [181.1, G.x1]]) { add(box(b - a, 0.8, 0.7, H2), (a + b) / 2, y + 0.4, G.z0 + 0.35); vanOnly.push({ x0: a, x1: b, z0: G.z0, z1: G.z0 + 0.7 }); }
-    add(box(0.7, 0.8, G.z1 - G.z0, H2), G.x1 - 0.35, y + 0.4, (G.z0 + G.z1) / 2); vanOnly.push({ x0: G.x1 - 0.7, x1: G.x1, z0: G.z0, z1: G.z1 });
+    for (const [a, b] of [[G.x0, 178.9], [181.1, G.x1]]) { add(box(b - a, 0.8, 0.7, H2), (a + b) / 2, y + 0.4, G.z0 + 0.35); solids.push({ x0: a, x1: b, z0: G.z0, z1: G.z0 + 0.7 }); }
+    add(box(0.7, 0.8, G.z1 - G.z0, H2), G.x1 - 0.35, y + 0.4, (G.z0 + G.z1) / 2); solids.push({ x0: G.x1 - 0.7, x1: G.x1, z0: G.z0, z1: G.z1 });   // (sebes: também a pé; entra-se pelo arco de rosas)
     for (let x = G.x0 + 0.5; x < G.x1 - 0.5; x += 0.9) if (Math.abs(x - 180) > 1.3) { const m = blob(0.46, LEAF[(x * 7 | 0) % 3]); m.scale.y *= 0.8; add(m, x, y + 0.85, G.z0 + 0.35, 0, x, 0); }
     for (let z = G.z0 + 0.9; z < G.z1 - 0.4; z += 0.9) { const m = blob(0.46, LEAF[(z * 7 | 0) % 3]); m.scale.y *= 0.8; add(m, G.x1 - 0.35, y + 0.85, z, 0, z, 0); }
     for (const sx of [-1, 1]) add(box(0.18, 2.6, 0.18, WOOD), 180 + sx * 1.15, y + 1.3, G.z0 + 0.35);                                    // arco de rosas na entrada
