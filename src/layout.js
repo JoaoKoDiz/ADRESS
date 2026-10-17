@@ -96,7 +96,7 @@ export function ensureSolid(b) {
 /** Troca a grade do bairro e refaz os obstáculos-base (lotes, praça e sebe). */
 export function configureGrid(kind) {
   GRID = kind === 'plaza6' || kind === 'grid6s' || kind === 'city6' || kind === 'city7' ? 6 : kind === 'city8' || kind === 'hill8' || kind === 'canal8' || kind === 'rail8' || kind === 'venice8' || kind === 'favela8' || kind === 'snow8' || kind === 'moon8' || kind === 'forest8' ? 8 : kind === 'flux10' || kind === 'night10' || kind === 'farm10' || kind === 'canyon10' || kind === 'med10' || kind === 'modern8' || kind === 'garden8' || kind === 'work8' ? 10 : kind === 'snow8' ? 14 : kind === 'moon8' ? 12 : kind === 'grid5' ? 5 : 4;
-  BUILD_H = kind === 'city8' || kind === 'canal8' || kind === 'rail8' ? 31 : kind === 'hill8' ? 23 : kind === 'favela8' ? 20 : kind === 'flux10' || kind === 'night10' || kind === 'canyon10' ? 16.5 : kind === 'farm10' ? 10 : kind === 'city6' || kind === 'city7' ? 16.5 : 9.2;
+  BUILD_H = kind === 'city8' || kind === 'canal8' || kind === 'rail8' ? 31 : kind === 'hill8' ? 23 : kind === 'favela8' ? 20 : kind === 'flux10' || kind === 'night10' || kind === 'canyon10' ? 16.5 : kind === 'farm10' ? 10 : kind === 'venice8' ? 15 : kind === 'city6' || kind === 'city7' ? 16.5 : 9.2;
   // praça: bloco 2×2 central (linhas e colunas 2–3 do 6×6)
   const plazaSlots = kind === 'plaza6' ? [2 * GRID + 2, 2 * GRID + 3, 3 * GRID + 2, 3 * GRID + 3] : [];
   ENTRANCE.road = kind === 'canal8' || kind === 'canyon10' ? 2 : Math.floor(GRID / 2);   // rua do meio (no 5×5, a 3ª rua); no Bairro 10 o meio é o canal

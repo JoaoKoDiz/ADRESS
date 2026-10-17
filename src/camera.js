@@ -4,7 +4,7 @@
 //     Parada, a câmera sobe para olhar por cima dos telhados; entregando, vira um pouco para a casa visitada.
 //   'overview' (tecla C): visão fixa do SUL, com o bairro inteiro enquadrado na tela.
 import * as THREE from 'three';
-import { MAP, HEDGE, HOUSE_SLOTS, GAS_LIST, GAS_PARTS, BUILD_H, slotOrigin, LOT_ANCHORS, ENTRANCE, FAVELA, FARMLAND, SNOWV, MOONV, GARDV, FORESTV, MEDV } from './layout.js';
+import { MAP, HEDGE, HOUSE_SLOTS, GAS_LIST, GAS_PARTS, BUILD_H, slotOrigin, LOT_ANCHORS, ENTRANCE, FAVELA, FARMLAND, SNOWV, MOONV, GARDV, FORESTV, MEDV, WARE_LIST, VENICE, LOT, ROAD } from './layout.js';
 import { FAV } from './favelaPlan.js';
 
 const PITCH = THREE.MathUtils.degToRad(57);   // inclinação para baixo
@@ -88,7 +88,7 @@ const BOOM_TOP_HEIGHT = 14.5;   //   … e a altura correspondente: encolher = s
 const FIXED_DIST = 11.5, FIXED_HEIGHT = 10;   // braço da câmera (fixo; a van parada ou em movimento tem o mesmo enquadramento)
 const R0_BASE = Math.hypot(FIXED_DIST, FIXED_HEIGHT - 2.2), EL0_BASE = Math.atan2(FIXED_HEIGHT - 2.2, FIXED_DIST);   // distância e elevação padrão do braço (PIVOT_Y = 2,2)
 let R0 = R0_BASE, EL0 = EL0_BASE;            // (o Medieval usa um braço mais curto e mais baixo: setProfile)
-const MIN_RADIUS = 3.2, MIN_ZOOM = 0.28;      // aproximação máxima
+const MIN_RADIUS = 3.2, MIN_ZOOM = 0.28, TIGHT_RADIUS = 0.8;      // aproximação máxima
 const MIN_ELEV = 0.1, MAX_ELEV = 1.5;         // inclinação mínima/máxima do braço (rad)
 const CHASE_LOOK_AHEAD = 6;     // ponto olhado fica um pouco à frente da van
 const CHASE_LOOK_Y = 1.2;
@@ -102,8 +102,10 @@ const UP = new THREE.Vector3(0, 1, 0);
 const CAM_PAD = 1.0;
 const CAM_BOXES = [];
 const EXTRA_BOXES = [];          // caixas extras fora do bairro (ex.: paredes da igreja), sem folga: [x0, z0, x1, z1, yTopo]
+const SCENE_BOXES = [];
 function buildCamBoxes() {
   CAM_BOXES.length = 0;
+  for (const b of SCENE_BOXES) CAM_BOXES.push(b);
   for (const b of EXTRA_BOXES) CAM_BOXES.push([b[0] - CAM_PAD * 0.6, b[1] - CAM_PAD * 0.6, b[2] + CAM_PAD * 0.6, b[3] + CAM_PAD * 0.6, b[4]]);
   if (MOONV) return;                                           // Órbita: só os obstáculos perto do jogador (main.js, a cada quadro)
   if (FAVELA) {                                                // Morro: faixas do morro (o braço não entra na encosta), casario e mercadinho
@@ -146,6 +148,14 @@ function buildCamBoxes() {
   for (const s of FAVELA || FARMLAND || SNOWV || MOONV || GARDV || FORESTV || MEDV ? [] : HOUSE_SLOTS) {
     const o = slotOrigin(s), H = LOT_ANCHORS.house;
     CAM_BOXES.push([o.x + H.x0 - 0.7 - CAM_PAD, o.z + H.z0 - 0.7 - CAM_PAD, o.x + H.x1 + 0.7 + CAM_PAD, o.z + H.z1 + 1.1 + CAM_PAD, BUILD_H + CAM_PAD]);
+  }
+  for (const w of WARE_LIST || []) {                           // galpões: 2 lotes + a rua entre eles (o 2º lote não está em HOUSE_SLOTS)
+    const o = slotOrigin(w.slots[0]);
+    CAM_BOXES.push([o.x + 1.5 - CAM_PAD, o.z + 0.8 - CAM_PAD, o.x + 2 * LOT + ROAD - 1.5 + CAM_PAD, o.z + 10.6 + CAM_PAD, 9.1 + CAM_PAD]);
+  }
+  if (VENICE) for (const cf of VENICE.cafes) {                 // Veneza: cafés girados (caixa que envolve o retângulo)
+    const c = Math.abs(Math.cos(cf.ang)), sn = Math.abs(Math.sin(cf.ang)), hx = (cf.w * c + cf.d * sn) / 2, hz = (cf.w * sn + cf.d * c) / 2;
+    CAM_BOXES.push([cf.cx - hx, cf.cz - hz, cf.cx + hx, cf.cz + hz, 9]);
   }
   for (const g of GAS_LIST) {                                 // postos: loja e totem (a van entra; a cobertura some)
     const o = slotOrigin(g.slots[0]);
@@ -242,9 +252,10 @@ export function createCameraRig() {
   function armGoal(wanted, d) {
     if (freeAt(wanted, d)) return wanted;
     let lo = MIN_RADIUS, hi = wanted;
-    for (let r = MIN_RADIUS; r < wanted; r += 0.5) { if (!freeAt(r, d)) { hi = r; break; } lo = r; }
+    if (!freeAt(MIN_RADIUS, d)) { lo = TIGHT_RADIUS; hi = MIN_RADIUS; }   // encostado numa parede (a pé, becos): o braço encurta mais (antes a lente ficava dentro da parede)
+    else for (let r = MIN_RADIUS; r < wanted; r += 0.5) { if (!freeAt(r, d)) { hi = r; break; } lo = r; }
     for (let i = 0; i < 6; i++) { const m = (lo + hi) / 2; if (freeAt(m, d)) lo = m; else hi = m; }
-    return Math.max(MIN_RADIUS, lo - 0.15);
+    return Math.max(TIGHT_RADIUS, lo - 0.15);
   }
 
   function apply() {
@@ -260,7 +271,8 @@ export function createCameraRig() {
     camera.position.lerpVectors(overviewPos, chasePos, b);
     camera.quaternion.slerpQuaternions(overviewQuat, chaseQuat, b);
     const fov = FOV + (CHASE_FOV - FOV) * b;
-    if (Math.abs(camera.fov - fov) > 1e-4) { camera.fov = fov; camera.updateProjectionMatrix(); }
+    const near = b > 0.99 && arm < MIN_RADIUS ? Math.max(0.2, arm * 0.3) : 1;   // braço bem curto: plano próximo menor (só aí; a precisão de profundidade normal fica)
+    if (Math.abs(camera.fov - fov) > 1e-4 || camera.near !== near) { camera.fov = fov; camera.near = near; camera.updateProjectionMatrix(); }
   }
 
   let lastW = 1600, lastH = 900;
@@ -327,7 +339,7 @@ export function createCameraRig() {
       if (!orbHeld) return;
       goalYaw += dx * 0.0055;                                                   // sem limite: dá para dar voltas completas
       if (Math.abs(goalYaw) > Math.PI * 6) { const w = Math.round(goalYaw / (Math.PI * 2)) * Math.PI * 2; goalYaw -= w; orbYaw -= w; }   // (reenrola sem salto visível)
-      goalPitch = THREE.MathUtils.clamp(goalPitch + dy * 0.0045, -0.7, 1.0);
+      goalPitch = THREE.MathUtils.clamp(goalPitch + dy * 0.0045, MIN_ELEV - EL0, MAX_ELEV - EL0);   // (mesmo limite do braço: sem zona morta no arrasto)
     },
     /** Roda do mouse (deltaY em pixels): aproxima (negativo) ou afasta de volta (positivo), sem passar da distância normal. */
     zoom(deltaY) {
@@ -344,6 +356,8 @@ export function createCameraRig() {
     setLookLift(v) { liftGoal = v; },
     /** Caixas extras que seguram o braço da câmera ([x0, z0, x1, z1, yTopo]); [] tira. */
     setExtraBoxes(list) { EXTRA_BOXES.length = 0; EXTRA_BOXES.push(...list); buildCamBoxes(); },
+    /** Caixas do cenário da composição (ex.: outdoors da Penumbra); ficam até a próxima chamada, independentes das extras das cenas. */
+    setSceneBoxes(list) { SCENE_BOXES.length = 0; SCENE_BOXES.push(...list); buildCamBoxes(); },
     /** Órbita: pose da visão geral (a lua inteira), refeita a cada quadro. */
     setOverview(pos, quat) { if (!pos) { overviewQuat.setFromEuler(new THREE.Euler(-PITCH, 0, 0)); resize(lastW, lastH); return; } overviewPos.copy(pos); overviewQuat.copy(quat); },
   };

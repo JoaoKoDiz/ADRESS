@@ -393,7 +393,8 @@ function composeRound() {
   if (city) showLounger();
   if (canyon) { canyonBalconies(); traffic.reset(0, 16); }   // Cachoeira: sacadas viradas para o desfiladeiro; trânsito moderado nas ruas e na ponte
   if (flux) traffic.reset(...(neighborhood === 'night10' ? [10, 10, true] : [32, 18, false, true]));   // Fluxo: a rede depende dos postos/galpões da partida; avenida movimentada nos dois sentidos (os carros dela ficam nela) (Penumbra: menos carros, faróis)
-  if (neighborhood === 'night10') night.layout(world, game, MAP);   // Penumbra: postes, letreiros e painéis para esta composição
+  if (neighborhood === 'night10') night.layout(world, game, MAP);
+  rig.setSceneBoxes(neighborhood === 'night10' ? night.camBoxes : []);   // Penumbra: postes, letreiros e painéis para esta composição
   rig.refit();
 }
 

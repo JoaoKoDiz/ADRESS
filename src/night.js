@@ -93,6 +93,7 @@ export function createNight() {
   const panels = [];                                 // { mats:[…], ads, cur, timer, mesh }
 const POLE_GEO = new THREE.CylinderGeometry(0.11, 0.14, 5.6, 6), POLE_MAT = new THREE.MeshStandardMaterial({ color: '#3a3d46', roughness: 0.6 });
   const BULB_GEO = new THREE.SphereGeometry(0.36, 8, 6); POLE_GEO.userData.keep = POLE_MAT.userData.keep = BULB_GEO.userData.keep = true;
+  const camBoxes = [];
   const poles = [];                                  // postes da composição atual (main.js: obstáculos de quem anda a pé)
   const lights = [];                                 // fontes de luz (postes, painéis, letreiros): as mais perto viram luz de verdade
   const pool = [...Array(12)].map(() => new THREE.PointLight('#ffffff', 0, 34, 1.3));   // poucas luzes dinâmicas (sempre as mesmas 12)
@@ -156,7 +157,7 @@ const POLE_GEO = new THREE.CylinderGeometry(0.11, 0.14, 5.6, 6), POLE_MAT = new 
   const pickAds = (n, rnd) => { const out = []; while (out.length < n) { const a = ADS[Math.floor(rnd() * ADS.length)]; if (!out.includes(a)) out.push(a); } return out; };
 
   return {
-    poles,
+    poles, camBoxes,
     /** Prepara um mundo do Penumbra (uma vez): luzes da noite e asfalto molhado. */
     setup(w) {
       world = w; const sc = w.scene;
@@ -177,7 +178,7 @@ const POLE_GEO = new THREE.CylinderGeometry(0.11, 0.14, 5.6, 6), POLE_MAT = new 
       if (root) { if (root.parent) root.parent.remove(root); disposeTree(root); }   // (a composição anterior sai da memória)
       root = new THREE.Group(); root.name = 'night'; w.scene.add(root);
       for (const k in winMats) delete winMats[k];
-      regions.forEach(r => { r.mats.length = 0; r.k = 1; }); panels.length = 0; lights.length = 0; poles.length = 0; glowMats.clear();
+      regions.forEach(r => { r.mats.length = 0; r.k = 1; }); panels.length = 0; lights.length = 0; poles.length = 0; glowMats.clear(); camBoxes.length = 0;
       for (const l of pool) w.scene.add(l); blackout = null; nextBlackout = 12 + Math.random() * 8;
       let sd = 31; const rnd = () => (sd = (sd * 16807 + 7) % 2147483647) / 2147483647;
       const skip = new Set([...GAS_LIST.flatMap(g => g.slots), ...WARE_LIST.flatMap(g => g.slots)]);
@@ -191,6 +192,7 @@ const POLE_GEO = new THREE.CylinderGeometry(0.11, 0.14, 5.6, 6), POLE_MAT = new 
         if (FLUX && FLUX.parks.includes(s) && (r === ROW + 1 || r === ROW - 2 || r === ROW + 2)) {                    // outdoor grande na pracinha
           const dir = r < ROW ? 1 : -1, z = o.z + (dir > 0 ? LOT - 3 : 3), x = o.x + LOT / 2;
           for (const dx of [-3.4, 3.4]) { const pl = new THREE.Mesh(new THREE.CylinderGeometry(0.18, 0.2, 7, 6), new THREE.MeshStandardMaterial({ color: '#2a2d34' })); pl.position.set(x + dx, 3.5, z); root.add(pl); }
+          camBoxes.push([x - 5.8, z - 0.6, x + 5.8, z + 0.6, 11.6]);       // (a câmera não fica atrás do painel)
           addPanel(x, 8.8, z, 11, 5.4, 0, dir, pickAds(r === ROW + 1 ? 3 : 2, rnd), false);
         }
         if (!H || skip.has(s)) continue;
