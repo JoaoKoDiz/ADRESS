@@ -23,14 +23,30 @@ function report(why) {
 export function createBattleMusic({ getVolume = () => 1 } = {}) {
   let el = null, ready = false, failed = null, playing = false, clock = 0, level = 1, own = false;
   let hiddenPause = false, synced = false, fadeTimer = 0;
+  // Caminhos tentados em ordem (cada um com prazo): o arquivo direto; os bytes baixados e tocados da memória (blob) —
+  // páginas publicadas podem barrar mídia de arquivo e aceitar blob. Falhou tudo: aviso com o motivo de cada tentativa.
+  const tries = [];
+  let attempt = -1, stallTimer = 0;
+  function next(why) {
+    clearTimeout(stallTimer);
+    if (attempt >= 0) tries.push(['arquivo', 'blob'][attempt] + ': ' + why);
+    attempt++;
+    if (attempt === 0) { el.src = BATTLE_TRACK; try { el.load(); } catch (e) { /* */ } }
+    else if (attempt === 1) {
+      fetch(BATTLE_TRACK).then(r => { if (!r.ok) throw new Error('HTTP ' + r.status); return r.blob(); })
+        .then(b => { if (ready) return; el.src = URL.createObjectURL(b.type ? b : new Blob([b], { type: 'audio/mpeg' })); try { el.load(); } catch (e) { /* */ } })
+        .catch(e => next(String(e && e.message || e)));
+    } else { failed = tries.join(' · '); report(failed); return; }
+    stallTimer = setTimeout(() => { if (!ready) next('sem resposta em 10 s'); }, 10000);
+  }
   function ensure() {
     if (el) return el;
     el = new Audio();
     el.preload = 'auto';
-    const ok = () => { ready = true; };
+    const ok = () => { if (!ready) { ready = true; clearTimeout(stallTimer); console.info('[batalha] música pronta (' + ['arquivo', 'blob'][attempt] + ')'); if (playing && !own && el.paused && !hiddenPause) el.play().catch(() => {}); } };   // (ficou pronta depois de pedida: toca)
     el.addEventListener('canplaythrough', ok); el.addEventListener('loadeddata', ok);
-    el.addEventListener('error', () => { failed = (el.error && el.error.message) || 'erro ' + (el.error ? el.error.code : '?'); report(failed); });
-    el.src = BATTLE_TRACK;
+    el.addEventListener('error', () => { if (!ready && attempt < 2) next((el.error && el.error.message) || 'erro ' + (el.error ? el.error.code : '?')); });
+    next();
     return el;
   }
   const apply = () => { if (el) el.volume = Math.max(0, Math.min(1, BASE * level * getVolume())); };
@@ -43,7 +59,7 @@ export function createBattleMusic({ getVolume = () => 1 } = {}) {
   });
   return {
     /** Começa a carregar (antes da apresentação). */
-    load() { if (own) return; ensure(); if (el.readyState < 2 && !failed) try { el.load(); } catch (e) { /* */ } },
+    load() { if (own) return; ensure(); },
     /** Pronta para tocar (ou sem jeito de tocar: aí a batalha segue pelo relógio próprio). */
     get ready() { return own || ready || !!failed; },
     get failed() { return failed; },
@@ -53,7 +69,7 @@ export function createBattleMusic({ getVolume = () => 1 } = {}) {
       if (own) return;
       ensure(); synced = el.readyState >= 2; apply();
       try { el.currentTime = at; } catch (e) { /* */ }
-      const p = el.play(); if (p && p.catch) p.catch(err => { if (!failed && playing) { failed = String(err && err.name || err); report(failed); } });
+      const p = el.play(); if (p && p.catch) p.catch(err => { if (!failed && playing && err && err.name === 'NotAllowedError') { failed = 'o navegador bloqueou o som automático (NotAllowedError)'; report(failed); } });   // (ainda carregando: toca quando ficar pronta)
     },
     /** Some em `secs` e para (por conta própria: não depende do laço da batalha). */
     fadeOut(secs = 1.5) {
