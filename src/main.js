@@ -545,7 +545,8 @@ function walkSolids() {
   const out = SOLIDS.slice(HOUSE_SLOTS.length + (PLAZA ? 1 : 0)).filter(b => !b.vanOnly);   // escadarias e passarelas: só a pé
   if (PLAZA) out.push(...plazaSolidsFoot());
   if (neighborhood === 'night10') out.push(...night.poles);
-  if (FLUX) out.push(...fluxParkFoot());                                      // Fluxo/Penumbra: dentro das pracinhas e estacionamentos                    // Penumbra: postes (a van já para no lote)                                  // Bairro 2: coreto, árvores, bancos… da praça
+  if (FLUX) out.push(...fluxParkFoot());
+  if (VENICE) out.push(...veniceTables());                                    // Veneza: mesas com cadeiras e sombrinhas da praça roxa                                      // Fluxo/Penumbra: dentro das pracinhas e estacionamentos                    // Penumbra: postes (a van já para no lote)                                  // Bairro 2: coreto, árvores, bancos… da praça
    // postos, sebe, troncos, parede da entrada, bloqueios
   for (const s of HOUSE_SLOTS) {
     const h = game.layout[s];
@@ -557,6 +558,17 @@ function walkSolids() {
     else if (HOUSES[h].kind === 'apt' && !SPOTS) out.push(...aptFootExtras(h, o));
   }
   return out;
+}
+// Veneza: cada conjunto de mesa + 4 cadeiras (raio ~1,9) da praça roxa — mesmas posições de terrain.js
+let venTablesCache = null;
+function veniceTables() {
+  if (venTablesCache && venTablesCache.v === VENICE) return venTablesCache.list;
+  const list = [], STEP = L_LOT + L_ROAD, X0 = HEDGE + L_ROAD;
+  for (const [r, c] of VENICE.zones.purple) for (let i = 0; i < 3; i++) for (let j = 0; j < 3; j++) {
+    const x = X0 + c * STEP + 3.0 + i * 5.6, z = X0 + r * STEP + 3.0 + j * 5.6, R = 1.9;
+    list.push({ x0: x - R, x1: x + R, z0: z - R, z1: z + R, r: R, cx: x, cz: z });
+  }
+  venTablesCache = { v: VENICE, list }; return list;
 }
 // Fluxo/Penumbra: o que há dentro das pracinhas (árvores, bancos) e dos estacionamentos (carros parados) — mesmas posições de models/flux.js
 let fluxFootCache = null, fluxFootKey = null;
