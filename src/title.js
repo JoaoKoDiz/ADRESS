@@ -60,6 +60,17 @@ body.menu-novan .title-buttons { align-self: center; }
   .title-play { width: auto; right: clamp(16px, 4vw, 72px); bottom: 42vh; justify-content: flex-start; }
   .title-driver { left: 2vw; top: 58vh; }
 }
+@media (max-height: 500px) and (min-aspect-ratio: 1/1) {   /* celular deitado: logo, título e cartões menores para caber tudo */
+  .title-play { gap: 6px; padding: 8px 0; }
+  .tp-logo { font-size: 40px; }
+  .tp-title { font-size: 22px; margin-top: 0; }
+  .title-card { padding-top: 6px; padding-bottom: 6px; }
+  .title-card svg.ic { width: 38px; }
+  .tc-text b { font-size: 22px; }
+  .tc-text small { font-size: 12px; }
+  .title-card.shop .tc-text b { font-size: 18px; }
+  .title-card.shop svg.ic { width: 30px; }
+}
 .title-fade { position: absolute; inset: 0; background: #1b2418; opacity: 0; transition: opacity .5s; pointer-events: none; z-index: 5; }
 .title-bye { color: #fff3d6; font: 800 clamp(22px, 2.4vw, 36px) "Trebuchet MS","Segoe UI",system-ui,sans-serif;
   text-shadow: 0 3px 0 rgba(0,0,0,.4); text-align: center; }

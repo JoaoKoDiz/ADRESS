@@ -68,6 +68,20 @@ body.lsel-on .title-play, body.lsel-on .title-driver { visibility: hidden; }   /
 .lsel-play:hover { filter: brightness(1.08); }
 .lsel-hint { font-weight: 700; font-size: clamp(12px, 1.1vw, 17px); color: #fff8ea; opacity: .9; text-shadow: 0 2px 4px rgba(0,0,0,.5); }
 .lsel-hint b { display: inline-block; min-width: 1.3em; text-align: center; color: #fff; background: #ff7a1a; border-radius: 5px; padding: .05em .3em; margin: 0 .12em; }
+/* celular em pé: as setas vão para baixo da grade (não saem da tela) */
+@media (max-width: 600px) {
+  .lsel-row { flex-wrap: wrap; justify-content: center; row-gap: 10px; }
+  .lsel-grid { order: -1; flex-basis: 100%; grid-template-columns: repeat(4, 21.5vw); justify-content: center; }
+}
+/* tela baixa (celular deitado): título, cartões e dica menores para o botão Jogar caber */
+@media (max-height: 500px) {
+  .lsel { padding-top: 50px; gap: 6px; }
+  .lsel h2 { font-size: 22px; }
+  .lsel-grid { grid-template-columns: repeat(4, min(20vw, 25vh)); }
+  .lsel-card .lbl { font-size: 12px; }
+  .lsel-hint { display: none; }
+  .lsel-play { margin-top: 0; font-size: 17px; }
+}
 `;
 // nomes dos bairros (só nesta tela do Modo Livre)
 export const NAMES = ['Bairro Raízes', 'Bairro Horizontes', 'Bairro Constância', 'Bairro Veredas', 'Bairro Ofício', 'Bairro Mirante', 'Bairro Altitude', 'Bairro Ápice', 'Bairro Encostas', 'Veneza', 'Bairro Travessia', 'Bairro Trilhos', 'Bairro Morro', 'Bairro Fluxo', 'Bairro Colheita', 'Bairro Nevasca', 'Bairro Jardins', 'Bairro Modernista', 'Bairro Penumbra', 'Lua', 'Bairro Operário', 'Bairro Bosque', 'Bairro Cachoeira', 'Bairro Medieval'];   // 18: reservado
