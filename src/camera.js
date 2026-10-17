@@ -284,7 +284,8 @@ export function createCameraRig() {
     camera.updateProjectionMatrix();
     // margem pequena (em pixels) em volta do mapa
     const m = Math.max(8, 0.012 * Math.min(w, h));
-    fitOverview(aspect, Math.max(0.5, 1 - 2 * m / w), Math.max(0.5, 1 - 2 * m / h), overviewPos);
+    const bar = (typeof document !== 'undefined' && document.querySelector('.ahud') || {}).offsetHeight || 0;   // a barra de cima cobre a borda norte: margem extra
+    fitOverview(aspect, Math.max(0.5, 1 - 2 * m / w), Math.max(0.5, 1 - 2 * (m + bar) / h), overviewPos);
     apply();
   }
 
