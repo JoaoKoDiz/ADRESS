@@ -553,8 +553,23 @@ function walkSolids() {
     const o = slotOrigin(s), f = FOOT[HOUSES[h].kind] || FOOT.house;
     out.push({ x0: o.x + f[0], x1: o.x + f[1], z0: o.z + f[2], z1: o.z + f[3] });
     if ((HOUSES[h].kind || 'house') === 'house') out.push(...lotFootExtras(h, o));
+    else if (HOUSES[h].kind === 'apt' && !SPOTS) out.push(...aptFootExtras(h, o));
   }
   return out;
+}
+// Prédios residenciais (apt.js): muro baixo da frente (portão livre) e o que fica no térreo, em coordenadas do lote
+function aptFootExtras(h, o) {
+  let rel = lotFootCache.get('apt' + h);
+  if (!rel) {
+    const A = LOT_ANCHORS, ex = HOUSES[h].extra || [], L = L_LOT;
+    rel = [[0.3, A.gate.x0, L - 0.5, L - 0.2], [A.gate.x1, L - 0.3, L - 0.5, L - 0.2]];
+    if (ex.includes('gnd:dumpster')) rel.push([2.0, 5.2, 12.75, 14.45]);
+    if (ex.includes('gnd:moto')) rel.push([12.5, 14.7, 13.4, 14.2]);
+    if (ex.includes('gnd:guard')) rel.push([A.gate.x1 + 0.4, A.gate.x1 + 2.2, L - 2.5, L - 0.7]);
+    if (ex.includes('gnd:bikes')) rel.push([1.6, 5.6, 13.8, 15.0]);
+    lotFootCache.set('apt' + h, rel);
+  }
+  return rel.map(([x0, x1, z0, z1]) => ({ x0: o.x + x0, x1: o.x + x1, z0: o.z + z0, z1: o.z + z1 }));
 }
 // Casas do lote padrão (house.js): cercas (entra-se pelo portão) e o miolo dos objetos do quintal, em coordenadas do lote
 const YARD_CORE = { fruit: 0.4, bare: 0.35, cactus: 0.6, sunflowers: 0.55, ballbush: 0.9, doghouse: 0.8, pool: 1.5, trampoline: 1.8, bike: 0.6, flamingo: 0.3, gnome: 0.3, tires: 0.8, fountain: 1.8 };
