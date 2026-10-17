@@ -64,6 +64,8 @@ const CSS = `
   font-size: var(--ahud-count); font-weight: bold; white-space: nowrap;
 }
 .ahud-count svg { width: 1.12em; height: 1.12em; flex: none; display: block; }
+/* celular em pé: sem o nome ao lado do ícone (o Voltar ocupa a esquerda) e a linha de cima alta o bastante para a pista não passar por baixo dele */
+@media (max-width: 560px) { .ahud-logo span { display: none; } .ahud-top { min-height: 40px; } }
 .ahud-count b { font-variant-numeric: tabular-nums; }
 
 /* ---------- texto principal (pista / fala), até 2 linhas ---------- */
