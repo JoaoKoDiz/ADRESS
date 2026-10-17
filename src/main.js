@@ -559,6 +559,22 @@ function walkSolids() {
   }
   return out;
 }
+// Helicóptero acima de 6,5 passa por cima de casas, cercas e árvores, mas não atravessa o que é mais alto que ele:
+// prédios contemporâneos, galpões e as igrejas (os residenciais/futuristas já viram "chão" — dá para pousar neles)
+const HELI_TALL = { mod: 15.5, ware: 8.8 };
+const heliTallOut = [];
+function heliTall(alt) {
+  heliTallOut.length = 0;
+  const y = alt + 0.3;
+  if (!SPOTS) for (const s of HOUSE_SLOTS) {
+    const h = game.layout[s]; if (h < 0 || boom.isDestroyed(h)) continue;
+    const top = HELI_TALL[HOUSES[h].kind]; if (!top || top + TERRAIN.h(slotOrigin(s).x + 8.6, slotOrigin(s).z + 8.6) <= y) continue;
+    const o = slotOrigin(s), f = FOOT[HOUSES[h].kind]; heliTallOut.push({ x0: o.x + f[0], x1: o.x + f[1], z0: o.z + f[2], z1: o.z + f[3] });
+  }
+  const ch = churchSolids.length ? churchSolids : MEDV && MEDV.extra && MEDV.extra.church ? MEDV.extra.church.solids : null;
+  if (ch) ch.forEach((b, i) => { if ((i < 4 ? 68 : 30) > y) heliTallOut.push(b); });   // fachada e torres (as 4 primeiras caixas) / nave
+  return heliTallOut;
+}
 // Veneza: cada conjunto de mesa + 4 cadeiras (raio ~1,9) da praça roxa — mesmas posições de terrain.js
 let venTablesCache = null;
 function veniceTables() {
@@ -2498,7 +2514,7 @@ function update(dt, t) {
         }
       }
       if (free && input.heli()) heli.toggle();
-      van.setGhost(free && (menu.unstoppable || heli.high));
+      van.setGhost(free && (menu.unstoppable || heli.high), menu.unstoppable ? null : heliTall(van.object.position.y));
       if (heli.landed) van.stop();                // pousado no teto: parado até decolar (H)
       if (!mooringStep(dt)) van.update(dt, heli.landed ? { x: 0, z: 0 } : approachLock() ? approachAxis() : input.axis(), approachLock() ? 'car' : rig.mode === 'chase' ? 'car' : 'screen');
       if (bumpLevel() && !heli.flying) countBumps();  // Bairros 2 e 3: batidas da van (não conta no ar, nem descendo do helicóptero)

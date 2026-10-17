@@ -256,6 +256,7 @@ export function createVan(scene, opts) {
   }
 
   /** Empurra os 3 círculos para fora dos lotes e da sebe (3 iterações). Retorna true se encostou em algo. */
+  let ghostList = null;              // voando alto: só o que é mais alto que o helicóptero (prédios altos, igreja)
   let ghost = false;                 // "van imparável" (menu): atravessa tudo
   const touched = new Set();         // sólidos em que a van encostou neste quadro (contador de batidas do Bairro 2)
   function collide() {
@@ -266,8 +267,9 @@ export function createVan(scene, opts) {
       for (let k = 0; k < OFFS.length; k++) {
         const c = Math.cos(heading), s = Math.sin(heading);
         let cx = x + c * OFFS[k], cz = z + s * OFFS[k];
-        for (let i = 0; !ghost && i < SOLIDS.length; i++) {
-          const b = SOLIDS[i];
+        const L = ghost ? ghostList : SOLIDS;
+        for (let i = 0; L && i < L.length; i++) {
+          const b = L[i];
           if (cx < b.x0 - R || cx > b.x1 + R || cz < b.z0 - R || cz > b.z1 + R) continue;
           if (b.r) {                                                  // obstáculo redondo (Órbita)
             const dx = cx - b.cx, dz = cz - b.cz, d = Math.hypot(dx, dz), m = b.r + R;
@@ -443,7 +445,7 @@ export function createVan(scene, opts) {
     setLowGravity(on) { lowG = !!on; simY = lastG = TERRAIN.h(x, z); vy = 0; sync(); },
     get lowGravity() { return lowG; },
     get simY() { return lowG ? simY : TERRAIN.h(x, z); },
-    setGhost(v) { ghost = !!v; },
+    setGhost(v, list = null) { ghost = !!v; ghostList = ghost ? list : null; },
     /** Troca o modelo das rodas (Shop): 0 = padrão. */
     /** Troca a carga do teto (Shop): 0 = caixas. */
     setRackModel(m) { setRack(m); findSway(); },
