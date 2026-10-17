@@ -544,7 +544,8 @@ const plazaSolidsFoot = () => { if (plazaFootKey !== PLAZA) { plazaFootKey = PLA
 function walkSolids() {
   const out = SOLIDS.slice(HOUSE_SLOTS.length + (PLAZA ? 1 : 0)).filter(b => !b.vanOnly);   // escadarias e passarelas: só a pé
   if (PLAZA) out.push(...plazaSolidsFoot());
-  if (neighborhood === 'night10') out.push(...night.poles);                    // Penumbra: postes (a van já para no lote)                                  // Bairro 2: coreto, árvores, bancos… da praça
+  if (neighborhood === 'night10') out.push(...night.poles);
+  if (FLUX) out.push(...fluxParkFoot());                                      // Fluxo/Penumbra: dentro das pracinhas e estacionamentos                    // Penumbra: postes (a van já para no lote)                                  // Bairro 2: coreto, árvores, bancos… da praça
    // postos, sebe, troncos, parede da entrada, bloqueios
   for (const s of HOUSE_SLOTS) {
     const h = game.layout[s];
@@ -556,6 +557,26 @@ function walkSolids() {
     else if (HOUSES[h].kind === 'apt' && !SPOTS) out.push(...aptFootExtras(h, o));
   }
   return out;
+}
+// Fluxo/Penumbra: o que há dentro das pracinhas (árvores, bancos) e dos estacionamentos (carros parados) — mesmas posições de models/flux.js
+let fluxFootCache = null, fluxFootKey = null;
+function fluxParkFoot() {
+  const key = FLUX.parks.join() + neighborhood;
+  if (fluxFootKey === key) return fluxFootCache;
+  const out = [], LOTN = L_LOT, circ = (x, z, r) => out.push({ x0: x - r, x1: x + r, z0: z - r, z1: z + r, r, cx: x, cz: z });
+  FLUX.parks.forEach((s, n) => {
+    const o = slotOrigin(s), cx = o.x + LOTN / 2, cz = o.z + LOTN / 2;
+    if (n % 2 === 0) {
+      for (const [x, z] of [[-5, -5], [5, -5], [-5, 5], [5, 5]]) circ(cx + x, cz + z, 0.3);
+      out.push({ x0: cx - 1.1, x1: cx + 1.1, z0: cz - 3.3, z1: cz - 2.7 }, { x0: cx - 1.1, x1: cx + 1.1, z0: cz + 2.7, z1: cz + 3.3 },
+        { x0: cx - 3.3, x1: cx - 2.7, z0: cz - 1.1, z1: cz + 1.1 }, { x0: cx + 2.7, x1: cx + 3.3, z0: cz - 1.1, z1: cz + 1.1 });
+    } else for (let k = 0; k < 5; k++) if ((k + n) % 3) { const x = o.x + 3 + k * 2.8, z = cz + (k % 2 ? 4.4 : -4.4); out.push({ x0: x - 1.0, x1: x + 1.0, z0: z - 2.3, z1: z + 2.3 }); }
+    const r = Math.floor(s / GRID);
+    if (neighborhood === 'night10' && (r === FLUX.row + 1 || r === FLUX.row - 2 || r === FLUX.row + 2)) {   // postes do outdoor (night.js)
+      const z = o.z + (r < FLUX.row ? LOTN - 3 : 3); for (const dx of [-3.4, 3.4]) circ(o.x + LOTN / 2 + dx, z, 0.22);
+    }
+  });
+  fluxFootKey = key; fluxFootCache = out; return out;
 }
 // Prédios residenciais (apt.js): muro baixo da frente (portão livre) e o que fica no térreo, em coordenadas do lote
 function aptFootExtras(h, o) {

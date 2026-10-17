@@ -458,7 +458,7 @@ function farmSolids() {
 function fluxSolids() {
   const hr = ROAD / 2, m = FLUX.median, g = FLUX.gaps;
   for (let k = 0; k < g.length - 1; k++) SOLIDS.push({ x0: roadCenter(g[k]) + hr, x1: roadCenter(g[k + 1]) - hr, z0: m.z0, z1: m.z1 });
-  for (const s of FLUX.parks) { const o = slotOrigin(s); SOLIDS.push({ x0: o.x - WALK, z0: o.z - WALK, x1: o.x + LOT + WALK, z1: o.z + LOT + WALK }); }
+  for (const s of FLUX.parks) { const o = slotOrigin(s); SOLIDS.push({ x0: o.x - WALK, z0: o.z - WALK, x1: o.x + LOT + WALK, z1: o.z + LOT + WALK, vanOnly: true }); }   // a pé dá para entrar (main.js: árvores, bancos, carros)
 }
 /** Morro: muros de contenção nas bordas das faixas (abertos nas ladeiras e escadarias), laterais das ladeiras e escadarias,
  *  escadarias barradas para a van, mercadinho, quadra e pracinha (só a pé) e as casas de enchimento. */
