@@ -1,6 +1,6 @@
 # Revisão de qualidade do ADRESS (17/10/2026)
 
-**Última atualização:** 16/10 23:12 (horário de Brasília)
+**Última atualização:** 16/10 23:40 (horário de Brasília)
 
 ## Ponto de partida
 - Estado salvo antes da revisão: commit `7b8aba7` (tag local `pre-revisao-qualidade`; o envio da tag ao GitHub foi recusado, a branch tem o commit).
@@ -42,18 +42,37 @@ Legenda: **[E]** verificado em execução (jogo rodando no Chromium) · **[C]** 
 - [C] Descer da van sem lugar livre ao lado colocava o personagem dentro de um sólido; agora procura o ponto livre mais perto em volta. `walker.js` (`81477be`).
 - [E] Casas giradas: a caixa de colisão a pé era feita com 2 cantos e ficava fina (atravessava-se a casa) ou encolhida. Agora é caixa orientada exata (`src/obb.js`) no Medieval, Bosque, Nevasca, Jardins e Modernista. Teste: em todos os 5 bairros o centro de todas as casas está bloqueado e nenhuma porta ficou bloqueada a mais que antes. (`30a9844`)
 
+### Igreja (física) (`dc2aeb8`)
+- [E] O sólido lateral ia até 16,8 contínuo (3,8 de parede invisível entre os contrafortes); agora parede em 13 + cada contraforte. Ábside em degraus seguindo o meio círculo. Plataforma do altar (degraus, mesa, cruz) sólida. Teste por pontos na igreja do Bairro 24 (entre contrafortes livre, contraforte/altar bloqueados, corredor livre). `models/church.js`.
+
+### Mais colisões e comportamento (`1e67365`, `30cb602`, `2a05d03`)
+- [C] Cancelas dos Jardins e do Modernista: ficam abertas com a van perto mesmo com o jogador a pé longe (antes fechavam em cima da van e a empurravam). `main.js`.
+- [C] Barcos de Veneza esperam a lancha à frente e, se ela não sair em 4 s, dão meia-volta (antes empurravam a lancha). `main.js`.
+- [C] Aproximação automática da igreja (Bairro 1): a van desvia de troncos/arbustos à frente. Não deu para testar em execução: a sequência depende do áudio, que não carrega no Chromium sem som. `main.js`.
+- [E] Veneza: a pé não atravessa mais as lojinhas nem os pilares do pórtico da Ponte de Rialto (corredor do meio e vão do pórtico livres; teste por pontos). `layout.js`.
+- [E] Bairro 2: a pé, coreto, troncos, canteiros, bancos, postes e cerquinha da praça têm colisão; caminhos livres (teste: andando para o coreto o personagem para na borda). `world.js` `plazaFootSolids`, `main.js`.
+
+### Memória e reinício (`1e67365`, `bf1f798`)
+- [C] Explosões: os entulhos com tamanhos aleatórios criavam geometrias novas a cada explosão e nunca liberavam (cache do kit); tamanhos em passos de 0,1. `boom.js`.
+- [E] Trânsito (Fluxo/Penumbra/Cachoeira) e enfeites noturnos da Penumbra: ao recriar, liberam as geometrias/materiais antigos (`disposeTree` em `models/kit.js`). Medido: a troca Penumbra → Fluxo ficou com ~160 geometrias a menos na GPU.
+- [C] Partida nova zera o contador de entregas em todos os reinícios e põe os montes de neve da Nevasca de volta. `main.js`.
+
+### Interface no celular (`bf1f798`, `32a4f49`, `b484e59`)
+- [E] Shop: em pé (360×740) virou uma coluna que rola com Salvar preso embaixo; deitado (740×360) as 3 colunas voltam com altura mínima (antes as listas sumiam). `shop.js`.
+- [E] HUD em pé: contador "Entregas" inteiro na tela e a pista não passa por baixo do Voltar. `hud.js`.
+- [E] Seleção do Livre em pé: setas abaixo da grade (a da direita saía da tela). Deitado: painel Jogar (logo/Shop) e seleção (botão Jogar) cabem. `levelSelect.js`, `title.js`.
+- Conferido por fotos; no computador (1280×600 e maiores) nada muda.
+
+### Encaixe (`9c6d01d`)
+- [C] Colheita: trilhas das rodas 2 cm acima da estrada de terra. Jardins: água do meio do lago 3 cm acima da de fora; piso do parquinho acima da grama.
+
 ## Em andamento / próximos passos (identificados, pendentes)
 Prioridade aproximada:
-1. Igreja (geometria física): sólido lateral contínuo até 16,8 (paredes em 13, entre os contrafortes); ábside retangular (modelo é meio cilindro); degraus do altar sem sólido.
-2. Cancelas dos Jardins/Modernista fecham sobre a van estacionada quando o jogador está a pé longe.
-3. Barcos de Veneza empurram a lancha (não param).
-4. Aproximação automática da igreja (Bairro 1): árvores no caminho podem prender a van.
-5. Helicóptero atravessa prédios altos que não são residenciais/futuristas.
-6. Ponte de Rialto: a pé atravessa lojinhas e pilares; praça do Bairro 2: objetos sem colisão a pé.
-7. Encaixe: calçadas na beira dos patamares das Encostas, caminho do Grillby's flutuando, caixa de areia/lago dos Jardins, marcas de pneu da Colheita, poça de luz da Penumbra, chão queimado, degraus da Cachoeira.
-8. Recursos: geometrias criadas a cada explosão/dica sem liberar (`boom.js`/`hint.js`), trânsito e enfeites noturnos recriados sem `dispose`; montes de neve e `game.delivered` no reinício.
-9. Interface: Shop no celular (Salvar fora da tela), contador "Entregas" cortado em 360 px, setas da seleção em retrato, telas baixas.
-10. Menores: cercas/objetos de quintal a pé, bancos `vanOnly`, postes da Penumbra, veículos de laço se atravessando.
+1. Helicóptero acima de 6,5 atravessa prédios altos que não são residenciais/futuristas (contemporâneos, galpões, igreja, torres). É o comportamento previsto ("passa por cima de tudo"), mas visualmente atravessa; corrigir muda a mecânica — fica para decisão.
+2. Encaixe: calçadas na beira dos patamares das Encostas, caminho do Grillby's 6 cm acima da rua, poça de luz da Penumbra, chão queimado, degraus da Cachoeira, faixa de 2 cm dos paredões.
+3. Interface: toque no balão E durante arraste da câmera, pinça/zoom no celular, áreas seguras (entalhe), Esc no cadeado, "Sair" sem saída no navegador.
+4. Menores: cercas/objetos de quintal a pé, bancos `vanOnly`, postes da Penumbra, guarita/moto, porta da oficina, veículos de laço que se atravessam depois de 6 s esperando.
+5. Ciclo de vida: galinhas/tratores sem liberar ao trocar de bairro; mundos guardados em cache (memória cresce visitando muitos bairros).
 
 Observado e mantido (não é defeito): na Nevasca (ponto 6) e no Medieval (ponto 10) o ponto de entrega fica a menos de 0,55 da quina de um obstáculo; a van entrega normalmente.
 
@@ -70,3 +89,12 @@ Observado e mantido (não é defeito): na Nevasca (ponto 6) e no Medieval (ponto
 - `345902f` — Nevasca/Bosque: ladeiras, atalhos, tapetes de folhas.
 - `81477be` — piscina, bondes, desembarque.
 - `30a9844` — caixas orientadas das casas giradas.
+- `7e03ed2` — relatório.
+- `dc2aeb8` — igreja (colisão).
+- `1e67365` — cancelas, barcos, aproximação, memória.
+- `bf1f798` — Shop no celular, reinício.
+- `32a4f49` — HUD no celular.
+- `30cb602` — Rialto.
+- `2a05d03` — praça do Bairro 2.
+- `9c6d01d` — Colheita/Jardins (encaixe).
+- `b484e59` — menus no celular.
