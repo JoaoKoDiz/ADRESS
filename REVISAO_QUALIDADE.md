@@ -1,6 +1,6 @@
 # Revisão de qualidade do ADRESS (17/10/2026)
 
-**Última atualização:** 17/10 02:12 (horário de Brasília)
+**Última atualização:** 17/10 02:52 (horário de Brasília)
 
 ## Ponto de partida
 - Estado salvo antes da revisão: commit `7b8aba7` (tag local `pre-revisao-qualidade`; o envio da tag ao GitHub foi recusado, a branch tem o commit).
@@ -117,14 +117,21 @@ Medição: chamadas de desenho por bairro (média ~407 no passe principal; picos
 - [E] A pé: obstáculos das casas e quintais calculados só quando a composição muda (antes, centenas de objetos novos por quadro). Testes de alcance dos quintais iguais.
 Não feito (mudaria visual ou é estrutural): instanciar o trânsito e os enfeites da Penumbra, reduzir luzes da Penumbra, galinhas/K da cadeira.
 
-### 3ª rodada (auditorias de interface e de interações, em execução)
+### 3ª rodada (auditorias de interface e de interações)
 - [E] **Regressão desta revisão, corrigida:** o botão **Carreira** do painel Jogar não fazia nada e travava o painel (introduzido em `04de67e`: a trava de clique duplo bloqueava a própria ação). Reteste pela interface: chega ao mapa. Artifact republicado logo em seguida. (`748f5cb`)
 - [E] **Morro:** as duas casas de cada beco tinham o mesmo ponto de entrega e uma delas nunca recebia (7 de 64 casas; ~45% das rodadas tinham uma na rota e a partida podia travar). Porta do lado de cada casa; reteste: 18/18 casas de beco entregam a casa certa (antes 11/18). (`952de5a`)
 - [E] A pé, logo ao descer, E entrava de novo na entrega em vez de entrar na van (bairros com entrega a pé). Agora a van ganha quando está tão perto quanto a porta; reteste: E volta para a van. (`952de5a`)
 - [E] Esc com a lista de missões aberta abria o MENU escondido por baixo (e pausava); agora fecha a lista. [C] Esc fecha o painel de desenvolvimento do cadeado; painel cabe em telas baixas; MENU some no mapa (não abria lá); aviso de missão e cabeçalho das missões em telas estreitas; balão do mapa sem quebrar; indicação "E — …" não sai da tela; Tab/Enter/setas funcionam nas Configurações; "Partida concluída!" no fim da Carreira. (`501699b`)
 - [E] HUD em 800–1100 px: dicas de teclado completas em 2 linhas (antes cortadas). Contador de entregas escondido no mapa. (`último commit`)
 - [E] Dica (T): no Medieval e nos Jardins a seta pousa no topo real do telhado (antes afundava dentro). (`eed6c4c`)
-- Interações conferidas sem problema (auditoria em execução): todos os destinos dos 24 bairros entregam a casa certa de van; entregas a pé em todos os bairros com ponto de casa (exceto o caso do Morro, corrigido); postos, porteiras, atracar/descer em Veneza, dica 1×/2×, centenas de entregas seguidas no Livre sem travar.
+- Interações conferidas sem problema: todos os destinos dos 24 bairros entregam a casa certa de van; entregas a pé em todos os bairros com ponto de casa (exceto o caso do Morro, corrigido); postos, porteiras, atracar/descer em Veneza, dica 1×/2×, centenas de entregas seguidas no Livre sem travar.
+
+### Revisão de regressões (todos os commits desta noite, outro agente, com o build antigo lado a lado)
+Encontrou 2 regressões minhas além da do botão Carreira — corrigidas e retestadas:
+- [E] Arrastar a câmera com o botão direito soltava as teclas seguradas (a van parava) — vinha da limpeza de teclas no menu de contexto (`04de67e`). Agora só limpa se o menu do navegador abrir de fato; reteste: W continua segurado e a van andando.
+- [E] O MENU deixou de abrir nas cenas que pausam por ele (cronômetro do resgate, missa/temporal, montagem da igreja) — a trava de `04de67e` era estreita demais. Reteste: MENU abre e o tempo da missa para.
+- Desfeita a mudança "teclado nas Configurações" (`501699b`): os controles do painel não recebem foco por projeto, então não tinha efeito útil.
+Verificado sem problema pela revisão: fluxos completos de interface (Livre, Carreira até voltar ao mapa com missões salvas, Shop, Configurações, cadeado), alcance a pé de todas as portas nos 24 bairros comparado ao build antigo (nenhuma perdida), caixa e frente do K, praça do Bairro 2, porta do Grillby's, igreja e oficina do Bairro 24, Rialto, pouso no terraço do Bairro 6 e L, dica, e o restante das mudanças de código.
 
 ## Em andamento / próximos passos (identificados, pendentes)
 Prioridade aproximada:
