@@ -2393,6 +2393,7 @@ function startNewRound(newMatch = true) {
   if (neighborhood === 'snow8') resetBanks();      // Nevasca: montes de neve de volta nos atalhos
   world.hideResident();
   resetVan();
+  if (newMatch) { if (rig.mode !== 'chase') rig.toggle(); rig.resetView(); }   // partida nova: câmera atrás da van, no padrão
   rig.snap({ x: van.x, z: van.z, heading: van.heading, speed: 0 });
   resetParcel(); setupChurch(); setupMedStory(); setupVeniceK();
   dialog = null; pending = -1; nearHouse = -1; actionLock = 0;
