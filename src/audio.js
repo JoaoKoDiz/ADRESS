@@ -2,7 +2,7 @@
 // Tudo é um no-op seguro antes de unlock() ou se o navegador não tiver WebAudio — nada aqui lança exceção.
 
 const MASTER = 0.9;
-let musicVol = 1, sfxVol = 1, musicBus = null;
+let musicVol = 1, sfxVol = 1, musicBus = null, fxHold = false;   // fxHold: efeitos calados (MENU aberto ou aba escondida)
 const ENGINE_MIN = 0.012, ENGINE_RANGE = 0.022;   // volume do motor: parado → velocidade máxima
 const ENGINE_HZ = 42, ENGINE_HZ_RANGE = 63;       // tom do motor (a 2ª onda toca uma oitava abaixo)
 const ENGINE_LP = 250, ENGINE_LP_RANGE = 120;     // filtro passa-baixa abre um pouco com a velocidade
@@ -15,14 +15,15 @@ export function createAudio() {
 
   const resume = () => {
     try {
-      if (ac && ac.state === 'suspended') { const p = ac.resume(); if (p && p.catch) p.catch(() => {}); }
+      if (ac && ac.state !== 'running' && ac.state !== 'closed') { const p = ac.resume();   // (inclui 'interrupted' do Safari/iOS)
+      if (p && p.catch) p.catch(() => {}); }
     } catch (e) { /* ignora */ }
   };
 
   function build() {
     ac = new Ctor();
     master = ac.createGain();
-    master.gain.value = MASTER * sfxVol;
+    master.gain.value = fxHold ? 0 : MASTER * sfxVol;
     master.connect(ac.destination);
     musicBus = ac.createGain();                 // músicas tocadas pelo WebAudio (cenas, Grillby's, engarrafamentos)
     musicBus.gain.value = musicVol;
@@ -106,7 +107,7 @@ export function createAudio() {
   }
   const ursa = {
     begin: safe(() => {
-      if (ub) { try { ub.disconnect(); } catch (e) { /* */ } }
+      if (ub) { try { ub.disconnect(); if (ub._comp) ub._comp.disconnect(); } catch (e) { /* */ } }
       const comp = ac.createDynamicsCompressor(); comp.threshold.value = -16; comp.ratio.value = 8; comp.attack.value = 0.003; comp.release.value = 0.25;
       ub = ac.createGain(); ub.gain.value = 0.85; ub.connect(comp); comp.connect(master); ub._comp = comp;
     }),
@@ -240,9 +241,16 @@ export function createAudio() {
     }),
   };
 
+  // Efeitos calados com o MENU aberto (jogo pausado) ou a aba escondida (o laço do jogo para e os laços de som ficariam tocando sozinhos).
+  let menuHold = false;
+  const applyHold = () => {
+    fxHold = menuHold || (typeof document !== 'undefined' && document.hidden);
+    try { if (master) master.gain.setTargetAtTime(fxHold ? 0 : MASTER * sfxVol, ac.currentTime, 0.04); } catch (e) { /* ignora */ }
+  };
   // Ao esconder a aba o laço para: silencia o motor para ele não ficar zumbindo sozinho.
   try {
     document.addEventListener('visibilitychange', () => {
+      applyHold();
       if (!eng || !document.hidden) return;
       try { eng.g.gain.setTargetAtTime(0, ac.currentTime, 0.05); engGain = 0; } catch (e) { /* ignora */ }
     });
@@ -254,10 +262,12 @@ export function createAudio() {
     get out() { return master; },
     /** Saída das músicas (volume da música nas Configurações). */
     get musicOut() { return musicBus || master; },
+    /** MENU aberto: cala os efeitos (a música continua). */
+    pauseFx(on) { if (menuHold !== !!on) { menuHold = !!on; applyHold(); } },
     /** Volumes das Configurações (0..1): efeitos (tudo que sai por `out`) e música (`musicOut`). */
     setVolumes(music, sfx) {
       musicVol = music; sfxVol = sfx;
-      try { if (master) master.gain.setTargetAtTime(MASTER * sfxVol, ac.currentTime, 0.02); if (musicBus) musicBus.gain.setTargetAtTime(musicVol, ac.currentTime, 0.02); } catch (e) { /* ignora */ }
+      try { if (master) master.gain.setTargetAtTime(fxHold ? 0 : MASTER * sfxVol, ac.currentTime, 0.02); if (musicBus) musicBus.gain.setTargetAtTime(musicVol, ac.currentTime, 0.02); } catch (e) { /* ignora */ }
     },
     /** Cria/retoma o AudioContext. Idempotente; chamar no primeiro evento de teclado/ponteiro. */
     unlock() {
@@ -334,7 +344,8 @@ export function createAudio() {
     traffic: safe((k, speed01 = 0.5) => {
       if (!traf) return;
       const gain = 0.03 * Math.max(0, Math.min(1, k)), t = ac.currentTime;
-      if (Math.abs(gain - trafGain) > 0.0008) { trafGain = gain; traf.tg.gain.setTargetAtTime(gain, t, 0.25); }
+      if (gain === 0 ? trafGain !== 0 : Math.abs(gain - trafGain) > 0.0008) {   // (zero sempre zera: ganhos pequenos não ficam presos)
+        trafGain = gain; traf.tg.gain.setTargetAtTime(gain, t, 0.25); }
       traf.t1.frequency.setTargetAtTime(52 + 30 * speed01, t, 0.3); traf.t2.frequency.setTargetAtTime(80 + 40 * speed01, t, 0.3);
     }),
     /** Cachoeira: k = 0 (longe) … 1 (bem perto). Mais perto, mais alto e mais agudo. */

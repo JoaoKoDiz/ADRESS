@@ -7,7 +7,7 @@
 const FORMANTS = [320, 420, 520, 640, 760, 900, 1100];
 
 export function createMedievalAudio(audio) {
-  let A = null;
+  let A = null, off = false;   // off: depois de stop(), só o laço (update) volta a montar os nós (um som pontual atrasado não remonta tudo fora do bairro)
   /** Monta os nós na primeira vez que o contexto existe (ou de novo depois de stop()). */
   function ensure() {
     const ac = audio && audio.ctx, out = audio && audio.out;
@@ -90,7 +90,7 @@ export function createMedievalAudio(audio) {
     s.onended = () => { try { s.disconnect(); f.disconnect(); g.disconnect(); } catch (e) { /* */ } };
     return f;
   }
-  const safe = fn => (...a) => { const X = ensure(); if (!X) return; try { fn(X, ...a); } catch (e) { /* som é opcional */ } };
+  const safe = (fn, loop) => (...a) => { if (off && !loop) return; off = false; const X = ensure(); if (!X) return; try { fn(X, ...a); } catch (e) { /* som é opcional */ } };
 
   return {
     /** Laços: { fountain, fountainPan, market, wind, cart, cartPan, cartSpeed } (0..1), dt em segundos. */
@@ -110,7 +110,7 @@ export function createMedievalAudio(audio) {
       A.cartT = (A.cartT || 0) - dt;                                        // rodas nas pedras: tremor irregular
       if (A.cartT <= 0) { A.cartT = 0.06 + Math.random() * 0.08; setG(A, 'c', A.cG.gain, 0.035 * (o.cart || 0) * (0.65 + 0.35 * Math.random()), 0.05); }
       setPan(A, A.cP, 'cp', o.cartPan);
-    }),
+    }, true),
     /** Martelo na bigorna: parciais metálicas + estalo. */
     clang: safe((A, k, p) => voice(A, k, p, (ac, g, t0) => {
       const f0 = 520 * (0.95 + Math.random() * 0.1);
@@ -157,6 +157,7 @@ export function createMedievalAudio(audio) {
     },
     /** Para e desliga tudo (sai do bairro); volta a montar sozinho se for usado de novo. */
     stop() {
+      off = true;
       if (!A) return;
       const X = A; A = null;
       try { for (const n of X.nodes) { try { if (n.stop) n.stop(); } catch (e) { /* */ } try { n.disconnect(); } catch (e) { /* */ } } X.bus.disconnect(); } catch (e) { /* */ }

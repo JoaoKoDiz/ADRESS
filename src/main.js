@@ -2506,6 +2506,7 @@ function update(dt, t) {
   if (state !== 'title' && state !== 'levelSelect' && state !== 'levelFly' && state !== 'shop' && !(state === 'fadeOut' && endToMap) && input.toggleCamera()) rig.toggle();
 
   const menuPause = menu.isOpen && MENU_STATES_OK.includes(state);   // MENU aberto: a partida espera de verdade (antes a van seguia andando e entregando com o cronômetro parado)
+  audio.pauseFx(menu.isOpen);                     // MENU aberto: os efeitos (motor, trânsito, chuva, cachoeira…) calam; a música continua
   if (menuPause) { van.stop(); nearHouse = -1; }
   else switch (state) {
     case 'drive': {
@@ -2845,7 +2846,7 @@ function update(dt, t) {
   if (MOONV && !heli.on && !heli.flying) van.object.position.y = van.simY;   // Órbita: a altura da gravidade baixa (saltinhos)
   boom.update(dt);
   { const foot = state === 'walk';              // quem está perto: a van ou, a pé, o personagem
-    jamSound.update(dt, IN_GAME.includes(state) && [6, 7, 10].includes(gameMode === 'career' ? careerLevel : freeLevel) && !missions.isOpen,   // Bairros 7, 8 e 11 (Travessia)
+    jamSound.update(dt, IN_GAME.includes(state) && [6, 7, 10].includes(gameMode === 'career' ? careerLevel : freeLevel) && !missions.isOpen && !menu.isOpen,   // Bairros 7, 8 e 11 (Travessia)
       barriers.jamRects, foot ? walker.x : van.x, foot ? walker.z : van.z);
     cityAmb.update(dt, (IN_GAME.includes(state) || foot || state === 'fadeIn') && (neighborhood === 'city7' || neighborhood === 'city8'), jamSound.debug.level / 0.7); }   // Bairros 7 e 8: cidade ao fundo (abaixa com a música dos engarrafamentos)
   // entregando (campainha/diálogo) ou com o balão "E — Entregar" à vista: a câmera se volta para a casa
@@ -2881,7 +2882,7 @@ function update(dt, t) {
     if (fog) { fog.near = 3000; fog.far = 3200; }
   }
   if (state === 'map') audio.engine(careerMap.moving, 0.55);
-  else audio.engine(state === 'drive', Math.min(1.15, Math.abs(van.speed) / van.maxSpeed));
+  else audio.engine(state === 'drive' && !heli.landed, Math.min(1.15, Math.abs(van.speed) / van.maxSpeed));
   input.endFrame();
 }
 
