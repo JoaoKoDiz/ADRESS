@@ -90,6 +90,26 @@ const CSS = `
 .shop-arrow.on { display: flex; }
 .shop-arrow:hover { filter: brightness(1.15); }
 @media (max-width: 900px) { .shopov { grid-template-columns: minmax(150px, 30vw) 1fr; grid-template-rows: auto auto minmax(220px, 1fr); } .shop-prev { grid-column: 1 / -1; } }
+/* celular em pé: tudo numa coluna que rola (categorias em fichas, descrição/itens, pré-visualização embaixo; Salvar preso ao pé da tela) */
+@media (max-width: 600px) {
+  .shopov { overflow-y: auto; grid-template-columns: minmax(0, 1fr); grid-template-rows: auto auto auto 320px; align-content: start; padding-top: 58px; }
+  .shop-side, .shop-main { min-height: auto; }
+  .shop-head { flex-wrap: wrap; gap: 4px 12px; }
+  .shop-side { flex-direction: row; flex-wrap: wrap; overflow: visible; }
+  .shop-sec { flex-basis: 100%; }
+  .shop-cat { flex: 1 1 auto; }
+  .shop-main { overflow: visible; }
+  .shop-prev { grid-column: auto; }
+}
+/* celular deitado (tela baixa): volta às 3 colunas com altura mínima e a tela rola */
+@media (max-height: 500px) and (min-width: 601px) {
+  .shopov { overflow-y: auto; padding-top: 54px; grid-template-columns: minmax(150px, 24vw) minmax(0, 1fr) minmax(220px, 34vw); grid-template-rows: auto minmax(270px, calc(100vh - 110px)); }
+  .shop-prev { grid-column: auto; }
+  .shop-head span { display: none; }
+  .shop-cat { flex-wrap: wrap; }
+  .shop-savebar { padding-top: 6px; padding-bottom: 6px; }
+  .shop-savebar .shop-desc { display: none; }
+}
 `;
 
 const KEY = 'adress.shop.v1';

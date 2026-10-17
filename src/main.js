@@ -33,7 +33,7 @@ import { createCameraRig } from './camera.js';
 import { createHUD } from './hud.js';
 import { createAudio } from './audio.js';
 import { buildLot } from './models/house.js';
-import { box as kbox, cyl as kcyl, sphere as ksphere, bakeStatic, mat, at } from './models/kit.js';
+import { box as kbox, cyl as kcyl, sphere as ksphere, bakeStatic, mat, at, disposeTree } from './models/kit.js';
 import { buildResident } from './models/resident.js';
 import { YARD_BUILDERS, YARD_BUILDERS_SNOW } from './models/yard.js';
 import { buildShopLot } from './models/shop.js';
@@ -574,7 +574,7 @@ const workTraffic = createWorkTraffic(audio);   // Nível 21 (Operário): caminh
 const buildForestCar = () => { const m = buildCar(); m.userData.body.material = mat(CAR_COLORS[Math.floor(Math.random() * CAR_COLORS.length)]); return m; };
 const banks = [];                                // { cut, mesh, open, t, k }
 function resetBanks() {
-  for (const b of banks) if (b.mesh.parent) b.mesh.parent.remove(b.mesh);
+  for (const b of banks) { if (b.mesh.parent) b.mesh.parent.remove(b.mesh); disposeTree(b.mesh); }
   banks.length = 0;
   if (!SNOWV) return;
   for (const cut of SNOWV.cuts) {
@@ -2331,7 +2331,7 @@ function updateGrill(dt) {
 }
 
 function startNewRound(newMatch = true) {
-  if (newMatch) { matchTimer.reset(); resetBumps(); }   // nova partida: cronômetro em 00:00 (começa no 1º quadro jogável) e batidas em 0
+  if (newMatch) { matchTimer.reset(); resetBumps(); game.delivered = 0; }   // nova partida: cronômetro em 00:00 (começa no 1º quadro jogável) e batidas em 0
   if (grillStory.active) grillStory.reset();
   if (insideOn) leaveGrill();
   grill = null;
@@ -2351,6 +2351,7 @@ function startNewRound(newMatch = true) {
   if (chatNpc) { medLife.endTalk(chatNpc); chatNpc = null; }
   resetGates();                                  // Colheita: porteiras fechadas de novo
   if (neighborhood === 'favela8') favPets.reset();   // Morro: bichos sorteados de novo
+  if (neighborhood === 'snow8') resetBanks();      // Nevasca: montes de neve de volta nos atalhos
   world.hideResident();
   resetVan();
   rig.snap({ x: van.x, z: van.z, heading: van.heading, speed: 0 });
