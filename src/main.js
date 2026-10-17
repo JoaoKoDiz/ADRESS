@@ -551,8 +551,28 @@ function walkSolids() {
     if (SPOTS) { out.push(SPOTS.spots[s].walkBox || SPOTS.spots[s].box); continue; }                   // Morro/Colheita: a construção (já girada)
     const o = slotOrigin(s), f = FOOT[HOUSES[h].kind] || FOOT.house;
     out.push({ x0: o.x + f[0], x1: o.x + f[1], z0: o.z + f[2], z1: o.z + f[3] });
+    if ((HOUSES[h].kind || 'house') === 'house') out.push(...lotFootExtras(h, o));
   }
   return out;
+}
+// Casas do lote padrão (house.js): cercas (entra-se pelo portão) e o miolo dos objetos do quintal, em coordenadas do lote
+const YARD_CORE = { fruit: 0.4, bare: 0.35, cactus: 0.6, sunflowers: 0.55, ballbush: 0.9, doghouse: 0.8, pool: 1.5, trampoline: 1.8, bike: 0.6, flamingo: 0.3, gnome: 0.3, tires: 0.8, fountain: 1.8 };
+const lotFootCache = new Map();
+function lotFootExtras(h, o) {
+  let rel = lotFootCache.get(h);
+  if (!rel) {
+    const A = LOT_ANCHORS, H = HOUSES[h], i0 = A.fenceInset, far = L_LOT - i0, t = 0.09;
+    rel = [[i0, far, i0 - t, i0 + t], [i0 - t, i0 + t, i0, far], [far - t, far + t, i0, far],          // fundo e laterais
+      [i0, A.gate.x0 - 0.13, far - t, far + t], [A.gate.x1 + 0.13, far, far - t, far + t]];          // frente (o portão fica livre)
+    (H.yardItems || []).forEach((key, i) => {
+      const slot = A.yardSlots[i], r = YARD_CORE[key]; if (!slot || !r) return;
+      const z = key === 'bike' ? A.bikeZ : (H.yardZ && H.yardZ[key]) || slot.z;
+      rel.push([slot.x - r, slot.x + r, z - r, z + r, r, slot.x, z]);
+    });
+    if (H.reader) rel.push([H.reader.x - 0.9, H.reader.x + 0.9, H.reader.z - 0.9, H.reader.z + 0.9, 0.9, H.reader.x, H.reader.z]);   // o K na cadeira de balanço
+    lotFootCache.set(h, rel);
+  }
+  return rel.map(([x0, x1, z0, z1, r, cx, cz]) => r ? { x0: o.x + x0, x1: o.x + x1, z0: o.z + z0, z1: o.z + z1, r, cx: o.x + cx, cz: o.z + cz } : { x0: o.x + x0, x1: o.x + x1, z0: o.z + z0, z1: o.z + z1 });
 }
 const train = createTrain();
 const traffic = createTraffic(audio);
