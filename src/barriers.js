@@ -13,7 +13,7 @@
 //   Trecho vertical (coluna j, entre as linhas i e i+1): I(j,i) — I(j,i+1). A barreira fica no meio e corta o trecho.
 import * as THREE from 'three';
 import { ROAD, GRID, ENTRANCE, GAS_LIST, HOUSE_SLOTS, roadCenter, SOLIDS } from './layout.js';
-import { mat, box, cyl, cone, at } from './models/kit.js';
+import { mat, box, cyl, cone, at, dynamic, bakeStatic } from './models/kit.js';
 
 const START = () => [ENTRANCE.road, 0];   // cruzamento da entrada (rua central, borda norte)
 // Por tipo: distância do centro do cruzamento até o bloqueio (trechos horizontais, perto de uma ponta)
@@ -150,8 +150,10 @@ function buildJam() {
     const c = buildCar();
     c.position.set(x, 0, lane * ROAD / 4);
     c.rotation.y = lane > 0 ? 0 : Math.PI;       // mão dupla: uma faixa para cada lado
+    dynamic(c.userData.body);                     // (a carroceria troca de cor a cada partida: fica separada)
     g.add(c); g.userData.cars.push(c);
   }
+  bakeStatic(g);                                  // rodas, vidros, faróis… dos 6 carros viram poucas malhas
   return g;
 }
 
