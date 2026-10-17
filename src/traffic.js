@@ -12,7 +12,7 @@
 import * as THREE from 'three';
 import { GRID, ROAD, roadCenter, FLUX, CANAL, GAS_LIST, WARE_LIST, SOLIDS } from './layout.js';
 import { buildCar, CAR_COLORS } from './barriers.js';
-import { mat, box, cyl, at, bakeStatic } from './models/kit.js';
+import { mat, box, cyl, at, bakeStatic, disposeTree } from './models/kit.js';
 
 const hr = ROAD / 2, rc = roadCenter, CAR = 4.6, GAP = 2.2;
 const DIRS = { E: [1, 0], W: [-1, 0], S: [0, 1], N: [0, -1] };
@@ -198,7 +198,7 @@ export function createTraffic(audio) {
     /** Monta a rede (depois dos postos/galpões da partida) e espalha os carros: mais na avenida, menos nas ruas.
      *  stay: os carros da avenida ficam nela, metade em cada sentido (Fluxo). */
     reset(nAve = 16, nStreet = 18, night = false, stay = false) {
-      for (const c of cars) { root.remove(c.mesh); const k = SOLIDS.indexOf(c.solid); if (k >= 0) SOLIDS.splice(k, 1); }
+      for (const c of cars) { root.remove(c.mesh); disposeTree(c.mesh); const k = SOLIDS.indexOf(c.solid); if (k >= 0) SOLIDS.splice(k, 1); }
       cars = []; busy = stay; build(); t = Math.random() * CYCLE;
       const all = [];
       for (let i = 0; i <= GRID; i++) for (let j = 0; j <= GRID; j++) for (const d of Object.keys(DIRS)) if (edgeOk(i, j, d)) laneCoords(i, j, d).forEach((_, k) => all.push(makeLane(i, j, d, k)));

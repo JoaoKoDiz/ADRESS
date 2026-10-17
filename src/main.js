@@ -487,11 +487,19 @@ const npcBoats = (() => {
       });
     },
     detach() { for (const b of list) { const i = SOLIDS.indexOf(b.solid); if (i >= 0) SOLIDS.splice(i, 1); } if (root.parent) root.parent.remove(root); },
-    update(dt) {
+    update(dt, boat = null) {
       clock += dt;
       for (const b of list) {
         const [x0, z0, x1, z1] = b.r, L = Math.hypot(x1 - x0, z1 - z0);
-        b.t += b.dir * dt * 3.2 / L;
+        let stop = false;                                              // lancha logo à frente: espera; parada demais, dá meia-volta
+        if (boat) {
+          const px = x0 + (x1 - x0) * b.t, pz = z0 + (z1 - z0) * b.t, ux = (x1 - x0) / L * b.dir, uz = (z1 - z0) / L * b.dir;
+          const ahead = (boat.x - px) * ux + (boat.z - pz) * uz, side = Math.abs((boat.x - px) * uz - (boat.z - pz) * ux);
+          stop = ahead > 0 && ahead < 7.5 && side < 3.4;
+        }
+        b.wait = stop ? (b.wait || 0) + dt : 0;
+        if (b.wait > 4) { b.dir = -b.dir; b.wait = 0; }
+        else if (!stop) b.t += b.dir * dt * 3.2 / L;
         if (b.t > 1) { b.t = 1; b.dir = -1; } else if (b.t < 0) { b.t = 0; b.dir = 1; }
         const x = x0 + (x1 - x0) * b.t, z = z0 + (z1 - z0) * b.t, hx = (x1 - x0) / L * b.dir, hz = (z1 - z0) / L * b.dir;
         b.m.position.set(x, Math.sin(clock * 1.4 + x) * 0.05, z); b.m.rotation.y = -Math.atan2(hz, hx);
@@ -1602,6 +1610,14 @@ function approachAxis() {
   const tx = MAP_W() / 2, tz = MAP_W() + CHURCH_Z;
   let d = Math.atan2(tz - van.z, tx - van.x) - van.heading;
   while (d > Math.PI) d -= 2 * Math.PI; while (d < -Math.PI) d += 2 * Math.PI;
+  // desvia de troncos/arbustos logo à frente (sem isso um tronco no caminho prendia a van até a revelação)
+  const fx = Math.cos(van.heading), fz = Math.sin(van.heading); let best = null;
+  for (const b of SOLIDS) {
+    if (b.x1 - b.x0 > 4 || b.z1 - b.z0 > 4) continue;
+    const cx = (b.x0 + b.x1) / 2 - van.x, cz = (b.z0 + b.z1) / 2 - van.z, ahead = cx * fx + cz * fz, side = cx * fz - cz * fx;
+    if (ahead > 0 && ahead < 16 && Math.abs(side) < 3.4 && (!best || ahead < best.ahead)) best = { ahead, side };
+  }
+  if (best) d += (best.side >= 0 ? 1 : -1) * 0.5 * (1 - best.ahead / 16);
   return { x: Math.max(-1, Math.min(1, d * 3)), z: -1 };
 }
 function revealChurch(fast) {
@@ -2624,7 +2640,7 @@ function update(dt, t) {
   if (neighborhood === 'night10') night.update(dt, state === 'walk' ? walker.x : van.x, state === 'walk' ? walker.z : van.z);
   if (neighborhood === 'farm10') farmOut.update(dt);
   if (neighborhood === 'garden8' && gardGate.arm) {   // Jardins: a cancela sobe quando a van (ou o personagem) chega perto e desce depois
-    const G = GARDV.GATE, px = state === 'walk' ? walker.x : van.x, pz = state === 'walk' ? walker.z : van.z, near = Math.hypot(px - G.x, pz - G.z) < 20;
+    const G = GARDV.GATE, near = Math.hypot(van.x - G.x, van.z - G.z) < 20 || (state === 'walk' && Math.hypot(walker.x - G.x, walker.z - G.z) < 20);   // (a van estacionada embaixo também segura a cancela)
     gardGate.k += ((near ? 1 : 0) - gardGate.k) * Math.min(1, dt * 3);
     gardGate.arm.rotation.z = gardGate.k * 1.45;
     const i = SOLIDS.indexOf(gardGate.solid);
@@ -2632,7 +2648,7 @@ function update(dt, t) {
     gardGate.live.userData.update(dt, t, state === 'walk' ? walker : null);   // portãozinho (abre para quem está a pé) e patinhos
   }
   if (neighborhood === 'modern8' && mdGate.arm) {   // Modernista: a cancela sobe quando a van (ou o personagem) chega perto e desce depois
-    const G = FORESTV.GATE, px = state === 'walk' ? walker.x : van.x, pz = state === 'walk' ? walker.z : van.z, near = Math.hypot(px - G.x, pz - G.z) < 20;
+    const G = FORESTV.GATE, near = Math.hypot(van.x - G.x, van.z - G.z) < 20 || (state === 'walk' && Math.hypot(walker.x - G.x, walker.z - G.z) < 20);   // (a van estacionada embaixo também segura a cancela)
     mdGate.k += ((near ? 1 : 0) - mdGate.k) * Math.min(1, dt * 3);
     mdGate.arm.rotation.z = mdGate.k * 1.45;
     const i = SOLIDS.indexOf(mdGate.solid);
@@ -2690,7 +2706,7 @@ function update(dt, t) {
     updateBanks(dt);
   }
   updateTrolleySeq(dt);   // Bairro 11: o bonde espera se a van estiver nos trilhos
-  if (neighborhood === 'venice8') { npcBoats.update(dt); updateBoat(dt); }
+  if (neighborhood === 'venice8') { npcBoats.update(dt, van); updateBoat(dt); }
   updateChurch(dt);
   world.updateGas(van.x, van.z, dt);
   fuelMsgT = Math.max(0, fuelMsgT - dt);

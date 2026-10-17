@@ -8,6 +8,7 @@
 import * as THREE from 'three';
 import { GRID, LOT, WALK, slotOrigin, GAS_LIST, WARE_LIST, FLUX } from './layout.js';
 import { HOUSES } from './data.js';
+import { disposeTree } from './models/kit.js';
 
 const ADS = [
   { t: 'ADRESS', s: 'Entregas que chegam (quase sempre)', bg: ['#ff7a1a', '#c84a00'], fg: '#fff3d6', sym: 'box' },
@@ -163,7 +164,7 @@ export function createNight() {
     /** Monta postes, vitrines, letreiros e painéis para a composição da partida (game.layout). */
     layout(w, game, MAPW) {
       world = w; M = MAPW;
-      if (root && root.parent) root.parent.remove(root);
+      if (root) { if (root.parent) root.parent.remove(root); disposeTree(root); }   // (a composição anterior sai da memória)
       root = new THREE.Group(); root.name = 'night'; w.scene.add(root);
       for (const k in winMats) delete winMats[k];
       regions.forEach(r => { r.mats.length = 0; r.k = 1; }); panels.length = 0; lights.length = 0;

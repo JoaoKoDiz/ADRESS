@@ -22,6 +22,15 @@ function cachedGeo(key, make) {
   return g;
 }
 
+/** Libera geometrias e materiais próprios de um grupo que saiu de cena (os do cache do kit e as texturas ficam). */
+export function disposeTree(root) {
+  const geos = new Set(geoCache.values()), mats = new Set(matCache.values());
+  root.traverse(o => {
+    if (o.geometry && !o.isSprite && !geos.has(o.geometry)) o.geometry.dispose();
+    for (const m of Array.isArray(o.material) ? o.material : o.material ? [o.material] : []) if (!mats.has(m)) m.dispose();
+  });
+}
+
 /** Cria um Mesh com sombra. `material` pode ser uma cor (string) ou um THREE.Material. */
 export function mesh(geometry, material, opts) {
   const m = new THREE.Mesh(geometry, typeof material === 'string' ? mat(material, opts) : material);

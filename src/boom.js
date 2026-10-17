@@ -48,7 +48,7 @@ export function createBoom(scene, getWorld, audio) {
     for (let i = 0; i < 70; i++) {                                                         // pilha de entulho
       const a = Math.random() * Math.PI * 2, R = small || 5.5, r = Math.sqrt(Math.random()) * R;
       const col = i % 3 === 0 ? roof : i % 3 === 1 ? WALL_COL : '#8a5a36';
-      const s = rnd(0.5, 1.4);
+      const s = Math.round(rnd(0.5, 1.4) * 10) / 10;           // (tamanhos em passos de 0,1: o cache de geometrias do kit não cresce a cada explosão)
       g.add(at(box(s, s * 0.5, s * 0.8, col), HX + Math.cos(a) * r, 0.3 + (5.5 - r) * 0.25 + Math.random() * 0.5, HZ + Math.sin(a) * r * 0.8,
         rnd(-0.6, 0.6), rnd(0, 3), rnd(-0.6, 0.6)));
     }
@@ -71,7 +71,7 @@ export function createBoom(scene, getWorld, audio) {
     const roof = ROOF_COL[HOUSES[h].roof];
     for (let i = 0; i < count; i++) {
       const col = i % 4 === 0 ? WALL_COL : i % 4 === 1 ? '#8a5a36' : roof;
-      const s = rnd(0.4, 1.2);
+      const s = Math.round(rnd(0.4, 1.2) * 10) / 10;
       const m = box(s, s * 0.4, s * 0.7, col);
       m.position.set(cx + rnd(-2, 2), cy, cz + rnd(-2, 2));
       fx.add(m);
