@@ -13,6 +13,7 @@
 - **Não mude o que não foi pedido.** Exemplo: "Não mude a estrutura do bairro 3, também." Mantenha tudo como está, exceto o que foi pedido.
 - **Ambiguidades.** Se uma ambiguidade muda o resultado, pergunte uma vez, curto, com opções. Para o resto, escolha o óbvio e avise.
   - Exemplo de ambiguidade real: missões que exigiam posto e prédio comercial num bairro que não tinha nenhum dos dois.
+- **Qualidade acima de tamanho (regra do dono):** o dono abre o jogo SEMPRE pelo GitHub Pages (<https://joaokodiz.github.io/ADRESS/>), não pelo artifact do Claude. **Nunca** diminua a qualidade de nada (músicas, texturas, modelos, efeitos) só para reduzir tamanho ou liberar espaço. O limite de 16 MB do artifact não vale mais: arquivos grandes (músicas) podem ficar fora do html, em `assets/` (GitHub Pages: até 100 MB por arquivo, 1 GB no site).
 - **Depois de cada mudança:**
   1. `npm run build` (gera o `index.html` jogável; o dono abre e aperta F5).
   2. `npm run build:netlify`.
