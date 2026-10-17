@@ -87,7 +87,7 @@ export function createForestFx() {
       for (const T of V.trees.concat(outTrees)) {
         let r = (T.type === 'wide' ? 3.0 : 2.4) * T.s;
         if (!T.out) { r = Math.min(r, V.roadDist(T.x, T.z) - 4.3, solidR(T.x, T.y, T.z, r + 0.6) - 0.6); if (r < 0.8 || inLot(T.x, T.z, r)) continue; }
-        carp.push([T.x + (rnd() - 0.5), T.y + 0.1 + rnd() * 0.01, T.z + (rnd() - 0.5), r, ['#c9762a', '#b8692a', '#a8743e', '#d08a34', '#9a6a3a'][Math.floor(rnd() * 5)]]);
+        carp.push([T.x + (rnd() - 0.5), T.y + 0.1 + (carp.length % 6) * 0.012 + rnd() * 0.002, T.z + (rnd() - 0.5), r, ['#c9762a', '#b8692a', '#a8743e', '#d08a34', '#9a6a3a'][Math.floor(rnd() * 5)]]);
       }
       const cm = new THREE.InstancedMesh(disc, new THREE.MeshLambertMaterial(), carp.length);
       carp.forEach(([x, y, z, r, c], i) => { cm.setMatrixAt(i, m4.compose(v.set(x, y, z), q.setFromEuler(e.set(0, rnd() * 6, 0)), sv.set(r, 1, r * (0.75 + rnd() * 0.3)))); cm.setColorAt(i, col.set(c)); });

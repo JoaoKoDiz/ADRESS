@@ -80,7 +80,7 @@ export function buildSnowScene(g, V, MAP, HEDGE) {
   };
   // patamares: blocos com recorte nas ladeiras (o trecho da ladeira dentro do patamar fica vazio)
   for (const [P, y0, y1] of [[V.MID, 0, MIDH], [V.HIGH, MIDH, HIGHH]]) {
-    const cuts = V.ramps.filter(r => r.h1 === y1).map(r => ({ x0: r.x0 - 0.6, x1: r.x1 + 0.6, z0: r.z0 - 0.6, z1: r.z1 + 0.6 }));
+    const cuts = V.ramps.filter(r => r.h1 === y1).map(r => { const mx = r.axis === 'z' ? 0.6 : 0, mz = r.axis === 'z' ? 0 : 0.6; return { x0: r.x0 - mx, x1: r.x1 + mx, z0: r.z0 - mz, z1: r.z1 + mz }; });
     // fatia o retângulo do patamar em faixas em Z nos limites dos recortes e corta em X
     const zs = [P.z0, X1, ...cuts.flatMap(c => [Math.max(P.z0, c.z0), Math.min(X1, c.z1)])].filter(z => z >= P.z0 && z <= X1).sort((a, b) => a - b);
     for (let k = 0; k < zs.length - 1; k++) {
@@ -99,7 +99,7 @@ export function buildSnowScene(g, V, MAP, HEDGE) {
   for (const s of V.segs) {
     if (s.type === 'ramp') continue;
     const [ax, az] = s.a, [bx, bz] = s.b, len = Math.hypot(bx - ax, bz - az), ry = Math.atan2(bx - ax, bz - az), y = V.h((ax + bx) / 2, (az + bz) / 2);
-    add(box(RW, 0.06, len, s.type === 'cut' ? '#c9d3dc' : ASPH), (ax + bx) / 2, y + 0.035, (az + bz) / 2, 0, ry, 0);
+    add(box(RW, 0.06, len, s.type === 'cut' ? '#c9d3dc' : ASPH), (ax + bx) / 2, y + (s.type === 'cut' ? 0.015 : 0.035), (az + bz) / 2, 0, ry, 0);   // atalho 2 cm abaixo: os discos dos nós cobrem as pontas sem tremular
     const nx = Math.cos(ry), nz = -Math.sin(ry);
   }
   for (const q of V.mounds) { const m = sphere(1.0, SNOW2, 7, 4); m.scale.set(0.8, 0.45, 1.3); add(m, q.x, q.y + 0.05, q.z, 0, q.ry, 0); }   // montes na margem (snowPlan: fora das pistas e acessos)

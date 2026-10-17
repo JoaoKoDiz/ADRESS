@@ -44,7 +44,7 @@ export function buildForestScene(g, V, MAP, HEDGE) {
     add(box(x1 - x0, 0.06, z1 - z0, GRASS), (x0 + x1) / 2, MIDH - 0.03, (z0 + z1) / 2);
   };
   // patamar com recorte nas ladeiras
-  const cuts = V.ramps.map(r => ({ x0: r.x0 - 0.6, x1: r.x1 + 0.6, z0: r.z0 - 0.6, z1: r.z1 + 0.6 }));
+  const cuts = V.ramps.map(r => { const mx = r.axis === 'z' ? 0.6 : 0, mz = r.axis === 'z' ? 0 : 0.6; return { x0: r.x0 - mx, x1: r.x1 + mx, z0: r.z0 - mz, z1: r.z1 + mz }; });
   const zs = [P.z0, X1, ...cuts.flatMap(c => [Math.max(P.z0, c.z0), Math.min(X1, c.z1)])].filter(z => z >= P.z0 && z <= X1).sort((a, b) => a - b);
   for (let k = 0; k < zs.length - 1; k++) {
     const z0 = zs[k], z1 = zs[k + 1]; if (z1 - z0 < 0.05) continue;
