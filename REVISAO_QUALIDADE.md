@@ -155,6 +155,16 @@ Verificado sem problema pela revisão: fluxos completos de interface (Livre, Car
 - Câmera na Rialto: tentei caixas para as lojinhas, mas como a ponte é diagonal e a câmera só usa caixas alinhadas aos eixos, elas cobriam o corredor do meio e a câmera encolhia à toa. Desfeito; segue como limitação.
 - Porta da oficina do Medieval: continua sem colisão de propósito — abre/fecha nas cenas da história secundária (fora do escopo), e uma colisão nela pode prender o personagem ou o K nessas cenas.
 
+### Efeitos sonoros (auditoria do ciclo de vida, sem mexer em música) — `bb5190b`
+- [E] Com o MENU aberto (jogo pausado) os efeitos continuavam: motor em marcha lenta, trânsito, cachoeira, vida do Medieval, chuva, rotor do helicóptero, cidade. Agora o barramento de efeitos cala enquanto o MENU está aberto e volta ao fechar; a música dos engarrafamentos também some com o MENU (como já sumia com a lista de missões). A música não muda.
+- [E] Com a aba escondida o laço do jogo para e os laços de som ficavam tocando no último volume (cachoeira, trânsito, Medieval, chuva). Agora os efeitos calam com a aba escondida e voltam ao reabrir. (A música dos engarrafamentos sai pelo canal de música e segue as outras músicas.)
+- [E] `traffic(0)` não zerava ganhos pequenos: um resíduo do trânsito/tratores ficava tocando para sempre em todos os bairros e menus. Agora zero sempre zera.
+- [C] Helicóptero pousado num terraço (motor desligado com H) mantinha o ronco do motor. Corrigido.
+- [C] Safari/iOS: depois de uma ligação ou do app ir para o fundo, o áudio ficava no estado "interrupted" e o jogo podia ficar mudo até recarregar; agora é retomado na próxima interação.
+- [C] Medieval: um som pontual atrasado (balde) podia remontar todos os laços do burgo depois de sair do bairro. Agora só o laço do bairro remonta.
+- [C] Compressor do efeito Ursa Menor desconectado junto (só acontecia num caso forçado).
+- Verificado sem problema [E]: nenhum acúmulo de nós de áudio depois de 10 trocas de bairro; Voltar silencia tudo; descer da van zera o motor; pousar no chão para o rotor; efeitos cancelados cortam o próprio som; nada fica mudo para sempre depois de pausar.
+
 ## Em andamento / próximos passos (identificados, pendentes)
 Prioridade aproximada:
 1. Helicóptero: o maciço da Cachoeira ainda é atravessado acima de 6,5 (castelo/torres/casas do Medieval, igrejas, galpões e contemporâneos já colidem).
@@ -189,4 +199,5 @@ Observado e mantido (não é defeito): na Nevasca (ponto 6) e no Medieval (ponto
 - `ae07633`, `9ee58b4` — cercas e objetos de quintal/térreo a pé.
 - `7b69307` — Livre: monstro, casa destruída, entulho, helicóptero na Cachoeira.
 - `f18eded` — efeitos da entrega errada liberam memória.
+- `bb5190b` — efeitos sonoros: MENU, aba escondida, trânsito, helicóptero pousado, iOS, Medieval.
 - bancos/postes, Encostas/Grillby's, paredões, área segura/Sair, postes compartilhados, câmera na partida nova (ver `git log`).
