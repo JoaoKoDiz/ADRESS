@@ -1423,7 +1423,7 @@ function requestHint() {
   if (gameMode === 'career') career.hint();
   hintStep = game.step;
   const h = game.route[game.step];
-  hint.drop(h, game.slotOf[h]);                // a câmera não muda; o jogador segue dirigindo
+  { const lg = world.lotGroup && world.lotGroup(h); hint.drop(h, game.slotOf[h], lg && !MOONV ? new THREE.Box3().setFromObject(lg).max.y : null); }                // a câmera não muda; o jogador segue dirigindo
   if (MOONV) { const o = slotOrigin(game.slotOf[h]); hint.attach(moonPin(o.x + 8.6, o.z + 5)); }   // Órbita: a seta cai no módulo, presa à lua
 }
 
