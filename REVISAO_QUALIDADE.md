@@ -149,6 +149,8 @@ Verificado sem problema pela revisão: fluxos completos de interface (Livre, Car
 - [E] Dados salvos: com o localStorage bloqueado (exceção em todo acesso), com JSON quebrado em todas as chaves e com valores absurdos (cores inválidas, modelos fora da lista, volumes em texto), o jogo abre, entrega no Livre e entra na Carreira sem erro; os valores inválidos voltam ao padrão. Nada a corrigir.
 - [E] Teste de fumaça nos 24 bairros (Livre: dirigir, dica, entrega errada/certa, a pé, câmera, helicóptero, MENU, míssil) + Carreira (Bairros 1 e 4 até o mapa) com o build atual: 0 erros de JavaScript. As 2 falhas de entrega do teste (Colheita casa 278, Jardins casa 336) são as mesmas da rodada anterior e vêm do posicionamento do teste (porteira fechada / casa só a pé), não do jogo.
 - [E] Teclas aleatórias (900 quadros por bairro, teclas seguradas/soltas e apertadas fora de hora — E, L, H, F, C, T, M, Esc, Shift, Espaço — e van levada à porta no meio): 24 bairros no Livre + Bairros 1–7 na Carreira. 0 erros de JavaScript, nenhuma posição/câmera inválida (NaN), todos os estados (míssil, fades, diálogo, a pé) voltam ao jogo.
+- [E] Câmera com o helicóptero voando baixo entre os prédios (Bairros 6, 8 e 9; 18 poses, subindo/virando): nenhum objeto entre a câmera e a van.
+- [C] Toque no balão "E — …" durante o arraste da câmera no celular: o toque no balão é capturado antes e vira um E (já tratado). Pinça para zoom no celular não existe — seria um controle novo, fora do escopo.
 - Câmera na Rialto: tentei caixas para as lojinhas, mas como a ponte é diagonal e a câmera só usa caixas alinhadas aos eixos, elas cobriam o corredor do meio e a câmera encolhia à toa. Desfeito; segue como limitação.
 - Porta da oficina do Medieval: continua sem colisão de propósito — abre/fecha nas cenas da história secundária (fora do escopo), e uma colisão nela pode prender o personagem ou o K nessas cenas.
 
@@ -156,7 +158,6 @@ Verificado sem problema pela revisão: fluxos completos de interface (Livre, Car
 Prioridade aproximada:
 1. Helicóptero: o maciço da Cachoeira ainda é atravessado acima de 6,5 (castelo/torres/casas do Medieval, igrejas, galpões e contemporâneos já colidem).
 2. Encaixe: poça de luz da Penumbra e degraus da Cachoeira (a conferir).
-3. Interface: toque no balão E durante arraste da câmera, pinça/zoom no celular.
 4. Menores: porta da oficina do Medieval sem sólido; veículos de laço (tratores, carros do Bosque, limpa-neve, carroças) se atravessam depois de 6 s esperando — é a saída anti-travamento atual; trocar exige outra lógica de prioridade.
 5. Ciclo de vida: mundos de todos os bairros visitados ficam guardados (a memória cresce visitando muitos bairros na mesma sessão). Descartar mundos mexe em vários sistemas presos a cada bairro (cancelas, efeitos, vida medieval); não alterado — risco registrado.
 
