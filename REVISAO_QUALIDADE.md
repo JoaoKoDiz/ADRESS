@@ -1,6 +1,6 @@
 # Revisão de qualidade do ADRESS (17/10/2026)
 
-**Última atualização:** 16/10 23:40 (horário de Brasília)
+**Última atualização:** 16/10 23:55 (horário de Brasília)
 
 ## Ponto de partida
 - Estado salvo antes da revisão: commit `7b8aba7` (tag local `pre-revisao-qualidade`; o envio da tag ao GitHub foi recusado, a branch tem o commit).
@@ -66,13 +66,29 @@ Legenda: **[E]** verificado em execução (jogo rodando no Chromium) · **[C]** 
 ### Encaixe (`9c6d01d`)
 - [C] Colheita: trilhas das rodas 2 cm acima da estrada de terra. Jardins: água do meio do lago 3 cm acima da de fora; piso do parquinho acima da grama.
 
+### Cercas e características das casas (`ae07633`, `9ee58b4`)
+- [E] Casas (lote padrão): a pé, as cercas do fundo, laterais e frente agora barram (entra-se pelo portão); árvores, fonte, piscina, cama elástica, casinha do cachorro, pneus, cacto, arbustos, flamingo, anão, bicicleta e a cadeira do K têm colisão pelo miolo. Teste: em 5 bairros (1, 2, 4, 5 e 14 com várias composições) todos os quintais continuam alcançáveis a pé pelo portão, e a caixa do K no Bairro 1 também. `main.js` (`lotFootExtras`).
+- [E] Prédios residenciais: muro baixo da frente (portão livre), caçamba, moto, guarita e bicicletário com colisão a pé; quintais alcançáveis nos Bairros 6, 7, 9 e 14. `main.js` (`aptFootExtras`).
+- [C] Bancos públicos (Nevasca, Bosque, Medieval, Jardins…): a pé o banco tem o tamanho real (girado); antes atravessava-se. `layout.js`.
+- [C] Penumbra: postes com colisão a pé; os 168 postes passaram a compartilhar geometria e material. `night.js`.
+
+### Encaixe e outros
+- [E] Encostas: a calçada dos lotes da beira dos patamares ficava no ar (0,4 sobre a rua de baixo); o paredão avança só embaixo dos lotes, sem invadir ladeiras/escadarias. Foto conferida. `terrain.js`.
+- [C] Caminho do Grillby's desce até a rua (ficava 6 cm no ar fora do lote). `models/grillby.js`.
+- [C] Paredões (Encostas, Nevasca, Bosque, Morro): faixa de 2 cm de sobreposição entre a parede e o topo, que tremia na face, removida.
+- [C] Marcas de queimado (Ursa Menor/Sistema Solar) em alturas separadas.
+- [E] Partida nova volta a câmera para trás da van no padrão (antes podia continuar na visão geral). `main.js`.
+- [C] Celular com entalhe: Voltar, MENU, ♪, DICA e MISSÕES respeitam a área segura (no computador as posições ficaram idênticas — medido). `template.html`.
+- [C] Tela do "Sair" ganhou "Voltar ao jogo" (antes ficava sem saída). `title.js`.
+- [E] Reteste completo de alcance das portas: 24 bairros × 2 sorteios, sem regressão.
+
 ## Em andamento / próximos passos (identificados, pendentes)
 Prioridade aproximada:
 1. Helicóptero acima de 6,5 atravessa prédios altos que não são residenciais/futuristas (contemporâneos, galpões, igreja, torres). É o comportamento previsto ("passa por cima de tudo"), mas visualmente atravessa; corrigir muda a mecânica — fica para decisão.
-2. Encaixe: calçadas na beira dos patamares das Encostas, caminho do Grillby's 6 cm acima da rua, poça de luz da Penumbra, chão queimado, degraus da Cachoeira, faixa de 2 cm dos paredões.
-3. Interface: toque no balão E durante arraste da câmera, pinça/zoom no celular, áreas seguras (entalhe), Esc no cadeado, "Sair" sem saída no navegador.
-4. Menores: cercas/objetos de quintal a pé, bancos `vanOnly`, postes da Penumbra, guarita/moto, porta da oficina, veículos de laço que se atravessam depois de 6 s esperando.
-5. Ciclo de vida: galinhas/tratores sem liberar ao trocar de bairro; mundos guardados em cache (memória cresce visitando muitos bairros).
+2. Encaixe: poça de luz da Penumbra e degraus da Cachoeira (a conferir).
+3. Interface: toque no balão E durante arraste da câmera, pinça/zoom no celular.
+4. Menores: porta da oficina do Medieval sem sólido; veículos de laço (tratores, carros do Bosque, limpa-neve, carroças) se atravessam depois de 6 s esperando — é a saída anti-travamento atual; trocar exige outra lógica de prioridade.
+5. Ciclo de vida: mundos de todos os bairros visitados ficam guardados (a memória cresce visitando muitos bairros na mesma sessão). Descartar mundos mexe em vários sistemas presos a cada bairro (cancelas, efeitos, vida medieval); não alterado — risco registrado.
 
 Observado e mantido (não é defeito): na Nevasca (ponto 6) e no Medieval (ponto 10) o ponto de entrega fica a menos de 0,55 da quina de um obstáculo; a van entrega normalmente.
 
@@ -98,3 +114,5 @@ Observado e mantido (não é defeito): na Nevasca (ponto 6) e no Medieval (ponto
 - `2a05d03` — praça do Bairro 2.
 - `9c6d01d` — Colheita/Jardins (encaixe).
 - `b484e59` — menus no celular.
+- `ae07633`, `9ee58b4` — cercas e objetos de quintal/térreo a pé.
+- bancos/postes, Encostas/Grillby's, paredões, área segura/Sair, postes compartilhados, câmera na partida nova (ver `git log`).
