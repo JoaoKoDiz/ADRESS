@@ -21,12 +21,13 @@ export const CHURCH_SOLIDS = (() => {
   const out = [], b = (x0, x1, z0, z1) => out.push({ x0, x1, z0, z1 }), m = (x0, x1, z0, z1) => { b(x0, x1, z0, z1); b(-x1, -x0, z0, z1); };
   m(4.5, 23.6, -3.2, 2.6);                                // fachada (a porta do meio fica livre: 9 de largura)
   m(NI, 23.6, -13, -3.2);                                  // base das torres
-  m(NI, 16.8, -44, -13);                                   // paredes laterais com contrafortes
-  b(-13, 13, -57, -44);                                    // parede do fundo + ábside
+  m(NI, 13.1, -44, -13);                                   // paredes laterais
+  for (let k = 0; k <= 5; k++) m(13, 16.7, -13 - k * 6.2 - 0.85, -13 - k * 6.2 + 0.85);   // contrafortes (entre eles, a parede)
+  b(-13, 13, -48, -44); b(-12.4, 12.4, -51, -48); b(-11, 11, -54, -51); b(-8.3, 8.3, -56, -54); b(-5, 5, -57.1, -56);   // fundo + ábside (meio círculo de raio 13, em degraus)
   for (const z of [-13, -19.2, -25.4, -31.6, -37.8]) m(5.9, 8.1, z - 1.1, z + 1.1);   // pilares
   m(1.35, 4.25, -36.0, -15.6);                             // bancos (o corredor e as passagens laterais ficam livres)
   m(4.25, 4.55, -7.5, -3.0);                               // folhas da porta abertas
-  b(-2.1, 2.1, -42.6, -41.0);                              // altar
+  b(-6.2, 6.2, -44, -38.6);                                // altar (plataforma com os degraus, a mesa e a cruz)
   return out;
 })();
 /** Caixas que seguram o braço da câmera (para não atravessar as paredes): [x0, x1, z0, z1, topo]. */
