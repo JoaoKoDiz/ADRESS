@@ -5,12 +5,14 @@ export function createInput(onFirstKey) {
   let unlocked = false;
   addEventListener('keydown', e => {
     if (!unlocked) { unlocked = true; onFirstKey && onFirstKey(); }
+    if (e.ctrlKey || e.metaKey || e.altKey) return;   // atalhos do navegador (Ctrl+F, Ctrl+C…) não disparam míssil/câmera
     if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Space'].includes(e.code)) e.preventDefault();
     if (!keys.has(e.code)) pressed.add(e.code);
     keys.add(e.code);
   });
   addEventListener('keyup', e => keys.delete(e.code));
   addEventListener('blur', () => { keys.clear(); vkeys.clear(); vaxis.x = vaxis.z = 0; });
+  addEventListener('contextmenu', () => keys.clear());   // o menu do navegador engole o keyup: nada fica preso
   addEventListener('pointerdown', () => onFirstKey && onFirstKey());
 
   const any = (...codes) => codes.some(c => keys.has(c) || vkeys.has(c));

@@ -513,6 +513,8 @@ const hintBtn = createHintButton(stage, () => requestHint());
 const boom = createBoom(world.scene, () => world, audio);
 boom.attachHatch(van.object);
 const menu = createMenu(stage);
+const MENU_STATES_OK = ['drive', 'ring', 'dialog', 'fuel', 'walk', 'missile', 'chat', 'inside'];   // o MENU só abre durante a partida (Esc nos menus não deixa um painel escondido aberto)
+menu.setGate(() => MENU_STATES_OK.includes(state));
 const heli = createHeli(van, audio);        // tecla H: vira helicóptero
 // Helicóptero: o topo de cada prédio residencial (Bairro 6) é um chão onde dá para pousar
 heli.setGround((x, z) => {
@@ -960,7 +962,7 @@ function syncNoVan() {
 }
 const title = createTitle({
   onFree: () => { if (state === 'title' && !title.starting) openLevelSelect(); },   // Livre: primeiro escolhe o bairro
-  onCareer: () => noVan() ? title.fadeOut(enterMap) : titleDriver.drive(() => title.fadeOut(enterMap)),     // dá a partida e vai para o mapa da Carreira (sem a van no menu: só o fade)
+  onCareer: () => { if (state !== 'title' || title.starting) return; noVan() || !titleDriver ? title.fadeOut(enterMap) : titleDriver.drive(() => title.fadeOut(enterMap)); },   // (não durante a decolagem do Livre: os dois caminhos rodavam juntos)     // dá a partida e vai para o mapa da Carreira (sem a van no menu: só o fade)
   onShop: () => { if (state === 'title') openShop(); },       // Shop: layout inicial (cores grátis; itens em breve)
   onPlay: el => { syncNoVan(); if (noVan()) { if (titleDriver) titleDriver.stop(); } else { titleDriver = titleDriver || createTitleDriver(el, audio); titleDriver.start(); }
     if (flagOn(MASS_KEY) && !flagOn(NOTICE_KEY)) { try { localStorage.setItem(NOTICE_KEY, '1'); } catch (e) { /* */ } title.notify('A história continua. Quatro novos lugares estão disponíveis no Modo Livre.'); } },   // uma vez, depois do temporal
@@ -1095,7 +1097,7 @@ const shopFronts = () => game.pool.filter(h => HOUSES[h].kind === 'shop' && !boo
 const TIMER_PLAY = ['drive', 'ring', 'dialog', 'fuel', 'walk', 'missile', 'chat', 'inside'];                 // partida na tela: aparece
 const TIMER_OFF = ['title', 'levelSelect', 'levelFly', 'shop', 'mapIn', 'map', 'mapOut', 'fadeIn', 'fadeOut', 'extra', 'battle'];   // menus e fades: não conta
 const missionsBtn = createMissionsButton(stage, () => {
-  if (gameMode === 'career' && IN_GAME.includes(state) && !missions.isOpen) missions.open(careerLevel);
+  if (gameMode === 'career' && (state === 'drive' || state === 'walk') && !missions.isOpen && !menu.isOpen) missions.open(careerLevel);   // (não por cima do diálogo/entrega)
 });
 let careerLevel = 0;                     // fase da Carreira sendo jogada
 let freeLevel = 0;                       // bairro escolhido no modo Livre
@@ -1154,7 +1156,7 @@ function goBack() {
 
 function startFree(mode = 'free') {
   // Bairro 2: 6×6 com praça; Bairro 4: 5×5 com bloqueios; o resto: 4×4
-  endToMap = false; matchTimer.reset(); resetBumps();
+  endToMap = false; matchTimer.reset(); resetBumps(); menu.close();   // (um MENU deixado aberto não volta aberto na partida nova)
   const lv = mode === 'career' ? careerLevel : freeLevel;
   useNeighborhood(lv === 1 ? 'plaza6' : lv === 3 ? 'grid5' : lv === 4 ? 'grid6s' : lv === 5 ? 'city6' : lv === 6 ? 'city7' : lv === 7 ? 'city8' : lv === 8 ? 'hill8' : lv === 9 ? 'venice8' : lv === 10 ? 'canal8' : lv === 11 ? 'rail8' : lv === 12 ? 'favela8' : lv === 13 ? 'flux10' : lv === 14 ? 'farm10' : lv === 15 ? 'snow8' : lv === 16 ? 'garden8' : lv === 18 ? 'night10' : lv === 19 ? 'moon8' : lv === 17 ? 'modern8' : lv === 20 ? 'work8' : lv === 21 ? 'forest8' : lv === 22 ? 'canyon10' : lv === 23 ? 'med10' : 'grid4');   // 17–19 reservados; 20 = Lua   // 10 = Veneza, 11 = Travessia, 12 = Trilhos
   gameMode = mode;
@@ -2364,7 +2366,9 @@ function update(dt, t) {
   if (!TIMER_OFF.includes(state) && !menu.isOpen && !missions.isOpen) matchTimer.tick(dt);   // (pausado com o MENU ou as missões abertas)
   if (state !== 'title' && state !== 'levelSelect' && state !== 'levelFly' && state !== 'shop' && !(state === 'fadeOut' && endToMap) && input.toggleCamera()) rig.toggle();
 
-  switch (state) {
+  const menuPause = menu.isOpen && MENU_STATES_OK.includes(state);   // MENU aberto: a partida espera de verdade (antes a van seguia andando e entregando com o cronômetro parado)
+  if (menuPause) { van.stop(); nearHouse = -1; }
+  else switch (state) {
     case 'drive': {
       if (missions.isOpen) {                        // lista de missões aberta: a van espera; M fecha
         van.stop(); nearHouse = -1;

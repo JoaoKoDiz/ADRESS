@@ -116,10 +116,10 @@ export function createSettings({ onChange, onClose } = {}) {
   // com o painel aberto, nenhuma tecla chega ao jogo; Esc volta (subtela → principal → fecha)
   window.addEventListener('keydown', e => {
     if (!open) return;
-    e.stopImmediatePropagation(); e.preventDefault();
+    e.stopImmediatePropagation();
+    if (!/^F\d+$/.test(e.key) && !e.ctrlKey && !e.metaKey) e.preventDefault();   // F5/F11 e atalhos do navegador continuam funcionando
     if (e.key === 'Escape' && !e.repeat) { const cur = el.querySelector('.st-sub.on').dataset.v; cur === 'main' ? close() : view('main'); }
   }, true);
-  window.addEventListener('keyup', e => { if (open) { e.stopImmediatePropagation(); } }, true);
 
   apply(); paint();
   return {

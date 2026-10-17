@@ -5,7 +5,7 @@
 // Missões por fase (nível). id liga a missão à regra em career.js; goal = quanto precisa para concluir.
 // Fases sem missões definidas usam o modelo (sem id: não avançam ainda).
 const PLACEHOLDER = () => Array.from({ length: 5 }, () => ({ id: null, name: 'MISSÃO', desc: 'Descrição breve da missão.', goal: 5 }));
-export const LEVEL_NAMES = ['Raízes', 'Horizontes', 'Constância', 'Veredas', 'Ofício', 'Mirante', 'Altitude', '', 'Veneza', '', '', '', '', '', '', '', '', '', '', '', '', '', '', ''];
+export const LEVEL_NAMES = ['Raízes', 'Horizontes', 'Constância', 'Veredas', 'Ofício', 'Mirante', 'Altitude', 'Ápice', 'Encostas', 'Veneza', 'Travessia', 'Trilhos', 'Morro', 'Fluxo', 'Colheita', 'Nevasca', 'Jardins', 'Modernista', 'Penumbra', 'Lua', 'Operário', 'Bosque', 'Cachoeira', 'Medieval'];   // (mesmos nomes da seleção do Livre; antes 'Veneza' estava no 8, Encostas)
 /** Bairro 18: espaço reservado para níveis futuros (não dá para jogar; não travam o desbloqueio do 20). */
 export const RESERVED = [];   // (18 = Modernista, 21 = Operário, 22 = Bosque, 23 = Cachoeira; nenhum reservado agora)   // (o 17 é Jardins, o 19 é o Penumbra)
 export const MISSIONS = [
