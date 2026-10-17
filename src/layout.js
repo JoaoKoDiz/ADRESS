@@ -277,8 +277,12 @@ function setupVenice(kind) {
     return LAND;
   };
   // onde dá para andar: ilhas das casas, praças, pontes (o resto é água)
+  // na Rialto, as lojinhas (|b| 2..4,2 ao longo de |a| 8,8..28,2) e os pilares do pórtico (|a| < 1,5) fecham as laterais: só o corredor do meio
+  const rialtoOpen = (x, z) => { const dx = x - rialto.cx, dz = z - rialto.cz, a = Math.abs(dx * rialto.ux + dz * rialto.uz), b = Math.abs(-dx * rialto.uz + dz * rialto.ux);
+    return a > 8.6 && a < 28.4 ? b < 1.4 : a < 1.7 ? b < 3.0 : true; };
   const walkable = (x, z) => {
-    if (onRialto(x, z) >= 0 || piers.some(p => inR(p, x, z))) return true;
+    if (onRialto(x, z) >= 0) return rialtoOpen(x, z);
+    if (piers.some(p => inR(p, x, z))) return true;
     for (const b of bridges) if (Math.abs(z - b.z) < b.w / 2 && x > b.x0 && x < b.x1) return true;
     if (plazaNE.concat(plazaSW).some(r => inR(r, x, z, 0.3))) return !cafes.some(cf => { const dx = x - cf.cx, dz = z - cf.cz, ca = Math.cos(cf.ang), sa = Math.sin(cf.ang);
       return Math.abs(dx * ca - dz * sa) < cf.w / 2 + 0.3 && Math.abs(dx * sa + dz * ca) < cf.d / 2 + 0.3; });

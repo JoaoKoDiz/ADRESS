@@ -2973,7 +2973,7 @@ renderer.setAnimationLoop(now => {
 // ---------- Ganchos para testes automatizados ----------
 window.ADRESS = {
   THREE, renderer, game, van, rig, hud, input, audio, hint, boom, menu, music, heli, monster,
-  get world() { return world; }, get FORESTV() { return FORESTV; }, get TERRAIN() { return TERRAIN; },
+  get world() { return world; }, get FORESTV() { return FORESTV; }, get VENICE() { return VENICE; }, get TERRAIN() { return TERRAIN; },
   get neighborhood() { return neighborhood; },
   barriers, SOLIDS, doorPoint, slotOrigin, GAS_CANOPY, GAS_ISLANDS,
   get gas() { return GAS_LIST; },
@@ -3002,7 +3002,7 @@ window.ADRESS = {
   get careerLevel() { return careerLevel; },
   setCareerLevel(l) { careerLevel = l; },
   setFreeLevel(l) { freeLevel = l; },
-  walker, jamSound, cityAmb, train, walkSolids, trolley, get tseq() { return tseq; }, get FAVELA() { return FAVELA; }, traffic, tractors, chickens, plow, workTraffic, banks, get SNOWV() { return SNOWV; }, get MEDV() { return MEDV; }, medLife, get chatNpc() { return chatNpc; }, night, get grillIn() { return grillIn; }, get insideOn() { return insideOn; }, grillStory, wsStory, grillMusic, rainMusic, thirdMusic, churchCine, nowPlaying, get chseq() { return chseq; }, churchDbg: () => ({ t: churchMusic.time, two: churchMusic === churchMusic2, vis: !!church && church.visible, a: churchA, shown: churchShown, phase: approach.phase }), get medChurch() { return medChurch; }, grillDoor: o => grillDoorWorld(o), get churchPewK() { return church && church.userData.pewK.visible; }, churchStage, get FARMLAND() { return FARMLAND; }, get GARDV() { return GARDV; }, gardGate, gateOpen, openGate,
+  walker, jamSound, cityAmb, train, walkSolids, trolley, get tseq() { return tseq; }, get FAVELA() { return FAVELA; }, traffic, tractors, chickens, plow, workTraffic, banks, get SNOWV() { return SNOWV; }, get MEDV() { return MEDV; }, medLife, get chatNpc() { return chatNpc; }, night, get grillIn() { return grillIn; }, get insideOn() { return insideOn; }, grillStory, wsStory, grillMusic, rainMusic, thirdMusic, churchCine, nowPlaying, get chseq() { return chseq; }, churchDbg: () => ({ on: churchOn, ct: churchT, t: churchMusic.time, two: churchMusic === churchMusic2, vis: !!church && church.visible, a: churchA, shown: churchShown, phase: approach.phase }), get medChurch() { return medChurch; }, grillDoor: o => grillDoorWorld(o), get churchPewK() { return church && church.userData.pewK.visible; }, churchStage, get FARMLAND() { return FARMLAND; }, get GARDV() { return GARDV; }, gardGate, gateOpen, openGate,
   get levelSelect() { return levelSelect; }, matchTimer, get bumps() { return bumps; }, HOUSES, shopFronts,
   shop,
   startGame: m => startFree(m), newRound: () => startNewRound(),
