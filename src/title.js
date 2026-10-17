@@ -135,7 +135,8 @@ export function createTitle({ onFree, onCareer, onPlay, onShop, onBack, onSettin
   el.querySelector('[data-act="settings"]').addEventListener('click', () => { if (!starting && onSettings) onSettings(); });
   el.querySelector('[data-act="quit"]').addEventListener('click', () => {
     window.close();                                   // só funciona se a aba foi aberta por script
-    el.innerHTML = '<div class="title-bye">Até a próxima!<br>Você já pode fechar esta aba.</div>';
+    el.innerHTML = '<div class="title-bye">Até a próxima!<br>Você já pode fechar esta aba.<br><button type="button" class="title-btn title-back-in" style="margin-top:1.2em;font-size:.7em">Voltar ao jogo</button></div>';
+    el.querySelector('.title-back-in').addEventListener('click', () => location.reload());   // (o progresso fica salvo; sem isto a tela ficava sem saída)
   });
 
   document.body.classList.add('title-on');
