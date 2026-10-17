@@ -548,17 +548,23 @@ function walkSolids() {
   if (FLUX) out.push(...fluxParkFoot());
   if (VENICE) out.push(...veniceTables());                                    // Veneza: mesas com cadeiras e sombrinhas da praça roxa                                      // Fluxo/Penumbra: dentro das pracinhas e estacionamentos                    // Penumbra: postes (a van já para no lote)                                  // Bairro 2: coreto, árvores, bancos… da praça
    // postos, sebe, troncos, parede da entrada, bloqueios
-  for (const s of HOUSE_SLOTS) {
-    const h = game.layout[s];
-    if (h < 0 || boom.isDestroyed(h)) continue;
-    if (SPOTS) { out.push(SPOTS.spots[s].walkBox || SPOTS.spots[s].box); continue; }                   // Morro/Colheita: a construção (já girada)
-    const o = slotOrigin(s), f = FOOT[HOUSES[h].kind] || FOOT.house;
-    out.push({ x0: o.x + f[0], x1: o.x + f[1], z0: o.z + f[2], z1: o.z + f[3] });
-    if ((HOUSES[h].kind || 'house') === 'house') out.push(...lotFootExtras(h, o));
-    else if (HOUSES[h].kind === 'apt' && !SPOTS) out.push(...aptFootExtras(h, o));
+  const key = neighborhood + '|' + game.layout.join(',') + '|' + boom.destroyedCount;   // casas e quintais: só refaz quando a composição muda
+  if (key !== houseFootKey) {
+    houseFootKey = key; houseFoot = [];
+    for (const s of HOUSE_SLOTS) {
+      const h = game.layout[s];
+      if (h < 0 || boom.isDestroyed(h)) continue;
+      if (SPOTS) { houseFoot.push(SPOTS.spots[s].walkBox || SPOTS.spots[s].box); continue; }                   // Morro/Colheita: a construção (já girada)
+      const o = slotOrigin(s), f = FOOT[HOUSES[h].kind] || FOOT.house;
+      houseFoot.push({ x0: o.x + f[0], x1: o.x + f[1], z0: o.z + f[2], z1: o.z + f[3] });
+      if ((HOUSES[h].kind || 'house') === 'house') houseFoot.push(...lotFootExtras(h, o));
+      else if (HOUSES[h].kind === 'apt' && !SPOTS) houseFoot.push(...aptFootExtras(h, o));
+    }
   }
+  for (let i = 0; i < houseFoot.length; i++) out.push(houseFoot[i]);
   return out;
 }
+let houseFootKey = null, houseFoot = [];
 let wasHigh = false;
 /** A van (3 círculos R 1,25) está dentro de algum sólido? Se estiver, vai para o ponto livre mais perto (espiral até 30). */
 function unstickVan() {

@@ -303,6 +303,7 @@ export function createBoom(scene, getWorld, audio) {
     markDestroyed(h) { if (destroyed.has(h)) return false; destroyed.add(h); W().setHidden(h, true); return true; },
     update(dt) { updateMissile(dt); update(dt); },
     isDestroyed: h => destroyed.has(h),
+    get destroyedCount() { return destroyed.size; },
     attachHatch, fire,
     get missileDone() { return mPhase === 'done'; },
     get missileTarget() { return target; },
