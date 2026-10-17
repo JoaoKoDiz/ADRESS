@@ -163,6 +163,7 @@ Verificado sem problema pela revisão: fluxos completos de interface (Livre, Car
 - [C] Safari/iOS: depois de uma ligação ou do app ir para o fundo, o áudio ficava no estado "interrupted" e o jogo podia ficar mudo até recarregar; agora é retomado na próxima interação.
 - [C] Medieval: um som pontual atrasado (balde) podia remontar todos os laços do burgo depois de sair do bairro. Agora só o laço do bairro remonta.
 - [C] Compressor do efeito Ursa Menor desconectado junto (só acontecia num caso forçado).
+- [E] Ainda no MENU aberto: carros, tratores, bondes, barcos, moradores do Medieval, galinhas, bichos do Morro, cancelas e efeitos continuavam se mexendo (só a van parava). Agora o mundo também espera; a câmera continua normal. Teste: Fluxo, Trilhos, Medieval e Veneza — nada se move com o MENU aberto e tudo volta ao fechar.
 - Verificado sem problema [E]: nenhum acúmulo de nós de áudio depois de 10 trocas de bairro; Voltar silencia tudo; descer da van zera o motor; pousar no chão para o rotor; efeitos cancelados cortam o próprio som; nada fica mudo para sempre depois de pausar.
 
 ## Em andamento / próximos passos (identificados, pendentes)

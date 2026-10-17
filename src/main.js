@@ -2760,32 +2760,33 @@ function update(dt, t) {
       break;
   }
 
-  if (state !== 'drive') van.relax(dt);          // torre de caixas do bagageiro: para de balançar quando a van não está sendo dirigida
-  world.update(t, dt);
-  if (neighborhood === 'rail8') train.update(dt, van, walker.visible ? walker : null);
-  if (neighborhood === 'night10') night.update(dt, state === 'walk' ? walker.x : van.x, state === 'walk' ? walker.z : van.z);
-  if (neighborhood === 'farm10') farmOut.update(dt);
+  const wdt = menuPause ? 0 : dt;                 // MENU aberto: o mundo (trânsito, moradores, bondes, barcos, efeitos) também espera
+  if (state !== 'drive') van.relax(wdt);          // torre de caixas do bagageiro: para de balançar quando a van não está sendo dirigida
+  world.update(t, wdt);
+  if (neighborhood === 'rail8') train.update(wdt, van, walker.visible ? walker : null);
+  if (neighborhood === 'night10') night.update(wdt, state === 'walk' ? walker.x : van.x, state === 'walk' ? walker.z : van.z);
+  if (neighborhood === 'farm10') farmOut.update(wdt);
   if (neighborhood === 'garden8' && gardGate.arm) {   // Jardins: a cancela sobe quando a van (ou o personagem) chega perto e desce depois
     const G = GARDV.GATE, near = Math.hypot(van.x - G.x, van.z - G.z) < 20 || (state === 'walk' && Math.hypot(walker.x - G.x, walker.z - G.z) < 20);   // (a van estacionada embaixo também segura a cancela)
-    gardGate.k += ((near ? 1 : 0) - gardGate.k) * Math.min(1, dt * 3);
+    gardGate.k += ((near ? 1 : 0) - gardGate.k) * Math.min(1, wdt * 3);
     gardGate.arm.rotation.z = gardGate.k * 1.45;
     const i = SOLIDS.indexOf(gardGate.solid);
     if (gardGate.k > 0.5 && i >= 0) SOLIDS.splice(i, 1); else if (gardGate.k <= 0.5 && i < 0) SOLIDS.push(gardGate.solid);
-    gardGate.live.userData.update(dt, t, state === 'walk' ? walker : null);   // portãozinho (abre para quem está a pé) e patinhos
+    gardGate.live.userData.update(wdt, t, state === 'walk' ? walker : null);   // portãozinho (abre para quem está a pé) e patinhos
   }
   if (neighborhood === 'modern8' && mdGate.arm) {   // Modernista: a cancela sobe quando a van (ou o personagem) chega perto e desce depois
     const G = FORESTV.GATE, near = Math.hypot(van.x - G.x, van.z - G.z) < 20 || (state === 'walk' && Math.hypot(walker.x - G.x, walker.z - G.z) < 20);   // (a van estacionada embaixo também segura a cancela)
-    mdGate.k += ((near ? 1 : 0) - mdGate.k) * Math.min(1, dt * 3);
+    mdGate.k += ((near ? 1 : 0) - mdGate.k) * Math.min(1, wdt * 3);
     mdGate.arm.rotation.z = mdGate.k * 1.45;
     const i = SOLIDS.indexOf(mdGate.solid);
     if (mdGate.k > 0.5 && i >= 0) SOLIDS.splice(i, 1); else if (mdGate.k <= 0.5 && i < 0) SOLIDS.push(mdGate.solid);
   }
-  if (neighborhood === 'canyon10') { const playing = IN_GAME.includes(state) || state === 'walk'; canyonFx.update(dt, playing ? (walker.visible ? walker : van) : null); }
+  if (neighborhood === 'canyon10') { const playing = IN_GAME.includes(state) || state === 'walk'; canyonFx.update(wdt, playing ? (walker.visible ? walker : van) : null); }
   const medActive = neighborhood === 'med10' && (IN_GAME.includes(state) || ['chat', 'fadeIn', 'fadeOut', 'laser', 'missile', 'boss'].includes(state));
   if (neighborhood === 'med10' && !medActive) medLife.silence();   // menus, título, mapa: o burgo fica em silêncio
   if (medActive) {                                 // Medieval: a vida do burgo continua mesmo com o jogador parado
     const me = walker.visible ? walker : van, playing = IN_GAME.includes(state) || state === 'chat';
-    medLife.update(dt, { t, playing, listener: { x: me.x, z: me.z }, van: { x: van.x, z: van.z, heading: van.heading, speed: van.speed, visible: van.object.visible && !heli.flying },
+    medLife.update(wdt, { t, playing, listener: { x: me.x, z: me.z }, van: { x: van.x, z: van.z, heading: van.heading, speed: van.speed, visible: van.object.visible && !heli.flying },
       walker: { x: walker.x, z: walker.z, visible: walker.visible }, camera: rig.camera,
       isDestroyed: s => { const h = game.layout[s]; return h >= 0 && boom.isDestroyed(h); },
       busySpot: (state === 'ring' || state === 'dialog') && pending >= 0 ? game.slotOf[pending] : nearHouse >= 0 ? game.slotOf[nearHouse] : -1 });
@@ -2795,19 +2796,19 @@ function update(dt, t) {
     if (!heli.flying) obs.push({ circles: [-1.5, 0, 1.5].map(k => [van.x + c * k, van.z + s2 * k, 1.25]) });
     if (walker.visible) obs.push({ circles: [[walker.x, walker.z, 0.6]] });
     const playing = IN_GAME.includes(state) || state === 'walk';
-    traffic.update(dt, obs, playing ? (walker.visible ? walker : van) : null);
+    traffic.update(wdt, obs, playing ? (walker.visible ? walker : van) : null);
     if (!playing) traffic.silence();
   }
-  if (neighborhood === 'favela8') favPets.update(dt, van.object.visible && !heli.flying ? { x: van.x, z: van.z, hd: van.heading, speed: van.speed } : null, walker.visible ? { x: walker.x, z: walker.z } : null);   // Morro: bichos (param diante da van)
+  if (neighborhood === 'favela8') favPets.update(wdt, van.object.visible && !heli.flying ? { x: van.x, z: van.z, hd: van.heading, speed: van.speed } : null, walker.visible ? { x: walker.x, z: walker.z } : null);   // Morro: bichos (param diante da van)
   if (neighborhood === 'farm10') {                // Colheita: tratores e porteiras
     const c = Math.cos(van.heading), s2 = Math.sin(van.heading), obs = [];
     if (!heli.flying) obs.push({ circles: [-1.5, 0, 1.5].map(k => [van.x + c * k, van.z + s2 * k, 1.25]) });
     if (walker.visible) obs.push({ circles: [[walker.x, walker.z, 0.6]] });
     const playing = IN_GAME.includes(state) || state === 'walk';
-    tractors.update(dt, obs, playing ? (walker.visible ? walker : van) : null);
+    tractors.update(wdt, obs, playing ? (walker.visible ? walker : van) : null);
     if (!playing) tractors.silence();
-    chickens.update(dt, heli.flying ? null : { x: van.x, z: van.z, circles: [-1.5, 0, 1.5].map(k => [van.x + c * k, van.z + s2 * k]) });
-    updateGates(dt);
+    chickens.update(wdt, heli.flying ? null : { x: van.x, z: van.z, circles: [-1.5, 0, 1.5].map(k => [van.x + c * k, van.z + s2 * k]) });
+    updateGates(wdt);
   }
   if (neighborhood === 'forest8' || neighborhood === 'work8') {   // Bosque e Operário: carros devagar (e, no Bosque, folhas caindo perto de quem joga)
     const c = Math.cos(van.heading), s2 = Math.sin(van.heading), obs = [];
@@ -2815,11 +2816,11 @@ function update(dt, t) {
     if (walker.visible) obs.push({ circles: [[walker.x, walker.z, 0.6]] });
     const playing = IN_GAME.includes(state) || state === 'walk', me = walker.visible ? walker : van;
     const cars = neighborhood === 'work8' ? workTraffic : forestCars;   // Operário: caminhões e vans (workTraffic.js)
-    cars.update(dt, obs, playing ? me : null);
+    cars.update(wdt, obs, playing ? me : null);
     if (!playing) cars.silence();
     if (neighborhood === 'forest8') {               // copas transparentes quando escondem quem joga ou a casa do destino
       const hd = playing && game.route ? game.route[game.step] : -1, sp = hd >= 0 && game.slotOf[hd] != null ? FORESTV.spots[game.slotOf[hd]] : null;
-      forestFx.update(dt, { x: me.x, y: TERRAIN.h(me.x, me.z), z: me.z }, rig.camera.position, sp ? { x: sp.cx, y: sp.y + 2.5, z: sp.cz } : null);
+      forestFx.update(wdt, { x: me.x, y: TERRAIN.h(me.x, me.z), z: me.z }, rig.camera.position, sp ? { x: sp.cx, y: sp.y + 2.5, z: sp.cz } : null);
     }
   }
   if (neighborhood === 'snow8') {                 // Nevasca: limpa-neve e atalhos
@@ -2827,28 +2828,28 @@ function update(dt, t) {
     if (!heli.flying) obs.push({ circles: [-1.5, 0, 1.5].map(k => [van.x + c * k, van.z + s2 * k, 1.25]) });
     if (walker.visible) obs.push({ circles: [[walker.x, walker.z, 0.6]] });
     const playing = IN_GAME.includes(state) || state === 'walk';
-    plow.update(dt, obs, playing ? (walker.visible ? walker : van) : null);
+    plow.update(wdt, obs, playing ? (walker.visible ? walker : van) : null);
     if (!playing) plow.silence();
-    updateBanks(dt);
+    updateBanks(wdt);
   }
-  updateTrolleySeq(dt);   // Bairro 11: o bonde espera se a van estiver nos trilhos
-  if (neighborhood === 'venice8') { npcBoats.update(dt, van); updateBoat(dt); }
-  updateChurch(dt);
-  world.updateGas(van.x, van.z, dt);
-  fuelMsgT = Math.max(0, fuelMsgT - dt);
+  updateTrolleySeq(wdt);   // Bairro 11: o bonde espera se a van estiver nos trilhos
+  if (neighborhood === 'venice8') { npcBoats.update(wdt, van); updateBoat(wdt); }
+  updateChurch(wdt);
+  world.updateGas(van.x, van.z, wdt);
+  fuelMsgT = Math.max(0, fuelMsgT - wdt);
   if ((state === 'drive' || state === 'missile') && allDestroyed()) {
     if (MOONV) { restartMsg = 'Todos os módulos foram destruídos! A partida vai reiniciar…'; setState('fadeOut'); }   // Órbita: sem o chefe (ele vive fora do bairro plano)
     else startBoss();
   }
-  hint.update(dt);
-  heli.update(dt, state === 'drive' && heli.on ? input.lift() : 0);
+  hint.update(wdt);
+  heli.update(wdt, state === 'drive' && heli.on ? input.lift() : 0);
   { const hi = heli.high; if (wasHigh && !hi && heli.flying && !menu.unstoppable) unstickVan(); wasHigh = hi; }   // descendo do alto no meio do casario: sai do que estiver por baixo
   if (MOONV && !heli.on && !heli.flying) van.object.position.y = van.simY;   // Órbita: a altura da gravidade baixa (saltinhos)
-  boom.update(dt);
+  boom.update(wdt);
   { const foot = state === 'walk';              // quem está perto: a van ou, a pé, o personagem
-    jamSound.update(dt, IN_GAME.includes(state) && [6, 7, 10].includes(gameMode === 'career' ? careerLevel : freeLevel) && !missions.isOpen && !menu.isOpen,   // Bairros 7, 8 e 11 (Travessia)
+    jamSound.update(wdt, IN_GAME.includes(state) && [6, 7, 10].includes(gameMode === 'career' ? careerLevel : freeLevel) && !missions.isOpen && !menu.isOpen,   // Bairros 7, 8 e 11 (Travessia)
       barriers.jamRects, foot ? walker.x : van.x, foot ? walker.z : van.z);
-    cityAmb.update(dt, (IN_GAME.includes(state) || foot || state === 'fadeIn') && (neighborhood === 'city7' || neighborhood === 'city8'), jamSound.debug.level / 0.7); }   // Bairros 7 e 8: cidade ao fundo (abaixa com a música dos engarrafamentos)
+    cityAmb.update(wdt, (IN_GAME.includes(state) || foot || state === 'fadeIn') && (neighborhood === 'city7' || neighborhood === 'city8'), jamSound.debug.level / 0.7); }   // Bairros 7 e 8: cidade ao fundo (abaixa com a música dos engarrafamentos)
   // entregando (campainha/diálogo) ou com o balão "E — Entregar" à vista: a câmera se volta para a casa
   const focusH = (state === 'ring' || state === 'dialog') ? pending : state === 'drive' ? nearHouse : -1;
   const onFoot = state === 'walk' || state === 'chat' || state === 'grill' || (footDelivery && (state === 'ring' || state === 'dialog'));   // (Grillby's: na transição a câmera fica no personagem)              // a câmera segue o personagem a pé
