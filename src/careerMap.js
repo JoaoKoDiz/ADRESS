@@ -12,7 +12,7 @@ const NEAR = 7;                   // distância (na estrada) para mostrar "E —
 const CAM_OFFSET = new THREE.Vector3(-24, 84, 70);   // câmera distante, ângulo fixo
 
 const CSS = `
-.cmap-prompt { position: absolute; left: 0; top: 0; z-index: 4; pointer-events: none; display: none;
+.cmap-prompt { position: absolute; left: 0; top: 0; z-index: 4; pointer-events: none; display: none; white-space: nowrap;
   transform: translate(-50%, -100%); padding: .45em .9em; border-radius: 12px; background: #fffaf0; border: 2px solid #e8661a;
   color: #3a2a1a; font: 700 clamp(14px, 1.2vw, 18px) "Trebuchet MS","Segoe UI",system-ui,sans-serif; box-shadow: 0 4px 12px rgba(0,0,0,.25); }
 .cmap-prompt.locked { border-color: #8a8a8a; color: #5c5c5c; background: #ececec; }

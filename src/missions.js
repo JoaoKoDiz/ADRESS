@@ -92,6 +92,7 @@ const CSS = `
 .missions-count { padding: .35em .9em; border-radius: 999px; background: #ffe2b8; font-weight: 800; font-size: clamp(15px, 1.4vw, 21px); color: #5a3c1e; }
 .missions-close { padding: .45em 1em; border: 3px solid #fff; border-radius: 999px; background: #3a2a1a; color: #fff3d6; cursor: pointer;
   font: 800 clamp(13px, 1.1vw, 16px) "Trebuchet MS","Segoe UI",system-ui,sans-serif; }
+@media (max-width: 560px) { .missions-head { flex-wrap: wrap; } .missions-title { flex: 1 0 100%; font-size: 20px; } .missions-close { white-space: nowrap; } }
 .missions-list { flex: 1; display: flex; flex-direction: column; justify-content: space-around; gap: clamp(8px, 1.4vh, 16px); }
 .mission { display: flex; flex-direction: column; gap: 4px; }
 .mission-name { font-weight: 900; font-size: clamp(18px, 1.8vw, 26px); }
@@ -171,6 +172,7 @@ export function createMissions(store) {
     }).join('');
   }
   function close() { open = false; el.classList.remove('open'); }
+  addEventListener('keydown', e => { if (open && e.key === 'Escape') { e.stopImmediatePropagation(); e.preventDefault(); close(); } }, true);   // Esc fecha a lista (e não abre o MENU por baixo)
 
   return {
     /** Abre as missões do bairro i (0..4). */

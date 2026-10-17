@@ -10,6 +10,7 @@ const CSS = `
   font: 15px "Trebuchet MS","Segoe UI",system-ui,sans-serif; box-shadow: 0 10px 30px rgba(0,0,0,.3); display: none;
   max-width: calc(100% - 2 * clamp(10px, 1.4vw, 20px)); max-height: calc(100% - 2 * clamp(10px, 1.6vh, 20px) - 3.8em); overflow-y: auto; box-sizing: border-box; }   /* telas baixas/estreitas: rola em vez de ser cortado */
 body.title-on .menu-panel { display: none; }
+body.on-map .menu-btn, body.on-map .menu-panel { visibility: hidden; }
 .menu-panel.open { display: block; }
 .menu-panel h3 { margin: 0 0 12px; font-size: 17px; color: #e8661a; letter-spacing: .06em; }
 .menu-row { display: flex; align-items: center; justify-content: space-between; gap: 14px; cursor: pointer; user-select: none; padding: 6px 0; }

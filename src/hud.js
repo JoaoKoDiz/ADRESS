@@ -342,6 +342,10 @@ export function createHUD(hudEl, stageEl) {
         if (promptOn) { promptOn = false; prompt.classList.remove('on'); }
         return;
       }
+      if (side === 'up') {                                         // perto da borda: o balão inteiro continua na tela (no celular ele é um botão)
+        const W = prompt.parentElement ? prompt.parentElement.clientWidth : innerWidth;
+        if (x < 160 || x > W - 160 || y < 80) { const w = prompt.offsetWidth || 0, h = prompt.offsetHeight || 0; x = Math.min(Math.max(x, w / 2 + 8), W - w / 2 - 8); y = Math.max(y, h + 8); }
+      }
       x = Math.round(x); y = Math.round(y);
       if (side !== promptSide) {
         promptSide = side;

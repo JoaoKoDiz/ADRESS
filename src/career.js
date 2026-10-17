@@ -86,7 +86,8 @@ const CSS = `
 .career-toast { position: fixed; left: 50%; top: 128px; z-index: 26; transform: translate(-50%, -10px); opacity: 0;
   padding: .55em 1.2em; border-radius: 999px; background: #1f7a3a; color: #fff; pointer-events: none;
   font: 800 clamp(14px, 1.3vw, 19px) "Trebuchet MS","Segoe UI",system-ui,sans-serif; box-shadow: 0 6px 18px rgba(0,0,0,.3);
-  transition: opacity .25s, transform .25s; }
+  transition: opacity .25s, transform .25s; width: max-content; max-width: min(92vw, 720px); text-align: center; box-sizing: border-box; }
+@media (max-width: 560px) { .career-toast { top: 152px; border-radius: 18px; } }
 .career-toast.on { opacity: 1; transform: translate(-50%, 0); }
 `;
 

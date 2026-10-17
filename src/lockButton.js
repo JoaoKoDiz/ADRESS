@@ -32,7 +32,7 @@ const CSS = `
 .lock-card .cps button:hover { filter: brightness(.96); }
 .lock-card.shake { animation: lockShake .35s; }
 /* painel de desenvolvimento (depois da senha) */
-.lock-card.dev { position: relative; width: min(860px, 94vw); max-height: 88vh; overflow: auto; box-sizing: border-box; padding: 16px 20px 16px; text-align: left; }
+.lock-card.dev { position: relative; width: min(860px, 94vw); max-height: calc(100% - 20px); overflow: auto; box-sizing: border-box; padding: 16px 20px 16px; text-align: left; }
 .lock-card.dev h3 { text-align: center; margin-bottom: 2px; }
 .dev-note { text-align: center; font-size: 13px; color: #6b5a40; margin-bottom: 4px; }
 .dev-sec { border-radius: 14px; padding: 10px 14px 14px; margin-top: 12px; }
@@ -185,6 +185,11 @@ export function createLockButton(stageEl, onUnlock, isUnlockedAll, cp = null, de
     else if (k === 'cancel' || e.target === panel) close();
   });
   // as teclas digitadas no painel não vão para o jogo (E/Enter não entram no bairro, A/D não andam)
+  addEventListener('keydown', e => {                               // Esc também com o foco fora do painel (depois da senha o foco volta ao body)
+    if (!open || e.key !== 'Escape' || panel.contains(document.activeElement)) return;
+    e.stopImmediatePropagation(); e.preventDefault();
+    if (confirmBox && confirmBox.classList.contains('on')) confirmBox.classList.remove('on'); else close();
+  }, true);
   panel.addEventListener('keydown', e => {
     e.stopPropagation();
     if (e.key === 'Enter' && field.addEventListener) submit();

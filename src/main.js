@@ -1322,7 +1322,7 @@ const FADE_TIME = 0.8, RING_TIME = 0.8, RESIDENT_APPEAR = 0.45, SUCCESS_AUTO = 4
 let state = 'title', stateT = 0, fade = 0;
 let dialog = null, pending = -1, nearHouse = -1;
 let actionLock = 0;                 // depois de fechar uma reclamação, E não toca a mesma campainha de novo na hora
-const setState = s => { state = s; stateT = 0; if (s === 'title' || s === 'mapIn' || s === 'map') music.setTrack(null); };   // fora da partida: a música padrão
+const setState = s => { state = s; stateT = 0; document.body.classList.toggle('on-map', s === 'map' || s === 'mapIn' || s === 'mapOut');   /* (no mapa o MENU não abre: o botão some) */ if (s === 'title' || s === 'mapIn' || s === 'map') music.setTrack(null); };   // fora da partida: a música padrão
 // Músicas próprias de alguns bairros (assets/): começam sozinhas ao entrar no bairro (Livre e Carreira)
 const LEVEL_TRACKS = { venice8: tarantellaUrl, farm10: sunnyUrl, snow8: snowyUrl, moon8: waterfallUrl };   // 20 (Lua): Waterfall
 // Créditos mostrados ao lado do botão de música. Só o que foi informado/confirmado; sem autor cadastrado, só o título;
@@ -2975,7 +2975,7 @@ function updateHUD() {
     else if (state === 'walk' && carrying) hud.setMain(walker.nearVan(van) ? 'Entrar na van devolve a caixa ao lugar dela.' : 'Carregando uma caixa… de quem será?', 'clue');
     else if (state === 'walk') hud.setMain(walker.nearVan(van) && !nearLounger() && !nearVenK() ? 'Perto da van — aperte E para entrar.' : SPOTS ? game.mainText() : 'Passeando a pé… (não dá para entregar andando)', 'clue');   // Morro: a pé continua valendo a pista
     else if (state === 'drive' && fuelMsgT > 0) hud.setMain(fuelMsg, 'dialog');
-    else if (state === 'fadeOut') hud.setMain(restartMsg || 'Entrega concluída! Preparando a próxima…', restartMsg ? 'dialog' : 'success');
+    else if (state === 'fadeOut') hud.setMain(restartMsg || (endToMap ? 'Partida concluída!' : 'Entrega concluída! Preparando a próxima…'), restartMsg ? 'dialog' : 'success');   // (na Carreira volta ao mapa)
     else hud.setMain(game.mainText(), 'clue');
   }
 
