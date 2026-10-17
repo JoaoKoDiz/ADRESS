@@ -16,14 +16,14 @@ export const BATTLE_CP_KEY = 'adress.dev.battle';   // teste pelo cadeado: liber
 // ---------- constantes (fáceis de ajustar) ----------
 const GRID = { x0: -7, x1: 7, z0: -9, z1: 9, cell: 1 };                // 14 × 18 células inteiras, sem moldura
 const LIM = { x0: -6.5, x1: 6.5, z0: -9, z1: 9 };                  // limites do círculo (os de sempre)          // X = lados, Z = comprimento (figura em −Z, jogador em +Z)
-const P_POS = new THREE.Vector3(-1.0, 0, 8.4), K_POS = new THREE.Vector3(1.7, 0, 2.6), F_POS = new THREE.Vector3(0, 0, -11);
+const P_POS = new THREE.Vector3(-1.0, 0, 8.4), K_POS = new THREE.Vector3(0.7, 0, 2.6), F_POS = new THREE.Vector3(0, 0, -11);
 const F_SCALE = [4.6, 5.0, 4.6];
 const FACE_NZ = Math.PI / 2, FACE_PZ = -Math.PI / 2;                 // os modelos olham para +X: π/2 → −Z, −π/2 → +Z
 const H_PROJ = 1.05, PR = 0.2, HIT_R = 0.45;                          // altura de voo, raio do projétil, raio do alvo
 // câmera fixa (ajustada por screenshots: jogador à esquerda em primeiro plano, K no centro, a figura inteira à direita, mais longe);
 // fov = vertical em 16:9; em telas mais estreitas ele abre para manter a mesma largura de visão (até 80°)
-// câmera sobre o 3º quadrado da grade à direita do jogador (célula x 2..3, z 8..9), na altura do peito, olhando na diagonal para a figura
-const CAM = { pos: new THREE.Vector3(2.5, 1.5, 8.8), fov: 68, look: new THREE.Vector3(-12.0, 3.25, -4.96) };
+// câmera sobre o 4º quadrado da grade à direita do jogador (célula x 3..4, z 8..9), na altura do peito, olhando na diagonal para a figura
+const CAM = { pos: new THREE.Vector3(3.5, 1.5, 8.8), fov: 68, look: new THREE.Vector3(-11.0, 3.25, -4.96) };
 const CIRCLE_R = 0.36, CIRCLE_SPEED = 6.5, CIRCLE_HOME = { x: 0, z: 5.5 };
 const WARN = 1.0;                                                     // aviso antes de cada disparo (s)
 const DMG = { P: 20, K: 34, K2: 28 }, REGEN = { wait: 5, rate: 4 };   // estabilidade: dano por impacto e regeneração lenta
