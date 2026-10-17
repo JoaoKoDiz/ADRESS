@@ -69,8 +69,8 @@ export function planFavela(MAP, HEDGE) {
       const band = bandOf(z);
       if (b.z0 < [HEDGE, B1, B2][band] + 1.0 || b.z1 > [B1, B2, MAP][band] - 1.0) continue;
       if (roadDist(cx, z) < hw + HALF + 0.6 || !free(b) || pads.concat(landmarks).some(r => hit(b, r, 0.6))) continue;
-      const door = { x: (a.x0 + a.x1) / 2, z };
-      spots.push({ cx, cz: z, y: bandY(band), fx: -side, fz: 0, box: b, lane: R(Math.min(cx, door.x), z - 1, Math.max(cx, door.x), z + 1), door,
+      const mid = (a.x0 + a.x1) / 2, door = { x: side < 0 ? a.x0 + 1.5 : a.x1 - 1.5, z };   // porta do lado da própria casa (antes as duas do beco tinham o mesmo ponto e só uma recebia)
+      spots.push({ cx, cz: z, y: bandY(band), fx: -side, fz: 0, box: b, lane: R(Math.min(cx, mid), z - 1, Math.max(cx, mid), z + 1), door,
         foot: true, tags: [a.top ? 'loc:stairtop' : 'loc:stairfoot'] });
     }
   }

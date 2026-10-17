@@ -1402,6 +1402,7 @@ function findNearHouseFoot() {
     const p = doorPoint(game.slotOf[h]), d = Math.hypot(walker.x - p.x, walker.z - p.z);
     if (d < best) { best = d; found = h; }
   }
+  if (found >= 0 && van.object.visible && walker.nearVan(van) && Math.hypot(walker.x - van.x, walker.z - van.z) <= best + 0.5) return -1;   // a van está mais perto que a porta: E entra na van (antes entregava de novo logo ao descer)
   return found;
 }
 function findNearHouse() {
