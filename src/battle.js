@@ -14,6 +14,7 @@ import { buildStandingReader, reachArm } from './models/reader.js';
 import { buildStandingReader as buildFigureBody } from './models/readerClassic.js';   // a figura mantém o formato antigo
 import { buildBody, restArms } from './models/driver.js';
 import { smoothCharacter } from './models/kit.js';
+import { createPlayerPose } from './battlePose.js';
 
 export const BATTLE_CP_KEY = 'adress.dev.battle';   // teste pelo cadeado: libera o cartão Sacrifício para começar a batalha
 
@@ -335,6 +336,7 @@ export function createBattle(ctx) {
   restArms(PB.arms);
   pModel.userData.torso = PB.torso;                                   // (mesma interface do reachArm do K)
   pModel.userData.arms = PB.arms.map((a, i) => ({ s: i ? 1 : -1, sh: a.sh, rest: a.sh.quaternion.clone(), elbow: a.elbow, erest: a.elbow.quaternion.clone() }));
+  const pose = createPlayerPose(PB, pModel, scene);                   // guarda do Bloquear e varredura do Refletir (battlePose.js)
   // K: com as cores dele
   const kHold = new THREE.Group(); kHold.position.copy(K_POS); scene.add(kHold);
   const K = buildStandingReader(); K.rotation.y = FACE_NZ; kHold.add(K);
@@ -525,7 +527,7 @@ export function createBattle(ctx) {
   let fragHandler = null, finaleHandler = null, token = 0, figGest = null;
   let mt = 0;                                                         // posição da música = relógio da batalha
   const music = ctx.music || null;
-  let camK = 1, camSnap = false;                                      // 0 = câmera de jogo, 1 = câmera de impacto
+  let camK = 1, camSnap = false, camForce = null;                                      // 0 = câmera de jogo, 1 = câmera de impacto
   const camBase = new THREE.Vector3(), camLook = new THREE.Vector3();
   const occ = { P: 1, K: 1 };                                         // opacidade de quem cobre algo interativo
   const L = s => { log.push(s); if (log.length > 500) log.shift(); };
@@ -556,7 +558,8 @@ export function createBattle(ctx) {
     return left > CAM_T + 0.45 + (camK > 0 ? 0 : CAM_T + 1.5) ? 1 : 0;
   }
   function updateCamera(dt) {
-    if (camSnap) { camSnap = false; camK = 0; }
+    if (camForce != null) camK = camForce;
+    else if (camSnap) { camSnap = false; camK = 0; }
     else { const g = camGoal(); camK = g > camK ? Math.min(g, camK + dt / CAM_T) : Math.max(g, camK - dt / CAM_T); }
     placeCamera();
   }
@@ -937,7 +940,7 @@ export function createBattle(ctx) {
     if (phase !== 'play' || !seg) return;
     if (seg.mech === 'block') {
       if (click && !slotFree()) L('slots:full');                    // 2 vagas ocupadas: não cria nem gasta a ação
-      else if (click && time - lastBar >= BLOCK.cooldown) { lastBar = time; addBarrier(cpos.x, cpos.z, 'P'); sfx('barrier'); L('barrier'); gest = { t: 0, x: cpos.x, z: cpos.z }; }
+      else if (click && time - lastBar >= BLOCK.cooldown) { lastBar = time; addBarrier(cpos.x, cpos.z, 'P'); sfx('barrier'); L('barrier'); pose.setGuard(true); }
     } else if (seg.mech === 'reflect') {
       if (click && !drawing && !slotFree()) L('slots:full');      // não começa a desenhar sem vaga
       if (act && !drawing && slotFree()) { drawing = { pts: [{ x: cpos.x, z: cpos.z }], len: 0, atLimit: false }; setPreview(true); }
@@ -991,7 +994,7 @@ export function createBattle(ctx) {
       let hit = false;
       for (const b of barriers) {
         if (!b.alive || b.age < BLOCK.rise * 0.5) continue;
-        if (wallHit(p.x, p.z, x1, z1, b.seg)) { killProjectile(p, 9, 0); killBarrier(b); sfx('block'); L(b.owner === 'K' ? 'block:K' : 'block'); hit = true; break; }
+        if (wallHit(p.x, p.z, x1, z1, b.seg)) { killProjectile(p, 9, 0); killBarrier(b); if (b.owner === 'P') pose.guardHit(); sfx('block'); L(b.owner === 'K' ? 'block:K' : 'block'); hit = true; break; }
       }
       if (hit) continue;
       // 2) paredes: reflexão no plano horizontal
@@ -1008,7 +1011,7 @@ export function createBattle(ctx) {
           if (l > 1e-6 && c > Math.cos(REFL.assist)) { p.vx = dx / l * p.speed; p.vz = dz / l * p.speed; }
         }
         p.reflected = true; p.kClaim = false; p.obj.userData.claim.visible = false; if (p.src) { p.src.busy = false; p.src = null; }
-        killWall(wall); spawnShards(p.x, H_PROJ, p.z, 4, 0); sfx('reflect'); L('reflect');
+        killWall(wall); spawnShards(p.x, H_PROJ, p.z, 4, 0); sfx('reflect'); L('reflect'); pose.sweep(refl.cx, refl.cz);   // o gesto começa no próprio rebate
         continue;
       }
       // 3) alvo (só quem não foi refletido) / estruturas e figura (só refletidos)
@@ -1194,6 +1197,8 @@ export function createBattle(ctx) {
     else if (seg && seg.guide && phase === 'play' && seg.guide.state === 'grab') { pk = 0.85; ps = seg.guide.x >= P_POS.x ? 1 : -1; ptgt.set(seg.guide.x, GUIDE.objY, seg.guide.z); }
     else if (seg && seg.guide && phase === 'play' && seg.guide.attract) pk = 0.6;
     for (const a of pModel.userData.arms) { a.k = (a.k || 0) + ((a.s === ps ? pk : 0) - (a.k || 0)) * Math.min(1, dt * 12); reachArm(pModel, a.s, ptgt, a.k); }
+    pose.setGuard(barriers.some(b => b.owner === 'P' && (b.alive || b.die < 0.15)));   // guarda até a última placa se desfazer
+    pose.update(dt, time);
     // K: postura vulnerável no começo, mais firme com a autonomia; olha o que vem para ele; gesto da defesa
     const rk = react.K, lowK = 1 - stab.K / 100;
     kHold.rotation.x = 0.26 * Math.sin(rk * Math.PI); kHold.position.x = K_POS.x + (rk > 0 ? (Math.random() - 0.5) * 0.07 * rk : 0);
@@ -1295,7 +1300,7 @@ export function createBattle(ctx) {
   function start(opts = {}) {
     stopInner();
     active = true; time = 0; log = []; retries = 0; lastBar = -9; lastKDef = -99;
-    paintWhite();
+    paintWhite(); pose.reset();
     key.position.set(CAMS.game.pos.x + 2, CAMS.game.pos.y + 7, CAMS.game.pos.z + 2); key.target.position.set(0, 0, 0);
     goTo(opts.step | 0);
     updateVisuals(0); setVeil(fade);
@@ -1330,6 +1335,7 @@ export function createBattle(ctx) {
     get guide() { const g = seg && seg.guide; return g ? { x: g.x, z: g.z, state: g.state, attract: g.attract, armed: g.armed, tension: g.tension, passed: g.passed, portal: g.portal ? { ...g.portal } : null, by: g.by || null } : null; },
     get through() { return projectiles.filter(p => p.alive && p.through).map(p => ({ x: p.x, z: p.z, vx: p.vx, vz: p.vz, inWhite: !!p.obj.parent && p.obj.parent === ws })); },
     _pull(down) { rightDown = !!down; },
+    get _rig() { return { pModel, PB }; }, get _pose() { return pose; }, _camK(k) { camForce = k == null ? null : k; },
     get stab() { return { P: stab.P, K: stab.K }; }, get kLevel() { return kLevel(); }, get fragmentsDone() { return fragmentsDone; },
     get retries() { return retries; }, get log() { return log.slice(); },
     _jump(i) { if (active) goTo(i); },
