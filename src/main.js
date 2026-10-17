@@ -27,7 +27,7 @@ import { createNight } from './night.js';
 import { createFarmOutside } from './farmOutside.js';
 import { createReality } from './reality.js';
 import { createInput } from './input.js';
-import { createWorld } from './world.js';
+import { createWorld, plazaFootSolids } from './world.js';
 import { createVan } from './van.js';
 import { createCameraRig } from './camera.js';
 import { createHUD } from './hud.js';
@@ -538,9 +538,12 @@ heli.setTerrain((x, z) => TERRAIN.h(x, z));   // Bairro 9: o chão sobe nas enco
 const walker = createWalker(world.scene);
 const playerSuit = spaceSuit(walker.object, { headY: 1.78, r: 0.72, back: [-0.42, 0], backY: 1.0 }); playerSuit.visible = false;   // Órbita: acessório temporário   // tecla L: o motorista desce e anda a pé
 const FOOT = { house: [4.1, 13.1, 1.5, 8.5], shop: [3.8, 13.4, 1.5, 8.5], apt: [3.4, 13.8, 1.2, 8.5], fut: [3.4, 13.8, 1.2, 8.5], ware: [1.5, 40.5, 0.8, 10.6], ven: [VEN_X0, VEN_X1, VEN_Z0, VEN_Z1], fav: [5.3, 11.9, 1.7, 8.3], mod: [3.4, 13.8, 1.2, 8.5] };   // paredes (locais do lote)
+let plazaFootCache = null, plazaFootKey = null;
+const plazaSolidsFoot = () => { if (plazaFootKey !== PLAZA) { plazaFootKey = PLAZA; plazaFootCache = plazaFootSolids(); } return plazaFootCache; };
 /** Obstáculos de quem anda a pé: tudo menos os lotes inteiros e a praça (dá para entrar nos quintais); só as paredes das casas. */
 function walkSolids() {
   const out = SOLIDS.slice(HOUSE_SLOTS.length + (PLAZA ? 1 : 0)).filter(b => !b.vanOnly);   // escadarias e passarelas: só a pé
+  if (PLAZA) out.push(...plazaSolidsFoot());                                  // Bairro 2: coreto, árvores, bancos… da praça
    // postos, sebe, troncos, parede da entrada, bloqueios
   for (const s of HOUSE_SLOTS) {
     const h = game.layout[s];

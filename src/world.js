@@ -445,6 +445,28 @@ function buildPlaza() {
   return g;
 }
 
+/** Obstáculos de quem anda a pé dentro da praça (a van já é barrada pela praça inteira): coreto, árvores, canteiros, bancos, postes, cerquinha. */
+export function plazaFootSolids() {
+  const P = PLAZA; if (!P) return [];
+  const cx = (P.x0 + P.x1) / 2, cz = (P.z0 + P.z1) / 2, w = P.x1 - P.x0, d = P.z1 - P.z0, out = [];
+  const circ = (x, z, r) => out.push({ x0: x - r, x1: x + r, z0: z - r, z1: z + r, r, cx: x, cz: z });
+  const rect = (x0, x1, z0, z1) => out.push({ x0, x1, z0, z1 });
+  circ(cx, cz, 4.9);                                                           // coreto (base e colunas)
+  for (const [sx, sz] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) {
+    const qx = cx + sx * w / 4, qz = cz + sz * d / 4;
+    circ(qx, qz, 2.6);                                                         // canteiro
+    for (const [tx, tz] of [[sx * 7.5, sz * 3.5], [sx * 3.5, sz * 7.5]]) circ(qx + tx, qz + tz, 0.45);   // troncos
+    const bx = cx + sx * 9.5, bz = cz + sz * 2.6;
+    rect(bx - 1.6, bx + 1.6, bz - 0.55, bz + 0.55);                            // banco (assento + encosto)
+    circ(cx + sx * 2.4, cz + sz * (d / 2 - 2.2), 0.15);                        // poste
+    const len = w / 2 - 3.2, fx = cx + sx * (1.6 + len / 2 + 0.2), fz = cz + sz * (d / 2 - 1.0);
+    rect(fx - len / 2, fx + len / 2, fz - 0.08, fz + 0.08);                    // cerquinha (aberta nos caminhos)
+    const gx = cx + sx * (w / 2 - 1.0), gz = cz + sz * (1.6 + len / 2 + 0.2);
+    rect(gx - 0.08, gx + 0.08, gz - len / 2, gz + len / 2);
+  }
+  return out;
+}
+
 // ---------- API ----------
 export function createWorld({ renderer, buildLot, buildResident, yardBuilders, pool = [...Array(16).keys()], dry = false, venice = false, snow = false, moon = false, farm = false }) {
   const pal = venice ? LAGOON : moon ? MOON_GROUND : snow ? SNOW_GROUND : dry ? DRY_GRASS : GREEN_GRASS;
