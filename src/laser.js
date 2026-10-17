@@ -38,6 +38,7 @@ export function disposeFx(root) {
     for (const m of Array.isArray(o.material) ? o.material : o.material ? [o.material] : []) {
       if (m.userData.keep) continue;
       for (const k of ['map', 'alphaMap', 'emissiveMap']) if (m[k] && !m[k].userData.keep) m[k].dispose();
+      if (m.uniforms) for (const u of Object.values(m.uniforms)) if (u && u.value && u.value.isTexture && !u.value.userData.keep) u.value.dispose();   // shaders próprios (Sol, planetas)
       m.dispose();
     }
   });

@@ -142,7 +142,8 @@ Verificado sem problema pela revisão: fluxos completos de interface (Livre, Car
 - [E] Monstro/robô do fim: eram presos à cena do 1º bairro criado; em qualquer outro bairro visitado depois o chefe ficava invisível. Agora vão para a cena do bairro atual (`monster.attach`). Teste: Bairros 1, 13 e 24, monstro na cena certa.
 - [E] Casa destruída deixava "Entregar" e contava entrega. Agora é ignorada; destruir de van uma casa que ainda estava na rota sorteia rota nova com as que sobraram (antes a partida podia travar).
 - [C] Entulho, bola de fogo, destroços e alvo do míssil na altura do patamar (Encostas, Morro, Nevasca…), antes ficavam no nível 0, dentro do morro. O míssil não mira casa já destruída.
-- [C] Efeitos da entrega errada (Laser, Ursa Menor, Sistema Solar, Devolução da Realidade): liberam na GPU o que criaram a cada execução (antes acumulavam geometrias/texturas a cada casa).
+- [E] Efeitos da entrega errada (Laser, Ursa Menor, Sistema Solar, Devolução da Realidade): liberam na GPU o que criaram a cada execução, inclusive as texturas dos shaders do Sol/planetas (antes acumulavam geometrias/texturas a cada casa). Medido: Sistema Solar 412/6 → 433/27 durante → 411/6 depois (geometrias/texturas); Laser e Ursa estáveis entre rodadas. Começar partida nova cancela qualquer efeito em andamento.
+- [E] Helicóptero acima de 6,5 para no maciço e nos degraus de pedra da Cachoeira (antes atravessava).
 
 ## Em andamento / próximos passos (identificados, pendentes)
 Prioridade aproximada:
