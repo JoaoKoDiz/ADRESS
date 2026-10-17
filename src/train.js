@@ -104,7 +104,19 @@ export function createTrain() {
   const blockedByVan = (T, van) => {
     if (!van) return false;
     const front = T.dir > 0 ? T.s0 + LEN : T.s0;
-    for (let k = 0.5; k <= 9; k += 0.75) { const p = T.line.at(front + T.dir * k); if (Math.hypot(p.x - van.x, p.z - van.z) < 3.0) return true; }
+    const c = Math.cos(van.heading), sn = Math.sin(van.heading);
+    for (let k = 0.5; k <= 9; k += 0.75) {
+      const p = T.line.at(front + T.dir * k);
+      if (Math.hypot(p.x - van.x, p.z - van.z) < 3.0) return true;
+      for (const e of [-1.5, 1.5]) if (Math.hypot(p.x - van.x - c * e, p.z - van.z - sn * e) < 2.5) return true;   // traseira/frente da van sobre o trilho
+    }
+    return false;
+  };
+  /** Personagem a pé no caminho (não conta para o dilema do bonde, só para não passar por cima dele). */
+  const blockedByFoot = (T, w) => {
+    if (!w) return false;
+    const front = T.dir > 0 ? T.s0 + LEN : T.s0;
+    for (let k = 0; k <= 7; k += 0.5) { const p = T.line.at(front + T.dir * k); if (Math.hypot(p.x - w.x, p.z - w.z) < 2.3) return true; }
     return false;
   };
   /** Distância livre até o ponto em que o bonde precisa parar por causa de um cruzamento (Infinity = livre). */
@@ -151,7 +163,7 @@ export function createTrain() {
       for (const t of trams) { t.reset(); const i = SOLIDS.indexOf(t.solid); if (i >= 0) SOLIDS.splice(i, 1); }
     },
     detach() { for (const t of trams) { const i = SOLIDS.indexOf(t.solid); if (i >= 0) SOLIDS.splice(i, 1); } if (root.parent) root.parent.remove(root); },
-    update(dt, van) {
+    update(dt, van, foot = null) {
       if (!RAIL) return;
       for (const T of trams) {
         const end = T.line.S - LEN;
@@ -163,7 +175,9 @@ export function createTrain() {
           T.vanBlock = byVan && T.v < 0.3 ? (T.vanBlock || 0) + dt : 0;          // tempo seguido parado pela van (Nível 12: o dilema)
           T.waiting = byVan || lim < Infinity;
           const room = Math.min(left, Math.max(0, lim));
-          const want = T.charge ? 8 : byVan ? 0 : Math.min(6.5, Math.sqrt(2 * 1.4 * Math.max(0, room)) + (room === left ? 0.3 : 0));
+          const byFoot = !T.charge && blockedByFoot(T, foot);
+          if (byFoot) T.waiting = true;
+          const want = T.charge ? 8 : byVan || byFoot ? 0 : Math.min(6.5, Math.sqrt(2 * 1.4 * Math.max(0, room)) + (room === left ? 0.3 : 0));
           T.v = T.v < want ? Math.min(want, T.v + (T.charge ? 3.2 : 1.4) * dt) : Math.max(want, T.v - 3.5 * dt);
           T.s0 += T.dir * T.v * dt;
           if (T.dir > 0 && T.s0 >= end) { T.s0 = end; T.dir = -1; T.wait = T.line.wait; T.v = 0; }

@@ -85,6 +85,12 @@ export function createWalker(scene) {
         for (const d of [3.6, 4.6]) for (const sg of [1, -1]) { const x = van.x + sg * fx * d, z = van.z + sg * fz * d; if (!hits(x, z, boxes)) { st.x = x; st.z = z; st.heading = van.heading; st.speed = 0; apply(); return true; } }
         return false;
       }
+      // sem lugar ao lado: o ponto livre mais perto em volta (fora da van), para não começar preso dentro de um sólido
+      const clearOfVan = (x, z) => [-1.5, 0, 1.5].every(k => Math.hypot(x - van.x - fx * k, z - van.z - fz * k) > 1.85);
+      for (let d = 2.5; d <= 8; d += 0.5) for (let k = 0; k < 16; k++) {
+        const a = van.heading + Math.PI / 2 + k * Math.PI / 8, x = van.x + Math.cos(a) * d, z = van.z + Math.sin(a) * d;
+        if (clearOfVan(x, z) && !hits(x, z, boxes)) { yAbs = -999; st.x = x; st.z = z; st.heading = van.heading; st.speed = 0; apply(); return true; }
+      }
       st.x = van.x + fz * 3.4; st.z = van.z - fx * 3.4; st.heading = van.heading; st.speed = 0; apply();
       return true;
     },

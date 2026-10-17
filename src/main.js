@@ -1438,7 +1438,7 @@ function roofSolids() {
     { x0: -B, x1: o.x + R.x0 + e, z0: -B, z1: B }, { x0: o.x + R.x1 - e, x1: B, z0: -B, z1: B },
     { x0: -B, x1: B, z0: -B, z1: o.z + R.z0 + e }, { x0: -B, x1: B, z0: o.z + R.z1 - e, z1: B },
   ];
-  if (a.atop === 'pool') out.push({ x0: o.x + R.x0 + 1.2, x1: o.x + R.x1 - 1.2, z0: o.z + R.z0 + 1.4, z1: o.z + R.z1 - 1.6 });
+  if (a.atop === 'pool') out.push({ x0: o.x + R.x0 + 1.5, x1: o.x + R.x1 - 1.5, z0: o.z + R.z0 + 1.7, z1: o.z + R.z1 - 1.7 });   // só a água (W−3 × D−3,4); a borda é piso
   if (a.atop === 'tank') { const cx = o.x + (R.x0 + R.x1) / 2, cz = o.z + (R.z0 + R.z1) / 2; out.push({ x0: cx - 2, x1: cx + 2, z0: cz - 2, z1: cz + 2 }); }
   return out;
 }
@@ -2620,7 +2620,7 @@ function update(dt, t) {
 
   if (state !== 'drive') van.relax(dt);          // torre de caixas do bagageiro: para de balançar quando a van não está sendo dirigida
   world.update(t, dt);
-  if (neighborhood === 'rail8') train.update(dt, van);
+  if (neighborhood === 'rail8') train.update(dt, van, walker.visible ? walker : null);
   if (neighborhood === 'night10') night.update(dt, state === 'walk' ? walker.x : van.x, state === 'walk' ? walker.z : van.z);
   if (neighborhood === 'farm10') farmOut.update(dt);
   if (neighborhood === 'garden8' && gardGate.arm) {   // Jardins: a cancela sobe quando a van (ou o personagem) chega perto e desce depois
