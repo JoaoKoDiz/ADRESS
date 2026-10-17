@@ -4548,6 +4548,10 @@ void main(){
 .ahud-count svg { width: 1.12em; height: 1.12em; flex: none; display: block; }
 /* celular em p\xE9: sem o nome ao lado do \xEDcone (o Voltar ocupa a esquerda) e a linha de cima alta o bastante para a pista n\xE3o passar por baixo dele */
 @media (max-width: 560px) { .ahud-logo span { display: none; } .ahud-top { min-height: 40px; } }
+/* telas m\xE9dias: as dicas de teclado quebram linha em vez de sumirem com "\u2026" */
+@media (max-width: 1100px) { .ahud-sub { white-space: normal; text-overflow: clip; } }
+/* no mapa da Carreira o contador de entregas n\xE3o tem sentido */
+body.on-map .ahud-count { visibility: hidden; }
 .ahud-count b { font-variant-numeric: tabular-nums; }
 
 /* ---------- texto principal (pista / fala), at\xE9 2 linhas ---------- */
