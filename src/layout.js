@@ -440,6 +440,10 @@ function snowSolids(V) {
   for (const c of V.cuts || []) { c.solid = { ...c.box }; SOLIDS.push(c.solid); }
   for (const p of V.pines || V.trees) { const r = p.type ? 0.45 * p.s : 0.5; SOLIDS.push({ x0: p.x - r, x1: p.x + r, z0: p.z - r, z1: p.z + r }); }   // troncos (as folhas não colidem)
   for (const b of V.benches || []) SOLIDS.push({ x0: b.x - 1.1, x1: b.x + 1.1, z0: b.z - 1.1, z1: b.z + 1.1, vanOnly: true });
+  for (const b of V.benches || []) {                                 // a pé: o banco de verdade (1,8 × 0,6, girado); a van já para na caixa acima
+    const c = Math.cos(b.ry || 0), sn = Math.sin(b.ry || 0), ex = 0.9 * Math.abs(c) + 0.3 * Math.abs(sn), ez = 0.9 * Math.abs(sn) + 0.3 * Math.abs(c);
+    SOLIDS.push({ x0: b.x - ex, x1: b.x + ex, z0: b.z - ez, z1: b.z + ez, obb: { cx: b.x, cz: b.z, c, s: sn, hx: 0.9, hz: 0.3 } });
+  }
   for (const l of V.lamps) SOLIDS.push({ ...l.box });                // postes
 }
 /** Colheita: cercas (a porteira fechada é um sólido à parte, que some ao abrir), plantações, extras e a decoração. */

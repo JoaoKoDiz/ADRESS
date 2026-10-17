@@ -543,7 +543,8 @@ const plazaSolidsFoot = () => { if (plazaFootKey !== PLAZA) { plazaFootKey = PLA
 /** Obstáculos de quem anda a pé: tudo menos os lotes inteiros e a praça (dá para entrar nos quintais); só as paredes das casas. */
 function walkSolids() {
   const out = SOLIDS.slice(HOUSE_SLOTS.length + (PLAZA ? 1 : 0)).filter(b => !b.vanOnly);   // escadarias e passarelas: só a pé
-  if (PLAZA) out.push(...plazaSolidsFoot());                                  // Bairro 2: coreto, árvores, bancos… da praça
+  if (PLAZA) out.push(...plazaSolidsFoot());
+  if (neighborhood === 'night10') out.push(...night.poles);                    // Penumbra: postes (a van já para no lote)                                  // Bairro 2: coreto, árvores, bancos… da praça
    // postos, sebe, troncos, parede da entrada, bloqueios
   for (const s of HOUSE_SLOTS) {
     const h = game.layout[s];
