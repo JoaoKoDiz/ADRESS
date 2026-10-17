@@ -20,6 +20,16 @@ const REV = { E: 'W', W: 'E', S: 'N', N: 'S' }, RIGHT = { E: 'S', S: 'W', W: 'N'
 const PHASES = [['aG', 10], ['aY', 2.5], ['R', 1.2], ['cG', 7], ['cY', 2.5], ['R', 1.2]];
 const CYCLE = PHASES.reduce((t, p) => t + p[1], 0);
 let glowT = null;
+let LIGHT = null;                                                    // faróis (Penumbra): material/geometria únicos para todos os carros
+function lightMats() {
+  if (!LIGHT) {
+    LIGHT = { spr: new THREE.SpriteMaterial({ map: carGlow(), color: '#fff2c8', blending: THREE.AdditiveBlending, transparent: true, depthWrite: false }),
+      pool: new THREE.MeshBasicMaterial({ map: carGlow(), color: '#fff0c0', transparent: true, opacity: 0.35, blending: THREE.AdditiveBlending, depthWrite: false }),
+      geo: new THREE.PlaneGeometry(6, 2.6) };
+    LIGHT.spr.userData.keep = LIGHT.pool.userData.keep = LIGHT.geo.userData.keep = true;
+  }
+  return LIGHT;
+}
 function carGlow() {
   if (glowT) return glowT;
   const c = document.createElement('canvas'); c.width = c.height = 64; const g = c.getContext('2d');
@@ -210,8 +220,8 @@ export function createTraffic(audio) {
           const mesh = buildCar(); mesh.userData.body.material = mat(CAR_COLORS[Math.floor(Math.random() * CAR_COLORS.length)]);
           bakeStatic(mesh);                                              // 1 malha por material (de 11 para 6 por carro: a avenida cheia pesa menos)
           if (night) for (const zz of [0.7, -0.7]) {                 // Penumbra: faróis acesos (brilho + luz no chão)
-            const g = new THREE.Sprite(new THREE.SpriteMaterial({ map: carGlow(), color: '#fff2c8', blending: THREE.AdditiveBlending, transparent: true, depthWrite: false })); g.scale.setScalar(1.3); g.position.set(2.35, 0.95, zz); mesh.add(g);
-            const b = new THREE.Mesh(new THREE.PlaneGeometry(6, 2.6), new THREE.MeshBasicMaterial({ map: carGlow(), color: '#fff0c0', transparent: true, opacity: 0.35, blending: THREE.AdditiveBlending, depthWrite: false })); b.rotation.x = -Math.PI / 2; b.position.set(5.2, 0.08, zz * 0.6); mesh.add(b);
+            const g = new THREE.Sprite(lightMats().spr); g.scale.setScalar(1.3); g.position.set(2.35, 0.95, zz); mesh.add(g);
+            const b = new THREE.Mesh(lightMats().geo, lightMats().pool); b.rotation.x = -Math.PI / 2; b.position.set(5.2, 0.08, zz * 0.6); mesh.add(b);
           }
           root.add(mesh);
           const c = { mesh, lane: L, s, v: 0, vmax: L.ave ? 8.5 + Math.random() * 2 : 5.5 + Math.random() * 1.5, next: null, turn: null, wait: 0, solid: { x0: 0, x1: 0, z0: 0, z1: 0 }, horiz: false, stay: home };

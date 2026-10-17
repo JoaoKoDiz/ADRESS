@@ -117,8 +117,13 @@ const POLE_GEO = new THREE.CylinderGeometry(0.11, 0.14, 5.6, 6), POLE_MAT = new 
     groundGlow(x, z, '#fff0c8', 6, 0.5, r);
     lights.push({ x, y: 5, z, c: '#ffd59a', i: 30, r });
   }
+  const glowMats = new Map(), glowGeos = new Map();                // (poças iguais na mesma região dividem material; tamanhos iguais, geometria)
   function groundGlow(x, z, col, size, op, r, sx = 1, sz = 1) {           // reflexo simples no asfalto molhado
-    const m = new THREE.Mesh(new THREE.PlaneGeometry(size * sx, size * sz), reg(r, new THREE.MeshBasicMaterial({ map: glowTex(), color: col, transparent: true, opacity: op, blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false })));
+    const gk = size * sx + 'x' + size * sz, mk = r + '|' + col + '|' + op;
+    let geo = glowGeos.get(gk); if (!geo) { geo = new THREE.PlaneGeometry(size * sx, size * sz); geo.userData.keep = true; glowGeos.set(gk, geo); }
+    let gm = glowMats.get(mk);
+    if (!gm) { gm = reg(r, new THREE.MeshBasicMaterial({ map: glowTex(), color: col, transparent: true, opacity: op, blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false })); glowMats.set(mk, gm); }
+    const m = new THREE.Mesh(geo, gm);
     m.rotation.x = -Math.PI / 2; m.position.set(x, 0.05, z); root.add(m);
   }
   /** Painel luminoso: plano com 1–3 anúncios (alternam devagar) virado para (nx, nz). */
@@ -172,7 +177,7 @@ const POLE_GEO = new THREE.CylinderGeometry(0.11, 0.14, 5.6, 6), POLE_MAT = new 
       if (root) { if (root.parent) root.parent.remove(root); disposeTree(root); }   // (a composição anterior sai da memória)
       root = new THREE.Group(); root.name = 'night'; w.scene.add(root);
       for (const k in winMats) delete winMats[k];
-      regions.forEach(r => { r.mats.length = 0; r.k = 1; }); panels.length = 0; lights.length = 0; poles.length = 0;
+      regions.forEach(r => { r.mats.length = 0; r.k = 1; }); panels.length = 0; lights.length = 0; poles.length = 0; glowMats.clear();
       for (const l of pool) w.scene.add(l); blackout = null; nextBlackout = 12 + Math.random() * 8;
       let sd = 31; const rnd = () => (sd = (sd * 16807 + 7) % 2147483647) / 2147483647;
       const skip = new Set([...GAS_LIST.flatMap(g => g.slots), ...WARE_LIST.flatMap(g => g.slots)]);
