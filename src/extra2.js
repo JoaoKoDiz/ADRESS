@@ -53,7 +53,7 @@ export function createExtra2(ctx) {
   const { chairs, people, K } = set;
   // a passagem: placas que se formam sob os pés, da escuridão até a mesa; ilha da cadeira sobrando; ilha de quem está de fora
   const tiles = [];
-  for (let i = 0; i < 7; i++) {
+  for (let i = 0; i < 9; i++) {                             // 9 placas: a última encosta no chão da mesa (antes sobrava um vão)
     const z = 11.5 - i * 1.95, x = Math.sin(i * 1.3) * 0.35;
     const p = makeFloorPiece(2.4, 1.85, '#57452f'); p.position.set(x, -4, z); p.visible = false; scene.add(p);
     tiles.push({ p, x, z, k: 0, on: false });
@@ -400,7 +400,7 @@ export function createExtra2(ctx) {
     get fade() { return S ? S.fade : 0; }, get white() { return S ? S.wk : 0; },
     get locked() { return !!S && !S.free; },
     get carrying() { return !!S && S.carry; }, get exposure() { return S ? S.ex : -1; }, get cracked() { return S ? S.cracked || 0 : 0; },
-    _set: set, _fig: fig, _ring: ring,
+    _set: set, _fig: fig, _ring: ring, _walkable: (x, z) => walkable(x, z), _spare: SPARE,
     _jump(p) { if (!S) return; if (!S.white) { S.white = whitenFade(walker.object); S.wk = 1; S.white.step(1); } S.fade = 0;
       for (const tl of tiles) { tl.on = true; tl.k = 1; tl.p.visible = true; tl.p.position.y = 0; } spareIsle.visible = true; S.spareK = 1; spareIsle.position.y = 0; walkRects = rects();
       if (p === 'carry' || p === 'expose') { K.visible = true; set.seat('M', true); set.seat('K', false); K.position.copy(WL(2.9, 1.0)).sub(T); people.N.visible = true; personOpacity(people.N, 1); }
