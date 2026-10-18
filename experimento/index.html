@@ -32,12 +32,18 @@
    movido) para o prefixo experimental. */
 (function () {
   try {
-    var ls = window.localStorage, P = 'adress.', X = 'adressx2.', MARK = 'adressx2.__copied';
+    var ls = window.localStorage, P = 'adress.', X = 'adressx2.', MARK = 'adressx2.__copied', CLEAN = 'adressx2.__clean1';
+    // não copia o ponto salvo da batalha da principal (os passos são outros) nem as marcas de teste do cadeado
+    var skip = function (k) { return k === 'adress.battle.cp' || k.indexOf('adress.dev.') === 0; };
     if (!ls.getItem(MARK)) {
       var keys = [];
       for (var i = 0; i < ls.length; i++) { var k = ls.key(i); if (k && k.indexOf(P) === 0) keys.push(k); }
-      keys.forEach(function (k) { var nk = X + k.slice(P.length); if (ls.getItem(nk) === null) ls.setItem(nk, ls.getItem(k)); });
-      ls.setItem(MARK, String(keys.length));
+      keys.forEach(function (k) { if (skip(k)) return; var nk = X + k.slice(P.length); if (ls.getItem(nk) === null) ls.setItem(nk, ls.getItem(k)); });
+      ls.setItem(MARK, String(keys.length)); ls.setItem(CLEAN, '1');
+    }
+    if (!ls.getItem(CLEAN)) {                           // cópias antigas: tira só o que veio da principal (igual ao valor de lá)
+      ['battle.cp', 'dev.battle', 'dev.battlePlus'].forEach(function (s) { var v = ls.getItem(P + s); if (v !== null && ls.getItem(X + s) === v) ls.removeItem(X + s); });
+      ls.setItem(CLEAN, '1');
     }
     var map = function (k) { k = String(k); return k.indexOf(P) === 0 ? X + k.slice(P.length) : k; };
     var proto = Object.getPrototypeOf(ls), g = proto.getItem, s = proto.setItem, r = proto.removeItem;
