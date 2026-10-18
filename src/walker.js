@@ -60,6 +60,7 @@ export function createWalker(scene) {
 
   return {
     object: root,
+    parts: { body, pelvis, torso, legs, arms, head },   // (cenas da história: braços erguidos por IK depois do update)
     get x() { return st.x; }, get z() { return st.z; }, get heading() { return st.heading; }, get speed() { return st.speed; },
     get visible() { return root.visible; },
     get floor() { return floorY; },

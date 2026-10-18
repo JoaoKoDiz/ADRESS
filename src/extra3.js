@@ -1,201 +1,277 @@
-// Nível extra 3 — Covardia. Uma rua curta com neve no vazio, um poste com luz laranja e, ao fundo, um lugar quente.
-// Memória (inventada, coerente com o resgate na nevasca): o K atravessa a tempestade para levar alguém caído no poste até o lugar
-// quente. O jogador anda com dificuldade (vento, passo reduzido). Uma silhueta oferece a mão; o K desvia e esconde a mão que
-// treme. Sinais do esforço real: ele se curva contra o vento, escorrega, ajoelha para levantar a pessoa, respira com vapor.
-// Ao chegar, a luz do lugar se apaga; o poste fica. Salva EXTRA3_KEY e volta à tela inicial.
+// Nível extra 3 — Covardia.
+// Um trecho curto de rua com neve, suspenso no vazio; um poste laranja; ao fundo, a sugestão de um lugar aquecido.
+// A lembrança: o K sozinho, caído na neve, precisando atravessar até a luz. Ele sabe falar de coragem; agora é ele quem
+// precisa de ajuda — e tem vergonha de mostrar. O jogador atravessa junto (terceira pessoa próxima): passos hesitantes,
+// vento, movimento reduzido nas rajadas, sem controles invertidos. Sinais do esforço real do K: levanta com dificuldade,
+// segue contra o vento, cai de joelhos e levanta de novo, a respiração vira vapor, as pegadas ficam.
+// No poste, uma silhueta oferece a mão. A mão dele, que treme, quase vai — e ele a esconde atrás das costas, endireita o
+// corpo e passa. Depois disso o abrigo fica mais longe (a distância que ele escolheu). Ele chega sozinho, ainda segurando a
+// mão atrás do corpo. O jogador alcança a luz, mas ela se apaga antes de dar alívio; o poste continua lá, pequeno no vazio.
+// A rua atrás de quem anda desaba (não há volta). Salva EXTRA3_KEY e volta à tela inicial.
 import * as THREE from 'three';
-import { whitenFade } from './whiteout.js';
+import { whitenFade, setWhiteGlow } from './whiteout.js';
 import { walkK, reachArm } from './models/reader.js';
-import { VOID, line, makeFigure, makeK, makeSilhouette, makeLampPost, createChase, shotTo, createSfx, faceTo, ease, clamp } from './storyKit.js';
+import { VOID, COL, line, makeFigure, makeFloorPiece, createSfx, createMurmur, createBuzz, createChase, attachAssist, shotTo, faceTo, ease, clamp } from './storyKit.js';
+import { buildStreetSet, poseKSit, personReach } from './memorySets.js';
 
 export const EXTRA3_KEY = 'adress.extra.3';
 const FAR_VAN = { x: 1e9, z: 1e9 };
-const START = { x: -0.6, z: 16 };
-const POST = new THREE.Vector3(2.4, 0, -4);
-const DOOR = new THREE.Vector3(0.4, 0, -29.5);
-const TALK = ['Você sabia o que precisava fazer.', 'Só não queria que alguém visse quanto custava.', 'Foi medo?', 'Pode chamar de cuidado, se preferir.',
-  'Você tem tantas palavras para não dizer essa.', 'Ajudar alguém é mais confortável.', 'Você fica do lado que parece forte.', 'Mas quando é você…',
-  'Você espera que ninguém perceba.', 'Até a sua coragem precisa de uma testemunha que não faça perguntas.'].map(s => line('f', s));
+const START = { x: -0.9, z: 1.6 };
+const F = (s, p = 0) => line('f', s, p);
+const L = {
+  sabia: F('Você sabia o que precisava fazer.'), custava: F('Só não queria que alguém visse quanto custava.'), medo: F('Foi medo?'),
+  cuidado: F('Pode chamar de cuidado, se preferir.'), palavras: F('Você tem tantas palavras para não dizer essa.'),
+  confortavel: F('Ajudar alguém é mais confortável.'), forte: F('Você fica do lado que parece forte.'), quando: F('Mas quando é você…'),
+  perceba: F('Você espera que ninguém perceba.'), testemunha: F('Até a sua coragem precisa de uma testemunha que não faça perguntas.'),
+};
 
 export function createExtra3(ctx) {
   const { walker, input, audio, talkBox } = ctx;
   const scene = new THREE.Scene(); scene.background = new THREE.Color(VOID);
-  scene.fog = new THREE.Fog(VOID, 14, 46);
-  const camera = new THREE.PerspectiveCamera(50, 16 / 9, 0.05, 300);
-  const hemi = new THREE.HemisphereLight('#c9d4e6', '#15161c', 0.55); scene.add(hemi);
-  const sfx = createSfx(audio);
+  scene.fog = new THREE.Fog(VOID, 12, 40);
+  const camera = new THREE.PerspectiveCamera(52, 16 / 9, 0.05, 300);
+  const hemi = new THREE.HemisphereLight('#c9d4e6', '#15161c', 0.72); scene.add(hemi);
+  const moon = new THREE.DirectionalLight('#aebbd6', 0.45); moon.position.set(-6, 10, 4); scene.add(moon);
+  const BG = new THREE.Color(VOID), BG_LATE = new THREE.Color('#15161b');   // no último plano o fundo clareia um pouco: a silhueta preta precisa aparecer
+  const sfx = createSfx(audio), inside = createMurmur(audio, 3), buzz = createBuzz(audio);
 
-  // rua: faixa de neve, calçadas, montinhos
-  const snowM = new THREE.MeshStandardMaterial({ color: '#dfe4ea', roughness: 1 });
-  const ground = new THREE.Mesh(new THREE.PlaneGeometry(9, 54).rotateX(-Math.PI / 2), snowM); ground.position.set(0, 0, -7); scene.add(ground);
-  const road = new THREE.Mesh(new THREE.PlaneGeometry(4.6, 54).rotateX(-Math.PI / 2), new THREE.MeshStandardMaterial({ color: '#b9bec8', roughness: 1 })); road.position.set(0, 0.005, -7); scene.add(road);
-  const moundM = new THREE.MeshStandardMaterial({ color: '#eef1f5', roughness: 1 });
-  for (let i = 0; i < 26; i++) { const m = new THREE.Mesh(new THREE.SphereGeometry(0.5 + Math.random() * 0.6, 10, 6), moundM); m.scale.y = 0.35; m.position.set((Math.random() < 0.5 ? -1 : 1) * (3.2 + Math.random() * 1.2), 0, 18 - i * 2 + Math.random()); scene.add(m); }
-  const post = makeLampPost(); post.position.copy(POST); post.rotation.y = Math.PI; scene.add(post);
-  // o lugar quente: fachada com porta e janela acesas
-  const warm = new THREE.Group(); warm.position.set(DOOR.x, 0, DOOR.z - 0.6); scene.add(warm);
-  const wallM = new THREE.MeshStandardMaterial({ color: '#4a3a30', roughness: 0.9 });
-  const wall = new THREE.Mesh(new THREE.BoxGeometry(7, 4.2, 0.5), wallM); wall.position.y = 2.1; warm.add(wall);
-  const roof = new THREE.Mesh(new THREE.BoxGeometry(7.6, 0.5, 1.6), new THREE.MeshStandardMaterial({ color: '#eef1f5', roughness: 1 })); roof.position.set(0, 4.4, 0.3); warm.add(roof);
-  const litM = new THREE.MeshBasicMaterial({ color: '#ffb066', toneMapped: false });
-  const doorM = new THREE.Mesh(new THREE.PlaneGeometry(1.2, 2.2), litM); doorM.position.set(0, 1.1, 0.27); warm.add(doorM);
-  const win = new THREE.Mesh(new THREE.PlaneGeometry(1.3, 1.0), litM); win.position.set(2.2, 2.2, 0.27); warm.add(win);
-  const warmLight = new THREE.PointLight('#ff9a4a', 22, 16, 1.4); warmLight.position.set(0, 1.6, 1.4); warm.add(warmLight);
-  // pessoas da memória
-  const K = makeK(); scene.add(K);
-  const fallen = makeSilhouette('#5f6068', { scale: 0.9 }); scene.add(fallen);
-  const helper = makeSilhouette('#6a6662', { hair: true }); scene.add(helper);
-  const fig = makeFigure(1.15); scene.add(fig);
-  // neve caindo (em volta da câmera)
-  const SN = 900, sp = new Float32Array(SN * 3), sGeo = new THREE.BufferGeometry();
-  for (let i = 0; i < SN; i++) { sp[i * 3] = (Math.random() - 0.5) * 26; sp[i * 3 + 1] = Math.random() * 12; sp[i * 3 + 2] = (Math.random() - 0.5) * 26; }
-  sGeo.setAttribute('position', new THREE.BufferAttribute(sp, 3));
-  const flakes = new THREE.Points(sGeo, new THREE.PointsMaterial({ color: '#ffffff', size: 0.06, transparent: true, opacity: 0.85, depthWrite: false })); flakes.frustumCulled = false; scene.add(flakes);
-  // vapor da respiração do K (prova do esforço)
-  const puffs = []; const puffM = new THREE.MeshBasicMaterial({ color: '#ffffff', transparent: true, opacity: 0, depthWrite: false });
-  for (let i = 0; i < 6; i++) { const p = new THREE.Mesh(new THREE.SphereGeometry(0.08, 8, 6), puffM.clone()); p.visible = false; scene.add(p); puffs.push({ m: p, t: 9 }); }
-  // pegadas do K na neve
-  const stepM = new THREE.MeshBasicMaterial({ color: '#a4abb6', transparent: true, opacity: 0.7, depthWrite: false });
-  const steps = new THREE.Group(); scene.add(steps);
+  const set = buildStreetSet(); scene.add(set.g);
+  const { K, helper, post, shelter } = set;
+  const startPiece = makeFloorPiece(2.6, 2.6, '#cfd5dc'); startPiece.position.set(START.x, 0, 1.3); scene.add(startPiece);   // (cobre z 0..2,6: emenda com a 1ª placa da rua)
+  const fig = makeFigure(1.05); fig.visible = false; scene.add(fig);
+  const baseShelterZ = set.shelterZ;
 
-  const chase = createChase(camera, walker, () => !!S && (S.phase === 'walk' || S.phase === 'cross'));
+  const chase = createChase(camera, walker, () => !!S && S.free, { dist: 4.4, pitch: 0.2, lookY: 1.45, side: 1.05 });
+  const assist = attachAssist(chase, walker, input);
+  const personOpacity = (p, a) => p.traverse(o => { if (o.isMesh) { o.material.transparent = true; o.material.opacity = a; o.material.depthWrite = a > 0.98; } });
+
   let S = null;
+  const queue = [];
+  const say = k => queue.push(L[k]);
+  function pumpLines(dt) {
+    if (talkBox.open) { talkBox.update(dt); return; }
+    if (!queue.length) return;
+    const l = queue.shift(); if (l.who === 'f') sfx.play('presence', 0.8);
+    talkBox.show([l], null, { auto: true });
+  }
 
   function reset() {
-    K.position.set(-3.8, 0, -1.5); K.rotation.y = 0; K.visible = false;
-    fallen.position.copy(POST).add(new THREE.Vector3(-0.45, 0, 0.2)); fallen.rotation.y = 0.3; fallen.userData.B.pelvis.position.y = 0.38; fallen.userData.B.torso.rotation.z = 0.5; fallen.visible = true;
-    helper.visible = false; helper.position.copy(DOOR).add(new THREE.Vector3(0.6, 0, -0.2)); helper.rotation.y = Math.PI / 2; helper.userData.mat.opacity = 0;
-    fig.visible = true; fig.userData.mat.opacity = 0; fig.position.set(-6, 0, -44); fig.rotation.y = -Math.PI / 2;
-    litM.color.set('#ffb066'); warmLight.intensity = 22; post.userData.set(1);
-    while (steps.children.length) steps.remove(steps.children[0]);
-    camera.fov = 50; camera.updateProjectionMatrix();
+    set.reset(); shelter.position.z = baseShelterZ; personOpacity(K, 1); personOpacity(helper, 0); helper.visible = false;
+    K.visible = false; K.position.set(0.5, 0, -1.6); K.rotation.y = Math.PI / 2; delete K.userData.gait; poseKSit(K, 1, 0.12);
+    K.userData.arms.forEach(a => { a.sh.quaternion.copy(a.rest); a.elbow.quaternion.copy(a.erest); });
+    helper.position.set(1.7, 0, set.postZ - 1.0); helper.rotation.y = Math.PI / 2;   // (sai da luz do poste)
+    fig.visible = false; fig.userData.mat.opacity = 0; startPiece.visible = true; startPiece.position.y = 0;
+    shelter.visible = true; shelter.traverse(o => { if (o.isMesh && o.material && o.material.userData.op0 !== undefined) { o.material.opacity = o.material.userData.op0; o.material.transparent = o.material.userData.tr0; } });
+    scene.background.copy(BG); queue.length = 0; camera.fov = 52; camera.updateProjectionMatrix();
   }
+  // onde se pisa: a placa de partida e as placas da rua que ainda não caíram
+  const walkable = (x, z) => {
+    if (Math.abs(x) > 3.4) return false;
+    if (startPiece.visible && Math.abs(x - START.x) < 1.3 && z > -0.05 && z < 2.6) return true;
+    const i = Math.floor(-z / 2); const T = set.tiles[i]; return !!T && T.fall < 0.05 && z <= 0;
+  };
+
   function start() {
     reset();
-    scene.add(walker.object); walker.setFloor(0); walker.pose(START.x, START.z, -Math.PI / 2); walker.show(true);
+    scene.add(walker.object); walker.setFloor(0); walker.pose(START.x, START.z, -Math.PI / 2); walker.show(true); setWhiteGlow(0.26);
+    walker.setArea(walkable);
     chase.reset(); chase.update(0, true);
-    S = { phase: 'walk', t: 0, white: null, wk: 0, fade: 1, gust: 0, stepAcc: 0, lastPuff: 0, kTalk: false };
+    S = { phase: 'open', t: 0, T: 0, hes: 0, white: null, wk: 0, fade: 1, free: true, gust: 0, stepAcc: 0, kStep: 0, lastPuff: 0, seen: {}, kz: -1.6, sway: 0 };
   }
   function stop() {
     if (!S) return;
     if (S.white) S.white.restore();
-    walker.setSpeedMul(1); sfx.stop(); if (talkBox.open) talkBox.hide();
+    walker.setArea(null); walker.setSpeedMul(1); sfx.stop(); inside.stop(); buzz.stop(); setWhiteGlow(0);
+    if (talkBox.open) talkBox.hide(); queue.length = 0;
     S = null;
   }
-  const go = p => { S.phase = p; S.t = 0; };
-  function puff(x, y, z) { const p = puffs.find(q => q.t > 1.6); if (!p) return; p.t = 0; p.m.position.set(x, y, z); p.m.visible = true; }
-  function footprint(x, z, h) { const m = new THREE.Mesh(new THREE.PlaneGeometry(0.16, 0.28).rotateX(-Math.PI / 2), stepM); m.position.set(x, 0.012, z); m.rotation.y = -h; steps.add(m); if (steps.children.length > 120) steps.remove(steps.children[0]); }
-  /** K apoiando a pessoa (braço dela sobre o ombro dele), andando curvado contra o vento. */
-  function walkPair(dt, speed, tremble) {
-    const prev = K.position.clone(), dir = DOOR.clone().sub(K.position).setY(0); const dist = dir.length();
-    if (dist > 0.9 && speed > 0) { dir.normalize(); K.position.addScaledVector(dir, Math.min(dist - 0.9, speed * dt)); }
-    faceTo(K, DOOR.x, DOOR.z, dt, 3);
-    const tr = prev.distanceTo(K.position); walkK(K, dt, tr);
-    K.userData.torso.rotation.z -= 0.28;                                   // curvado contra o vento
-    const side = new THREE.Vector3(Math.sin(K.rotation.y), 0, Math.cos(K.rotation.y));   // à esquerda do K
-    fallen.position.copy(K.position).addScaledVector(side, 0.62); fallen.rotation.y = K.rotation.y;
-    if (tr > 0) { S.stepAcc += tr; if (S.stepAcc > 0.45) { S.stepAcc = 0; footprint(K.position.x, K.position.z, -K.rotation.y); } }
-    // mão direita (a que treme) no casaco da pessoa; tremor visível
-    const a = K.userData.arms.find(x => x.s === 1); if (a && a.wrist) a.wrist.rotation.x = tremble * Math.sin(performance.now() * 0.06) * 0.25;
-    return dist;
+  const go = (p, free) => { S.phase = p; S.t = 0; if (free !== undefined) S.free = free; };
+
+  /** Mão direita do K: no peito, tremendo (k = quanto está segurando); escondida atrás das costas (hide). */
+  function kHand(tremble, hide) {
+    const kw = K.getWorldPosition(new THREE.Vector3()), fwd = new THREE.Vector3(Math.cos(K.rotation.y), 0, -Math.sin(K.rotation.y));
+    const side = new THREE.Vector3(Math.sin(K.rotation.y), 0, Math.cos(K.rotation.y));
+    const chest = kw.clone().add(new THREE.Vector3(0, 1.18, 0)).addScaledVector(fwd, 0.26).addScaledVector(side, 0.06);
+    const back = kw.clone().add(new THREE.Vector3(0, 0.92, 0)).addScaledVector(fwd, -0.32).addScaledVector(side, 0.12);
+    const tgt = chest.lerp(back, hide);
+    tgt.x += Math.sin(S.t * 41) * 0.012 * tremble; tgt.y += Math.sin(S.t * 37 + 1) * 0.012 * tremble;
+    reachArm(K, 1, tgt, 0.9);
+    const a = K.userData.arms.find(x => x.s === 1); if (a && a.wrist) a.wrist.rotation.x = Math.sin(S.t * 45) * 0.18 * tremble;
   }
 
   function update(dt, paused) {
     if (!S || paused) { if (S && paused) sfx.wind(0); return; }
-    S.t += dt; const t = S.t, now = performance.now() / 1000;
-    // vento em rajadas: o passo do jogador oscila (nunca inverte; só pesa)
+    S.t += dt; S.T += dt; const t = S.t, now = S.T;
     S.gust = 0.5 + 0.5 * Math.sin(now * 0.7) * Math.sin(now * 1.9 + 1.3);
-    const move = S.phase === 'walk' || S.phase === 'cross';
-    walker.setSpeedMul(move ? 0.62 - 0.22 * S.gust : 0);
-    const solids = [{ x0: POST.x - 0.25, x1: POST.x + 0.25, z0: POST.z - 0.25, z1: POST.z + 0.25 }, { x0: -5, x1: 5, z0: DOOR.z - 2.5, z1: DOOR.z - 0.4 }, { x0: -9, x1: -4.4, z0: -40, z1: 30 }, { x0: 4.4, x1: 9, z0: -40, z1: 30 }];
-    walker.update(dt, move ? input.axis() : { x: 0, z: 0 }, 'car', solids, FAR_VAN);
+    // jogador: passo pesado e hesitante na neve (o pé afunda, a rajada pesa), no ritmo do K; nunca invertido
+    S.hes = (S.hes + dt * 0.85) % 1;
+    const step = 0.62 + 0.38 * (0.5 - 0.5 * Math.cos(S.hes * Math.PI * 2));
+    walker.setSpeedMul(S.free ? (0.2 - 0.065 * S.gust) * step : 0);
+    const ox = walker.x, oz = walker.z;
+    walker.update(dt, S.free ? input.axis() : { x: 0, z: 0 }, 'car', [{ x0: 1.45, x1: 1.95, z0: set.postZ - 0.25, z1: set.postZ + 0.25 }, { x0: -4, x1: 4, z0: shelter.position.z - 0.6, z1: shelter.position.z + 0.4 }], FAR_VAN);
+    const moved = Math.hypot(walker.x - ox, walker.z - oz);
+    S.stepAcc += moved; if (S.stepAcc > 0.62) { S.stepAcc = 0; sfx.play('step', 0.5); }
     if (!S.white && Math.hypot(walker.x - START.x, walker.z - START.z) > 0.05) S.white = whitenFade(walker.object);
     if (S.white && !S.white.done) { S.wk = Math.min(1, S.wk + dt / 1.6); S.white.step(ease(S.wk)); }
-    S.fade = S.phase === 'end' ? S.fade : Math.max(0, S.fade - dt);
-    if (talkBox.open) talkBox.update(dt);
-    sfx.wind(S.phase === 'end' ? 0.08 : 0.16 + 0.16 * S.gust, 260);
-    // neve acompanha a câmera, levada pelo vento
-    const pos = sGeo.attributes.position, cx = camera.position.x, cz = camera.position.z;
-    for (let i = 0; i < SN; i++) {
-      let x = pos.getX(i) + dt * (1.4 + 2.6 * S.gust), y = pos.getY(i) - dt * 1.6, z = pos.getZ(i) + dt * 0.8;
-      if (y < 0) y += 12; if (x - cx > 13) x -= 26; if (x - cx < -13) x += 26; if (z - cz > 13) z -= 26; if (z - cz < -13) z += 26;
-      pos.setXYZ(i, x, y, z);
-    }
-    pos.needsUpdate = true;
-    for (const p of puffs) { if (!p.m.visible) continue; p.t += dt; p.m.position.y += dt * 0.25; p.m.position.x += dt * 0.6; p.m.scale.setScalar(1 + p.t * 2.2); p.m.material.opacity = Math.max(0, 0.35 * (1 - p.t / 1.4)); if (p.t > 1.4) p.m.visible = false; }
-    post.userData.light.intensity = 14 * (0.92 + 0.08 * Math.sin(now * 23) * Math.sin(now * 7));   // a luz do poste tremula de leve
+    if (S.phase !== 'out') S.fade = Math.max(0, S.fade - dt);
+    pumpLines(dt);
+    set.memory.flicker(t); set.update(dt, walker.x, walker.z, S.gust);
+    sfx.wind(S.phase === 'dark' || S.phase === 'out' ? 0.07 : 0.15 + 0.15 * S.gust, 260);
+    const dPost = Math.hypot(walker.x - 1.7, walker.z - set.postZ);
+    const flick = 0.9 + 0.1 * Math.sin(now * 23) * Math.sin(now * 7);
+    buzz.level(clamp(1 - dPost / 7, 0, 1)); buzz.update(dt, flick);
+    post.userData.light.intensity = 14 * flick;
+    const dSh = Math.hypot(walker.x - shelter.position.x, walker.z - shelter.position.z);
+    inside.level(S.phase === 'dark' || S.phase === 'out' ? 0 : 0.18 * clamp(1 - dSh / 16, 0, 1)); inside.update(dt);
+    // a rua atrás desaba (sem volta)
+    for (const T of set.tiles) { const behind = walker.z < T.z1 - 4.2 && K.position.z < T.z1 - 3; if (behind && T.fall === 0) { T.fall = 0.001; sfx.play('fall', 0.12); } if (T.fall > 0 && T.fall < 1) set.setTile(T.i, Math.min(1, T.fall + dt / 1.6)); }
+    if (startPiece.visible && walker.z < -3.5) { startPiece.position.y -= dt * 3; if (startPiece.position.y < -9) startPiece.visible = false; }
+
+    // câmera próxima: um balanço curto nas rajadas
+    if (S.free) { chase.update(dt); assist.update(dt, S.focus, 1.6, 0.9); S.sway += (S.gust - S.sway) * Math.min(1, dt * 2); camera.position.x += Math.sin(now * 1.7) * 0.05 * S.sway; camera.rotation.z += Math.sin(now * 1.3) * 0.012 * S.sway; }
 
     switch (S.phase) {
-      case 'walk':
-        chase.update(dt);
-        if (walker.z < POST.z + 9) { go('lift'); K.visible = true; }
+      case 'open':                                           // a neve começa; o K aparece caído
+        if (t > 0.8 && !K.visible) { K.visible = true; personOpacity(K, 0); }
+        if (K.visible) personOpacity(K, Math.min(1, (t - 0.8) / 1.2));
+        kHand(1, 0); K.userData.head.rotation.z = -0.4;
+        S.focus = K.getWorldPosition(new THREE.Vector3());
+        if (t > 2.6) go('rise');
         break;
-      case 'lift': {                                       // o K vem do escuro, ajoelha e levanta a pessoa (esforço visível)
-        shotTo(camera, [walker.x + 1.6, 2.0, walker.z + 3.6], [POST.x - 0.8, 0.9, POST.z], t < 0.05 ? 1 : Math.min(1, dt * 2));
-        const goal = fallen.position.clone().add(new THREE.Vector3(-0.7, 0, 0.1));
-        if (t < 3.2) { const prev = K.position.clone(), k = ease(t / 3.2); K.position.lerpVectors(new THREE.Vector3(-3.8, 0, -1.5), goal, k); faceTo(K, goal.x, goal.z, dt); walkK(K, dt, prev.distanceTo(K.position)); K.userData.torso.rotation.z -= 0.3;
-          if (t > 1.6 && t < 1.9) K.position.x += Math.sin(t * 40) * 0.03; }   // escorrega
-        else if (t < 5.4) { faceTo(K, fallen.position.x, fallen.position.z, dt); const kneel = ease(Math.min(1, (t - 3.2) / 0.8)) * (t < 4.6 ? 1 : 1 - ease((t - 4.6) / 0.8)); K.userData.body.position.y = -0.32 * kneel; K.userData.torso.rotation.z = -0.5 * kneel;
-          reachArm(K, 1, fallen.position.clone().setY(0.9), kneel); reachArm(K, -1, fallen.position.clone().setY(0.7), kneel);
-          if (t > 4.6) { const u = ease((t - 4.6) / 0.8); fallen.userData.B.pelvis.position.y = 0.38 + (0.64 - 0.38) * u; fallen.userData.B.torso.rotation.z = 0.5 * (1 - u) + 0.2 * u; } }
-        if (t - S.lastPuff > 0.9) { S.lastPuff = t; puff(K.position.x + 0.3, 1.55 + K.userData.body.position.y, K.position.z); }
-        if (t > 5.6) { K.userData.body.position.y = 0; go('cross'); talkBox.show(TALK, () => { if (S) S.talkDone = true; }, { auto: true, onAdvance: i => { if (S) S.line = i; } }); S.line = 0; }
+      case 'rise': {                                         // levanta com esforço (escorrega uma vez)
+        const k = t < 0.9 ? 0 : t < 1.4 ? (t - 0.9) / 0.5 * 0.4 : t < 1.9 ? 0.4 - (t - 1.4) / 0.5 * 0.25 : 0.15 + Math.min(1, (t - 1.9) / 1.2) * 0.85;
+        poseKSit(K, 1 - k, 0.12); kHand(1, 0);
+        if (t > 1.4 && t < 1.5) sfx.play('step', 0.6);
+        if (S.T - S.lastPuff > 0.8) { S.lastPuff = S.T; puffK(); }
+        S.focus = K.getWorldPosition(new THREE.Vector3());
+        if (t > 3.3) { poseKSit(K, 0); go('cross'); say('sabia'); }
         break;
       }
-      case 'cross': {                                      // atravessam juntos até o lugar quente; o jogador segue com dificuldade
-        chase.update(dt);
-        const toDoor = K.position.distanceTo(DOOR);
-        const speed = (S.line >= 9 || S.talkDone) ? 0.9 : toDoor > 4 ? 0.62 + 0.15 * (1 - S.gust) : 0;   // espera perto da porta até as falas acabarem
-        const offer = !S.declined && toDoor < 13;
-        walkPair(dt, offer && S.offerT > 0 && !S.declined ? 0 : speed, 1);
-        if (t - S.lastPuff > 1.1) { S.lastPuff = t; puff(K.position.x + 0.3, 1.5, K.position.z); }
-        fig.userData.mat.opacity = Math.min(1, fig.userData.mat.opacity + dt * 0.25);
-        // a silhueta sai do lugar quente e oferece a mão; o K desvia e esconde a mão que treme
-        if (offer) {
-          S.offerT = (S.offerT || 0) + dt; const o = S.offerT;
-          helper.visible = true; helper.userData.mat.opacity = Math.min(1, o / 0.8);
-          const hp = DOOR.clone().add(new THREE.Vector3(0.2, 0, 2.2)).lerp(K.position.clone().add(new THREE.Vector3(0, 0, -1.6)), ease(Math.min(1, o / 2.4)) * 0.6);
-          helper.position.copy(hp); faceTo(helper, K.position.x, K.position.z, dt);
-          helper.userData.B.arms[1].sh.rotation.z = Math.min(1.25, Math.max(0, o - 1.6) * 1.6);   // estende a mão
-          if (o > 3.2) {                                   // o K vira o rosto e leva a mão para as costas
-            const k = ease(Math.min(1, (o - 3.2) / 0.8));
-            K.userData.head.rotation.y = 0.5 * k;
-            const back = K.position.clone().add(new THREE.Vector3(Math.cos(-K.rotation.y), 0, Math.sin(-K.rotation.y)).multiplyScalar(-0.35)).setY(0.95);
-            reachArm(K, 1, back, k);
+      case 'cross': crossStep(dt); break;
+      case 'offer': offerStep(dt); break;
+      case 'after': crossStep(dt, true); break;
+      case 'arrive': {                                       // ele chega sozinho, segurando a mão atrás do corpo
+        walkK(K, dt, 0); kHand(1, 1); K.userData.torso.rotation.z = -0.05; faceTo(K, 0, shelter.position.z - 3, dt, 2);
+        S.focus = K.getWorldPosition(new THREE.Vector3());
+        if (t > 1.0 && !S.seen.perceba) { S.seen.perceba = 1; say('perceba'); }
+        const near = Math.hypot(walker.x - shelter.position.x, walker.z - (shelter.position.z + 1.4)) < 3.6;
+        if (near && t > 1.6 && !talkBox.open && !queue.length) { go('dark', false); sfx.play('out', 0.6); }
+        break;
+      }
+      case 'dark': {                                         // a luz se apaga antes do alívio; o poste fica
+        // a luz do abrigo some de uma vez; o K fica um instante no escuro, ainda com a mão atrás das costas, e some
+        set.setShelter(0); walkK(K, dt, 0); kHand(1, 1);
+        personOpacity(K, 1 - clamp((t - 0.9) / 1.3, 0, 1));
+        const wallA = 1 - clamp((t - 0.5) / 1.2, 0, 1);
+        shelter.traverse(o => { if (o.isMesh && o.material && !o.material.isMeshBasicMaterial) { const m = o.material; if (m.userData.op0 === undefined) { m.userData.op0 = m.opacity; m.userData.tr0 = m.transparent; } m.transparent = true; m.opacity = m.userData.op0 * wallA; } });
+        if (wallA <= 0) shelter.visible = false;
+        // a rua desaba toda, menos o pedaço sob o jogador e o do poste
+        const under = Math.floor(-walker.z / 2), postI = Math.floor(-set.postZ / 2);
+        if (t > 1.0) for (const T of set.tiles) if (T.fall === 0 && T.i !== under && T.i !== postI) { T.fall = 0.001; sfx.play('fall', 0.08); }
+        // corte: o jogador se volta para o caminho que fez; o poste pequeno no vazio; além da luz dele, a figura
+        const pw = new THREE.Vector3(1.7, 0, set.postZ);
+        if (t > 2.4) {
+          if (!S.turned) {
+            S.turned = true; walker.pose(walker.x, walker.z, Math.atan2(pw.z - walker.z, pw.x - walker.x));
+            fig.visible = true; fig.position.set(pw.x - 0.6, 0, pw.z + 10); fig.rotation.y = Math.PI / 2;
+            camera.fov = 38; camera.updateProjectionMatrix();
           }
-          if (o > 5.2) { S.declined = true; S.helperBack = 0; }
-        } else if (S.declined && helper.visible) {
-          S.helperBack += dt; helper.userData.B.arms[1].sh.rotation.z *= 0.92; helper.position.lerp(DOOR.clone().add(new THREE.Vector3(2.4, 0, 0.6)), Math.min(1, dt));
-          if (S.helperBack > 2) helper.userData.mat.opacity = Math.max(0, helper.userData.mat.opacity - dt * 0.6);
-          const back = K.position.clone().add(new THREE.Vector3(Math.cos(-K.rotation.y), 0, Math.sin(-K.rotation.y)).multiplyScalar(-0.35)).setY(0.95);
-          reachArm(K, 1, back, 1);                         // a mão continua escondida
-        }
-        if ((S.talkDone || S.line >= 9) && toDoor < 1.2) { go('end'); sfx.play('out', 0.5); }
+          const ws = new THREE.Vector3(walker.x, 0, walker.z), dir = pw.clone().sub(ws).normalize(), rt = new THREE.Vector3(-dir.z, 0, dir.x);
+          const drift = Math.min(1, (t - 2.4) / 9);                       // aproxima bem devagar das costas do jogador
+          const back = 4.3 - drift * 0.45;
+          shotTo(camera, [ws.x - dir.x * back + rt.x * 1.1, 1.95, ws.z - dir.z * back + rt.z * 1.1], [pw.x - 0.2, 2.5, pw.z + 3], 1);
+          scene.background.copy(BG).lerp(BG_LATE, clamp((t - 2.4) / 2.5, 0, 1));
+          fig.userData.mat.opacity = clamp((t - 3.4) / 1.6, 0, 1);
+          if (t > 3.6 && !S.seen.test) { S.seen.test = 1; say('testemunha'); }
+        } else { chase.update(dt); }
+        if (t > 9.6 && !talkBox.open && !queue.length) go('out', false);
         break;
       }
-      case 'end': {                                        // entram; a luz se apaga; o poste fica
-        chase.update(dt);
-        if (t < 1.4) { const k = ease(t / 1.4); K.position.lerp(DOOR.clone().add(new THREE.Vector3(0, 0, -0.6)), k * 0.2); fallen.position.lerp(DOOR.clone().add(new THREE.Vector3(0.5, 0, -0.6)), k * 0.2); }
-        else { K.visible = false; fallen.visible = false; }
-        const off = clamp((t - 1.6) / 1.2, 0, 1);
-        litM.color.setRGB(1 - 0.92 * off, (0.69) * (1 - 0.94 * off), 0.4 * (1 - 0.95 * off)); warmLight.intensity = 22 * (1 - off);
-        fig.userData.mat.opacity = Math.max(0, 1 - off);
-        if (t > 4.8) S.fade = Math.min(1, (t - 4.8) / 2.2);
-        if (t > 7.2 && !S.saved) { S.saved = true; try { localStorage.setItem(EXTRA3_KEY, '1'); } catch (e) { /* */ } const cb = ctx.onDone; stop(); cb && cb(true); return; }
+      case 'out':
+        S.fade = Math.min(1, t / 2.4);
+        if (t > 2.8 && !S.saved) { S.saved = true; try { localStorage.setItem(EXTRA3_KEY, '1'); } catch (e) { /* */ } const cb = ctx.onDone; stop(); cb && cb(true); return; }
         break;
-      }
     }
   }
+  function puffK() { const kw = K.getWorldPosition(new THREE.Vector3()), fwd = new THREE.Vector3(Math.cos(K.rotation.y), 0, -Math.sin(K.rotation.y)); set.puff(kw.x + fwd.x * 0.35, 1.55 + K.userData.body.position.y, kw.z + fwd.z * 0.35); }
+  /** A travessia: o K anda curvado contra o vento, mancando; cai de joelhos uma vez e levanta. */
+  function crossStep(dt, after) {
+    const T = S.T, goalZ = after ? shelter.position.z + 1.3 : set.postZ + 1.5;
+    const limp = 0.75 + 0.25 * Math.sin(S.kStep * 3.1);
+    // antes da mão: curvado, devagar. Depois de recusá-la: endireita e apressa o passo para parecer bem — e continua mancando.
+    let v = (after ? 0.95 : 0.72 + 0.15 * (1 - S.gust)) * limp;
+    if (!after && K.position.z < -6.6 && !S.fell) { S.fell = T; }
+    if (S.fell && T - S.fell < 2.0) {                          // de joelhos, apoia a mão boa no chão, levanta
+      const u = T - S.fell, k = u < 0.4 ? u / 0.4 : u < 1.3 ? 1 : 1 - (u - 1.3) / 0.7;
+      poseKSit(K, 0.55 * k, 0.12); v = 0; if (u > 0.05 && u < 0.12) sfx.play('step', 0.7);
+      reachArm(K, -1, K.getWorldPosition(new THREE.Vector3()).add(new THREE.Vector3(0.3, 0.15, -0.2)), k * 0.8);
+      if (!S.seen.custava) { S.seen.custava = 1; say('custava'); }
+    } else if (S.fell && !S.up) { S.up = true; poseKSit(K, 0); }
+    const dz = goalZ - K.position.z;
+    if (Math.abs(dz) > 0.05 && v > 0) { const st = Math.min(Math.abs(dz), v * dt); K.position.z += Math.sign(dz) * st; K.position.x += (0.3 - K.position.x) * Math.min(1, dt * 0.5); walkK(K, dt, st); S.kStep += st; if (Math.floor(S.kStep / 0.45) !== S.lastFoot) { S.lastFoot = Math.floor(S.kStep / 0.45); set.footprint(K.position.x + (S.lastFoot % 2 ? 0.12 : -0.12), K.position.z, -K.rotation.y); } }
+    else walkK(K, dt, 0);
+    faceTo(K, K.position.x, K.position.z - 5, dt, 3);
+    K.userData.torso.rotation.z -= after ? 0.06 + 0.03 * S.gust : 0.24 + 0.08 * S.gust;   // curvado contra o vento (depois, ereto à força)
+    kHand(1, after ? 1 : 0);
+    if (T - S.lastPuff > (after ? 0.7 : 1.0)) { S.lastPuff = T; puffK(); }
+    S.focus = K.getWorldPosition(new THREE.Vector3()).add(new THREE.Vector3(0, 0, -2));
+    const z = K.position.z;
+    if (!after) {
+      if (z < -4.0 && !S.seen.medo) { S.seen.medo = 1; say('medo'); }
+      if (z < -8.0 && !S.seen.cuidado) { S.seen.cuidado = 1; say('cuidado'); }
+      if (Math.abs(dz) < 0.1 && (!S.fell || T - S.fell > 2.0)) { go('offer'); helper.visible = true; S.h0 = helper.position.clone(); }
+    } else {
+      if (z < -16 && !S.seen.quando) { S.seen.quando = 1; say('quando'); }
+      // depois da recusa o abrigo fica mais longe (3,5 m em 3 s) e depois para
+      const k = ease(clamp(S.t / 3.0, 0, 1)); shelter.position.z = baseShelterZ - 3.5 * k;
+      if (Math.abs(dz) < 0.1) go('arrive');
+    }
+  }
+  /** A mão oferecida: a dele quase vai — e vai para trás das costas. Ele endireita e passa. */
+  function offerStep(dt) {
+    const t = S.t;
+    personOpacity(helper, Math.min(1, t / 0.9));
+    const stand = new THREE.Vector3(1.15, 0, K.position.z - 0.95);          // sob a luz do poste, à direita do caminho dele
+    helper.position.lerp(stand, Math.min(1, dt * 1.2)); faceTo(helper, K.position.x, K.position.z, dt, 4);
+    personReach(helper, 1, ease(clamp((t - 1.0) / 0.8, 0, 1)), 1.2);       // estende a mão
+    walkK(K, dt, 0); faceTo(K, helper.position.x, helper.position.z, dt, 2);
+    S.focus = K.getWorldPosition(new THREE.Vector3()).lerp(helper.getWorldPosition(new THREE.Vector3()), 0.5);
+    if (t > 1.2 && !S.seen.palavras) { S.seen.palavras = 1; say('palavras'); }
+    let hide = 0;
+    if (t > 2.2 && t < 3.2) {                                 // a mão que treme se ergue um pouco na direção da outra
+      const kw = K.getWorldPosition(new THREE.Vector3()), hp = helper.getWorldPosition(new THREE.Vector3()).add(new THREE.Vector3(0, 1.0, 0));
+      reachArm(K, 1, kw.clone().add(new THREE.Vector3(0, 1.05, 0)).lerp(hp, 0.35 * ease((t - 2.2) / 0.8)), 0.9);
+      const a = K.userData.arms.find(x => x.s === 1); if (a && a.wrist) a.wrist.rotation.x = Math.sin(t * 45) * 0.2;
+    } else {
+      hide = t <= 2.2 ? 0 : ease(clamp((t - 3.2) / 0.6, 0, 1));
+      kHand(1, hide);
+    }
+    if (t > 3.2) { K.userData.torso.rotation.z = -0.04 * hide; K.userData.head.rotation.y += (0.45 * hide - K.userData.head.rotation.y) * Math.min(1, dt * 3); }   // endireita e desvia o rosto
+    if (t > 4.4 && !S.seen.conf) { S.seen.conf = 1; say('confortavel'); say('forte'); }
+    if (t > 5.0) { go('after'); S.helperT = 0; }
+  }
+  // a silhueta continua com a mão estendida para o espaço vazio, depois abaixa e some
+  const _helperTick = dt => {
+    if (!S || !helper.visible || S.phase === 'offer') return;
+    S.helperT = (S.helperT || 0) + dt; const u = S.helperT;
+    personReach(helper, 1, Math.max(0, 1 - Math.max(0, u - 2.2) / 1.4), 1.2);
+    if (u > 2.6) faceTo(helper, walker.x, walker.z, dt, 1.2);
+    if (u > 4.0) personOpacity(helper, Math.max(0, 1 - (u - 4.0) / 1.6));
+    if (u > 5.8) helper.visible = false;
+  };
+  const baseUpdate = update;
+  function update2(dt, paused) { baseUpdate(dt, paused); if (!paused) _helperTick(dt); }
 
   return {
-    scene, camera, start, stop, update,
+    scene, camera, start, stop, update: update2,
     get active() { return !!S; }, get phase() { return S ? S.phase : ''; }, get t() { return S ? S.t : 0; },
     get fade() { return S ? S.fade : 0; }, get white() { return S ? S.wk : 0; },
-    get locked() { return !!S && S.phase !== 'walk' && S.phase !== 'cross'; },
-    get light() { return warmLight.intensity; }, get kPos() { return K.position.clone(); }, get declined() { return !!(S && S.declined); },
-    _K: K, _helper: helper, _post: post,
-    _jump(p) { if (!S) return; if (!S.white) { S.white = whitenFade(walker.object); S.wk = 1; S.white.step(1); } S.fade = 0;
-      if (p === 'cross') { K.visible = true; K.position.copy(POST).add(new THREE.Vector3(-1.1, 0, 0.3)); fallen.userData.B.pelvis.position.y = 0.64; fallen.userData.B.torso.rotation.z = 0.2; walker.pose(0, POST.z + 6, -Math.PI / 2); S.line = 0; go('cross'); talkBox.show(TALK, () => { if (S) S.talkDone = true; }, { auto: true, onAdvance: i => { if (S) S.line = i; } }); }
+    get locked() { return !!S && !S.free; },
+    get light() { return set.warm.intensity; }, get kPos() { return K.position.clone(); }, get shelterZ() { return shelter.position.z; },
+    _set: set, _fig: fig,
+    _jump(p) { if (!S) return; if (!S.white) { S.white = whitenFade(walker.object); S.wk = 1; S.white.step(1); } S.fade = 0; K.visible = true; personOpacity(K, 1); poseKSit(K, 0);
+      if (p === 'offer') { K.position.set(0.3, 0, set.postZ + 1.5); walker.pose(-0.6, set.postZ + 4.5, -Math.PI / 2); helper.visible = true; go('offer'); }
+      else if (p === 'arrive') { K.position.set(0.3, 0, shelter.position.z + 1.3); walker.pose(-0.4, shelter.position.z + 5.0, -Math.PI / 2); go('arrive'); }
       else go(p); },
   };
 }

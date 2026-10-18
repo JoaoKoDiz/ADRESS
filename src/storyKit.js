@@ -202,8 +202,8 @@ export function whisper(text, op = 1) {
 }
 
 // ---------- câmera em 3ª pessoa (botão direito gira/inclina; fica onde deixar) ----------
-export function createChase(camera, walker, isOn, { dist = 6.2, pitch = 0.28, lookY = 1.35 } = {}) {
-  const C = { yaw: 0, pitch, oy: 0, op: 0, hold: false, dist };
+export function createChase(camera, walker, isOn, { dist = 6.2, pitch = 0.28, lookY = 1.35, side = 0 } = {}) {
+  const C = { yaw: 0, pitch, oy: 0, op: 0, hold: false, dist, side };
   addEventListener('mousedown', e => { if (isOn() && e.button === 2) { C.hold = true; e.preventDefault(); } });
   addEventListener('mouseup', e => { if (e.button === 2) C.hold = false; });
   addEventListener('mousemove', e => { if (C.hold && isOn() && (e.buttons & 2)) { C.oy -= e.movementX * 0.005; C.op = Math.max(-0.2, Math.min(1.0, C.op + e.movementY * 0.004)); } });
@@ -215,9 +215,88 @@ export function createChase(camera, walker, isOn, { dist = 6.2, pitch = 0.28, lo
       const k = snap ? 1 : 1 - Math.exp(-dt * 6);
       let d = walker.heading - C.yaw; while (d > Math.PI) d -= 2 * Math.PI; while (d < -Math.PI) d += 2 * Math.PI; C.yaw += d * k;
       const yaw = C.yaw + C.oy, p = C.pitch + C.op;
-      camera.position.set(walker.x - Math.cos(yaw) * Math.cos(p) * C.dist, floor + 1.5 + Math.sin(p) * C.dist, walker.z - Math.sin(yaw) * Math.cos(p) * C.dist);
-      camera.lookAt(_l.set(walker.x, floor + lookY, walker.z));
+      // side > 0: câmera por cima do ombro direito (o jogador fica à esquerda do quadro, o que está à frente aparece à direita)
+      const rx = -Math.sin(yaw) * C.side, rz = Math.cos(yaw) * C.side;
+      camera.position.set(walker.x - Math.cos(yaw) * Math.cos(p) * C.dist + rx, floor + 1.5 + Math.sin(p) * C.dist, walker.z - Math.sin(yaw) * Math.cos(p) * C.dist + rz);
+      camera.lookAt(_l.set(walker.x + rx * 0.55, floor + lookY, walker.z + rz * 0.55));
     },
+  };
+}
+/** Atenção da câmera (cenas com o jogador livre): se ele não mexe na câmera nem anda há `idle` s, ela vira devagar para o
+ *  que está acontecendo (sem tirar o controle: qualquer movimento cancela). */
+export function attachAssist(chase, walker, input) {
+  let quiet = 0;
+  addEventListener('mousemove', e => { if (e.buttons & 2) quiet = 0; });
+  return {
+    update(dt, focus, idle = 1.4, rate = 1.2) {
+      const ax = input.axis(); if (ax.x || ax.z) quiet = 0; else quiet += dt;
+      if (!focus || quiet < idle) return;
+      const want = Math.atan2(focus.z - walker.z, focus.x - walker.x) - walker.heading;
+      let d = want - chase.C.oy; while (d > Math.PI) d -= 2 * Math.PI; while (d < -Math.PI) d += 2 * Math.PI;
+      chase.C.oy += d * Math.min(1, dt * rate);
+    },
+    poke() { quiet = 0; },
+  };
+}
+/** Braços do jogador (andando) controláveis por IK depois do walker.update (reachArm). */
+export function walkerArms(walker) {
+  const P = walker.parts, root = walker.object;
+  if (!root.userData.arms) { root.userData.torso = P.torso; root.userData.arms = P.arms.map((a, i) => ({ s: a.s || (i ? 1 : -1), sh: a.sh, rest: a.sh.quaternion.clone(), elbow: a.elbow, erest: a.elbow.quaternion.clone() })); }
+  return root;
+}
+/** Voz da figura ficando para trás: letras somem e viram pontos com a distância (k 0 = nítida, 1 = nada). */
+export function degrade(text, k, seed = 1) {
+  if (k <= 0) return text; if (k >= 1) return '';
+  let s = seed; const r = () => (s = (s * 16807) % 2147483647) / 2147483647;
+  return text.split('').map(ch => ch === ' ' ? ' ' : r() < k ? (r() < 0.6 ? '·' : ' ') : ch).join('');
+}
+/** Frase de vidro (lembranças): texto num cartão translúcido; crack(n) desenha n rachaduras por cima (o toque não apaga nada). */
+export function glassText(text, { color = '#bff2c4', size = 0.28 } = {}) {
+  const c = document.createElement('canvas'), x = c.getContext('2d'), font = '600 40px system-ui, sans-serif'; x.font = font;
+  const w = Math.ceil(x.measureText(text).width) + 40; c.width = w; c.height = 72;
+  const draw = (cracks = 0, seed = 5) => {
+    x.clearRect(0, 0, w, 72); x.fillStyle = 'rgba(190,255,200,0.10)'; x.strokeStyle = 'rgba(220,255,225,0.55)'; x.lineWidth = 2;
+    x.beginPath(); x.roundRect(2, 4, w - 4, 64, 14); x.fill(); x.stroke();
+    x.font = font; x.fillStyle = color; x.textBaseline = 'middle'; x.fillText(text, 20, 37);
+    let s = seed; const r = () => (s = (s * 16807) % 2147483647) / 2147483647;
+    x.strokeStyle = 'rgba(255,255,255,0.85)'; x.lineWidth = 1.4;
+    for (let n = 0; n < cracks; n++) { let px = 20 + r() * (w - 40), py = 10 + r() * 52; x.beginPath(); x.moveTo(px, py); for (let k = 0; k < 4; k++) { px += (r() - 0.5) * 44; py += (r() - 0.5) * 30; x.lineTo(px, py); } x.stroke(); }
+  };
+  draw();
+  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace;
+  const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: t, transparent: true, depthWrite: false, toneMapped: false }));
+  sp.scale.set(size * w / 72, size, 1);
+  sp.userData = { cracks: 0, crack() { sp.userData.cracks++; draw(sp.userData.cracks); t.needsUpdate = true; }, dispose() { t.dispose(); sp.material.dispose(); } };
+  return sp;
+}
+/** Murmúrio de um grupo (vozes borradas, sem palavras), uma "voz" por pessoa: setVoices(n) cala as que sobram, uma a uma. */
+export function createMurmur(audio, n = 5) {
+  let N = null, lvl = 0, cur = 0, t = 0, on = n;
+  function build() {
+    const ac = audio.ctx; if (!ac || !audio.out) return null;
+    const len = ac.sampleRate * 4, buf = ac.createBuffer(1, len, ac.sampleRate), d = buf.getChannelData(0);
+    let b0 = 0, b1 = 0, b2 = 0; for (let i = 0; i < len; i++) { const w = Math.random() * 2 - 1; b0 = 0.997 * b0 + w * 0.03; b1 = 0.985 * b1 + w * 0.06; b2 = 0.9 * b2 + w * 0.15; d[i] = (b0 + b1 + b2) * 0.5; }
+    for (let i = 0; i < 2000; i++) { const k = i / 2000; d[i] = d[i] * k + d[len - 2000 + i] * (1 - k); }
+    const out = ac.createGain(); out.gain.value = 0; const lp = ac.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 1600; lp.connect(out); out.connect(audio.out);
+    const voices = Array.from({ length: n }, (_, i) => {
+      const f = [300, 430, 560, 760, 980, 1200][i % 6];
+      const s = ac.createBufferSource(); s.buffer = buf; s.loop = true; const bp = ac.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = f; bp.Q.value = 5;
+      const g = ac.createGain(); g.gain.value = 0; s.connect(bp); bp.connect(g); g.connect(lp); s.start(0, i * 0.61);
+      return { s, bp, g, f, ph: i * 1.7, sp: 0.6 + i * 0.23, k: 1 };
+    });
+    return { out, voices };
+  }
+  return {
+    level(k) { lvl = k; if (!N && k > 0) N = build(); },
+    setVoices(k) { on = k; },
+    update(dt) {
+      if (!N) return; t += dt; cur += (lvl - cur) * (1 - Math.exp(-dt * 1.2));
+      try {
+        N.out.gain.value = cur * 0.5;
+        N.voices.forEach((v, i) => { v.k += ((i < on ? 1 : 0) - v.k) * Math.min(1, dt * 0.8); const a = 0.5 + 0.5 * Math.sin(t * v.sp + v.ph) * Math.sin(t * v.sp * 2.7 + v.ph * 2); v.g.gain.value = (0.25 + 0.75 * Math.max(0, a)) * v.k; v.bp.frequency.value = v.f * (1 + 0.08 * Math.sin(t * v.sp * 1.9 + v.ph)); });
+      } catch (e) { /* */ }
+    },
+    stop() { if (!N) return; try { N.voices.forEach(v => v.s.stop()); N.out.disconnect(); } catch (e) { /* */ } N = null; cur = 0; lvl = 0; },
   };
 }
 /** Câmera para uma tomada (com suavização opcional). */
@@ -258,6 +337,13 @@ export function createSfx(audio) {
       else if (kind === 'chime') { for (let i = 0; i < 3; i++) tone(1300 + i * 520, 1250 + i * 500, 1.2, 0.08, 'sine', i * 0.07); }
       else if (kind === 'whoosh') noise(0.8, 700, 'bandpass', 0.4);
       else if (kind === 'thud') { tone(80, 32, 0.8, 0.8); noise(0.3, 300, 'lowpass', 0.4); }
+      else if (kind === 'presence') { tone(52, 44, 2.6, 0.22, 'sine'); tone(78, 70, 2.2, 0.06, 'sine', 0.15); noise(2.2, 160, 'lowpass', 0.12); }   // a voz da figura: um grave baixo por baixo da fala
+      else if (kind === 'tick') { tone(3200, 2900, 0.09, 0.07, 'sine'); tone(4700, 4300, 0.06, 0.035, 'sine', 0.01); }
+      else if (kind === 'creak') { const o = ac.createOscillator(), f = ac.createBiquadFilter(), g = ac.createGain(); o.type = 'sawtooth'; o.frequency.setValueAtTime(70, now); o.frequency.linearRampToValueAtTime(110, now + 0.5); o.frequency.linearRampToValueAtTime(64, now + 0.9); f.type = 'bandpass'; f.frequency.value = 700; f.Q.value = 6; g.gain.setValueAtTime(0, now); g.gain.linearRampToValueAtTime(0.18, now + 0.12); g.gain.exponentialRampToValueAtTime(0.001, now + 1.0); o.connect(f); f.connect(g); g.connect(out); o.start(now); o.stop(now + 1.05); }
+      else if (kind === 'step') noise(0.12, 900 + Math.random() * 500, 'bandpass', 0.18);
+      else if (kind === 'scrape') { noise(0.9, 380, 'bandpass', 0.3); tone(95, 70, 0.8, 0.08, 'sawtooth'); }
+      else if (kind === 'drip') tone(1500 + Math.random() * 900, 900, 0.08, 0.05, 'sine');
+      else if (kind === 'burn') { noise(0.5, 1800, 'bandpass', 0.06); tone(230, 180, 0.4, 0.03, 'triangle'); }
       else if (kind === 'out') { tone(220, 110, 0.6, 0.15, 'sine'); }
     },
   };
@@ -271,3 +357,29 @@ export function faceTo(obj, x, z, dt, rate = 6) {
 }
 export const ease = k => { k = Math.max(0, Math.min(1, k)); return k * k * (3 - 2 * k); };
 export const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+
+/** Zumbido grave contínuo (tensão que sobe aos poucos): level(k) 0..1, tone(f) muda a nota devagar. */
+export function createDrone(audio, f0 = 55) {
+  let N = null, lvl = 0, cur = 0, f = f0;
+  function build() {
+    const ac = audio.ctx; if (!ac || !audio.out) return null;
+    const out = ac.createGain(); out.gain.value = 0; const lp = ac.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 420; lp.connect(out); out.connect(audio.out);
+    const osc = [1, 1.004, 1.5, 2.003].map((r, i) => { const o = ac.createOscillator(); o.type = i === 2 ? 'triangle' : 'sine'; o.frequency.value = f * r; const g = ac.createGain(); g.gain.value = [0.5, 0.45, 0.12, 0.08][i]; o.connect(g); g.connect(lp); o.start(); return { o, r }; });
+    return { out, lp, osc };
+  }
+  return {
+    level(k) { lvl = k; if (!N && k > 0) N = build(); },
+    tone(nf) { f = nf; },
+    update(dt) { if (!N) return; cur += (lvl - cur) * (1 - Math.exp(-dt * 0.8)); try { N.out.gain.value = cur * 0.16; N.lp.frequency.value = 260 + 500 * cur; for (const v of N.osc) v.o.frequency.setTargetAtTime(f * v.r, audio.ctx.currentTime, 0.8); } catch (e) { /* */ } },
+    stop() { if (!N) return; try { N.osc.forEach(v => v.o.stop()); N.out.disconnect(); } catch (e) { /* */ } N = null; cur = 0; lvl = 0; },
+  };
+}
+/** Zumbido de lâmpada (poste): nível pela distância. */
+export function createBuzz(audio) {
+  let N = null, lvl = 0, cur = 0;
+  return {
+    level(k) { lvl = k; if (!N && k > 0 && audio.ctx && audio.out) { const ac = audio.ctx, o = ac.createOscillator(), o2 = ac.createOscillator(), f = ac.createBiquadFilter(), g = ac.createGain(); o.type = 'sawtooth'; o.frequency.value = 120; o2.type = 'sine'; o2.frequency.value = 240; f.type = 'bandpass'; f.frequency.value = 900; f.Q.value = 1.2; g.gain.value = 0; o.connect(f); o2.connect(f); f.connect(g); g.connect(audio.out); o.start(); o2.start(); N = { o, o2, g }; } },
+    update(dt, flick = 1) { if (!N) return; cur += (lvl - cur) * (1 - Math.exp(-dt * 3)); try { N.g.gain.value = cur * 0.012 * flick; } catch (e) { /* */ } },
+    stop() { if (!N) return; try { N.o.stop(); N.o2.stop(); N.g.disconnect(); } catch (e) { /* */ } N = null; cur = 0; lvl = 0; },
+  };
+}

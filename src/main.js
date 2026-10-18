@@ -28,6 +28,7 @@ import { createExtra3, EXTRA3_KEY } from './extra3.js';
 import { createExtra4, EXTRA4_KEY } from './extra4.js';
 import { createFragments } from './fragments.js';
 import { createEpilogue } from './epilogue.js';
+import * as memorySets from './memorySets.js';
 import { createNight } from './night.js';
 import { createFarmOutside } from './farmOutside.js';
 import { createReality } from './reality.js';
@@ -2058,7 +2059,7 @@ document.head.appendChild(EXTRA_CSS);
 const voidMusic = createVoidMusic(audio, justUsUrl, justUsLoopUrl);   // extra 1: "just us" (original → loop), do começo do deslocamento até a tela inicial
 const extra1 = createExtraStory({ walker, input, audio, renderer, talkBox, onTravel: () => voidMusic.start(), onShatter: (snap, rect) => { syncNoVan(); endExtra('shatter'); screenShatter(snap, rect); } });   // (o extra 1 já foi salvo na quebra)
 // Extras 2–4 (história completa): músicas que já existem no jogo (sem arquivos novos); falha de áudio → aviso na tela, a cena segue
-const xMusic = [null, createChurchMusic(audio, talkTrackUrl, 0.42, null, true), createChurchMusic(audio, rainUrl, 0.42, null, true), null];
+const xMusic = [null, null, null, null];   // (extras 2–4: paisagem sonora própria, procedural — murmúrio, vento, zumbido; a música da 2ª rodada não se sobrepõe)
 const xCtx = { walker, input, audio, renderer, talkBox, onDone: () => endExtra(true) };
 const extras = [extra1, createExtra2(xCtx), createExtra3(xCtx), createExtra4(Object.assign({}, xCtx, { onBattle: () => extraToBattle() }))];
 let extra = extra1, extraIdx = 0;
@@ -3253,7 +3254,7 @@ window.ADRESS = {
   moonPlace(p, f) { van.teleport(0, 0, 0); FRAME.reset(new THREE.Vector3(...p).normalize(), new THREE.Vector3(...f), 0, 0); moonAnchor.x = moonAnchor.z = 0; FRAME.toSphere(0, 0, vanSph.p); moonUpdate(0, true); },
   get moonVan() { return { p: vanSph.p.toArray().map(v => +v.toFixed(3)), f: vanSph.f.toArray().map(v => +v.toFixed(3)), y: +van.simY.toFixed(2) }; },
   FRAME, MOONV: () => MOONV,
-  massStory, MASS_KEY, get extra() { return extra; }, extras, frag, epi, startEpilogue, finishStory, pickExtra, extraToBattle, startExtra, battle, battleMusic, startBattle, endBattle, screenShatter, voidMusic, menuMusic, rainFx, rainAudio, menuBg, get menuNight() { return !!nightSaved; }, get rainOn() { return rainOn(); }, menuWorld, lockCP: n => STORY_CP.apply(n), lockCPcur: () => STORY_CP.current(), devMissions: DEV_MISSIONS, get parcelVisible() { return !!parcel.parent; },
+  memorySets, massStory, MASS_KEY, get extra() { return extra; }, extras, frag, epi, startEpilogue, finishStory, pickExtra, extraToBattle, startExtra, battle, battleMusic, startBattle, endBattle, screenShatter, voidMusic, menuMusic, rainFx, rainAudio, menuBg, get menuNight() { return !!nightSaved; }, get rainOn() { return rainOn(); }, menuWorld, lockCP: n => STORY_CP.apply(n), lockCPcur: () => STORY_CP.current(), devMissions: DEV_MISSIONS, get parcelVisible() { return !!parcel.parent; },
   laser, ursa, solar, reality, startLaser,
   get church() { return church; }, get venK() { return venK; }, startVeniceTalk, churchStage, get greenBell() { return greenBell; }, get churchBell() { return churchBell; },
   churchReveal() { if (churchOn && !churchShown) { approach.phase = 'revealed'; revealChurch(true); } },

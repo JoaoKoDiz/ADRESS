@@ -108,7 +108,7 @@ export function buildWorkshop() {
   const phoneGlow = new THREE.PointLight('#8fc0ff', 0, 1.6, 2); phoneGlow.position.y = 0.2; phone.add(phoneGlow);
   root.traverse(o => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
   const api = {
-    root, roof, doorPivot, grip, chair, newHinges, oldHinges, phone,
+    root, roof, doorPivot, grip, chair, newHinges, oldHinges, phone, bench, ruinGroup: null,
     /** Tela do celular: acesa com a chamada recebida (pisca de leve) ou apagada. */
     setPhone(on, t = 0) { const k = on ? 0.75 + 0.25 * Math.sin(t * 6) : 0; paintScreen(on); scrTex.needsUpdate = true; scrMat.color.setScalar(on ? k : 1); phoneGlow.intensity = on ? 0.6 * k : 0; },
     /** Mostra o que já foi feito (não volta ao estado inicial). */
@@ -143,7 +143,7 @@ export function buildWorkshop() {
     roof.visible = false; light.intensity = 0; for (const l of lamps) l.visible = false;
     const dark = new THREE.MeshStandardMaterial({ color: '#2a2622', roughness: 1 });
     for (const w of wins) w.material = dark;
-    const g = new THREE.Group(); root.add(g);
+    const g = new THREE.Group(); root.add(g); api.ruinGroup = g;
     const rm = mat(ROOF), pl = mat(PLASTER), tm = mat(TIMBER), raw = mat('#4a3f35'), st2 = mat(STONE2);
     let seed = 7; const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
     // oitões quebrados (a ponta caiu) e chaminé torta

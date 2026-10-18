@@ -5,6 +5,9 @@ import * as THREE from 'three';
 
 const WHITE = new THREE.MeshStandardMaterial({ color: '#ffffff', roughness: 0.85, metalness: 0, flatShading: false });
 const WHITE2 = WHITE.clone(); WHITE2.side = THREE.DoubleSide;
+/** Cenas escuras (níveis extras): um pouco de brilho próprio no branco, para o jogador continuar lendo como branco no vazio
+ *  (0 = sombreamento normal, como nas igrejas). Só muda o material branco temporário, nunca a customização. */
+export function setWhiteGlow(v) { for (const m of [WHITE, WHITE2]) m.emissive.setScalar(v); }
 
 /** Deixa os objetos inteiramente brancos. Retorna uma função que desfaz exatamente o que foi feito. */
 export function whiten(...roots) {
