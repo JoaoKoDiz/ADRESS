@@ -1,12 +1,13 @@
-// Música da batalha final: a versão adaptada de "Finale" (Toby Fox), assets/finale-batalha.mp3 — arquivo EXTERNO, ao lado
-// do index.html (como a música de fundo), porque o html já está no limite de tamanho. Vem da edição aprovada
-// (finale-batalha-revisao.wav: cortes e ordem de marks.json), recodificada uma vez a 128 kbps, sem mexer nos cortes.
+// Música da batalha final: a 2ª edição da adaptação de "Finale" (Toby Fox), assets/finale-batalha-v2.mp3 — arquivo EXTERNO,
+// ao lado do index.html (como a música de fundo). Feita a partir do remix original sem alterá-lo (cortes em limites naturais,
+// sem mudar velocidade nem afinação; tabela em marks-v2.json): 1ª metade contida, a virada no interlúdio, as quatro
+// repetições com espaço próprio e o fim que respira. A edição anterior (finale-batalha.mp3) continua no projeto, intocada.
 // A posição de reprodução é o relógio da batalha (battle.js lê `time`): um relógio próprio avança com o laço e é puxado
 // para a posição real do áudio — nunca volta para trás e, se a faixa travar carregando, espera por ela.
 // Sem áudio (arquivo ausente, bloqueado ou em teste), o relógio próprio segue sozinho; uma falha real aparece na tela.
 
-export const BATTLE_TRACK = (typeof __ASSET_BASE__ !== 'undefined' ? __ASSET_BASE__ : 'assets/') + 'finale-batalha.mp3';   // (versão experimental publicada em /experimento/: usa os arquivos da principal, ../assets/)
-export const BATTLE_TRACK_SECS = 581.856;                 // duração da faixa editada (marks.json: total)
+export const BATTLE_TRACK = (typeof __ASSET_BASE__ !== 'undefined' ? __ASSET_BASE__ : 'assets/') + 'finale-batalha-v2.mp3';   // (versão experimental publicada em /experimento/: usa os arquivos da principal, ../assets/)
+export const BATTLE_TRACK_SECS = 689.21;                  // duração da 2ª edição (marks-v2.json: total)
 const BASE = 0.9;                                          // ganho da faixa (o volume da música das Configurações multiplica)
 
 /** Falha de carregamento: no console e num aviso visível (nada substitui a faixa). */

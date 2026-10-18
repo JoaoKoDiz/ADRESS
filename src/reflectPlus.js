@@ -41,9 +41,18 @@ export const PLUS_SCRIPTS = {
 // a parede se quebrando (o K segura o golpe). Uma fenda grande se abre atrás da grade (branco contra preto). Segurar a ação
 // atrai os projéteis para o círculo na grade; levar o círculo até a fenda os entrega a ela. Soltar devolve cada um ao alvo.
 // Controles continuam 2D (o círculo na grade). Começa com grupos pequenos.
-PLUS_SCRIPTS.G = [{ wait: 0.5 }, { demo: true }, { wait: 0.6 }, { group: [[-2.4, 4.4], [-0.6, 5.6]], to: ['K', 'P'], v: 5.2 }, { wait: 0.8 }, { group: [[-3.6, 3.2], [-1.2, 4.8], [1.0, 6.2]], to: ['P', 'K', 'K'], v: 5.6 }];
-PLUS_SCRIPTS.G2 = [{ wait: 0.4 }, { group: [[-3.0, 5.0], [-1.0, 3.6], [0.8, 5.8]], to: ['K', 'P', 'K'], v: 5.8 }, { wait: 0.6 }, { group: [[-4.2, 3.0], [-2.2, 6.0], [-0.2, 4.0], [1.6, 3.0]], to: ['P', 'K', 'P', 'K'], v: 6.2, gap: 0.3 }];
-export const RIFT = { u: 4.0, v: 4.2, w: 3.4, h: 4.2, z: -1.7, openT: 1.3 };
+// S13 (depois do M2): demonstração protegida → o objeto aparece onde a fenda vai rasgar → o jogador puxa a ponta (botão direito/E)
+// → a fenda abre → grupos pequenos. Nada ataca enquanto o objeto não foi rompido.
+PLUS_SCRIPTS.G = [{ wait: 0.5 }, { demo: true }, { wait: 0.8 }, { obj: true }, { wait: 0.5 }, { group: [[-2.4, 4.4], [-0.6, 5.6]], to: ['K', 'P'], v: 5.2 }, { wait: 0.8 }, { group: [[-3.6, 3.2], [-1.2, 4.8], [1.0, 6.2]], to: ['P', 'K', 'K'], v: 5.6 }];
+// S17 (depois do S2, combate final): as imagens voltam acusando; o K faz uma barreira para si, depois uma para o jogador, depois
+// puxa a ponta e rasga a fenda sozinho; o jogador conduz a última corrente (grupos crescendo até uma corrente longa).
+const STREAM = [[-4.4, 3.0], [-3.4, 5.6], [-2.4, 2.6], [-1.4, 6.2], [-0.4, 3.4], [0.6, 5.0], [-3.9, 4.2], [-1.9, 3.0], [0.1, 6.0], [-2.9, 4.8]];
+PLUS_SCRIPTS.F = [{ wait: 0.6 }, { images: true }, { wait: 1.4 }, { kguard: 'K', at: [1.2, 3.4], v: 5.6 }, { wait: 0.9 }, { kguard: 'P', at: [-2.6, 3.0], v: 5.6 }, { wait: 0.7 },
+  { kopen: true }, { wait: 0.4 }, { group: [[-2.0, 4.8], [-0.4, 3.4], [1.2, 5.6]], to: ['K', 'P', 'K'], v: 5.6 }, { wait: 0.5 },
+  { group: [[-4.0, 3.0], [-2.4, 6.0], [-0.6, 4.2], [1.0, 2.8]], to: ['P', 'K', 'P', 'K'], v: 6.0, gap: 0.32 }, { wait: 0.5 },
+  { group: STREAM, to: ['K', 'P', 'K', 'P', 'K', 'P', 'K', 'P', 'K', 'P'], v: 6.2, gap: 0.3 }, { wait: 0.6 },
+  { group: STREAM.concat([[-4.6, 4.6], [-0.8, 2.4], [-2.0, 6.4], [0.4, 3.8]]), to: ['P', 'K', 'P', 'K', 'P', 'K', 'P', 'K', 'P', 'K', 'P', 'K', 'P', 'K'], v: 6.4, gap: 0.26 }];   // a figura insiste: a corrente mais longa
+export const RIFT = { u: 4.0, v: 4.2, w: 3.4, h: 4.2, z: -1.7, openT: 1.3, grabR: 0.9, pull: 3.0, kPullT: 2.4 };
 
 const ease = x => x <= 0 ? 0 : x >= 1 ? 1 : x * x * (3 - 2 * x);
 const clamp = (v, a, b) => v < a ? a : v > b ? b : v;
@@ -59,6 +68,10 @@ void main(){
   float a = max(line * uAlpha, uFill);
   if (a < 0.004) discard; gl_FragColor = vec4(1.0, 1.0, 1.0, a); }`;
 
+const ARC_V = `varying vec2 vL; void main(){ vL = position.xy; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`;
+const ARC_F = `uniform float uFrac, uA, uBase; varying vec2 vL;
+void main(){ float a = atan(vL.x, vL.y); a = (a < 0.0 ? a + 6.2831853 : a) / 6.2831853;
+  float al = a <= uFrac ? uA : uBase; if (al < 0.003) discard; gl_FragColor = vec4(1.0, 1.0, 1.0, al); }`;
 function segDist(px, py, a, b) {                                     // distância de (px,py) ao segmento a→b; devolve também o ponto
   const dx = b.u - a.u, dy = b.v - a.v, L = dx * dx + dy * dy;
   let t = L > 1e-9 ? ((px - a.u) * dx + (py - a.v) * dy) / L : 0; t = clamp(t, 0, 1);
@@ -100,6 +113,26 @@ export function createReflectPlus(api) {
   // círculo de controle (disco branco cheio, como no chão)
   const disc = new THREE.Mesh(new THREE.CircleGeometry(api.circleR, 40), new THREE.MeshBasicMaterial({ color: '#ffffff', toneMapped: false, side: THREE.DoubleSide }));
   disc.position.z = 0.03; face.add(disc);
+  // estabilidade do jogador: arco fino em volta do disco (como no chão)
+  const stabArc = new THREE.Mesh(new THREE.RingGeometry(api.circleR + 0.17, api.circleR + 0.21, 48), new THREE.ShaderMaterial({ vertexShader: ARC_V, fragmentShader: ARC_F, transparent: true, depthWrite: false, side: THREE.DoubleSide,
+    uniforms: { uFrac: { value: 1 }, uA: { value: 0.16 }, uBase: { value: 0.05 } } }));
+  stabArc.position.z = 0.031; face.add(stabArc);
+  // o objeto preto de pontas onde a fenda vai rasgar (puxar a ponta com o círculo embaixo, ou o K com a mão)
+  const gobj = new THREE.Group(); gobj.position.set(RIFT.u, RIFT.v, 0.14); gobj.visible = false; face.add(gobj);
+  const blackM = new THREE.MeshBasicMaterial({ color: '#000000', toneMapped: false });
+  gobj.add(new THREE.Mesh(new THREE.IcosahedronGeometry(0.24, 0), blackM));
+  const gSpikeGeo = new THREE.ConeGeometry(0.06, 1, 4).translate(0, 0.5, 0), gSpikes = [];
+  for (let i = 0; i < 14; i++) { const m = new THREE.Mesh(gSpikeGeo, blackM); gobj.add(m); gSpikes.push({ m, d: new THREE.Vector3(0, 1, 0), l: 0.4 }); }
+  const gHalo = new THREE.Mesh(new THREE.CircleGeometry(0.95, 32), new THREE.MeshBasicMaterial({ color: '#25252d', transparent: true, opacity: 0.6, depthWrite: false })); gHalo.position.z = -0.05; gobj.add(gHalo);
+  const gRing = new THREE.Mesh(new THREE.RingGeometry(RIFT.grabR - 0.05, RIFT.grabR, 48), new THREE.MeshBasicMaterial({ color: '#a0a0aa', transparent: true, opacity: 0.5, depthWrite: false, side: THREE.DoubleSide }));
+  gRing.position.set(RIFT.u, RIFT.v, 0.05); gRing.visible = false; face.add(gRing);
+  const tGeo = new THREE.BufferGeometry(); tGeo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(6), 3));
+  const tLine = new THREE.Line(tGeo, new THREE.LineBasicMaterial({ color: '#9a9aa4', transparent: true, opacity: 0.9 })); tLine.frustumCulled = false; tLine.visible = false; scene.add(tLine);
+  const tCone = new THREE.Mesh(new THREE.ConeGeometry(1, 1, 5, 1, true).translate(0, -0.5, 0).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ color: '#000000', side: THREE.DoubleSide, toneMapped: false }));
+  tCone.visible = false; scene.add(tCone);
+  // placas do K na grade (bloqueiam; não refletem): levemente azuladas, contorno duplo
+  const kPlateMat = () => new THREE.MeshBasicMaterial({ color: '#d4e2ff', transparent: true, opacity: 0.55, depthWrite: false, side: THREE.DoubleSide, toneMapped: false });
+  const kPlateGeo = new THREE.PlaneGeometry(1.3, 0.8), kPlateEdge = new THREE.EdgesGeometry(kPlateGeo);
   // prévia do traço
   const PREV = 96, prevGeo = new THREE.BufferGeometry(); prevGeo.setAttribute('position', new THREE.Float32BufferAttribute(new Float32Array(PREV * 3), 3));
   const prev = new THREE.Line(prevGeo, new THREE.LineBasicMaterial({ color: '#ffffff', transparent: true, opacity: 0.75, depthWrite: false })); prev.visible = false; face.add(prev);
@@ -110,7 +143,8 @@ export function createReflectPlus(api) {
 
   const S = { k: 0, want: 0, cu: 0, cv: 3.6, drawing: null, walls: [], projs: [], rets: [], flashes: [], n: 0,
     script: null, ev: 0, evT: 0, wait: 0, done: false, armed: false, camW: 0, rallyN: 0, plusT: 0,
-    mode: 'reflect', attract: false, riftK: 0, through: 0, demoDone: false };
+    mode: 'reflect', attract: false, riftK: 0, through: 0, demoDone: false,
+    riftOpen: false, gobj: false, grab: false, tension: 0, kpull: null, pullHeld: false, kPlates: [], stab: 1, stabFl: 0, by: null };
   const W = (u, v, out = new THREE.Vector3()) => out.set(u, v, 0).applyMatrix4(face.matrixWorld);   // ponto da grade → mundo
 
   // ---------- barreiras ----------
@@ -177,6 +211,7 @@ export function createReflectPlus(api) {
     if (p.obj) { p.obj.scale.setScalar(1); api.projPut(p.obj); p.obj = null; }
   }
   /** Cruzou a grade: barreira no ponto? (contato reconhecível: o ponto onde ele atravessa) */
+  function kPlateHit(x, y) { for (const k of S.kPlates) if (k.alive && Math.abs(x - k.u) < 0.75 && Math.abs(y - k.v) < 0.5) return k; return null; }
   function cross(p, x, y) {
     for (const w of S.walls) {
       if (!w.alive || w.age < 0.08) continue;
@@ -231,6 +266,8 @@ export function createReflectPlus(api) {
         const x0 = p.pos.z; p.pos.addScaledVector(p.vel, dt);
         if (p.state === 'in' && x0 < WP.zp && p.pos.z >= WP.zp) {                     // atravessou a grade
           const f = (WP.zp - x0) / (p.pos.z - x0 || 1), cx = p.pos.x - p.vel.x * dt * (1 - f), cy = p.pos.y - p.vel.y * dt * (1 - f);
+          const kp = kPlateHit(cx, cy);
+          if (kp) { killKPlate(kp); const c = W(cx, cy); flash(c, 0.7); api.shards(c.x, c.y, c.z + 0.1, 10, 0, 2.6); api.sfx('block'); killProj(p); api.L('p:kblock'); continue; }
           const hit = cross(p, cx, cy);
           if (hit && p.power) { killWall(hit.w); const c = W(hit.x, hit.y); flash(c, 1); api.shards(c.x, c.y, c.z + 0.1, 12, 0, 3.2); api.sfx('fail'); p.state = 'out'; killRet(p.ret); p.ret = null; aim(p, charPt(p.to)); api.L('p:overpower'); }
           else if (hit) rebound(p, hit);
@@ -256,7 +293,7 @@ export function createReflectPlus(api) {
   /** Modo conduzir: segurando, persegue o círculo (do lado da figura, rente à grade); com o círculo na fenda, entra nela. */
   function conductStep(p, dt) {
     if (p.state === 'gone') { p.pos.lerp(W(RIFT.u, RIFT.v, _r).add(_c.set(0, 0, 0)), Math.min(1, dt * 5)); p.t2 = (p.t2 || 0) + dt; if (p.t2 > 0.45) { killProj(p); } return; }
-    if (S.attract && S.riftK > 0.9 && !p.demo) {
+    if (S.attract && S.riftOpen && S.riftK > 0.9 && !p.demo) {
       const goal = W(S.cu, S.cv, _c); goal.z -= 0.7 + 0.25 * (p.slot || 0);
       goal.x += Math.cos(S.plusT * 3 + (p.slot || 0) * 2.1) * 0.35; goal.y += Math.sin(S.plusT * 3 + (p.slot || 0) * 2.1) * 0.35;
       const want = goal.sub(p.pos), d = want.length();
@@ -271,11 +308,58 @@ export function createReflectPlus(api) {
     if (p.state === 'held') { p.state = 'in'; aim(p, charPt(p.to)); p.vel.multiplyScalar(1); api.L('p:release'); }   // soltou: volta ao alvo (atravessa a grade)
     const x0 = p.pos.z; p.pos.addScaledVector(p.vel, dt);
     if (x0 < WP.zp && p.pos.z >= WP.zp) {
+      const kp = kPlateHit(p.pos.x, p.pos.y);
+      if (kp) { killKPlate(kp); const c = W(p.pos.x, p.pos.y); flash(c, 0.7); api.shards(c.x, c.y, c.z + 0.1, 10, 0, 2.6); api.sfx('block'); killProj(p); api.L('p:kblock'); return; }
       const hit = cross(p, p.pos.x, p.pos.y);
       if (hit) { killWall(hit.w); const c = W(hit.x, hit.y); flash(c, 1); api.shards(c.x, c.y, c.z + 0.1, 12, 0, 3.2); api.sfx('fail'); api.L('p:overpower'); }
       p.state = 'out'; killRet(p.ret); p.ret = null; aim(p, charPt(p.to));
     }
   }
+
+  // ---------- o objeto da fenda (puxar a ponta) e as placas do K ----------
+  function addKPlate(u, v) {
+    const g = new THREE.Group(); g.position.set(u, v, 0.08);
+    const m = new THREE.Mesh(kPlateGeo, kPlateMat()); g.add(m, new THREE.LineSegments(kPlateEdge, new THREE.LineBasicMaterial({ color: '#e4ecff', transparent: true, opacity: 0.9 })));
+    const e2 = new THREE.LineSegments(kPlateEdge, new THREE.LineBasicMaterial({ color: '#e4ecff', transparent: true, opacity: 0.6 })); e2.scale.set(1.1, 1.18, 1); g.add(e2);
+    face.add(g); S.kPlates.push({ u, v, g, m, age: 0, alive: true, die: 0 }); api.sfx('barrier');
+  }
+  function killKPlate(k) { if (k.alive) { k.alive = false; k.die = 0; } }
+  const _o = new THREE.Vector3(), _h = new THREE.Vector3();
+  function tear(by) {
+    S.riftOpen = true; S.gobj = false; S.grab = false; S.kpull = null; S.by = by; gobj.visible = false; gRing.visible = false; tLine.visible = tCone.visible = false;
+    const c = W(RIFT.u, RIFT.v); api.shards(c.x, c.y, c.z + 0.2, 18, 0.9, 2.6); api.sfx('struct'); flash(c, 1); api.L('p:tear ' + by);
+  }
+  function updatePull(dt) {
+    if (!S.gobj) { tLine.visible = tCone.visible = false; return; }
+    gobj.scale.setScalar(Math.min(1, gobj.scale.x + dt / 0.4));
+    let to = null;
+    if (S.kpull) {                                                                  // o K puxa com a mão (gesto em battle.js)
+      S.kpull.t += dt; const k = S.kpull.t < 0 ? 0 : S.kpull.t / RIFT.kPullT; S.tension = ease(k);
+      if (api.kHand && S.kpull.t > 0) to = api.kHand(_h);
+      if (k >= 1) { tear('K'); return; }
+    } else {
+      const d = Math.hypot(S.cu - RIFT.u, S.cv - RIFT.v);
+      if (!S.grab && S.pullHeld && d <= RIFT.grabR && S.k >= 0.999) { S.grab = true; api.L('p:grab'); }
+      if (S.grab && !S.pullHeld) { S.grab = false; api.L('p:release'); }
+      if (S.grab) { S.tension = Math.min(1, d / RIFT.pull); to = W(S.cu, S.cv, _h); if (d >= RIFT.pull) { tear('P'); return; } }
+      else S.tension = Math.max(0, S.tension - dt / 0.35);
+      gRing.material.opacity = d <= RIFT.grabR ? 0.95 : 0.45 + 0.15 * Math.sin(S.plusT * 4);
+    }
+    // pontas trocando de forma várias vezes por segundo; com tensão, esticadas para quem puxa
+    const T2 = S.tension, from = gobj.getWorldPosition(_o);
+    let dx = 0, dy = 0, dz = 0; if (to) { const v = to.clone().sub(from).normalize(); dx = v.x; dy = v.y; dz = v.z; }
+    for (const sp of gSpikes) {
+      if (Math.random() < 0.5) { sp.d.set(Math.random() * 2 - 1, Math.random() * 2 - 1, Math.random() * 2 - 1).normalize(); if (T2 > 0) sp.d.lerp(new THREE.Vector3(dx, dy, dz), 0.6 * T2).normalize(); sp.l = (0.3 + Math.random() * 0.5) * (1 + 0.8 * T2); }
+      sp.m.quaternion.setFromUnitVectors(_upv, sp.d); sp.m.scale.set(1 - 0.4 * T2, sp.l, 1 - 0.4 * T2);
+    }
+    const show = !!to && T2 > 0.01; tLine.visible = tCone.visible = show;
+    if (show) {
+      const end = to, len = from.distanceTo(end), r = 0.07 * (1 - 0.75 * T2) + 0.012;
+      tCone.position.copy(from); tCone.lookAt(end); tCone.scale.set(r, r, len);
+      const tp = tGeo.attributes.position; tp.setXYZ(0, from.x, from.y, from.z); tp.setXYZ(1, end.x, end.y, end.z); tp.needsUpdate = true;
+    }
+  }
+  const _upv = new THREE.Vector3(0, 1, 0);
 
   // ---------- roteiro ----------
   function startEvent(e) {
@@ -285,6 +369,14 @@ export function createReflectPlus(api) {
       addWall([{ u: -2.2, v: 4.6 }, { u: -0.2, v: 4.6 }]);
       newProj({ T: { u: -1.2, v: 4.6 }, to: 'K', speed: 7.4, lead: 1.0, idx: 0, next: null, power: true, protect: true, demo: true });
       api.L('p:demo'); return;
+    }
+    if (e.obj) { S.gobj = true; gobj.visible = true; gobj.scale.setScalar(0.01); gRing.visible = true; S.tension = 0; S.grab = false; api.sfx('struct'); api.L('p:obj'); return; }
+    if (e.kopen) { S.gobj = true; gobj.visible = true; gobj.scale.setScalar(0.01); S.kpull = { t: -0.5 }; api.L('p:kopen'); return; }
+    if (e.images) { api.images && api.images(true); return; }
+    if (e.kguard) {                                                                 // o K se antecipa: placa dele na grade, no ponto onde o golpe vai cruzar
+      const q = newProj({ T: { u: e.at[0], v: e.at[1] }, to: e.kguard, speed: e.v || 5.6, lead: 1.1, idx: 0, next: null, power: true });
+      S.kGuardFor = q; S.kGuardT = 0; S.kGuardAt = { u: e.at[0], v: e.at[1], who: e.kguard };
+      api.kGesture && api.kGesture(W(e.at[0], e.at[1]).clone(), 1.6); api.L('p:kguard ' + e.kguard); return;
     }
     if (e.group) { e.group.forEach((pt, i) => { const q = newProj({ T: { u: pt[0], v: pt[1] }, to: e.to[i], speed: e.v, lead: WP.warn + i * (e.gap || 0.35), idx: 0, next: null, power: true }); q.slot = i; }); return; }
     if (e.shot) { newProj({ T: { u: e.shot[0], v: e.shot[1] }, to: e.to, speed: e.v, lead: WP.warn, idx: 0, next: null }); return; }
@@ -301,6 +393,7 @@ export function createReflectPlus(api) {
     S.plusT += dt;
     if (S.wait > 0) { S.wait -= dt; return; }
     if (S.projs.some(p => p.state !== 'void' && p.state !== 'gone' && !(p.state === 'back' && !p.next))) return;   // uma coisa por vez (a volta final e o desvio para o vazio são só visuais)
+    if (S.gobj && !S.riftOpen) return;                                               // o objeto ainda não foi rompido: nada ataca
     if (S.ev >= S.script.length) { S.done = true; api.L('p:done'); return; }
     startEvent(S.script[S.ev++]);
   }
@@ -346,10 +439,21 @@ export function createReflectPlus(api) {
     // câmera: segue a grade erguida (sem alternar sozinha)
     S.camW = want ? Math.min(1, S.camW + dt / 1.2) : Math.max(0, S.camW - dt / 1.0);
     disc.visible = S.k > 0.999 && want > 0;
-    S.riftK = S.mode === 'conduct' && want && S.k > 0.999 ? Math.min(1, S.riftK + dt / RIFT.openT) : Math.max(0, S.riftK - dt / 0.6);
+    S.riftK = S.mode === 'conduct' && want && S.k > 0.999 && S.riftOpen ? Math.min(1, S.riftK + dt / RIFT.openT) : Math.max(0, S.riftK - dt / 0.6);
     riftG.visible = S.riftK > 0.001; { const e = ease(S.riftK), j = 1 + 0.03 * Math.sin(S.plusT * 17); riftG.scale.set(e * j, e * (2 - j), 1); riftIn.material.opacity = 0.85 + 0.15 * Math.sin(S.plusT * 9); }
     disc.scale.setScalar(S.mode === 'conduct' && S.attract ? 1.35 + 0.08 * Math.sin(S.plusT * 14) : 1);
     disc.position.set(S.cu, S.cv, 0.03);
+    stabArc.visible = disc.visible; stabArc.position.set(S.cu, S.cv, 0.031);
+    { const u = stabArc.material.uniforms; u.uFrac.value = S.stab; u.uA.value = (S.stab < 0.995 ? 0.42 : 0.16) + 0.5 * S.stabFl * (Math.sin(S.plusT * 40) > 0 ? 1 : 0.3); u.uBase.value = 0.05 + 0.18 * S.stabFl; }
+    updatePull(dt);
+    // placas do K: surgem rápido, brilham e somem ao bloquear
+    S.kPlates = S.kPlates.filter(k => {
+      k.age += dt;
+      if (k.alive) { const e = Math.min(1, k.age / 0.14); k.g.scale.set(e, e, 1); k.m.material.opacity = 0.55 + 0.35 * Math.max(0, 1 - k.age / 0.3); return true; }
+      k.die += dt; const q = k.die / 0.18; k.g.scale.set(1 + 0.3 * q, 1 - q, 1); k.m.material.opacity = 0.7 * (1 - q);
+      if (q >= 1) { face.remove(k.g); k.m.material.dispose(); return false; } return true;
+    });
+    if (S.kGuardFor && !S.kGuardMade) { S.kGuardT += dt; if (S.kGuardT >= 0.55) { S.kGuardMade = true; addKPlate(S.kGuardAt.u, S.kGuardAt.v); api.L('p:kplate ' + S.kGuardAt.who); } }
     // prévia
     if (S.drawing && disc.visible) {
       const pa = prevGeo.attributes.position, pts = S.drawing.pts.concat(S.drawing.atLimit ? [] : [{ u: S.cu, v: S.cv }]); const n = Math.min(PREV, pts.length);
@@ -371,19 +475,28 @@ export function createReflectPlus(api) {
   return {
     /** Arma o trecho aprimorado: a grade se ergue (se ainda não estiver) e o roteiro espera o fim da rotação. */
     setup(name) {
-      clearAttacks(); S.want = 1; S.script = PLUS_SCRIPTS[name] || PLUS_SCRIPTS.A; S.mode = name && name[0] === 'G' ? 'conduct' : 'reflect'; S.attract = false; S.through = 0; S.ev = 0; S.wait = 0; S.done = false; S.plusT = 0; S.rallyN = 0;
+      clearAttacks(); S.want = 1; S.script = PLUS_SCRIPTS[name] || PLUS_SCRIPTS.A; S.mode = name === 'G' || name === 'F' ? 'conduct' : 'reflect'; S.attract = false; S.through = 0; S.ev = 0; S.wait = 0; S.done = false; S.plusT = 0; S.rallyN = 0;
+      S.riftOpen = false; S.gobj = false; S.grab = false; S.kpull = null; S.tension = 0; S.by = null; S.kGuardFor = null; S.kGuardMade = false; gobj.visible = false; gRing.visible = false; api.images && api.images(false);
       S.cu = 0; S.cv = 3.6; S.drawing = null; api.L('p:setup ' + name);
     },
     lower() { S.want = 0; clearAttacks(); },
+    /** Puxar (botão direito / E / Puxar no toque). */
+    pull(down) { S.pullHeld = !!down; },
+    setStab(frac, flash) { S.stab = frac; S.stabFl = flash; },
+    get objVisible() { return S.gobj && !S.kpull; }, get riftOpen() { return S.riftOpen; }, get grabbing() { return S.grab; },
+    /** O K puxando a ponta: ponto do objeto (mundo) e a tensão — para o gesto do braço dele. */
+    get kPull() { return S.kpull && S.kpull.t > -0.2 ? { at: gobj.getWorldPosition(new THREE.Vector3()), k: S.tension } : null; },
+    get by() { return S.by; },
     /** Começo/fim da batalha: deitada na hora, sem animação. */
-    reset() { clearAttacks(); for (const w of S.walls) disposeWall(w); S.walls = []; S.want = 0; S.k = 0; S.camW = 0; S.script = null; S.mode = 'reflect'; S.riftK = 0; S.demoDone = false; update(0, false); },
+    reset() { clearAttacks(); for (const w of S.walls) disposeWall(w); S.walls = []; S.want = 0; S.k = 0; S.camW = 0; S.script = null; S.mode = 'reflect'; S.riftK = 0; S.demoDone = false;
+      S.riftOpen = false; S.gobj = false; S.grab = false; S.kpull = null; S.tension = 0; gobj.visible = false; gRing.visible = false; tLine.visible = tCone.visible = false; api.images && api.images(false); update(0, false); },
     clearAttacks,
     cancelDraw() { S.drawing = null; },
     update, move, action, step: stepScript,
     get active() { return S.want > 0; }, get lifted() { return S.k >= 0.999; }, get k() { return S.k; }, get camW() { return ease(S.camW); },
     get done() { return S.done; },
     /** Pontos interativos (para a transparência de quem cobre). */
-    points() { const out = []; if (disc.visible) { const c = W(S.cu, S.cv); out.push([c.x, c.y, c.z]); } for (const p of S.projs) if (p.obj) out.push([p.pos.x, p.pos.y, p.pos.z]); for (const r of S.rets) if (r.alive) { const c = W(r.u, r.v); out.push([c.x, c.y, c.z]); } return out; },
+    points() { const out = []; if (disc.visible) { const c = W(S.cu, S.cv); out.push([c.x, c.y, c.z]); } if (S.gobj) { const c = W(RIFT.u, RIFT.v); out.push([c.x, c.y, c.z]); } for (const p of S.projs) if (p.obj) out.push([p.pos.x, p.pos.y, p.pos.z]); for (const r of S.rets) if (r.alive) { const c = W(r.u, r.v); out.push([c.x, c.y, c.z]); } return out; },
     // testes
     get circle() { return { u: S.cu, v: S.cv }; }, _setCircle(u, v) { S.cu = u; S.cv = v; },
     get walls() { return S.walls.filter(w => w.alive).map(w => ({ n: w.n, pts: w.pts.map(p => ({ u: +p.u.toFixed(2), v: +p.v.toFixed(2) })) })); },
@@ -394,6 +507,7 @@ export function createReflectPlus(api) {
     for (const p of S.projs) killProj(p); S.projs = [];
     for (const r of S.rets) killRet(r); S.rets = [];
     for (const w of S.walls) killWall(w);
-    S.drawing = null;
+    for (const k of S.kPlates) killKPlate(k);
+    S.drawing = null; S.kGuardFor = null;
   }
 }

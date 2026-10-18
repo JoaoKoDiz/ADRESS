@@ -1110,7 +1110,7 @@ const BATTLE_CP_SAVE = 'adress.battle.cp';
 const battleCp = () => { try { const v = localStorage.getItem(BATTLE_CP_SAVE); return v == null ? -1 : +v; } catch (e) { return -1; } };
 const extrasOpen = () => 1 + (flagOn(EXTRA1_KEY) ? 1 : 0) + (flagOn(EXTRA1_KEY) && flagOn(EXTRA2_KEY) ? 1 : 0) + (flagOn(EXTRA1_KEY) && flagOn(EXTRA2_KEY) && flagOn(EXTRA3_KEY) ? 1 : 0);
 function pickExtra(i) {
-  if (i === 3 && battleTest()) { startBattle(flagOn(BATTLE_PLUS_KEY) ? { step: 16 } : {}); return; }
+  if (i === 3 && battleTest()) { startBattle(flagOn(BATTLE_PLUS_KEY) ? { step: 18 } : {}); return; }
   if (i >= extrasOpen()) return;
   if (i === 3 && battleCp() > 0 && !flagOn(EXTRA_DONE_KEY)) { startBattle({ step: battleCp() }); return; }
   startExtra(i);
@@ -1162,7 +1162,7 @@ const FULL_CP = 14;      // experimento: 14 extras liberados · 15 batalha no in
 const FULL_CP_KEY = 'adress.dev.fullCp';
 const BATTLE_CP = 12;    // teste da batalha: tudo até a missa + marca que libera o cartão Sacrifício para começar a batalha (não conclui os extras)
 const battleTest = () => flagOn(BATTLE_CP_KEY);
-const BATTLE_PLUS_CP = 13, BATTLE_PLUS_KEY = 'adress.dev.battlePlus';   // igual ao 13, mas o cartão Sacrifício começa direto no 1º REFLETIR aprimorado (passo 17)
+const BATTLE_PLUS_CP = 13, BATTLE_PLUS_KEY = 'adress.dev.battlePlus';   // igual ao 13, mas o cartão Sacrifício começa direto no 1º REFLETIR aprimorado (passo 18)
 const WS_LAST_CP = 8;    // checkpoint especial (fora da contagem de chaves): Grillby's feito, oficina na 3ª tarefa com a travessa buscada
 const WS_CP_KEY = 'adress.dev.wsLast';   // 'start' = ainda vai pôr o jogador a pé diante da oficina (1× por seleção); 'held' = só mantém a travessa até a entrega
 const storyKeys = () => [PARCEL_KEY, ROOF_KEY, CHURCH_TALK_KEY, TROLLEY_TALK_KEY, VENICE_TALK_KEY, CHURCH2_KEY, GRILL_TALK_KEY, 'adress.med.talk1', INTRO_KEY, MASS_KEY];
@@ -1199,8 +1199,8 @@ const STORY_CP = {
         for (const k of [EXTRA1_KEY, EXTRA2_KEY, EXTRA3_KEY]) localStorage.setItem(k, '1');
         localStorage.setItem(NOVAN_KEY, '1'); localStorage.setItem(NOTICE_KEY, '1');
         if (n >= 15) localStorage.setItem(EXTRA4_KEY, '1');
-        if (n === 15) localStorage.setItem(BATTLE_CP_SAVE, '13');   // interlúdio S1→R2
-        if (n === 16) localStorage.setItem(BATTLE_CP_SAVE, '24');   // combate final (depois do S2), encerramento e epílogo
+        if (n === 15) localStorage.setItem(BATTLE_CP_SAVE, '15');   // interlúdio S1→R2
+        if (n === 16) localStorage.setItem(BATTLE_CP_SAVE, '26');   // combate final (depois do S2), encerramento e epílogo
         if (n === 17) localStorage.setItem(EXTRA_DONE_KEY, '1');
         localStorage.setItem(FULL_CP_KEY, String(n));
       } catch (e) { /* */ }
@@ -2124,21 +2124,21 @@ function extraToBattle() {
 // por enquanto só pelo teste do cadeado (o cartão Sacrifício na página dos extras). Nada é salvo no progresso.
 // Música: a adaptação de "Finale" (battleMusic.js, assets/finale-batalha.mp3); a posição dela é o relógio da batalha.
 const battleMusic = createBattleMusic({ getVolume: () => settings.prefs.music });
-const battle = createBattle({ input, audio, renderer, stage, music: battleMusic, onFinish: () => startEpilogue(),
+const battle = createBattle({ input, audio, renderer, stage, talkBox, music: battleMusic, onFinish: () => startEpilogue(),
   onCheckpoint: st => { try { localStorage.setItem(BATTLE_CP_SAVE, String(st)); } catch (e) { /* */ } } });   // checkpoints depois dos fragmentos
 // Fragmentos, interlúdio e encerramento: cenas próprias sincronizadas com a música da batalha (fragments.js)
 const frag = createFragments({ input, audio, talkBox });
 battle.setFragmentHandler((info, done) => frag.play(info, done));
-battle.setFinaleHandler((info, done) => frag.finale(info, done));
+// (o interlúdio e o encerramento acontecem na própria arena: battleScenes.js)
 // Epílogo: a caminhada, o lugar bonito, a bancada, a conversa final e a saída (epilogue.js)
 const epiMusic = createChurchMusic(audio, innocentTimeUrl, 0.3);
 const epi = createEpilogue({ walker, input, audio, talkBox, onArea: () => playTrack(epiMusic, 6, 'Once Upon An Innocent Time'), onQuiet: () => epiMusic.fadeOut(3), onDone: () => finishStory() });
 function startEpilogue() {
-  const fk = frag._K.position;
+  const fk = { x: 0.7, z: 2.6 };                         // (onde o K está na arena: K_POS da batalha)
   frag.stop(); battle.stop();
   epi.camera.aspect = rig.camera.aspect; epi.camera.updateProjectionMatrix();
   epi.start({ player: { x: -1, z: 8.4 }, k: { x: fk.x, z: fk.z } }); renderer.compile(epi.scene, epi.camera);
-  try { localStorage.setItem(BATTLE_CP_SAVE, '24'); } catch (e) { /* */ }   // (saindo agora, o cartão volta ao combate final)
+  try { localStorage.setItem(BATTLE_CP_SAVE, '26'); } catch (e) { /* */ }   // (saindo agora, o cartão volta ao combate final)
   fade = 0; setState('epilogue');
 }
 /** Fim efetivo: só aqui os extras e a batalha ficam concluídos. A chuva forçada acaba, o fundo vira a manhã, a música normal volta e a van também. */
@@ -2169,6 +2169,7 @@ function startBattle(opts = {}) {
     talkBox.hide();
     music.suspend(true, 0.2); menuMusic.stop(0.2); voidMusic.fadeOut(0.2);   // encerra a faixa anterior (sem sobrepor)
     battle.camera.aspect = rig.camera.aspect; battle.camera.updateProjectionMatrix();
+    try { battle.setMemoryImages(frag.images(renderer)); } catch (e) { console.warn('[batalha] imagens das lembranças:', e); }   // (os cacos do interlúdio e as imagens do combate final)
     battle.start(opts); renderer.compile(battle.scene, battle.camera);   // (a trilha começa aqui, do início da apresentação)
     fade = 1; setState('battle');
   };
