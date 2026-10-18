@@ -111,7 +111,9 @@ lembrança abre em rachaduras da cor; estática; cena; estática no fim.
   silhueta vai junto, a mão no braço dele; as placas à frente racham e o círculo as sustenta; chega ao mesmo abrigo, ainda com medo.
 - **S1:** segura a viga e estica a outra mão para a ferramenta (longe demais); a vela diminui; a estrutura cede; ele termina ajoelhado.
 - **S2:** mesma viga; percebe que segurar não salva; o círculo pode segurar um instante para ele chegar à bancada; pega a ferramenta e
-  o caderno, solta e recua antes de cair; põe a vela, muito pequena, sobre a pedra firme.
+  o caderno, solta e recua antes de cair; põe a vela, muito pequena, sobre a pedra firme. A pedra já está no chão desde o S1 (ninguém a
+  usa ali); no S2, quando ele solta a estrutura, o olhar da câmera o acompanha até ela, sem corte, e o destroço que ficaria na frente
+  dele ou da vela fica translúcido (antes a vela na pedra terminava escondida atrás de uma tábua e da caixa de fala).
 
 **Interlúdio S1→R2 (na própria arena, `src/battleScenes.js`).** Quatro cacos de vidro com as **imagens reais** das quatro lembranças saem
 de trás da figura e cercam o K. O azul para de obedecer (pisca, fica), depois os outros se soltam. O círculo aparece; o jogador o leva
@@ -184,7 +186,8 @@ Ganchos de teste (console): `ADRESS.pickExtra(i)` · `ADRESS.extra` (`phase`, `_
   apaga, poste no vazio com a figura além da luz → salvo → menu.
 - **Extra 4** inteiro: peças → escoramento cede → viga/porta/bancada uma de cada vez → sobrecarga → dissolução → o K presente → grade →
   estado `battle`, salvo.
-- **Os 8 fragmentos** (cada um até o fim, voltando à arena no passo certo) com 3 capturas cada; **interlúdio** com o jogador sustentando a
+- **Os 8 fragmentos** (cada um até o fim, voltando à arena no passo certo) com 3 capturas cada (o roxo refeito e capturado de novo depois
+  da última correção de enquadramento); **interlúdio** com o jogador sustentando a
   barreira e o K tocando o caco; **combate final** com o K se protegendo, protegendo o jogador e rasgando a fenda (31 projéteis
   atravessaram); **encerramento** até "Você vem?" e a passagem para o epílogo no fim exato da música.
 - **Momentos do K por roteiro** pelo registro da batalha: `kdef:first` no S11, `p:tear P` no S13, `kclaim:early` e `kdef:protect` no S15.
