@@ -99,7 +99,7 @@ export function createFragments(ctx) {
   }
 
   let S = null;
-  const _v = new THREE.Vector3(), _w = new THREE.Vector3();
+  const _v = new THREE.Vector3(), _w = new THREE.Vector3(), occT = [new THREE.Vector3(), new THREE.Vector3()];
   const setCam = (c, drift = 0) => { camera.position.set(c.pos[0] + drift * 0.35, c.pos[1] - drift * 0.1, c.pos[2] - drift * 0.6); camera.lookAt(c.look[0], c.look[1], c.look[2]); if (Math.abs(camera.fov - c.fov) > 0.01) { camera.fov = c.fov; camera.updateProjectionMatrix(); } };
   const personOp = (p, a) => p.traverse(o => { if (o.isMesh && o.material) { o.material.transparent = true; o.material.opacity = a; o.material.depthWrite = a > 0.98; } });
   const restArms = K => K.userData.arms.forEach(a => { a.sh.quaternion.copy(a.rest); a.elbow.quaternion.copy(a.erest); });
@@ -379,6 +379,10 @@ export function createFragments(ctx) {
   //     vela (muito pequena) sobre a pedra firme. Nenhuma oficina nova.
   function tickS(dt, b, pass, held) {
     setCam(CAM.S, ease(clamp(b / 30, 0, 1)) * 0.5);
+    if (pass === 2 && b > 17) {                                            // solta a estrutura: o olhar acompanha o K até a pedra firme
+      const k = ease(clamp((b - 17) / 5, 0, 1)), L = CAM.S.look;           // (ele e a vela acima da caixa de fala, sem corte)
+      camera.lookAt(L[0] + (1.6 - L[0]) * k, L[1] + (0.9 - L[1]) * k, L[2] + (1.0 - L[2]) * k);
+    }
     WS.float(b, 1); WS.memory.flicker(b); WS.candle.userData.tick(dt); wsKMem.flicker(b);
     const K = wsK, tip = WS.beamTip(new THREE.Vector3()), cand = WS.candle.userData;
     const underBeam = Math.hypot(S.c.x - tip.x, S.c.z - tip.z) < 0.9;
@@ -422,6 +426,7 @@ export function createFragments(ctx) {
       K.userData.torso.rotation.z = b < 8 ? -0.16 : b < 23 ? -0.05 : 0;
     }
     S.sag = sag; WS.setBeam(sag);
+    WS.occlude(camera.position, [occT[0].set(K.position.x, 1.3, K.position.z), occT[1].copy(WS.candle.position)], dt);   // destroço na frente do K ou da vela fica translúcido
   }
 
   // ---------- auxiliares de pose ----------

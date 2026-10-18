@@ -315,7 +315,7 @@ export function buildWorkshopSet() {
       for (const c of chunks.values()) {
         if (!c.box) { c.box = new THREE.Box3(); c.loc = new THREE.Box3(); for (const it of c.items) c.loc.expandByObject(it.o); c.ref = c.items[0].o.position.clone(); }
         const d = c.items[0].o.position; c.box.copy(c.loc).translate(_p.copy(d).sub(c.ref));   // (o bloco inteiro flutua junto)
-        const hit = segBox(cam, target, c.box);
+        const hit = Array.isArray(target) ? target.some(t => segBox(cam, t, c.box)) : segBox(cam, target, c.box);
         const want = hit ? 0.16 : 1; c.alpha = c.alpha === undefined ? 1 : c.alpha + (want - c.alpha) * Math.min(1, dt * 7);
         if (Math.abs(c.alpha - (c.shown === undefined ? 1 : c.shown)) > 0.01) applyAlpha(c);
       }
