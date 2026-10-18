@@ -15,6 +15,7 @@ import { buildStandingReader as buildFigureBody } from './models/readerClassic.j
 import { buildBody, restArms } from './models/driver.js';
 import { smoothCharacter } from './models/kit.js';
 import { createPlayerPose } from './battlePose.js';
+import { createReflectPlus } from './reflectPlus.js';
 
 export const BATTLE_CP_KEY = 'adress.dev.battle';   // teste pelo cadeado: libera o cartão Sacrifício para começar a batalha
 
@@ -35,6 +36,8 @@ const CAMS = {
   game: { pos: camAt(136, 11.25, 5.0), look: new THREE.Vector3(-1.73, 1.79, -1.94), fov: 50 },
   // impacto: baixa e próxima (jogador em primeiro plano, K entre os dois, a figura ao fundo) — sobre o 4º quadrado à direita do jogador
   impact: { pos: new THREE.Vector3(3.5, 1.5, 8.8), look: new THREE.Vector3(-11.0, 3.25, -4.96), fov: 68 },
+  // grade erguida (REFLETIR aprimorado): baixa, perto, atrás e à direita do jogador, olhando pela lateral dele para a figura
+  wall: { pos: new THREE.Vector3(2.1, 1.7, 12.4), look: new THREE.Vector3(-1.2, 3.9, -1), fov: 55 },
 };
 const CAM_T = 1.0;                                                    // duração de uma troca de câmera (s)
 const CIRCLE_R = 0.36, CIRCLE_SPEED = 6.5, CIRCLE_HOME = { x: 0, z: 5.5 };
@@ -143,16 +146,17 @@ const SEGMENTS = [
   { mech: 'reflect', structs: [st(SA(), 5, 6, 0.2), st(SC(), 5, 6, 1.9), st(SD(), 5, 6, 3.6)] },
   { mech: 'guide', shots: [[1.2, 'L1', 'K', 5.4], [1.9, 'fig', 'P', 5.4], [2.6, 'R3', 'K', 5.6], [3.3, 'fig', 'K', 5.6]] },
   { mech: 'block', shots: genShots(12, 10, 1.45, 6.5, 7.2, 0.15) },
-  { mech: 'reflect', structs: [st(SB(), 4.8, 6.2, 0.2), st(SD(), 4.8, 6.2, 1.8), st(SA(), 4.8, 6.2, 3.4)], figEvery: 7 },
+  { mech: 'reflect', plus: 'A', structs: [st(SB(), 4.8, 6.2, 0.2), st(SD(), 4.8, 6.2, 1.8), st(SA(), 4.8, 6.2, 3.4)], figEvery: 7 },   // 13: depois do 2º azul → grade erguida (reflectPlus.js)
   { mech: 'guide', shots: [[1.2, 'fig', 'K', 5.6], [1.8, 'L2', 'P', 5.6], [2.4, 'R2', 'K', 5.8], [3.0, 'fig', 'P', 5.8], [3.6, 'L3', 'K', 5.8]] },
   { mech: 'block', shots: genShots(15, 11, 1.3, 6.8, 7.3, 0.2) },
-  { mech: 'reflect', structs: [st(SA(), 4.6, 6.4, 0.2), st(SD(), 4.6, 6.4, 1.4), st(SB(), 4.6, 6.4, 2.6), st(SC(), 4.6, 6.4, 3.8)], figEvery: 6 },
+  { mech: 'reflect', plus: 'B', structs: [st(SA(), 4.6, 6.4, 0.2), st(SD(), 4.6, 6.4, 1.4), st(SB(), 4.6, 6.4, 2.6), st(SC(), 4.6, 6.4, 3.8)], figEvery: 6 },   // 16: grade erguida, trocas mais rápidas
   { mech: 'guide', kOpens: true, shots: [[1.2, 'R1', 'K', 5.8], [1.7, 'fig', 'P', 5.8], [2.2, 'L1', 'K', 6], [2.7, 'fig', 'K', 6], [3.2, 'R3', 'P', 6], [3.7, 'L2', 'K', 6]] },   // 17: o K abre o portal
   { mech: 'block', shots: genShots(18, 14, 1.1, 7.0, 7.5, 0.25) },                                                           // 18: o mais intenso
 ];
 const LABEL = {
   block: ['BLOQUEAR · clique esquerdo', 'BLOQUEAR · botão Ação'],
   reflect: ['REFLETIR · segure o clique e mova (WASD)', 'REFLETIR · segure o botão Ação e mova'],
+  plus: ['REFLETIR · segure o clique e desenhe na grade · W/S sobe e desce · A/D lados', 'REFLETIR · segure o botão Ação e desenhe na grade'],
   guide: ['CONDUZIR · segure o clique esquerdo para atrair · sob o objeto, segure o direito e puxe', 'CONDUZIR · segure Atrair · sob o objeto, segure Puxar e arraste'],
 };
 const ACTION = { block: 'Bloquear', reflect: 'Refletir', guide: 'Atrair' };
@@ -482,7 +486,7 @@ export function createBattle(ctx) {
 
   // ---- som (efeitos curtos, procedurais) ----
   let noiseBuf = null;
-  function sfx(kind) {
+  function sfx(kind, k = 0) {
     const ac = audio && audio.ctx, out = audio && audio.out; if (!ac || !out || ac.state !== 'running') return;
     try {
       const now = ac.currentTime + 0.005, g = ac.createGain(); g.connect(out);
@@ -497,6 +501,9 @@ export function createBattle(ctx) {
       else if (kind === 'struct') { noise(0.32, 'highpass', 2200, 0.07); tone(420, 210, 0.3, 'triangle', 0.035); }
       else if (kind === 'core') { tone(660, 660, 0.7, 'sine', 0.04); tone(990, 990, 0.6, 'sine', 0.025, 0.06); }
       else if (kind === 'fail') tone(180, 90, 0.6, 'sine', 0.07);
+      else if (kind === 'rhit') { const f = 1 + 0.18 * k; tone(1650 * f, 2100 * f, 0.13, 'triangle', 0.06 + 0.03 * k); tone(2500 * f, 2900 * f, 0.1, 'sine', 0.03, 0.015); noise(0.07, 'highpass', 4200, 0.04 + 0.03 * k); }   // rebatida: curta e definida (mais forte nas trocas)
+      else if (kind === 'frebound') { tone(240, 420, 0.12, 'triangle', 0.05); noise(0.1, 'bandpass', 900, 0.035); }
+      else if (kind === 'void') { noise(0.4, 'bandpass', 600, 0.05); tone(300, 90, 0.35, 'sine', 0.04); }
       setTimeout(() => { try { g.disconnect(); } catch (e) { /* */ } }, 1500);
     } catch (e) { /* som é opcional */ }
   }
@@ -530,6 +537,12 @@ export function createBattle(ctx) {
   const kLevelOf = n => n < 5 ? 0 : Math.min(4, n - 4);
   const kLevel = () => kLevelOf(fragmentsDone);
   const charPos = who => who === 'K' ? K_POS : P_POS;
+  // REFLETIR aprimorado (grade erguida): só nos trechos marcados com `plus` e depois do 2º fragmento azul (índice 4)
+  const PLUS_AFTER = 5;
+  const plus = createReflectPlus({ scene, floorRect: gridMat.uniforms.uRect.value, floorZ0: GRID.z0, circleR: CIRCLE_R, speed: CIRCLE_SPEED,
+    sfx, L: m => L(m), impact: who => impact(who), shards: (x, y, z, n, d, sp) => spawnShards(x, y, z, n, d, sp),
+    projGet: () => projPool.get(), projPut: o => projPool.put(o), pose, figGest: g => { figGest = g; }, charPos });
+  const plusSeg = () => !!(seg && seg.plus);
 
   function fitFov(base) {
     const asp = camera.aspect || 16 / 9, h = Math.tan(base * Math.PI / 360) * 16 / 9;
@@ -539,8 +552,10 @@ export function createBattle(ctx) {
   /** Câmera entre as duas posições (k: 0 = jogo, 1 = impacto), com a troca suavizada. */
   function placeCamera() {
     const e = ease(camK), G = CAMS.game, I = CAMS.impact;
-    camBase.lerpVectors(G.pos, I.pos, e); camLook.lerpVectors(G.look, I.look, e);
-    camera.position.copy(camBase); camera.lookAt(camLook); fitFov(G.fov + (I.fov - G.fov) * e);
+    camBase.lerpVectors(G.pos, I.pos, e); camLook.lerpVectors(G.look, I.look, e); let fov = G.fov + (I.fov - G.fov) * e;
+    const pw = plus.camW;                                             // grade erguida: câmera baixa atrás/à direita do jogador
+    if (pw > 0) { camBase.lerp(CAMS.wall.pos, pw); camLook.lerp(CAMS.wall.look, pw); fov += (CAMS.wall.fov - fov) * pw; }
+    camera.position.copy(camBase); camera.lookAt(camLook); fitFov(fov);
     for (const f of Object.values(fissures)) f.g.rotation.y = Math.atan2(camBase.x - f.x, camBase.z - f.z);   // de frente para a câmera
   }
   /** Nada que exija reação: sem projéteis/avisos, sem traço sendo desenhado, sem núcleo sendo segurado. */
@@ -548,6 +563,7 @@ export function createBattle(ctx) {
   /** Câmera de impacto só em intervalos seguros (apresentação, espera entre janelas, antes de um fragmento), com tempo de voltar. */
   function camGoal() {
     const s = STEPS[step];
+    if (plus.active) return 0;                                        // com a grade erguida a câmera não alterna
     if (phase !== 'wait' || !s || !calm()) return 0;
     if (s.k !== 'S') return 1;
     const left = TL[step].a - mt;                                     // a câmera de jogo tem de estar no lugar antes da janela
@@ -702,12 +718,14 @@ export function createBattle(ctx) {
     gridMat.uniforms.uOn.value.fill(0);
     if (kAct) kAct = null;
     gest = null; figGest = null; traceT = 0; trace.material.opacity = 0;
+    plus.clearAttacks();
   }
   function setupSegment(i) {
     clearAll();
     const def = SEGMENTS[i];
-    seg = { i, def, mech: def.mech, t: 0, shotIdx: 0, figNext: def.figEvery || 0, figTgt: 0, structures: [], guide: null };
-    (def.structs || []).forEach((s, j) => {
+    seg = { i, def, mech: def.mech, t: 0, shotIdx: 0, figNext: def.figEvery || 0, figTgt: 0, structures: [], guide: null, plus: !!def.plus && fragmentsDone >= PLUS_AFTER };
+    if (seg.plus) plus.setup(def.plus); else if (plus.active) plus.lower();
+    if (!seg.plus) (def.structs || []).forEach((s, j) => {
       const o = structObjs[j]; o.position.set(s.x, H_PROJ, s.z); o.scale.setScalar(1); o.visible = true; o.userData.em.color.set('#ffffff'); o.userData.em.opacity = 0.9;
       seg.structures.push({ x: s.x, z: s.z, target: s.target, period: s.period, speed: s.speed, next: s.phase, alive: true, busy: false, die: -1, obj: o });
     });
@@ -740,6 +758,7 @@ export function createBattle(ctx) {
     for (const b of barriers) killBarrier(b);
     for (const w of walls) killWall(w);
     setPreview(false); kAct = null; hideMsg();
+    if (plus.active) plus.lower();
     nextStep();
   }
   function beginPause() {                                            // fragmento ou final: gancho de integração ou pausa neutra
@@ -766,7 +785,7 @@ export function createBattle(ctx) {
   }
   function fail() {
     if (phase !== 'play' && phase !== 'intro' && phase !== 'clear') return;
-    phase = 'fail'; pt = 0; L('fail'); sfx('fail'); setPreview(false);
+    phase = 'fail'; pt = 0; L('fail'); sfx('fail'); setPreview(false); plus.cancelDraw();
   }
 
   // ---------- Conduzir ----------
@@ -938,6 +957,7 @@ export function createBattle(ctx) {
 
   // ---------- laço por fase ----------
   function moveCircle(dt) {
+    if (plusSeg()) { plus.move(dt, input.axis()); return; }
     const ax = input.axis(); let x = ax.x, z = ax.z; const l = Math.hypot(x, z); if (l > 1) { x /= l; z /= l; }
     cpos.x = clamp(cpos.x + x * CIRCLE_SPEED * dt, LIM.x0 + CIRCLE_R, LIM.x1 - CIRCLE_R);
     cpos.z = clamp(cpos.z + z * CIRCLE_SPEED * dt, LIM.z0 + CIRCLE_R, LIM.z1 - CIRCLE_R);
@@ -947,6 +967,7 @@ export function createBattle(ctx) {
     if (phase !== 'play' || !seg) return;
     if (seg.mech === 'block') {
       if (click && time - lastBar >= BLOCK.cooldown) { lastBar = time; makeRoom(); addBarrier(cpos.x, cpos.z, 'P'); sfx('barrier'); L('barrier'); pose.setGuard(true); }
+    } else if (seg.mech === 'reflect' && seg.plus) { plus.action(act);
     } else if (seg.mech === 'reflect') {
       if (act && !drawing) { drawing = { pts: [{ x: cpos.x, z: cpos.z }], len: 0, atLimit: false }; setPreview(true); }   // começar a desenhar não remove nada (a troca é ao soltar)
       if (act && drawing) {
@@ -1070,6 +1091,7 @@ export function createBattle(ctx) {
     if (seg.mech === 'block') {
       while (seg.shotIdx < def.shots.length && seg.t >= def.shots[seg.shotIdx][0]) { const [, from, tg, v] = def.shots[seg.shotIdx++]; createWarning(from, tg, v); }
       if (seg.shotIdx >= def.shots.length && !warnings.length && !projectiles.length) toClear();
+    } else if (seg.mech === 'reflect' && seg.plus) { plus.step(dt); if (plus.done) toClear();
     } else if (seg.mech === 'reflect') {
       for (const s of seg.structures) if (s.alive && !s.busy && seg.t >= s.next) { createWarning(s, s.target, s.speed); s.next = seg.t + s.period; }
       if (def.figEvery && seg.t >= seg.figNext) { createWarning('fig', seg.figTgt++ % 2 ? 'K' : 'P', 6.5); seg.figNext = seg.t + def.figEvery; }
@@ -1083,6 +1105,7 @@ export function createBattle(ctx) {
     for (const p of projectiles) killProjectile(p, p.through ? 0 : 6); projectiles = [];
     for (const w of warnings) removeWarning(w); warnings = [];
     if (seg && seg.guide) { clearGuide(); seg.guide.state = 'closed'; }
+    if (plus.active) plus.lower();                                    // a grade volta a deitar
     L('clear');
   }
 
@@ -1108,6 +1131,7 @@ export function createBattle(ctx) {
       if (seg.guide && portal.visible) pts.push([portal.position.x, H_PROJ, portal.position.z]);
     }
     if (circle.visible) pts.push([cpos.x, 0.05, cpos.z]);
+    if (plus.active) pts.push(...plus.points());
     return pts;
   }
   function updateOcclusion(dt) {
@@ -1130,7 +1154,7 @@ export function createBattle(ctx) {
   function updateVisuals(dt) {
     // círculo
     circle.position.x = cpos.x; circle.position.z = cpos.z;
-    circle.visible = phase === 'intro' || phase === 'play' || phase === 'clear' || phase === 'fail';
+    circle.visible = !plusSeg() && (phase === 'intro' || phase === 'play' || phase === 'clear' || phase === 'fail');
     updatePreview();
     // barreiras
     barriers = barriers.filter(b => {
@@ -1237,7 +1261,7 @@ export function createBattle(ctx) {
   let labelOn = false, labelText = '';
   function updateLabel() {
     const on = !!seg && (phase === 'play' || phase === 'clear' || (phase === 'intro' && pt > 0.4));
-    const txt = seg ? LABEL[seg.mech][document.body.classList.contains('touch-on') ? 1 : 0] : '';
+    const txt = seg ? LABEL[seg.plus ? 'plus' : seg.mech][document.body.classList.contains('touch-on') ? 1 : 0] : '';
     if (txt !== labelText) { label.textContent = txt; labelText = txt; }
     if (on !== labelOn) { labelOn = on; label.style.display = 'block'; label.style.opacity = on ? '1' : '0'; }
   }
@@ -1285,6 +1309,7 @@ export function createBattle(ctx) {
         break;
     }
     if (!active) { setVeil(0); return; }
+    plus.update(dt, phase === 'play' || phase === 'intro');
     updateVisuals(dt);
     updateLabel(); setVeil(fade);
   }
@@ -1304,13 +1329,13 @@ export function createBattle(ctx) {
   function start(opts = {}) {
     stopInner();
     active = true; time = 0; log = []; retries = 0; lastBar = -9; lastKDef = -99;
-    paintWhite(); pose.reset();
+    paintWhite(); pose.reset(); plus.reset();
     key.position.set(CAMS.game.pos.x + 2, CAMS.game.pos.y + 7, CAMS.game.pos.z + 2); key.target.position.set(0, 0, 0);
     goTo(opts.step | 0);
     updateVisuals(0); setVeil(fade);
   }
   function stopInner() {
-    token++; clearAll(); seg = null; hideMsg(); setVeil(0); label.style.display = 'none'; label.style.opacity = '0'; labelOn = false;
+    token++; clearAll(); plus.reset(); seg = null; hideMsg(); setVeil(0); label.style.display = 'none'; label.style.opacity = '0'; labelOn = false;
     mouseDown = false; simAct = false; rightDown = false; prevAct = false; pauseDone = null;
   }
 
@@ -1339,7 +1364,7 @@ export function createBattle(ctx) {
     get guide() { const g = seg && seg.guide; return g ? { x: g.x, z: g.z, state: g.state, attract: g.attract, armed: g.armed, tension: g.tension, passed: g.passed, portal: g.portal ? { ...g.portal } : null, by: g.by || null } : null; },
     get through() { return projectiles.filter(p => p.alive && p.through).map(p => ({ x: p.x, z: p.z, vx: p.vx, vz: p.vz, inWhite: !!p.obj.parent && p.obj.parent === ws })); },
     _pull(down) { rightDown = !!down; },
-    get _rig() { return { pModel, PB }; }, get _pose() { return pose; }, _camK(k) { camForce = k == null ? null : k; },
+    get _plus() { return plus; }, get _rig() { return { pModel, PB }; }, get _pose() { return pose; }, _camK(k) { camForce = k == null ? null : k; },
     get stab() { return { P: stab.P, K: stab.K }; }, get kLevel() { return kLevel(); }, get fragmentsDone() { return fragmentsDone; },
     get retries() { return retries; }, get log() { return log.slice(); },
     _jump(i) { if (active) goTo(i); },

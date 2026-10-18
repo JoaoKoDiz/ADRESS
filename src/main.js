@@ -1097,7 +1097,7 @@ const title = createTitle({
 const shop = createShop();
 function openShop() { shop.open(); setState('shop'); }
 // Livre: seleção do bairro (todas as miniaturas na tela; setas escolhem, E joga). Depois o helicóptero decola.
-const levelSelect = createLevelSelect(l => confirmLevel(l), i => { if (i === 0) startExtra(); else if (i === 3 && battleTest()) startBattle(); });   // (o 2º, liberado depois do 1º, ainda é espaço reservado)   // (o 1º cartão da página dos extras: introdução do extra 1)
+const levelSelect = createLevelSelect(l => confirmLevel(l), i => { if (i === 0) startExtra(); else if (i === 3 && battleTest()) startBattle(flagOn(BATTLE_PLUS_KEY) ? { step: 17 } : {}); });   // (o 2º, liberado depois do 1º, ainda é espaço reservado)   // (o 1º cartão da página dos extras: introdução do extra 1)
 function openLevelSelect() { levelSelect.setExtra(flagOn(MASS_KEY), flagOn(EXTRA1_KEY) ? 2 : 1, battleTest() ? [3] : []); levelSelect.open(freeLevel); setState('levelSelect'); }   // (página dos 4 níveis extras: só depois do temporal)
 function confirmLevel(l) {
   if (state === 'levelSelect' && l < 0 && levelSelect.onExtra) { startExtra(); return; }   // página dos extras: E/Enter abre o 1º
@@ -1138,9 +1138,10 @@ const missions = createMissions(career); // Carreira: M perto da maquete abre as
 const STORY_STEPS = ['Nada', 'Conversa na casa do personagem — completa', 'Conversa no terraço — completa', 'Primeira conversa na igreja — completa',
   'Trolley Problem — completo', 'Conversa em Veneza — completa', 'Segunda conversa na igreja — completa', "Encontro no Grillby's — completo",
   'Oficina — Entregar a última peça', 'Oficina no Bairro 24 — completa', 'Apresentação da igreja (Bairro 24) — vista', 'Missa e temporal — completos',
-  'Batalha após Sacrifício (teste)'];
+  'Batalha após Sacrifício (teste)', 'Batalha — REFLETIR aprimorado (teste)'];
 const BATTLE_CP = 12;    // teste da batalha: tudo até a missa + marca que libera o cartão Sacrifício para começar a batalha (não conclui os extras)
 const battleTest = () => flagOn(BATTLE_CP_KEY);
+const BATTLE_PLUS_CP = 13, BATTLE_PLUS_KEY = 'adress.dev.battlePlus';   // igual ao 13, mas o cartão Sacrifício começa direto no 1º REFLETIR aprimorado (passo 17)
 const WS_LAST_CP = 8;    // checkpoint especial (fora da contagem de chaves): Grillby's feito, oficina na 3ª tarefa com a travessa buscada
 const WS_CP_KEY = 'adress.dev.wsLast';   // 'start' = ainda vai pôr o jogador a pé diante da oficina (1× por seleção); 'held' = só mantém a travessa até a entrega
 const storyKeys = () => [PARCEL_KEY, ROOF_KEY, CHURCH_TALK_KEY, TROLLEY_TALK_KEY, VENICE_TALK_KEY, CHURCH2_KEY, GRILL_TALK_KEY, 'adress.med.talk1', INTRO_KEY, MASS_KEY];
@@ -1163,12 +1164,13 @@ const STORY_CP = {
   names: STORY_STEPS,
   current() {
     const k = storyKeys(); let n = 0; while (n < k.length && flagOn(k[n])) n++;
-    if (flagOn(BATTLE_CP_KEY)) return BATTLE_CP;
+    if (flagOn(BATTLE_CP_KEY)) return flagOn(BATTLE_PLUS_KEY) ? BATTLE_PLUS_CP : BATTLE_CP;
     if (n === 7 && localStorage.getItem(WS_CP_KEY) && localStorage.getItem('adress.med.shop') === '3') return WS_LAST_CP;
     return n >= 8 ? n + 1 : n;                          // (o da oficina ocupa a posição 9)
   },
   apply(n) {
-    try { localStorage.removeItem(WS_CP_KEY); localStorage.removeItem(BATTLE_CP_KEY); } catch (e) { /* */ }
+    try { localStorage.removeItem(WS_CP_KEY); localStorage.removeItem(BATTLE_CP_KEY); localStorage.removeItem(BATTLE_PLUS_KEY); } catch (e) { /* */ }
+    if (n === BATTLE_PLUS_CP) { this.apply(BATTLE_CP); try { localStorage.setItem(BATTLE_PLUS_KEY, '1'); } catch (e) { /* */ } return; }
     if (n === BATTLE_CP) {                                 // só prepara: depois da missa, o cartão Sacrifício (4º extra) começa a batalha
       this.apply(11);
       try { localStorage.setItem(BATTLE_CP_KEY, '1'); } catch (e) { /* */ }
