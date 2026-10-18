@@ -1,0 +1,247 @@
+{
+ "sections": [
+  {
+   "name": "Apresentação",
+   "src": [
+    0.0,
+    39.338
+   ],
+   "at": 0,
+   "len": 39.338,
+   "role": "intro",
+   "gain": -1.5
+  },
+  {
+   "name": "Batalha 1",
+   "src": [
+    46.417,
+    71.678
+   ],
+   "at": 39.308,
+   "len": 25.261,
+   "role": "S",
+   "gain": -1.5
+  },
+  {
+   "name": "R1 — episódio azul (alarme + estática + tema + estática)",
+   "src": [
+    190.731,
+    228.31
+   ],
+   "at": 64.539,
+   "len": 37.579,
+   "role": "F",
+   "gain": -1.5
+  },
+  {
+   "name": "Batalha 2",
+   "src": [
+    109.526,
+    132.386
+   ],
+   "at": 102.088,
+   "len": 22.86,
+   "role": "S",
+   "gain": -1.5
+  },
+  {
+   "name": "M1 — episódio verde",
+   "src": [
+    311.996,
+    349.526
+   ],
+   "at": 124.918,
+   "len": 37.53,
+   "role": "F",
+   "gain": -1.5
+  },
+  {
+   "name": "Batalha 3",
+   "src": [
+    170.204,
+    190.731
+   ],
+   "at": 162.418,
+   "len": 20.527,
+   "role": "S",
+   "gain": -1.5
+  },
+  {
+   "name": "C1 — episódio laranja",
+   "src": [
+    132.386,
+    170.204
+   ],
+   "at": 182.915,
+   "len": 37.818,
+   "role": "F",
+   "gain": -1.5
+  },
+  {
+   "name": "Batalha 4",
+   "src": [
+    228.31,
+    253.586
+   ],
+   "at": 220.703,
+   "len": 25.276,
+   "role": "S",
+   "gain": -1.5
+  },
+  {
+   "name": "S1 — episódio roxo",
+   "src": [
+    253.586,
+    291.47
+   ],
+   "at": 245.975,
+   "len": 37.883,
+   "role": "F",
+   "gain": -1.5
+  },
+  {
+   "name": "Batalha 5a",
+   "src": [
+    291.47,
+    311.996
+   ],
+   "at": 283.855,
+   "len": 20.526,
+   "role": "S",
+   "gain": -1.5
+  },
+  {
+   "name": "Batalha 5b",
+   "src": [
+    349.526,
+    372.382
+   ],
+   "at": 304.351,
+   "len": 22.856,
+   "role": "S",
+   "gain": -1.5
+  },
+  {
+   "name": "Ponte: estática do Finale",
+   "src": [
+    408.888,
+    410.216
+   ],
+   "at": 327.177,
+   "len": 1.328,
+   "role": "I",
+   "gain": -1.0
+  },
+  {
+   "name": "Interlúdio S1→R2 — Finale, parte calma B",
+   "src": [
+    514.912,
+    546.621
+   ],
+   "at": 328.475,
+   "len": 31.709,
+   "role": "I",
+   "gain": 0.0
+  },
+  {
+   "name": "R2 — reprise do tema azul (sem alarme)",
+   "src": [
+    195.136,
+    228.314
+   ],
+   "at": 360.124,
+   "len": 33.178,
+   "role": "F",
+   "gain": 0.0
+  },
+  {
+   "name": "Batalha 6 — Finale forte 1",
+   "src": [
+    432.935,
+    473.2
+   ],
+   "at": 393.272,
+   "len": 40.266,
+   "role": "S",
+   "gain": 0.0
+  },
+  {
+   "name": "M2 — reprise do tema verde",
+   "src": [
+    316.482,
+    349.53
+   ],
+   "at": 433.477,
+   "len": 33.048,
+   "role": "F",
+   "gain": 0.0
+  },
+  {
+   "name": "Batalha 7 — Finale mais forte 1",
+   "src": [
+    473.2,
+    513.623
+   ],
+   "at": 466.495,
+   "len": 40.423,
+   "role": "S",
+   "gain": 0.0
+  },
+  {
+   "name": "C2 — reprise do tema laranja",
+   "src": [
+    137.332,
+    170.208
+   ],
+   "at": 506.768,
+   "len": 32.876,
+   "role": "F",
+   "gain": 0.0
+  },
+  {
+   "name": "Batalha 8 — Finale forte 2",
+   "src": [
+    546.621,
+    587.09
+   ],
+   "at": 539.614,
+   "len": 40.469,
+   "role": "S",
+   "gain": 0.0
+  },
+  {
+   "name": "S2 — reprise do tema roxo",
+   "src": [
+    258.608,
+    291.474
+   ],
+   "at": 580.023,
+   "len": 32.866,
+   "role": "F",
+   "gain": 0.0
+  },
+  {
+   "name": "Combate final — Finale mais forte 2",
+   "src": [
+    587.09,
+    627.35
+   ],
+   "at": 612.859,
+   "len": 40.26,
+   "role": "S",
+   "gain": 0.0
+  },
+  {
+   "name": "Encerramento — saída do Finale",
+   "src": [
+    627.35,
+    663.445
+   ],
+   "at": 653.115,
+   "len": 36.095,
+   "role": "E",
+   "gain": 0.0
+  }
+ ],
+ "total": 689.21
+}

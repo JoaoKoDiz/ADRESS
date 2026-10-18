@@ -1,159 +1,246 @@
-# ADRESS — versão experimental: história completa
+# ADRESS — versão experimental: história completa (rodada 2)
 
-> Versão experimental, separada da principal. Nada aqui muda o jogo principal nem o progresso salvo dele.
+> Experimento separado da versão principal. Nada aqui muda o jogo principal nem o progresso salvo dele.
+> Esta é a 2ª rodada: o pedido original foi reavaliado inteiro e boa parte foi reconstruída. A rodada 1 continua jogável e
+> preservada (abaixo).
 
 ## 1. Onde está cada versão
 
-| | Versão principal (preservada) | Versão experimental |
-|---|---|---|
-| Jogar | <https://joaokodiz.github.io/ADRESS/> | <https://joaokodiz.github.io/ADRESS/experimento/> |
-| Código | branch `main` (intocada pelo experimento, só ganhou a pasta `experimento/`) | branch `experimento/historia-completa` |
-| Cópia de segurança | branch `preservado/2026-10-18` = commit `acee819` (o `main` antes do experimento) | — |
-| Progresso salvo | chaves `adress.*` do navegador | chaves `adressx.*` (separadas) |
+| | Versão principal (preservada) | Experimento — rodada 2 (atual) | Experimento — rodada 1 (preservada) |
+|---|---|---|---|
+| Jogar | <https://joaokodiz.github.io/ADRESS/> | <https://joaokodiz.github.io/ADRESS/experimento/> | <https://joaokodiz.github.io/ADRESS/experimento/rodada1/> |
+| Código | branch `main` | branch `experimento/historia-completa` · cópia fixa `experimento/rodada2-2026-10-18` | branch `experimento/rodada1-2026-10-18` (commit `53587d1`) |
+| Antes do experimento | branch `preservado/2026-10-18` (commit `acee819`) | — | — |
+| Progresso salvo | chaves `adress.*` | chaves `adressx2.*` | chaves `adressx.*` |
 
-**Salvamento isolado.** As duas páginas ficam no mesmo site, então dividem o mesmo `localStorage`. A experimental troca, antes de o jogo
-carregar, toda chave `adress.*` por `adressx.*` (script no `src/template.html` da branch experimental). Na 1ª abertura ela **copia** o
-progresso da principal para `adressx.*` (nunca move nem apaga nada da principal; marca `adressx.__copied`). Testado: depois de jogar a
-experimental até o fim, as chaves `adress.*` continuam exatamente como estavam.
+**Salvamento isolado.** As três páginas estão no mesmo site e dividem o `localStorage`. Antes de o jogo carregar, a rodada 2 troca toda
+chave `adress.*` por `adressx2.*` (script em `src/template.html`). Na 1ª abertura ela **copia** o progresso da principal para
+`adressx2.*` (nunca move nem apaga; marca `adressx2.__copied`). A rodada 1 continua em `adressx.*`. **Testado** (seção 6): depois de
+concluir a história na rodada 2, as chaves `adress.*` e `adressx.*` continuam exatamente iguais.
 
-**Arquivos fora do Git** (registrados, não publicados): `finale-batalha-revisao.wav` (edição aprovada da música da batalha, 102 MB) e
-`marks.json` (tabela de cortes) estavam só na pasta temporária da sessão anterior; o MP3 publicado (`assets/finale-batalha.mp3`) é o
-mesmo usado pelas duas versões. Os zips do Netlify são gerados no Windows e ficam fora do Git.
+**Música da batalha:** `assets/finale-batalha-v2.mp3` (nova edição, seção 8) foi **acrescentada** ao lado da anterior;
+`assets/finale-batalha.mp3` (usada pela rodada 1 e pela principal) não foi alterada. O remix original não foi modificado.
 
 ### Como rodar
-- **Principal:** `git checkout main` → `npm run build` → abrir `index.html` (ou o link do GitHub Pages).
-- **Experimental:** `git checkout experimento/historia-completa` → `npm run build:experimento` → gera `experimento/index.html`
-  (a música externa vem de `../assets/`, os arquivos da principal). Para testar abrindo direto, copie `assets/` para junto ou use o link.
+- **Principal:** `git checkout main` → `npm run build` → `index.html` (ou o link).
+- **Rodada 2:** `git checkout experimento/historia-completa` → `npm run build:experimento` → `experimento/index.html` (a música vem de
+  `../assets/`). Para abrir direto do disco: `node build.mjs --dev --out <pasta>/index.html` com uma pasta `assets/` ao lado.
+- **Rodada 1:** `git checkout experimento/rodada1-2026-10-18` → `node build.mjs --out experimento/rodada1/index.html --asset-base ../../assets/`.
 
 ### Como restaurar
-- Voltar o `main` ao estado de antes: `git checkout main && git reset --hard preservado/2026-10-18` (ou só apagar a pasta `experimento/`).
-- Apagar o progresso experimental (sem tocar no principal): no console do navegador da página experimental,
-  `Object.keys(localStorage).filter(k => k.startsWith('adressx.')).forEach(k => localStorage.removeItem(k))`.
+- Principal como antes de qualquer experimento: o conteúdo de `preservado/2026-10-18`; os experimentos só acrescentaram a pasta
+  `experimento/` e o arquivo `assets/finale-batalha-v2.mp3` (apagar os dois volta ao estado anterior).
+- Voltar o experimento publicado para a rodada 1: publicar o build de `experimento/rodada1-2026-10-18` em `experimento/`.
+- Apagar só o progresso da rodada 2 (console da página experimental):
+  `Object.keys(localStorage).filter(k => k.startsWith('adressx2.')).forEach(k => localStorage.removeItem(k))`.
 
-## 2. O que está completo (jogável de ponta a ponta)
+## 2. Avaliação da rodada 1 (o que a experiência realmente entregava)
 
-Depois do 4º sino: **Extra 1 → 2 → 3 → 4 → batalha (emendada no fim do extra 4, sem voltar ao menu) → encerramento → epílogo → volta ao jogo.**
+Joguei e reli a rodada 1 contra o pedido original. Funcionava de ponta a ponta, mas em vários pontos estava superficial ou contrariava
+a direção:
+- **Terror sem construção.** A figura aparecia cedo e de perto; quase não havia distância, silêncio ou antecipação; o som era pouco usado.
+- **Extra 3 errado no conceito:** o K atravessava a nevasca *carregando alguém* — virava uma cena de coragem, quando o pedido é o K
+  sozinho, precisando de ajuda e com vergonha de mostrar.
+- **Sem linguagem visual de lembrança.** Lembrança e presente tinham o mesmo aspecto; por isso o "K aparece fisicamente pela primeira
+  vez" no fim do extra 4 não significava nada.
+- **Fragmentos desviados do pedido:** R1 sem os pequenos ajustes do K; M2 com o K pondo a própria cadeira de volta (o pedido diz que
+  ela continua ausente); C sem a silhueta que oferece ajuda; frases do M não saíam de falas comuns do K.
+- **A batalha não desenvolvia a mudança do K pela jogabilidade:** a defesa dele era por sorteio; nada marcava a 1ª defesa
+  hesitante, o momento claro em que ele protege o jogador nem o S2 (ele abrir a fenda).
+- **Música:** a 2ª metade estava espremida (fragmentos de 26 s em tempos provisórios); as repetições não tinham espaço próprio.
+- **Interlúdio e encerramento** eram réplicas da arena em outra cena (trocas de cena onde o pedido pede continuidade).
+- **Final acrescentado, não preparado:** o lugar bonito era um largo pronto (não "ainda sendo preparado"); o K não deixava a ferramenta
+  no chão; a voz da figura só sumia (em vez de ficar ininteligível); faltava o descanso antes das palavras.
 
-- **Cartões** (página dos extras no Livre): os 4 continuam; cada um libera o seguinte; todos repetíveis. Imagens: Rigidez (estátua de
-  vidro azul), Maledicência (lápide com musgo), **Covardia (nova: lanterninha laranja acesa, vidro rachado, facho tremido)**, Sacrifício
-  (vela quase no fim, chama roxa). Fundo preto.
-- **Extra 1 — Rigidez:** refinado. Novo diálogo 1 (a despedida, texto do dono, avanço manual), dentro do cubo, o K de frente para a R;
-  o gatilho é a distância (não precisa encostar no cubo). Os diálogos 2 e 3 da figura ficaram como estavam. Vento a 40% (já estava),
-  "just us" → loop com 6 s de transição, fade de 3 s na volta.
-- **Extra 2 — Maledicência** (`src/extra2.js`): chão em pedaços no vazio, mesa, cadeiras, silhuetas, acento verde. Quem acolheu o K o
-  leva à mesa; chega alguém novo; **o jogador pega e coloca a cadeira dela**; ela senta. A figura (11 falas, manual) leva frases comuns
-  do K até as silhuetas e cada uma vira a cadeira; a cadeira do K desliza para longe; a figura passa para entre ele e o grupo. Fim: a
-  cadeira que o jogador trouxe fica; a do K some. Salva, volta ao menu. Música: "Once Upon A Terrible Time" (já existia no jogo).
-- **Extra 3 — Covardia** (`src/extra3.js`): rua curta com neve, poste laranja, lugar quente ao longe, vento e passo reduzido (sem
-  inverter controles). Memória inventada coerente com o resgate: o K atravessa a nevasca levando alguém caído no poste (escorrega,
-  ajoelha, levanta a pessoa, vapor da respiração, pegadas). Uma silhueta oferece a mão; ele desvia o rosto e esconde a mão que treme.
-  10 falas da figura (automáticas, o jogador continua andando). Ao chegar, a luz do lugar se apaga; o poste fica. Salva, menu.
-  Música: "It's Raining Somewhere Else".
-- **Extra 4 — Sacrifício** (`src/extra4.js`): pedaços da oficina destruída; o jogador leva 4 peças à bancada; cada uma faz outra parte
-  perder o apoio (esteio tomba, painel escorrega, a tábua cai da bancada, viga despenca); a vela roxa diminui a cada tentativa. 10 falas.
-  Fim: a oficina se desfaz (ficam a bancada e a vela acesa), a figura tenta ocupar o quadro, o K aparece cabisbaixo entre os dois, a
-  grade branca nasce no chão → **batalha** direto. Nada do progresso normal/Shop é tocado.
-- **Batalha:**
-  - Ordem: ◼◼ R1 ◼◼ M1 ◼◼ C1 ◼◼ S1 ◼ **interlúdio** R2 ◼◼ M2 ◼◼ C2 ◼◼ S2 ◼ encerramento (o interlúdio ocupa a passagem antes do Finale).
-  - **8 fragmentos** (`src/fragments.js`): cenas reais, sincronizadas com o relógio da música, com o círculo do jogador ativo:
-    - R: a moldura estreita; o jogador segura a passagem (R1). No R2 o K não segura; pega um pedacinho azul.
-    - M: o K explica, a cadeira se afasta; o jogador recolhe fragmentos verdes (M1). No M2 o K põe a própria cadeira num lugar dele.
-    - C: o K esconde a mão e chega sozinho (C1). No C2 pede companhia; só anda bem com o círculo perto.
-    - S: o K segura a viga; a vela diminui; a estrutura cede e ele ajoelha (S1). No S2 solta a viga, pega ferramenta e caderno e põe
-      a vela numa pedra firme (o círculo marca a pedra).
-  - **Interlúdio S1→R2:** 4 cacos em volta da figura, o azul desobedece e desce; o jogador segura uma barreirinha com o círculo; o K
-    hesita, recua a mão e toca. Diálogo do dono.
-  - **Autonomia do K:** nenhuma barreira antes do R2 · depois do R2: às vezes, a si mesmo · M2: mais firme · C2: protege o jogador ·
-    S2: abre a fenda no combate final. Não é invulnerável.
-  - **Combate final** (trecho 18): as imagens dos 4 fragmentos voltam girando, acusadoras; o K faz uma barreira para si, depois outra
-    para o jogador, depois abre a fenda sozinho; o jogador conduz a última corrente. Nenhum ataque à figura.
-  - **Encerramento:** a conversa do dono com a figura (sincronizada com os últimos 40 s da música); a câmera deixa de seguir a figura;
-    "Você vem?".
-  - **Câmera:** a principal agora é baixa e próxima, atrás e à direita do jogador (ele grande à esquerda, o K mais à direita, a figura
-    além da área). A arena do chão ficou mais larga e rasa (16 × 14 células inteiras, sem moldura) para caber nela. Sem as trocas
-    dramáticas periódicas (a de impacto só na apresentação); nunca troca durante traço/condução. Marca discreta no chão sob cada
-    projétil (ajuda a ler a altura). Grade vertical vista quase de frente.
-  - **CONDUZIR aprimorado** (trechos 18 e 22, depois do R2): a grade se ergue; uma demonstração protegida mostra o ataque quebrando
-    uma parede do REFLETIR (o K segura o golpe); uma fenda grande (branca, borda preta) se abre atrás da grade; segurar atrai os
-    projéteis para o círculo na grade e levar o círculo até a fenda os entrega a ela; soltar devolve cada um ao alvo. Controles 2D.
-    Grupos de 2–3 no 1º trecho, 3–4 no 2º. Testado com robô: todos entram na fenda, sem dano.
-  - **Checkpoints:** depois de cada fragmento (`adressx.battle.cp`); o cartão Sacrifício volta ao último.
-- **Epílogo** (`src/epilogue.js`):
-  - Caminhada junto, para longe da figura. O K espera se o jogador parar; sem cronômetro. Os ecos da figura somem com a distância.
-  - A grade perde linhas, a luz suaviza, as 4 cores aparecem de leve. Surge o bairro medieval de manhã, depois da chuva: pedras
-    molhadas, poças, casas, árvore, gotas.
-  - O K põe ferramenta e caderno na bancada provisória; o ajuste falha uma vez; o jogador segura a tábua enquanto ele conserta.
-  - O K senta; "E — Sentar". Conversa final do dono (manual).
-  - Alguns segundos de silêncio. Ele escreve no caderno e o fecha. O jogador sai; o K fica; fade.
-  - Música: "Once Upon An Innocent Time", baixa, só no lugar bonito; some antes do silêncio.
-- **Fim efetivo:** só aqui salva os extras 1–4 + `adressx.extra.done`. A chuva forçada acaba. O fundo do menu vira a manhã no bairro
-  medieval. A música normal volta ("snow" sai). A van volta ao menu com a customização salva.
-- **Menus:**
-  - Chuva até o extra 1; noite no Bairro 1 até o extra 2; depois variações discretas da mesma noite (a luz do quintal mais fraca
-    depois do extra 2 e mais ainda depois do extra 3).
-  - Dentro dos extras: sem MENU, DICA, controles normais, botão de música, cronômetro ou batidas.
-  - Celular: joystick + toque no balão/indicação; na batalha, "Segurar" nos fragmentos.
+## 3. O que decidi preservar
+- A estrutura (4 extras → batalha emendada → encerramento → volta ao jogo), os 4 cartões e as imagens deles.
+- O extra 1: estrutura, despedida do dono (o K olhando a R), diálogos aprovados da figura, fluxo de áudio ("just us" → loop com 6 s de
+  transição, ~3 s de fade, vento a 40%). Só ganhou a borda azul de lembrança (seção 4).
+- Os três mecanismos e as regras das barreiras (não expiram, no máximo 2, substituição da posicionada por último, troca só ao soltar no
+  REFLETIR, as do K não contam), o REFLETIR aprimorado (grade erguida, trocas), a física do CONDUZIR (míssil, portal, vazio branco),
+  a câmera principal baixa atrás/à direita e as marcas no chão.
+- A arquitetura "a música é o relógio da batalha"; os checkpoints depois dos fragmentos; salvar só no fim efetivo.
+- Menus da fase de terror (chuva até o extra 1, noite no Bairro 1 sem van até o extra 2, "snow" nos menus); textos do dono (falas da
+  figura, falas do K nos fragmentos, conversa final) sem reescrever.
 
-## 3. Mapa de cenas e checkpoints de teste
+## 4. O que refiz ou criei nesta rodada — e por quê
 
-Cadeado 1225 → **Checkpoint da história**:
-- **15** "extras 1 a 3 feitos": libera os 4 cartões.
-- **16** "batalha no interlúdio": o cartão Sacrifício começa no passo 13.
-- **17** "combate final, encerramento e epílogo": cartão Sacrifício no passo 24.
-- **18** "concluída": manhã depois da chuva.
+**Música (nova edição, `finale-batalha-v2.mp3`).** A estrutura antiga não deixava as repetições respirarem. A nova edição corta só
+em limites naturais (estáticas e entradas de seção), sem mudar velocidade nem afinação: 1ª metade contida (episódios com alarme), a
+virada no interlúdio (parte calma do Finale), cada repetição com o próprio tema sem alarme (~33 s), a intensificação depois do R2 e o
+fim que respira (o "Você vem?" cai no silêncio do fim da faixa). Tabela na seção 8.
 
-(Posições no painel = índice + 1.)
+**Linguagem visual das lembranças (`src/memorySets.js`).** Os mesmos cenários servem aos extras, aos fragmentos e às imagens dos
+cacos: o cubo da despedida, a mesa, a rua com neve, a oficina destruída (a mesma do Bairro 24). Tudo que é lembrança tem uma borda
+de luz na cor da experiência e um pouco menos de cor; o presente (jogador branco, figura, o K no fim do extra 4, a arena) não tem.
+Assim o fim do extra 4 ganha sentido: o K aparece sem a borda, de verdade, pela primeira vez.
 
-Ganchos de teste (console):
-- `ADRESS.pickExtra(i)` · `ADRESS.extra` (`phase`, `_jump`) · `ADRESS.battle._jump(passo)` · `ADRESS.frag` (`code`, `t`, `blue`, `ev`) ·
-  `ADRESS.epi` (`phase`, `prog`, `_jump('area'|'talk')`) · `ADRESS.startEpilogue()` · `ADRESS.finishStory()`.
+**Extra 2 — Maledicência (reescrito).** Um lugar preparado (chão que se forma, uma cadeira que se puxa sozinha); M recebe o K; chega a
+pessoa de fora; o jogador leva a cadeira; uma passagem se forma e o K puxa a cadeira para ela (o mesmo gesto que recebeu). A pessoa
+acolhida tira frases **comuns** do K (cansaço, "eu disse que vinha", "não foi isso que eu quis dizer", "deixa, eu resolvo") e as leva ao
+grupo; cada uma vira uma cadeira, uma voz some do murmúrio e a cadeira do K escorrega. Ninguém ri; só costas, silêncio. A figura
+chega aos poucos e termina entre ele e o grupo; a cadeira dele vira pó verde; a que o jogador trouxe fica.
 
-Passos da batalha:
-- 0–1 S · 2 R1 · 3–4 S · 5 M1 · 6–7 S · 8 C1 · 9–10 S · 11 S1 · 12 S · 13 interlúdio · 14 R2 · 15–16 S (16 = Refletir aprimorado A)
-- 17 M2 · 18–19 S · 20 C2 · 21–22 S (21 = aprimorado B) · 23 S2 · 24 combate final · 25 encerramento.
+**Extra 3 — Covardia (refeito do zero).** O K sozinho, caído na neve, a mão que treme no peito. O jogador atravessa junto, no ritmo dele
+(passo pesado, rajadas, sem controles invertidos). Sinais de esforço que a figura ignora: levanta escorregando, cai de joelhos e
+levanta, a respiração vira vapor. No poste, uma silhueta oferece a mão; a dele quase vai — e vai para trás das costas; ele endireita o
+corpo e apressa o passo para parecer bem (e continua mancando). De trás, só o jogador vê a mão escondida tremendo. O abrigo fica um
+pouco mais longe. Ele chega sozinho; a luz se apaga antes do alívio; corte: o jogador se volta, o poste pequeno no vazio e, além da luz
+dele, a figura — "Até a sua coragem precisa de uma testemunha que não faça perguntas."
 
-## 4. Música (tabela de tempos)
+**Extra 4 — Sacrifício (reescrito).** Silêncio e goteiras ao entrar. Duas peças na bancada ("Ainda falta."); pôr a última faz o
+escoramento da viga escorregar. Segurar (E) sustenta — e a vela roxa queima mais depressa enquanto se segura; ao segurar a viga, a porta
+se solta lá na entrada; depois a bancada racha e derruba o que foi posto; por fim tudo junto. Cada exigência tem o seu tempo (não
+cascateia). A oficina se desfaz, ficam a bancada e a vela muito pequena (acesa); a figura tenta ocupar o quadro; o K aparece de verdade,
+abatido, entre os dois; a grade nasce no chão e a batalha começa sem menu. Pedaços que ficam entre a câmera e o jogador ficam
+translúcidos.
 
-Arquivo: `assets/finale-batalha.mp3` (a edição aprovada; **não foi feita nova edição** nesta rodada — os tempos abaixo são da mesma faixa).
+**Fragmentos (todos refeitos, `src/fragments.js`).** Mesmo cenário, enquadramento e gestos nas duas passagens; muda a resposta do K. O
+jogador está presente só como o círculo branco (tenta, sustenta, recolhe — sem poder mudar a lembrança). 1ª passagem: no alarme a
+lembrança abre em rachaduras da cor; estática; cena; estática no fim.
+- **R1:** a R vai embora pelo fundo; o K faz pequenos ajustes (meio passo, a mão que sobe e desce, voltar ao lugar), cada vez mais perto da
+  frente, enquanto a moldura se estreita; o círculo segurado no vão cria folga, mas ela fecha mesmo assim; ele termina preso na fresta.
+- **R2:** mesma despedida; a mão dele vai à moldura e solta; ele recolhe um pedacinho azul que ficou e atravessa enquanto ainda há
+  espaço — a moldura fecha atrás dele, vazia (sem carregar a porta nas costas).
+- **M1:** cada exposição vira uma cadeira; cada resposta do K se parte em duas acusações; a cadeira dele se afasta enquanto ele explica;
+  o jogador recolhe frases (elas ficam girando no círculo), mas a exclusão acontece igual.
+- **M2:** mesma exposição; ele começa "Não foi…" e para; olha a cadeira que trouxe; diz as falas e vai embora; a cadeira dele some e não
+  volta; ninguém se reconcilia.
+- **C1:** a mão escondida; ele desvia da mão oferecida — e também do círculo, se o jogador o puser no caminho; chega sozinho.
+- **C2:** ele para e olha a mão que treme, sem esconder; "Estou com medo."; aceita a mão; "Você pode ficar comigo até eu atravessar?"; a
+  silhueta vai junto, a mão no braço dele; as placas à frente racham e o círculo as sustenta; chega ao mesmo abrigo, ainda com medo.
+- **S1:** segura a viga e estica a outra mão para a ferramenta (longe demais); a vela diminui; a estrutura cede; ele termina ajoelhado.
+- **S2:** mesma viga; percebe que segurar não salva; o círculo pode segurar um instante para ele chegar à bancada; pega a ferramenta e
+  o caderno, solta e recua antes de cair; põe a vela, muito pequena, sobre a pedra firme.
 
-| Trecho | Início (s) |
-|---|---|
-| Apresentação | 0 |
-| Batalha 1 | 39,3 |
-| R1 (azul) | 64,6 |
-| Batalha 2 | 102,2 |
-| M1 (verde) | 125,0 |
-| Batalha 3 | 162,5 |
-| C1 (laranja) | 183,1 |
-| Batalha 4 | 220,9 |
-| S1 (roxo) | 246,2 |
-| Batalha 5a | 284,0 |
-| **Interlúdio** (5b inteira) | 304,6 |
-| R2 (entrada do Finale) | 327,4 |
-| 2ª passagem | fragmentos de 26 s, trechos de ~15,5 s (`FIN_PLAN`) |
-| Encerramento | 541,9 → 581,9 |
+**Interlúdio S1→R2 (na própria arena, `src/battleScenes.js`).** Quatro cacos de vidro com as **imagens reais** das quatro lembranças saem
+de trás da figura e cercam o K. O azul para de obedecer (pisca, fica), depois os outros se soltam. O círculo aparece; o jogador o leva
+até perto do azul e sustenta uma pequena barreira (a pose de guarda; sem o jogador ela aparece sozinha — nada falha); os outros cacos
+se afastam. O K anda até o azul, estende a mão, recua, estende de novo e toca. Os quatro continuam rachados; o azul ganha luz primeiro.
+O diálogo do dono passa sincronizado. O azul cresce até encher a tela — e o R2 começa na mesma imagem.
 
-- **Sincronizadas:** fragmentos, interlúdio e encerramento (falas automáticas na hora marcada).
-- **Manuais:** despedida (extra 1), figura do extra 2, conversa final.
-- **Automáticas enquanto o jogador anda:** extras 3 e 4.
+**Batalha (reorganizada, `src/battle.js`, `src/reflectPlus.js`).**
+- 18 trechos + 8 fragmentos + interlúdio + encerramento nos tempos da nova edição. Ensino gradual na 1ª metade (BLOQUEAR → REFLETIR →
+  CONDUZIR, curtos e contidos); depois do R2, trechos de ~20 s.
+- **O K conquista a iniciativa por roteiro, sem sorteio:** nenhuma defesa antes do R2 · logo depois do R2, a 1ª defesa própria (placa
+  pequena, gesto hesitante, mas funciona) e depois às vezes · depois do M2, firme · depois do C2, antecipa no aviso, e há um momento
+  marcado em que dois disparos vêm no jogador ao mesmo tempo — o jogador cobre um, o K se vira e cobre o outro (traço de luz do braço
+  dele até a placa) · depois do S2, no combate final, ele faz uma barreira para si, depois uma para o jogador, e puxa sozinho a ponta
+  do objeto que rasga a fenda.
+- **CONDUZIR aprimorado** (depois do M2): a demonstração protegida mostra o ataque quebrando o REFLETIR; o objeto aparece onde a fenda
+  vai rasgar; **o próprio jogador puxa a ponta** (círculo no objeto + botão direito/E) e só então os grupos começam (2, depois 3).
+  No combate final quem puxa é o K — o jogador só guia a corrente (grupos de 3, 4, 10 e uma corrente de 14).
+- **Combate final:** as quatro imagens das lembranças voltam em volta da figura com as frases dela ("Uma escolha certa.", "Explique
+  melhor.", "Não deixe perceberem.", "Mais um pouco.").
+- **Encerramento (na arena):** a figura tenta começar outra exigência e nada sai; o diálogo do dono; ela tenta crescer, mas a câmera
+  gira devagar para um plano lateral dos dois e ela sai do quadro sem ser perseguida; o K se volta para o jogador: "Você vem?".
+- **Estabilidade discreta:** um arco fino em volta do círculo (jogador) e as linhas da grade em volta do K (perdem força e tremem quando
+  a dele cai). Sem anéis aos pés, sem HUD.
+- **Falha:** a música volta ao começo do trecho e ele recomeça com tudo limpo; cada nova tentativa do mesmo trecho dói um pouco menos.
 
-## 5. Testes feitos (Chromium headless, de verdade)
-- Extra 2 inteiro: andar → cena → pegar/colocar a cadeira → 11 falas → fim salvo → menu (sem erros).
-- Extra 3 inteiro: andar → levantar a pessoa → travessia (oferta recusada) → luz apagada → salvo → menu.
-- Extra 4 inteiro: 4 peças (vela 1 → 0,24) → desfaz → figura → K → grade → **estado `battle`** com `adressx.extra.4`.
-- Os 8 fragmentos + interlúdio pelos passos da batalha: todos começam e terminam na janela; K autonomia 0→1→2→3→4.
-- Combate final → encerramento → epílogo → caminhada (o K espera/acompanha) → bancada → segurar a tábua → sentar → 27 falas → silêncio
-  → escrever → sair → **tela inicial** com `extra.done`, sem `battle.cp`, sem chuva, fundo `morning`, van de volta.
-- Isolamento do salvamento (acima).
+**Epílogo (refeito, `src/epilogue.js`).** A caminhada no ritmo dos dois (o K espera se o jogador parar). A voz da figura continua atrás,
+cada vez menos inteligível — as letras viram pontos com a distância, sem uma última palavra. A grade perde linhas, a luz suaviza, as
+quatro cores aparecem de leve no ar e em reflexos no chão. Surge um **terreno ainda sendo preparado** perto do bairro medieval depois do
+temporal: estacas e barbante marcando algo que ainda não existe, tábuas empilhadas, pedras, um balde, poças, grama molhada, uma árvore
+pingando, a muralha ao longe na névoa. O K põe a ferramenta e o caderno na bancada provisória, abre o caderno, alinha uma tábua — ela
+escorrega; ele olha, respira, muda a mão de lugar e tenta de novo; o jogador segura a tábua enquanto ele fixa (três batidas). Ele deixa a
+ferramenta no chão e senta; "Sentar ao lado". Cinco segundos sentados sem fala. A conversa (manual) muda de plano conforme o que ele diz
+(os dois; só ele; ele olhando o jogador; a bancada; aberto). Silêncio. Uma anotação pequena e o caderno fechado. O jogador vai até a
+saída; a última imagem olha de volta: o K continua ali, sentado. Fade.
 
-**Não testado:** som real (o navegador de teste não tem áudio); celular de verdade; a dificuldade com pessoas (só robô); o extra 1 novo
-de ponta a ponta com a música.
+**Menus ecoando cada extra (sem revelar o fim).** Depois do 2º: a cadeira de balanço do K não está mais no quintal. Depois do 3º: a
+luz do quintal apaga (o lampião continua lá) e só um poste laranja fica aceso no fim da rua. Com o 4º feito e a batalha pendente: uma
+chama roxa pequena no quintal. Fim: manhã depois da chuva no bairro medieval, música normal, a van de volta.
 
-## 6. Limitações e próximos passos
-- **Música:** não foi feita nova edição (cortes/loops). A 2ª passagem usa tempos provisórios. A janela de 26 s dos fragmentos da 2ª
-  passagem é curta para respirar.
-- **Música:** sem reescuta humana não arrisquei cortes novos; se quiser a nova edição, o caminho é estender a 2ª passagem do Finale
-  com laços (tempos em `FIN_PLAN` em `src/battle.js`).
-- A arena nova (mais rasa) ainda não foi testada por uma pessoa; os disparos de lado vêm de um pouco mais longe (fissuras em x ±9,4).
-- **Personagens das memórias** (silhuetas) usam o corpo antigo com uma cor; animação simples (deslizam).
-- **Batidas na madeira, vapor, pegadas:** procedurais e simples.
+**Celular.** As falas automáticas (cenas sincronizadas) não tiram mais os controles de toque (antes o joystick e o botão sumiam
+enquanto uma fala estava na tela). Em telas baixas, essas falas ficam compactas e no alto; as conversas manuais ficam embaixo, menores.
+
+## 5. Mapa das cenas e checkpoints
+
+Cadeado 1225 → **Checkpoint da história** (posição no painel = índice + 1):
+- **12** Missa e temporal completos → os extras começam pelo cartão 1.
+- **13** Batalha após Sacrifício (teste) → o cartão Sacrifício começa a batalha do início (não conclui extras).
+- **14** Batalha — REFLETIR aprimorado (teste) → começa no passo 18.
+- **15** História completa — extras 1 a 3 feitos (cartões liberados).
+- **16** … batalha no interlúdio (passo 15).
+- **17** … combate final, encerramento e epílogo (passo 26).
+- **18** … concluída (manhã depois da chuva).
+- **19** … batalha depois do R2 (passo 17: a 1ª defesa do K).
+
+Passos da batalha (`ADRESS.battle._jump(n)`): 0 S0 · 1 S1 · **2 R1** · 3 S2 · 4 S3 · **5 M1** · 6 S4 · 7 S5 · **8 C1** · 9 S6 · 10 S7 ·
+**11 S1** · 12 S8 · 13 S9 · 14 S10 · **15 interlúdio** · **16 R2** · 17 S11 (1ª defesa do K) · 18 S12 (REFLETIR aprimorado A) · **19 M2** ·
+20 S13 (CONDUZIR aprimorado, o jogador rasga a fenda) · 21 S14 · **22 C2** · 23 S15 (o K protege o jogador) · 24 S16 (REFLETIR aprimorado B) ·
+**25 S2** · 26 S17 (combate final) · **27 encerramento**.
+
+Ganchos de teste (console): `ADRESS.pickExtra(i)` · `ADRESS.extra` (`phase`, `_jump`) · `ADRESS.battle` (`_jump`, `kLevel`, `log`,
+`_inter`, `_finale`, `_plus`) · `ADRESS.frag` (`code`, `t`, `ev`) · `ADRESS.epi` (`phase`, `shot`, `_jump('area'|'talk')`) ·
+`ADRESS.startEpilogue()` · `ADRESS.finishStory()` · `ADRESS.menuBg()`.
+
+## 6. O que executei e verifiquei (Chromium headless + SwiftShader, de verdade, com capturas)
+- **Extra 1** inteiro: andar → despedida dentro do cubo (o K de frente para a R, com a borda azul) → saída pela esquerda → quebra →
+  figura → diálogos 2 e 3 → deslocamento → puxão → tela inicial; salvo; fundo do menu na etapa certa.
+- **Extra 2** inteiro (pegar e pôr a cadeira, as quatro exposições, a figura entre ele e o grupo, a cadeira dele some) → salvo → menu.
+- **Extra 3** inteiro (~50 s): queda de joelhos (o tempo dela corrigido), oferta da mão sob o poste, mão escondida vista de trás, luz que
+  apaga, poste no vazio com a figura além da luz → salvo → menu.
+- **Extra 4** inteiro: peças → escoramento cede → viga/porta/bancada uma de cada vez → sobrecarga → dissolução → o K presente → grade →
+  estado `battle`, salvo.
+- **Os 8 fragmentos** (cada um até o fim, voltando à arena no passo certo) com 3 capturas cada; **interlúdio** com o jogador sustentando a
+  barreira e o K tocando o caco; **combate final** com o K se protegendo, protegendo o jogador e rasgando a fenda (31 projéteis
+  atravessaram); **encerramento** até "Você vem?" e a passagem para o epílogo no fim exato da música.
+- **Momentos do K por roteiro** pelo registro da batalha: `kdef:first` no S11, `p:tear P` no S13, `kclaim:early` e `kdef:protect` no S15.
+- **Percurso completo, duas vezes** (a 2ª com o build final): missa feita (fundo chuva, "snow" nos menus) → extra 1 (noite, sem van) →
+  extra 2 (`night2`) → extra 3 (`night3`) → extra 4 → batalha (os 28 passos em ordem, nenhum pulado) → epílogo → tela inicial:
+  `extra.done` salvo, chuva desligada, fundo `morning`, van de volta, "snow" desligada. **Nenhum erro** no console.
+- **Epílogo** sozinho: o K espera quando o jogador para; a voz da figura vira pontos; a tábua escorrega e é refeita; a ferramenta vai ao
+  chão; os 27 trechos da conversa com os planos; anotação; saída; olhar para trás; menu.
+- **Fundos dos menus** em cada etapa (capturas): noite com a cadeira; sem a cadeira; luz apagada + poste laranja; chama roxa; manhã.
+- **Celular** (toque, 844×390 e 390×844) e **redimensionamento** no meio da batalha (844 → 390×844 → 1280×720): joystick e botões nos
+  extras, na batalha e nos fragmentos (depois da correção), falas compactas.
+- **Isolamento do salvamento:** com chaves da principal e da rodada 1 já gravadas, concluir a história na rodada 2 não mudou nenhuma
+  delas.
+
+**Não verifiquei de verdade:** o som (o navegador de teste não tem saída de áudio; toda sincronização foi testada pelo relógio da
+música, que a batalha segue); a dificuldade com pessoas (só robôs; no percurso completo o robô não perde estabilidade, para testar as
+transições); aparelhos reais e desempenho em máquinas fracas (só SwiftShader).
+
+## 7. Limitações e pendências
+- **Dificuldade não calibrada com pessoas**, sobretudo os REFLETIR aprimorados (velocidades da rodada 1) e o CONDUZIR com puxar.
+- As pessoas das lembranças usam o corpo antigo, de uma cor, com animação simples (andam deslizando um pouco; gestos por braço).
+- Os cacos e as imagens acusadoras são fotos do enquadramento inicial de cada lembrança (não mudam entre as passagens).
+- No celular em pé, a câmera da batalha corta parte do jogador (o campo de visão vai até 80°); deitado está bem.
+- O arquivo da nova edição tem 27,6 MB (320 kbps a partir do remix decodificado, para não perder qualidade); toca em streaming.
+- Sons das cenas continuam procedurais e simples (passos, vento, madeira, vidro).
+- O extra 1 manteve a estrutura da rodada 1 (como pedido); só ganhou a borda de lembrança.
+
+## 8. Música: `assets/finale-batalha-v2.mp3` (689,21 s) — tabela de tempos
+
+Feita a partir do remix original (que não foi alterado), só com cortes em limites naturais e transições de 4–150 ms; sem mudar
+velocidade nem afinação. A tabela completa (com as posições no remix) está em `marks-v2.json`, ao lado deste relatório; os tempos
+também estão em `src/battle.js` (`MUS`).
+
+| Início (s) | Passo | Trecho da faixa |
+|---|---|---|
+| 0 | apresentação + S0 | Apresentação |
+| 39,31 | S1 | Batalha 1 |
+| 64,54 | R1 | episódio azul (alarme, estática, tema, estática) |
+| 102,09 | S2 · S3 | Batalha 2 (dividida) |
+| 124,92 | M1 | episódio verde |
+| 162,42 | S4 · S5 | Batalha 3 (dividida) |
+| 182,92 | C1 | episódio laranja |
+| 220,70 | S6 · S7 | Batalha 4 (dividida) |
+| 245,98 | S1 | episódio roxo |
+| 283,86 | S8 | Batalha 5a |
+| 304,35 | S9 · S10 | Batalha 5b (dividida) |
+| 327,18 | interlúdio | estática do Finale + parte calma B (a virada) |
+| 360,12 | R2 | tema azul, reprise sem alarme |
+| 393,27 | S11 · S12 | Finale forte 1 |
+| 433,48 | M2 | tema verde, reprise |
+| 466,50 | S13 · S14 | Finale mais forte 1 |
+| 506,77 | C2 | tema laranja, reprise |
+| 539,61 | S15 · S16 | Finale forte 2 |
+| 580,02 | S2 | tema roxo, reprise |
+| 612,86 | S17 | Finale mais forte 2 (combate final) |
+| 653,12 → 689,21 | encerramento | fim do Finale (silêncio a partir de ~683) |
+
+- **Sincronizadas** (falas automáticas curtas, com tempo de leitura): fragmentos, interlúdio, encerramento; falas da figura nos extras 2–4.
+- **Manuais** (E/Espaço/toque): despedida e diálogos da figura no extra 1, conversa final.
