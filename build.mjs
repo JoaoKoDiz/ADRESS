@@ -13,7 +13,8 @@ const flag = f => args.includes(f);
 const opt = (f, d) => { const i = args.indexOf(f); return i >= 0 ? args[i + 1] : d; };
 const dev = flag('--dev'), watch = flag('--watch');
 const entry = opt('--entry', 'src/main.js'), out = opt('--out', 'index.html');
-const withAssets = flag('--with-assets');   // copia assets/ (música) para junto do html gerado
+const withAssets = flag('--with-assets');
+const assetBase = opt('--asset-base', null);   // experimento publicado numa subpasta: música externa da versão principal (ex.: ../assets/)   // copia assets/ (música) para junto do html gerado
 
 async function inject(js) {
   const tpl = await readFile('src/template.html', 'utf8');
@@ -27,7 +28,8 @@ async function inject(js) {
 const options = {
   entryPoints: [entry], bundle: true, format: 'iife', target: 'es2020',
   minify: !dev, legalComments: 'none', write: false, logLevel: 'warning',
-  loader: { '.ogg': 'dataurl', '.mp3': 'dataurl' },            // honk.ogg vai embutido no html (funciona abrindo o arquivo direto)
+  loader: { '.ogg': 'dataurl', '.mp3': 'dataurl' },
+  define: assetBase ? { __ASSET_BASE__: JSON.stringify(assetBase) } : {},            // honk.ogg vai embutido no html (funciona abrindo o arquivo direto)
 };
 
 if (watch) {

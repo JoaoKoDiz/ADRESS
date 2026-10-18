@@ -24,6 +24,9 @@ export function createTalkBox(stage) {
       border: 5px solid #FF7A1A; border-radius: 18px; box-shadow: 0 6px 0 rgba(0,0,0,.18);
       font: 600 23px/1.45 system-ui, 'Segoe UI', Roboto, sans-serif; z-index: 40; display: none; pointer-events: none; }
     .talkbox-text b { font-weight: 900; }
+    .talkbox[data-who=r] { border-color: #003EFF; }
+    .talkbox[data-who=f] { background: #0d0d10; color: #ece8e0; border-color: #000; box-shadow: 0 0 0 2px #2a2a30, 0 6px 0 rgba(0,0,0,.4); }
+    .talkbox[data-who=f] .talkbox-next { color: #9a958c; }
     .talkbox-next { position: absolute; right: 18px; bottom: 8px; font-size: 14px; font-weight: 700; color: #FF7A1A;
       opacity: 0; animation: talkbox-blink 1s steps(2, start) infinite; }
     .talkbox.done .talkbox-next { opacity: .85; }
@@ -71,6 +74,7 @@ export function createTalkBox(stage) {
     el.classList.toggle('done', shown >= total);
   }
   function startLine() {
+    el.dataset.who = lines[idx].who || '';                          // quem fala (só a cor da caixa: K laranja, R azul, figura escura)
     shown = 0; total = segs().reduce((n, s) => n + s.t.length, 0); pauseLeft = 0; hold = 0;
     pauses = []; let at = 0;                                     // pausas: posição (em letras) e duração
     for (const p of lines[idx]) { if (typeof p === 'string') at += p.length; else if (p.b) at += p.b.length; else if (p.p) pauses.push({ at, d: p.p }); }

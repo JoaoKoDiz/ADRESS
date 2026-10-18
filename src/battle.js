@@ -58,10 +58,10 @@ const STRUCT = { hitR: 0.95 };
 // closeDelay/closeT = espera depois do último e fechamento; portalW/H = tamanho; passW = meia-largura estável da passagem;
 // kLevel/kDelay/kOpenT = o K abre o portal sozinho nos trechos finais (nível de autonomia, espera e duração do gesto).
 const GUIDE = { turn: 2.6, grabR: 0.8, pull: 3.0, objY: 2.2, formT: 0.7, closeDelay: 2.5, closeT: 0.5, portalW: 2.3, portalH: 1.5,
-  passW: 0.85, kLevel: 3, kDelay: 1.5, kOpenT: 2.4, spikes: 16, far: 45, ring: 48 };
+  passW: 0.85, kLevel: 4, kDelay: 1.5, kOpenT: 2.4, spikes: 16, far: 45, ring: 48 };
 // Autonomia do K por nível (gap = intervalo mínimo entre defesas; chance por projétil; hesitate = tempo do gesto;
 // self = defende a si mesmo; other = chance de proteger o jogador)
-const K_DEF = [null, { gap: 9, chance: 0.35, hesitate: 0.7, self: true, other: 0 }, { gap: 6, chance: 0.5, hesitate: 0.5 }, { gap: 4.5, chance: 0.65, hesitate: 0.4 }, { gap: 3.5, chance: 0.7, hesitate: 0.3, other: 0.45 }];
+const K_DEF = [null, { gap: 9, chance: 0.35, hesitate: 0.7, self: true, other: 0 }, { gap: 6, chance: 0.5, hesitate: 0.5 }, { gap: 4.5, chance: 0.6, hesitate: 0.4, other: 0.45 }, { gap: 3.5, chance: 0.7, hesitate: 0.3, other: 0.55 }];   // depois do R2: às vezes; M2: mais firme; C2: protege o jogador; S2: abre a fenda
 const kDef = l => Object.assign({}, K_DEF[1], K_DEF[l]);
 const T = { fadeIn: 0.7, startFade: 1.5, intro: 1.0, clear: 1.0, out: 0.7, freeze: 0.35, failMsg: 1.0 };
 const RETRY_MIN = 4;                                                  // falha com menos que isso de janela: o trecho não recomeça (a música segue)
@@ -74,8 +74,9 @@ const COLOR_HEX = { azul: '#003EFF', verde: '#00C000', laranja: '#FCA600', roxo:
 const STEPS = (() => {
   const out = []; let s = 0, f = 0;
   const S = () => out.push({ k: 'S', seg: s++ }), F = (color, pass) => out.push({ k: 'F', index: f++, color, pass });
+  const I = () => { out.push({ k: 'I' }); s += 2; };              // interlúdio S1→R2 (os 4 cacos; o azul desobedece) no lugar de 2 trechos
   S(); S(); F('azul', 1); S(); S(); F('verde', 1); S(); S(); F('laranja', 1); S(); S(); F('roxo', 1);
-  S(); S(); S(); F('azul', 2); S(); S(); F('verde', 2); S(); S(); F('laranja', 2); S(); S(); F('roxo', 2); S();
+  S(); I(); F('azul', 2); S(); S(); F('verde', 2); S(); S(); F('laranja', 2); S(); S(); F('roxo', 2); S();
   out.push({ k: 'E' });
   return out;
 })();
@@ -89,10 +90,10 @@ const MUS = { intro: 0, b1: 39.334, azul: 64.591, b2: 102.166, verde: 125.022, b
 // (2 por passagem, divididos ao meio; os 3 depois do roxo = 4:44,0 e a passagem 5:04,6 dividida). PROVISÓRIOS (ajustáveis,
 // FIN_PLAN): a 2ª passagem e o final, dentro do Finale (5:27,4 → 9:41,9) — azul 2 na entrada do Finale (estática),
 // fragmentos de FRAG2 s, os trechos repartem o resto e o encerramento ocupa o fim da faixa.
-const FIN_PLAN = { frag2: 30, end: 14 };
+const FIN_PLAN = { frag2: 26, end: 40 };   // 2ª passagem: fragmentos de 26 s; o encerramento (conversa final) nos últimos 40 s
 const TL = (() => {
   const a = [10.5, MUS.b1, MUS.azul, MUS.b2, (MUS.b2 + MUS.verde) / 2, MUS.verde, MUS.b3, (MUS.b3 + MUS.laranja) / 2, MUS.laranja,
-    MUS.b4, (MUS.b4 + MUS.roxo) / 2, MUS.roxo, MUS.b5a, MUS.b5b, (MUS.b5b + MUS.finale) / 2, MUS.finale];
+    MUS.b4, (MUS.b4 + MUS.roxo) / 2, MUS.roxo, MUS.b5a, MUS.b5b, MUS.finale];   // (b5b inteira = o interlúdio)
   const nFixed = a.length;                                           // até aqui: tempos da edição (o 1º trecho começa depois da apresentação)
   const rest = STEPS.slice(nFixed), endA = MUS.end - FIN_PLAN.end;
   const nS = rest.filter(s => s.k === 'S').length, nF = rest.filter(s => s.k === 'F').length;
@@ -150,8 +151,11 @@ const SEGMENTS = [
   { mech: 'guide', shots: [[1.2, 'fig', 'K', 5.6], [1.8, 'L2', 'P', 5.6], [2.4, 'R2', 'K', 5.8], [3.0, 'fig', 'P', 5.8], [3.6, 'L3', 'K', 5.8]] },
   { mech: 'block', shots: genShots(15, 11, 1.3, 6.8, 7.3, 0.2) },
   { mech: 'reflect', plus: 'B', structs: [st(SA(), 4.6, 6.4, 0.2), st(SD(), 4.6, 6.4, 1.4), st(SB(), 4.6, 6.4, 2.6), st(SC(), 4.6, 6.4, 3.8)], figEvery: 6 },   // 16: grade erguida, trocas mais rápidas
-  { mech: 'guide', kOpens: true, shots: [[1.2, 'R1', 'K', 5.8], [1.7, 'fig', 'P', 5.8], [2.2, 'L1', 'K', 6], [2.7, 'fig', 'K', 6], [3.2, 'R3', 'P', 6], [3.7, 'L2', 'K', 6]] },   // 17: o K abre o portal
-  { mech: 'block', shots: genShots(18, 14, 1.1, 7.0, 7.5, 0.25) },                                                           // 18: o mais intenso
+  { mech: 'guide', shots: [[1.2, 'R1', 'K', 5.8], [1.7, 'fig', 'P', 5.8], [2.2, 'L1', 'K', 6], [2.7, 'fig', 'K', 6], [3.2, 'R3', 'P', 6], [3.7, 'L2', 'K', 6]] },
+  // 18: combate final (depois do S2): as imagens dos fragmentos voltam acusando; o K faz uma barreira para si, depois uma para o
+  // jogador, depois abre a fenda (portal) sozinho; o jogador conduz a última corrente.
+  { mech: 'guide', kOpens: true, kGuard: 2, kDelay: 3.6, images: true, shots: [[0.6, 'fig', 'K', 4.6], [2.0, 'fig', 'P', 4.6],
+    [5.6, 'L1', 'K', 5.2], [6.0, 'R1', 'P', 5.2], [6.4, 'fig', 'K', 5.4], [6.8, 'L3', 'P', 5.4], [7.2, 'R3', 'K', 5.4], [7.6, 'fig', 'P', 5.6], [8.0, 'L2', 'K', 5.6], [8.4, 'R2', 'P', 5.6]] },
 ];
 const LABEL = {
   block: ['BLOQUEAR · clique esquerdo', 'BLOQUEAR · botão Ação'],
@@ -350,6 +354,22 @@ export function createBattle(ctx) {
   const fig = buildFigureBody(); fig.traverse(o => { if (o.isMesh) { o.material = figMat; o.castShadow = false; } }); smoothCharacter(fig);
   fig.scale.set(...F_SCALE); fig.rotation.y = FACE_PZ; fig.position.copy(F_POS); scene.add(fig);
   const FU = fig.userData;
+  // combate final: as imagens dos 4 fragmentos voltam como vidros acusadores girando em volta (sem colisão)
+  const accuse = new THREE.Group(); accuse.visible = false; scene.add(accuse);
+  for (const c of ['azul', 'verde', 'laranja', 'roxo']) {
+    const m = new THREE.Mesh(new THREE.PlaneGeometry(1.5, 2.1), new THREE.MeshBasicMaterial({ color: COLOR_HEX[c], transparent: true, opacity: 0.5, side: THREE.DoubleSide, depthWrite: false, toneMapped: false }));
+    const edge = new THREE.LineSegments(new THREE.EdgesGeometry(m.geometry), new THREE.LineBasicMaterial({ color: '#ffffff', transparent: true, opacity: 0.6 })); m.add(edge);
+    accuse.add(m);
+  }
+  function updateAccuse(dt) {
+    const on = !!(seg && seg.def.images && (phase === 'intro' || phase === 'play' || phase === 'clear' || phase === 'wait'));
+    accuse.visible = on; if (!on) return;
+    accuse.children.forEach((m, i) => {
+      const a = time * 0.35 + i * Math.PI / 2, r = 6.5 + Math.sin(time * 0.6 + i) * 0.6;
+      m.position.set(Math.cos(a) * r * 0.85, 3.2 + Math.sin(time * 0.9 + i * 1.7) * 0.5, -3 + Math.sin(a) * r * 0.6);
+      m.lookAt(camera.position); m.material.opacity = 0.32 + 0.18 * Math.sin(time * 2.3 + i);
+    });
+  }
 
   // ---- círculo, prévia e indicador de comprimento ----
   const circle = new THREE.Group(); circle.position.y = 0.04; scene.add(circle);
@@ -564,7 +584,7 @@ export function createBattle(ctx) {
   function camGoal() {
     const s = STEPS[step];
     if (plus.active) return 0;                                        // com a grade erguida a câmera não alterna
-    if (phase !== 'wait' || !s || !calm()) return 0;
+    if (phase !== 'wait' || !s || !calm() || step > 0) return 0;          // sem trocas dramáticas periódicas: a de impacto só na apresentação
     if (s.k !== 'S') return 1;
     const left = TL[step].a - mt;                                     // a câmera de jogo tem de estar no lugar antes da janela
     return left > CAM_T + 0.45 + (camK > 0 ? 0 : CAM_T + 1.5) ? 1 : 0;
@@ -762,11 +782,15 @@ export function createBattle(ctx) {
     nextStep();
   }
   function beginPause() {                                            // fragmento ou final: gancho de integração ou pausa neutra
-    const s = STEPS[step], w = TL[step], my = ++token; phase = s.k === 'F' ? 'frag' : 'end'; pt = 0; fade = 1;
+    const s = STEPS[step], w = TL[step], my = ++token; phase = s.k === 'E' ? 'end' : 'frag'; pt = 0; fade = 1;
     clearAll(); seg = null; camSnap = true;                           // no preto a câmera já fica na de jogo para a volta
     const done = () => { if (my !== token || !active) return; hideMsg(); token++; finishPause(); };
     const info = { start: w.a, end: w.b, duration: w.b - w.a, confirmed: w.fixed, time: () => mt };
-    if (s.k === 'F') {
+    if (s.k === 'I') {
+      L(`interlude ${mt.toFixed(2)}`);
+      if (fragHandler) { phase = 'fragWait'; fragHandler(Object.assign({ interlude: true, index: -1, color: 'azul', pass: 2 }, info), done); }
+      else showMsg('interlúdio — pendente', COLOR_HEX.azul);
+    } else if (s.k === 'F') {
       L(`frag:${s.color}:${s.pass} ${mt.toFixed(2)}`);
       if (fragHandler) { phase = 'fragWait'; fragHandler(Object.assign({ index: s.index, color: s.color, pass: s.pass }, info), done); }
       else showMsg(`fragmento ${s.color} · ${s.pass}ª passagem — conteúdo pendente`, COLOR_HEX[s.color]);
@@ -780,7 +804,7 @@ export function createBattle(ctx) {
   let pauseDone = null;
   function finishPause() {
     const s = STEPS[step];
-    if (s.k === 'F') { fragmentsDone = Math.max(fragmentsDone, s.index + 1); nextStep(); }
+    if (s.k === 'F' || s.k === 'I') { if (s.k === 'F') fragmentsDone = Math.max(fragmentsDone, s.index + 1); ctx.onCheckpoint && ctx.onCheckpoint(step + 1); nextStep(); }
     else { phase = 'done'; active = false; ctx.onFinish && ctx.onFinish(); }
   }
   function fail() {
@@ -848,7 +872,7 @@ export function createBattle(ctx) {
     const g = seg.guide, def = seg.def; g.t += dt;
     while (seg.shotIdx < def.shots.length && seg.t >= def.shots[seg.shotIdx][0]) { const [, from, tg, v] = def.shots[seg.shotIdx++]; createWarning(from, tg, v); }
     // o K abre o portal sozinho só nos trechos finais (autonomia já alta)
-    if (def.kOpens && g.state === 'idle' && !g.kTried && kLevel() >= GUIDE.kLevel && seg.t >= GUIDE.kDelay) { g.kTried = true; g.state = 'kpull'; g.t = 0; L('guide:kpull'); }
+    if (def.kOpens && g.state === 'idle' && !g.kTried && kLevel() >= GUIDE.kLevel && seg.t >= (def.kDelay || GUIDE.kDelay)) { g.kTried = true; g.state = 'kpull'; g.t = 0; L('guide:kpull'); }
     if (g.state === 'grab') {
       const d = Math.hypot(cpos.x - g.x, cpos.z - g.z); g.tension = Math.min(1, d / GUIDE.pull);
       if (d >= GUIDE.pull) rupture(cpos.x - g.x, cpos.z - g.z, 'P');
@@ -929,9 +953,12 @@ export function createBattle(ctx) {
   }
   function kEvaluate(p) {
     p.evaluated = true;
-    const lv = kLevel(); if (lv < 1 || !seg || seg.mech === 'guide' || kAct) return;
-    const d = kDef(lv), chance = p.target === 'K' ? (d.self ? d.chance : 0) : (d.other || 0);
-    if (!chance || covered(p) || time - lastKDef < d.gap || Math.random() >= chance) return;
+    const lv = kLevel(); if (lv < 1 || !seg || kAct) return;
+    const forced = seg.def.kGuard && (seg.kGuards || 0) < seg.def.kGuard && p.target === (seg.kGuards ? 'P' : 'K');   // combate final: primeiro ele mesmo, depois o jogador
+    if (seg.mech === 'guide' && !forced) return;
+    if (forced) { seg.kGuards = (seg.kGuards || 0) + 1; }
+    const d = kDef(lv), chance = forced ? 1 : p.target === 'K' ? (d.self ? d.chance : 0) : (d.other || 0);
+    if (!forced && (!chance || covered(p) || time - lastKDef < d.gap || Math.random() >= chance)) return;
     const dx = p.tx - p.x, dz = p.tz - p.z, l = Math.hypot(dx, dz) || 1;
     const bx = p.tx - dx / l * 1.4, bz = p.tz - dz / l * 1.4;
     p.kClaim = true; p.obj.userData.claim.visible = true; lastKDef = time;
@@ -1270,6 +1297,7 @@ export function createBattle(ctx) {
     if (!active || paused) return;
     if (music) { music.update(Math.min(dt, 0.5)); mt = music.time; } else mt += Math.min(dt, 0.05);   // (o relógio da música anda pelo tempo real)
     dt = Math.min(dt, 0.05); time += dt; pt += dt;
+    updateAccuse(dt);
     const s0 = STEPS[step];                                           // a janela do trecho acabou (a música manda): interrompe e segue
     if (s0 && s0.k === 'S' && (phase === 'intro' || phase === 'play' || phase === 'clear' || phase === 'fail') && mt >= TL[step].b) cutSegment();
     switch (phase) {
@@ -1311,7 +1339,7 @@ export function createBattle(ctx) {
     if (!active) { setVeil(0); return; }
     plus.update(dt, phase === 'play' || phase === 'intro');
     updateVisuals(dt);
-    updateLabel(); setVeil(fade);
+    updateLabel(); setVeil(phase === 'fragWait' || phase === 'endWait' ? 0 : fade);   // (fragmentos/encerramento: a cena deles cuida do próprio fade)
   }
 
   /** Começa no passo i (0 = apresentação): a música vai para pouco antes dele e toca dali. */

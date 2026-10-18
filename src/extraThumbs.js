@@ -114,6 +114,34 @@ function candle() {
   return g;
 }
 
+/** Covardia: lanterna pequena laranja, acesa, com o vidro rachado e o facho tremido (o tremido é a luz desigual). */
+function lantern() {
+  const g = new THREE.Group();
+  const metal = new THREE.MeshStandardMaterial({ color: '#2b2622', roughness: 0.55, metalness: 0.6 });
+  const glassM = new THREE.MeshPhysicalMaterial({ color: '#ffb35a', roughness: 0.15, transmission: 0.35, transparent: true, opacity: 0.55, emissive: '#ff8a1a', emissiveIntensity: 0.65 });
+  const base = new THREE.Mesh(new THREE.CylinderGeometry(0.34, 0.38, 0.12, 6), metal); base.position.y = 0.06; g.add(base);
+  const glass = new THREE.Mesh(new THREE.CylinderGeometry(0.27, 0.27, 0.62, 6, 1, true), glassM); glass.position.y = 0.43; g.add(glass);
+  for (let i = 0; i < 6; i++) { const a = i / 6 * Math.PI * 2 + Math.PI / 6, bar = new THREE.Mesh(new THREE.BoxGeometry(0.035, 0.66, 0.035), metal); bar.position.set(Math.cos(a) * 0.27, 0.43, Math.sin(a) * 0.27); g.add(bar); }
+  const top = new THREE.Mesh(new THREE.ConeGeometry(0.36, 0.26, 6), metal); top.position.y = 0.87; g.add(top);
+  const ring = new THREE.Mesh(new THREE.TorusGeometry(0.09, 0.022, 6, 16), metal); ring.position.y = 1.07; g.add(ring);
+  // rachaduras no vidro (linhas claras na face da frente)
+  const crackM = new THREE.LineBasicMaterial({ color: '#fff3e0', transparent: true, opacity: 0.9 });
+  const pts = [], c0 = new THREE.Vector3(0.06, 0.5, 0.235);
+  for (let k = 0; k < 6; k++) { let p = c0.clone(); const a = k / 6 * Math.PI * 2 + rand() * 0.6; for (let j = 0; j < 3; j++) { const q = p.clone().add(new THREE.Vector3(Math.cos(a + (rand() - 0.5) * 0.7) * 0.06, Math.sin(a + (rand() - 0.5) * 0.7) * 0.07, 0)); q.z = 0.236; pts.push(p, q); p = q; } }
+  const cracks = new THREE.LineSegments(new THREE.BufferGeometry().setFromPoints(pts), crackM); g.add(cracks);
+  // chama e brilho
+  const flame = new THREE.Sprite(new THREE.SpriteMaterial({ map: flameTexture(), color: '#ffa640', blending: THREE.AdditiveBlending, depthWrite: false, transparent: true }));
+  flame.scale.set(0.16, 0.3, 1); flame.position.set(0.015, 0.42, 0); g.add(flame);
+  const light = new THREE.PointLight('#ff9a3c', 1.4, 3, 1.6); light.position.y = 0.45; g.add(light);
+  // facho tremido: um cone de luz que sai torto pela rachadura, com a borda desigual
+  const beamC = document.createElement('canvas'); beamC.width = 64; beamC.height = 8; const bx = beamC.getContext('2d');
+  for (let i = 0; i < 64; i++) { bx.fillStyle = `rgba(255,180,90,${(0.15 + 0.85 * Math.abs(Math.sin(i * 1.7) * Math.sin(i * 0.37))) * (1 - i / 64)})`; bx.fillRect(i, 0, 1, 8); }
+  const beam = new THREE.Mesh(new THREE.ConeGeometry(0.42, 1.6, 20, 1, true), new THREE.MeshBasicMaterial({ map: new THREE.CanvasTexture(beamC), color: '#ff9a40', transparent: true, opacity: 0.32, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide }));
+  beam.rotation.z = Math.PI / 2 + 0.12; beam.rotation.y = -0.5; beam.position.set(0.85, 0.42, 0.25); g.add(beam);
+  const frame = new THREE.Mesh(new THREE.CylinderGeometry(0.75, 0.75, 1.2, 8)); frame.position.y = 0.55; frame.visible = false; g.add(frame);
+  return g;
+}
+
 /** Devolve as 4 imagens (data URL; null = área preta, sem imagem). Retrato 3:4, fundo preto. */
 export function renderExtraThumbs(w = 360, h = 480) {
   const r = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
@@ -143,7 +171,11 @@ export function renderExtraThumbs(w = 360, h = 480) {
     const key = new THREE.DirectionalLight('#fff4e0', 2.6); key.position.set(3, 6, 5); s.add(key);
     const rim = new THREE.DirectionalLight('#c8d8ff', 1.2); rim.position.set(-4, 3, -3); s.add(rim);
   }, { dir: new THREE.Vector3(0.15, 0.42, 1), k: 0.82 }));
-  urls.push(null);                                              // Covardia: ainda sem imagem (área preta)
+  rnd = 5;
+  urls.push(shot(lantern(), s => {
+    s.add(new THREE.HemisphereLight('#ffe8d0', '#000000', 0.3));
+    const key = new THREE.DirectionalLight('#fff0e0', 0.6); key.position.set(-2, 4, 3); s.add(key);
+  }, { dir: new THREE.Vector3(-0.15, 0.3, 1), k: 0.82 }));   // Covardia: lanterna laranja acesa, vidro rachado
   rnd = 3;
   urls.push(shot(candle(), s => {
     s.add(new THREE.HemisphereLight('#fff4e6', '#000000', 0.55));

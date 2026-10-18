@@ -42,7 +42,7 @@ const TALK2 = [   // diálogo 2: depois que o cubo se quebra e a figura aparece
   'Eu estou olhando agora.',
   '[…] E não vejo bem algum.',
   'Ao menos, […] nenhum que seja verdadeiro.',
-].map(P_);
+].map(P_).map(l => { l.who = 'f'; return l; });
 const TALK3 = [   // diálogo 3: durante o deslocamento, depois que ela reaparece à frente
   'Você ainda acha que existe alguma coisa boa aí dentro.',
   'Algo que eu não vi.',
@@ -82,7 +82,16 @@ const TALK3 = [   // diálogo 3: durante o deslocamento, depois que ela reaparec
   '[…] Não seria você contra mim.',
   'Seria você contra todos.',
   'Eu só fui o primeiro a dizer.',
-].map(P_);
+].map(P_).map(l => { l.who = 'f'; return l; });
+// diálogo 1 (a despedida, dentro do cubo): K e R. Sem promessa de reencontro.
+const say = (who, s, p = 0) => { const l = P_(s); if (p) l.unshift({ p }); l.who = who; return l; };
+const TALK1 = [
+  say('k', 'Eu achei que conseguiria arrumar tudo sem ter que sair.'), say('r', 'Eu sei.'),
+  say('k', 'Fiquei esperando aparecer um jeito que não levasse nada embora.'), say('r', 'E apareceu?'), say('k', 'Não.'),
+  say('r', 'Então talvez você esteja esperando uma coisa que ninguém pode oferecer.'), say('k', 'O que existiu aqui foi bom.'), say('r', 'Foi.'),
+  say('k', 'Mesmo com o resto.'), say('r', 'Mesmo com o resto.'), say('k', 'Eu não queria que ir embora parecesse dizer o contrário.'), say('r', 'Não precisa dizer.'),
+  say('k', 'Você vai ficar bem?', 1.6), say('r', 'Eu vou continuar.'), say('k', 'É.'), say('r', 'Você também precisa.'),
+];
 const HINT = 'E / Espaço — Continuar';
 const VMAX = 240;                                       // velocidade do deslocamento (cenário relativo)
 
@@ -277,7 +286,7 @@ export function createExtraStory(ctx) {
     if (!S) return;
     if (S.white) S.white.restore();                     // a customização nunca foi tocada: só devolve os materiais
     walker.setSpeedMul(1); walker.setFloor(0); stopWhoosh();
-    if (S.phase === 'talk2' || S.phase === 'talk3') talkBox.hide();
+    if (S.phase === 'talk2' || S.phase === 'talk3' || S.phase === 'hold') talkBox.hide();
     S = null; ctx.renderer.localClippingEnabled = false;
   }
   const go = (p) => { S.phase = p; S.t = 0; };
@@ -311,8 +320,11 @@ export function createExtraStory(ctx) {
         if (S.t >= 0.95) { walker.setSpeedMul(1); setView(); go('hold'); }   // (o jogador fica onde parou)
         break;
       case 'hold':                                         // câmera de dentro, atrás da R, um pouco à esquerda dela
-        shot([2.35 + t * 0.01, 2.55, BACK + 0.25], [-0.7, 1.0, FRONT + 2.5]);
-        if (t >= T.hold) go('kexit');
+        shot([2.35 + Math.min(t, 40) * 0.008, 2.55, BACK + 0.25], [-0.7, 1.0, FRONT + 2.5]);
+        if (!S.farewell && t > 1.2) { S.farewell = true; talkBox.show(TALK1, () => { if (S && S.phase === 'hold') { S.byeDone = S.t; } }, { hint: HINT }); }   // diálogo 1: a despedida (manual)
+        if (talkBox.open) { talkBox.update(dt); if (t > 1.4 && input.action()) talkBox.press(); }
+        { const h = K.userData.head; h.rotation.z += ((talkBox.open && talkBox.index === 4 ? -0.25 : 0) - h.rotation.z) * Math.min(1, dt * 3); }   // ("Não." — o K olha para baixo)
+        if (S.byeDone != null && t - S.byeDone > 1.2) go('kexit');
         break;
       case 'kexit': {                                     // o K sai andando pela esquerda da R e some no corte do cubo
         shot([2.4, 2.55, BACK + 0.25], [-0.7, 1.0, FRONT + 2.5]);

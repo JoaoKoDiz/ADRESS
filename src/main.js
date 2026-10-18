@@ -23,6 +23,11 @@ import { createChurchCine } from './churchCine.js';
 import { createMassStory, MASS_KEY, BELL3_KEY, NOTICE_KEY, createRainFx, createRainAudio } from './massStory.js';
 import { createTouch } from './touch.js';
 import { createExtraStory, EXTRA_DONE_KEY, EXTRA1_KEY, EXTRA2_KEY, screenShatter } from './extraStory.js';
+import { createExtra2 } from './extra2.js';
+import { createExtra3, EXTRA3_KEY } from './extra3.js';
+import { createExtra4, EXTRA4_KEY } from './extra4.js';
+import { createFragments } from './fragments.js';
+import { createEpilogue } from './epilogue.js';
 import { createNight } from './night.js';
 import { createFarmOutside } from './farmOutside.js';
 import { createReality } from './reality.js';
@@ -1079,9 +1084,9 @@ let titleDriver = null;   // motorista curtindo a música (painel "Jogar")
 // Depois do extra 1 (salvo à parte em NOVAN_KEY, para não voltar com mudanças futuras de fundo): o painel Jogar fica sem a van
 // e o motorista (o espaço fica vazio, mostrando o fundo); o Shop e as partidas continuam com a van.
 const NOVAN_KEY = 'adress.menu.noVan';
-const noVan = () => { try { return localStorage.getItem(NOVAN_KEY) === '1'; } catch (e) { return false; } };
+const noVan = () => { try { return localStorage.getItem(NOVAN_KEY) === '1' && localStorage.getItem('adress.extra.done') !== '1'; } catch (e) { return false; } };   // (no fim da história a van volta)
 function syncNoVan() {
-  try { if (!noVan() && localStorage.getItem('adress.extra.1') === '1') localStorage.setItem(NOVAN_KEY, '1'); } catch (e) { /* */ }
+  try { if (localStorage.getItem('adress.extra.done') === '1') localStorage.removeItem(NOVAN_KEY); else if (!noVan() && localStorage.getItem('adress.extra.1') === '1') localStorage.setItem(NOVAN_KEY, '1'); } catch (e) { /* */ }
   document.body.classList.toggle('menu-novan', noVan());
 }
 const title = createTitle({
@@ -1097,10 +1102,22 @@ const title = createTitle({
 const shop = createShop();
 function openShop() { shop.open(); setState('shop'); }
 // Livre: seleção do bairro (todas as miniaturas na tela; setas escolhem, E joga). Depois o helicóptero decola.
-const levelSelect = createLevelSelect(l => confirmLevel(l), i => { if (i === 0) startExtra(); else if (i === 3 && battleTest()) startBattle(flagOn(BATTLE_PLUS_KEY) ? { step: 17 } : {}); });   // (o 2º, liberado depois do 1º, ainda é espaço reservado)   // (o 1º cartão da página dos extras: introdução do extra 1)
-function openLevelSelect() { levelSelect.setExtra(flagOn(MASS_KEY), flagOn(EXTRA1_KEY) ? 2 : 1, battleTest() ? [3] : []); levelSelect.open(freeLevel); setState('levelSelect'); }   // (página dos 4 níveis extras: só depois do temporal)
+const levelSelect = createLevelSelect(l => confirmLevel(l), i => pickExtra(i));
+// Cartões dos extras: 1 → 2 → 3 → 4 (cada um liberado pelo anterior; todos repetíveis). O 4º leva à batalha sem voltar ao menu;
+// se a batalha já começou e não terminou, o cartão volta ao último checkpoint (depois de um fragmento).
+const BATTLE_CP_SAVE = 'adress.battle.cp';
+const battleCp = () => { try { const v = localStorage.getItem(BATTLE_CP_SAVE); return v == null ? -1 : +v; } catch (e) { return -1; } };
+const extrasOpen = () => 1 + (flagOn(EXTRA1_KEY) ? 1 : 0) + (flagOn(EXTRA1_KEY) && flagOn(EXTRA2_KEY) ? 1 : 0) + (flagOn(EXTRA1_KEY) && flagOn(EXTRA2_KEY) && flagOn(EXTRA3_KEY) ? 1 : 0);
+function pickExtra(i) {
+  if (i === 3 && battleTest()) { startBattle(flagOn(BATTLE_PLUS_KEY) ? { step: 16 } : {}); return; }
+  if (i >= extrasOpen()) return;
+  if (i === 3 && battleCp() > 0 && !flagOn(EXTRA_DONE_KEY)) { startBattle({ step: battleCp() }); return; }
+  startExtra(i);
+}
+const nextExtra = () => { const o = extrasOpen(); for (let i = 0; i < o; i++) if (!flagOn([EXTRA1_KEY, EXTRA2_KEY, EXTRA3_KEY, EXTRA_DONE_KEY][i])) return i; return 0; };   // (o 2º, liberado depois do 1º, ainda é espaço reservado)   // (o 1º cartão da página dos extras: introdução do extra 1)
+function openLevelSelect() { levelSelect.setExtra(flagOn(MASS_KEY), extrasOpen(), battleTest() ? [3] : []); levelSelect.open(freeLevel); setState('levelSelect'); }   // (página dos 4 níveis extras: só depois do temporal)
 function confirmLevel(l) {
-  if (state === 'levelSelect' && l < 0 && levelSelect.onExtra) { startExtra(); return; }   // página dos extras: E/Enter abre o 1º
+  if (state === 'levelSelect' && l < 0 && levelSelect.onExtra) { pickExtra(nextExtra()); return; }   // página dos extras: E/Enter abre o 1º
   if (state !== 'levelSelect' || l < 0 || RESERVED.includes(l)) return;   // (−1: página dos níveis extras, ainda sem fases)   // 17–19: reservados
   freeLevel = l;
   levelSelect.close();
@@ -1138,7 +1155,10 @@ const missions = createMissions(career); // Carreira: M perto da maquete abre as
 const STORY_STEPS = ['Nada', 'Conversa na casa do personagem — completa', 'Conversa no terraço — completa', 'Primeira conversa na igreja — completa',
   'Trolley Problem — completo', 'Conversa em Veneza — completa', 'Segunda conversa na igreja — completa', "Encontro no Grillby's — completo",
   'Oficina — Entregar a última peça', 'Oficina no Bairro 24 — completa', 'Apresentação da igreja (Bairro 24) — vista', 'Missa e temporal — completos',
-  'Batalha após Sacrifício (teste)', 'Batalha — REFLETIR aprimorado (teste)'];
+  'Batalha após Sacrifício (teste)', 'Batalha — REFLETIR aprimorado (teste)',
+  'História completa — extras 1 a 3 feitos (cartões liberados)', 'História completa — batalha no interlúdio', 'História completa — combate final, encerramento e epílogo', 'História completa — concluída (manhã depois da chuva)'];
+const FULL_CP = 14;      // experimento: 14 extras liberados · 15 batalha no interlúdio · 16 combate final · 17 concluída
+const FULL_CP_KEY = 'adress.dev.fullCp';
 const BATTLE_CP = 12;    // teste da batalha: tudo até a missa + marca que libera o cartão Sacrifício para começar a batalha (não conclui os extras)
 const battleTest = () => flagOn(BATTLE_CP_KEY);
 const BATTLE_PLUS_CP = 13, BATTLE_PLUS_KEY = 'adress.dev.battlePlus';   // igual ao 13, mas o cartão Sacrifício começa direto no 1º REFLETIR aprimorado (passo 17)
@@ -1163,13 +1183,29 @@ let wsFoot = false;
 const STORY_CP = {
   names: STORY_STEPS,
   current() {
+    const fc = (() => { try { return +localStorage.getItem(FULL_CP_KEY) || 0; } catch (e) { return 0; } })();
+    if (fc >= FULL_CP) return fc;
     const k = storyKeys(); let n = 0; while (n < k.length && flagOn(k[n])) n++;
     if (flagOn(BATTLE_CP_KEY)) return flagOn(BATTLE_PLUS_KEY) ? BATTLE_PLUS_CP : BATTLE_CP;
     if (n === 7 && localStorage.getItem(WS_CP_KEY) && localStorage.getItem('adress.med.shop') === '3') return WS_LAST_CP;
     return n >= 8 ? n + 1 : n;                          // (o da oficina ocupa a posição 9)
   },
   apply(n) {
-    try { localStorage.removeItem(WS_CP_KEY); localStorage.removeItem(BATTLE_CP_KEY); localStorage.removeItem(BATTLE_PLUS_KEY); } catch (e) { /* */ }
+    try { localStorage.removeItem(WS_CP_KEY); localStorage.removeItem(BATTLE_CP_KEY); localStorage.removeItem(BATTLE_PLUS_KEY); localStorage.removeItem(FULL_CP_KEY); localStorage.removeItem(BATTLE_CP_SAVE); } catch (e) { /* */ }
+    if (n >= FULL_CP) {                                    // história completa (teste): tudo até a missa + extras conforme o ponto
+      this.apply(11);
+      try {
+        for (const k of [EXTRA1_KEY, EXTRA2_KEY, EXTRA3_KEY]) localStorage.setItem(k, '1');
+        localStorage.setItem(NOVAN_KEY, '1'); localStorage.setItem(NOTICE_KEY, '1');
+        if (n >= 15) localStorage.setItem(EXTRA4_KEY, '1');
+        if (n === 15) localStorage.setItem(BATTLE_CP_SAVE, '13');   // interlúdio S1→R2
+        if (n === 16) localStorage.setItem(BATTLE_CP_SAVE, '24');   // combate final (depois do S2), encerramento e epílogo
+        if (n === 17) localStorage.setItem(EXTRA_DONE_KEY, '1');
+        localStorage.setItem(FULL_CP_KEY, String(n));
+      } catch (e) { /* */ }
+      syncNoVan(); return;
+    }
+    try { for (const k of [EXTRA3_KEY, EXTRA4_KEY, EXTRA_DONE_KEY]) localStorage.removeItem(k); } catch (e) { /* */ }
     if (n === BATTLE_PLUS_CP) { this.apply(BATTLE_CP); try { localStorage.setItem(BATTLE_PLUS_KEY, '1'); } catch (e) { /* */ } return; }
     if (n === BATTLE_CP) {                                 // só prepara: depois da missa, o cartão Sacrifício (4º extra) começa a batalha
       this.apply(11);
@@ -1221,7 +1257,7 @@ const resetBumps = () => { bumps = 0; bumpHold.clear(); };
 /** Prédios comerciais da partida (grade): porta e frente do lote (as fachadas dão para o sul). */
 const shopFronts = () => game.pool.filter(h => HOUSES[h].kind === 'shop' && !boom.isDestroyed(h)).map(h => { const s = game.slotOf[h]; return { x: doorPoint(s).x, z: slotOrigin(s).z + L_LOT }; });
 const TIMER_PLAY = ['drive', 'ring', 'dialog', 'fuel', 'walk', 'missile', 'chat', 'inside'];                 // partida na tela: aparece
-const TIMER_OFF = ['title', 'levelSelect', 'levelFly', 'shop', 'mapIn', 'map', 'mapOut', 'fadeIn', 'fadeOut', 'extra', 'battle'];   // menus e fades: não conta
+const TIMER_OFF = ['title', 'levelSelect', 'levelFly', 'shop', 'mapIn', 'map', 'mapOut', 'fadeIn', 'fadeOut', 'extra', 'battle', 'epilogue'];   // menus e fades: não conta
 const missionsBtn = createMissionsButton(stage, () => {
   if (gameMode === 'career' && (state === 'drive' || state === 'walk') && !missions.isOpen && !menu.isOpen) missions.open(careerLevel);   // (não por cima do diálogo/entrega)
 });
@@ -1270,6 +1306,8 @@ function goBack() {
     showPlayPanel();
   } else if (state === 'battle') {
     endBattle(false);                                   // sair da batalha: volta ao painel Jogar (nada é salvo)
+  } else if (state === 'epilogue') {
+    endEpilogue();
   } else if (state === 'extra') {
     endExtra(false);                                    // sair do nível extra: volta ao painel Jogar (nada é salvo)
   } else if (IN_GAME.includes(state)) {
@@ -1880,12 +1918,18 @@ const rainFx = createRainFx(), rainAudio = createRainAudio(audio);
 const _rl = new THREE.Vector3(), _rinv = new THREE.Matrix4();
 // Fundo dos menus pelo progresso salvo: depois do 4º sino → Bairro 24 na chuva; depois do extra 1 → Bairro 1 à noite
 // (sem chuva, só a luz do quintal do K acesa, sem o K); depois do extra 2: ainda não definido (volta ao de sempre).
-function menuBg() { if (!flagOn(MASS_KEY)) return ''; if (!flagOn(EXTRA1_KEY)) return 'rain'; if (!flagOn(EXTRA2_KEY)) return 'night'; return ''; }
+function menuBg() {
+  if (!flagOn(MASS_KEY)) return '';
+  if (flagOn(EXTRA_DONE_KEY)) return 'morning';           // fim da história: o bairro medieval de manhã, depois da chuva
+  if (!flagOn(EXTRA1_KEY)) return 'rain';
+  if (!flagOn(EXTRA2_KEY)) return 'night';
+  return flagOn(EXTRA3_KEY) ? 'night3' : 'night2';        // variações discretas da mesma noite (sem revelar o fim)
+}
 function menuWorld() {
   setMenuNight(false);
   const bg = menuBg();
-  if (bg === 'rain' && neighborhood !== 'med10') useNeighborhood('med10');
-  else if (bg === 'night' && (neighborhood !== 'grid4' || !game.layout.includes(L1_FIXED[15]))) {   // o Bairro 1 com a casa do K
+  if ((bg === 'rain' || bg === 'morning') && neighborhood !== 'med10') useNeighborhood('med10');
+  else if (bg.startsWith('night') && (neighborhood !== 'grid4' || !game.layout.includes(L1_FIXED[15]))) {   // o Bairro 1 com a casa do K
     const gm = gameMode, fl = freeLevel; gameMode = 'free'; freeLevel = 0;
     if (neighborhood !== 'grid4') useNeighborhood('grid4'); else setupGrid4();
     gameMode = gm; freeLevel = fl;
@@ -1928,13 +1972,25 @@ function setMenuNight(on) {
   const post = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.07, 1.9, 6), new THREE.MeshStandardMaterial({ color: '#1d1b18', roughness: 0.8 })); post.position.y = 0.95; lamp.add(post);
   const bulb = new THREE.Mesh(new THREE.SphereGeometry(0.17, 10, 8), new THREE.MeshBasicMaterial({ color: '#ffe2a8' })); bulb.position.y = 2.0; lamp.add(bulb);
   const cap = new THREE.Mesh(new THREE.ConeGeometry(0.28, 0.2, 6), new THREE.MeshStandardMaterial({ color: '#1d1b18' })); cap.position.y = 2.2; lamp.add(cap);
-  const pl = new THREE.PointLight('#ffc27a', 60, 26, 1.6); pl.position.y = 1.9; lamp.add(pl);
+  const bgK = menuBg(), dim = bgK === 'night3' ? 0.45 : bgK === 'night2' ? 0.72 : 1;   // cada extra deixa a luz do quintal um pouco mais fraca
+  const pl = new THREE.PointLight(bgK === 'night3' ? '#ffa860' : '#ffc27a', 60 * dim, 26, 1.6); pl.position.y = 1.9; lamp.add(pl);
   const gc = document.createElement('canvas'); gc.width = gc.height = 64; const gg = gc.getContext('2d'), gr = gg.createRadialGradient(32, 32, 0, 32, 32, 32);
   gr.addColorStop(0, 'rgba(255,214,150,0.9)'); gr.addColorStop(0.3, 'rgba(255,190,110,0.35)'); gr.addColorStop(1, 'rgba(255,170,90,0)'); gg.fillStyle = gr; gg.fillRect(0, 0, 64, 64);
   const glow = new THREE.Sprite(new THREE.SpriteMaterial({ map: new THREE.CanvasTexture(gc), blending: THREE.AdditiveBlending, depthWrite: false, transparent: true }));
-  glow.scale.setScalar(4.2); glow.position.y = 2.0; lamp.add(glow);
+  glow.scale.setScalar(4.2 * (0.6 + 0.4 * dim)); glow.position.y = 2.0; lamp.add(glow); glow.material.opacity = 0.5 + 0.5 * dim;
   sc.add(lamp);
   nightCam.p.set(p.x - 13, 11, p.z + 23); nightCam.l.set(p.x - 5, 2.2, p.z - 3);   // de fora da sebe sul, de frente para a casa e o quintal
+}
+/** Manhã depois da chuva (fim da história): céu limpo, sol baixo e quente, chão molhado brilhando um pouco. */
+let morningSaved = null;
+function setMenuMorning(on) {
+  if (on === !!morningSaved) return;
+  const sc = world.scene;
+  if (!on) { const sv = morningSaved; morningSaved = null; sc.background = sv.bg; if (sc.fog && sv.fogC) sc.fog.color.copy(sv.fogC); for (const [l, i, c] of sv.lights) { l.intensity = i; l.color.copy(c); } return; }
+  const sv = morningSaved = { bg: sc.background, fogC: sc.fog ? sc.fog.color.clone() : null, lights: [] };
+  sc.traverse(o => { if (o.isLight && (o.isHemisphereLight || o.isDirectionalLight)) sv.lights.push([o, o.intensity, o.color.clone()]); });
+  for (const [l, i] of sv.lights) { if (l.isHemisphereLight) { l.intensity = i * 1.15; l.color.set('#dfeaf6'); } else { l.intensity = i * 1.25; l.color.set('#ffe1b8'); } }
+  sc.background = new THREE.Color('#bcd3e6'); if (sc.fog) sc.fog.color.set('#c9d8e4');
 }
 const MENU_STATES = ['title', 'levelSelect', 'levelFly', 'shop'];
 const MENU_RAIN = 0.16;                                  // chuva nos menus (fração)
@@ -1978,13 +2034,13 @@ function updateMenuMusic() {
   else if (menuMusic.playing) menuMusic.stop(0.8);
 }
 function updateRain(dt) {
-  const on = rainOn() && !extra.active && !massStory.active && !battle.active;
+  const on = rainOn() && !extra.active && !massStory.active && !battle.active && !epi.active;
   const menuS = MENU_STATES.includes(state) || inMap();
   const chs = [church, medChurch].filter(c => c && c.parent === world.scene && c.visible !== false);
   const cam = rig.camera.position;
   const inChurch = chs.some(c => { c.updateMatrixWorld(); _rl.copy(cam).applyMatrix4(_rinv.copy(c.matrixWorld).invert()); return _rl.x > -24 && _rl.x < 24 && _rl.z > -58 && _rl.z < 2.4 && _rl.y < 72; });
   const menuRain = menuBg() === 'rain';                 // menus: chuva só no fundo do Bairro 24 (na noite do Bairro 1, nada)
-  setMenuNight(menuBg() === 'night' && MENU_STATES.includes(state) && neighborhood === 'grid4');
+  setMenuNight(menuBg().startsWith('night') && MENU_STATES.includes(state) && neighborhood === 'grid4'); setMenuMorning(menuBg() === 'morning' && MENU_STATES.includes(state) && neighborhood === 'med10');
   rainAudio.set(on && (!menuS || menuRain) ? (menuS ? MENU_RAIN : 0.3) : 0, insideOn || inChurch);
   // dentro de qualquer igreja: o jogador a pé sem boné (só esconde o acessório; volta ao sair; a customização salva não muda)
   const capSlot = walker.object.getObjectByName('cap');
@@ -2000,15 +2056,29 @@ const EXTRA_CSS = document.createElement('style');
 EXTRA_CSS.textContent = ['.ahud', '.hint-btn', '.menu-btn', '.menu-panel', '.music-btn', '.music-now', '.match-hud'].map(c => 'body.extra-on ' + c).join(', ') + ' { display: none !important; pointer-events: none !important; }';   // níveis extras: sem barra/dicas do topo, DICA, MENU, música (botão e créditos), cronômetro e batidas (a música continua tocando; Voltar, diálogos e toque ficam)
 document.head.appendChild(EXTRA_CSS);
 const voidMusic = createVoidMusic(audio, justUsUrl, justUsLoopUrl);   // extra 1: "just us" (original → loop), do começo do deslocamento até a tela inicial
-const extra = createExtraStory({ walker, input, audio, renderer, talkBox, onTravel: () => voidMusic.start(), onShatter: (snap, rect) => { syncNoVan(); endExtra('shatter'); screenShatter(snap, rect); } });   // (o extra 1 já foi salvo na quebra)
+const extra1 = createExtraStory({ walker, input, audio, renderer, talkBox, onTravel: () => voidMusic.start(), onShatter: (snap, rect) => { syncNoVan(); endExtra('shatter'); screenShatter(snap, rect); } });   // (o extra 1 já foi salvo na quebra)
+// Extras 2–4 (história completa): músicas que já existem no jogo (sem arquivos novos); falha de áudio → aviso na tela, a cena segue
+const xMusic = [null, createChurchMusic(audio, talkTrackUrl, 0.42, null, true), createChurchMusic(audio, rainUrl, 0.42, null, true), null];
+const xCtx = { walker, input, audio, renderer, talkBox, onDone: () => endExtra(true) };
+const extras = [extra1, createExtra2(xCtx), createExtra3(xCtx), createExtra4(Object.assign({}, xCtx, { onBattle: () => extraToBattle() }))];
+let extra = extra1, extraIdx = 0;
+function playTrack(m, fade, label) {
+  if (!m) return;
+  audio.unlock();
+  m.load().then(() => { if ((state === 'extra' && extra.active) || state === 'epilogue') m.play(fade); }).catch(e => {
+    console.error('[história] música não carregou:', label, e);
+    talkBox.warn(['Música não carregou: ', { b: label }, ' — a cena continua sem ela.']); setTimeout(() => talkBox.warn(null), 4000);
+  });
+}   // (o extra 1 já foi salvo na quebra)
 // Extra 1: qualquer tecla/toque (ex.: avançar o diálogo 2) retoma o áudio se o navegador o tiver suspendido e garante as faixas
 // decodificadas antes do deslocamento — sem tocar nada antes da hora.
 for (const ev of ['keydown', 'pointerdown']) addEventListener(ev, () => {
   if (state === 'extra') { audio.unlock(); voidMusic.load(); }
   else if (audio.ctx && audio.ctx.state !== 'running') audio.unlock();   // (navegador suspendeu o áudio: retoma na próxima interação; a música dos menus segue de onde estava)
 }, true);
-function startExtra() {
+function startExtra(i = 0) {
   if (state !== 'levelSelect') return;
+  extraIdx = i; extra = extras[i] || extra1;
   document.body.classList.add('extra-on'); menu.close();   // já antes do fade: nada da interface pisca ao carregar
   levelSelect.close(); setState('levelFly');
   title.fadeOut(() => {
@@ -2016,7 +2086,10 @@ function startExtra() {
     title.hide(); document.body.classList.add('extra-on');
     talkBox.hide(); music.suspend(true, 0.8);
     extra.camera.aspect = rig.camera.aspect; extra.camera.updateProjectionMatrix();
-    extra.start(); renderer.compile(extra.scene, extra.camera); voidMusic.load();   // (a música do deslocamento já decodificada)
+    extra.start(); renderer.compile(extra.scene, extra.camera);
+    if (extraIdx === 0) voidMusic.load();                 // (a música do deslocamento já decodificada)
+    else playTrack(xMusic[extraIdx], 3, ['', 'Once Upon A Terrible Time', "It's Raining Somewhere Else"][extraIdx] || '');
+    if (extraIdx === 3) battleMusic.load();               // o extra 4 termina direto na batalha
     fade = 1; setState('extra');
   });
 }
@@ -2024,6 +2097,8 @@ function startExtra() {
 function endExtra(toTitle) {
   extra.stop();
   voidMusic.fadeOut(3);                                  // (com a tela inicial já aparecendo; sem corte seco)
+  for (const m of xMusic) if (m && m.audible) m.fadeOut(3);
+  syncNoVan();
   if (toTitle) menuFadeIn = 3;                           // "snow" entra nos mesmos 3 s em que "just us" sai
   document.body.classList.remove('extra-on');
   world.scene.add(walker.object); walker.show(false); walker.setFloor(0);
@@ -2034,16 +2109,57 @@ function endExtra(toTitle) {
     if (rig.mode !== 'overview') rig.toggle();
     rig.snap({ x: van.x, z: van.z, heading: van.heading, speed: 0 });
     title.show('home'); if (titleDriver) titleDriver.stop();
-    setState('title'); setMenuNight(menuBg() === 'night' && neighborhood === 'grid4');
+    setState('title'); setMenuNight(menuBg().startsWith('night') && neighborhood === 'grid4');
     if (toTitle !== 'shatter') { talkBox.fadeBlack(1, 0); setTimeout(() => talkBox.fadeBlack(0, 1500), 60); }
   } else showPlayPanel();
+}
+/** Fim do extra 4: sem voltar ao menu, a grade já nasceu no chão → a batalha começa. */
+function extraToBattle() {
+  world.scene.add(walker.object); walker.show(false); walker.setFloor(0);
+  startBattle({ direct: true });
 }
 // ---------- Batalha (depois do 4º nível extra, Sacrifício) ----------
 // Cena própria (battle.js). Entrada: no futuro, direto do fim do extra 4 (startBattle({ direct: true }), sem voltar ao menu);
 // por enquanto só pelo teste do cadeado (o cartão Sacrifício na página dos extras). Nada é salvo no progresso.
 // Música: a adaptação de "Finale" (battleMusic.js, assets/finale-batalha.mp3); a posição dela é o relógio da batalha.
 const battleMusic = createBattleMusic({ getVolume: () => settings.prefs.music });
-const battle = createBattle({ input, audio, renderer, stage, music: battleMusic, onFinish: () => endBattle(true) });
+const battle = createBattle({ input, audio, renderer, stage, music: battleMusic, onFinish: () => startEpilogue(),
+  onCheckpoint: st => { try { localStorage.setItem(BATTLE_CP_SAVE, String(st)); } catch (e) { /* */ } } });   // checkpoints depois dos fragmentos
+// Fragmentos, interlúdio e encerramento: cenas próprias sincronizadas com a música da batalha (fragments.js)
+const frag = createFragments({ input, audio, talkBox });
+battle.setFragmentHandler((info, done) => frag.play(info, done));
+battle.setFinaleHandler((info, done) => frag.finale(info, done));
+// Epílogo: a caminhada, o lugar bonito, a bancada, a conversa final e a saída (epilogue.js)
+const epiMusic = createChurchMusic(audio, innocentTimeUrl, 0.3);
+const epi = createEpilogue({ walker, input, audio, talkBox, onArea: () => playTrack(epiMusic, 6, 'Once Upon An Innocent Time'), onQuiet: () => epiMusic.fadeOut(3), onDone: () => finishStory() });
+function startEpilogue() {
+  const fk = frag._K.position;
+  frag.stop(); battle.stop();
+  epi.camera.aspect = rig.camera.aspect; epi.camera.updateProjectionMatrix();
+  epi.start({ player: { x: -1, z: 8.4 }, k: { x: fk.x, z: fk.z } }); renderer.compile(epi.scene, epi.camera);
+  try { localStorage.setItem(BATTLE_CP_SAVE, '24'); } catch (e) { /* */ }   // (saindo agora, o cartão volta ao combate final)
+  fade = 0; setState('epilogue');
+}
+/** Fim efetivo: só aqui os extras e a batalha ficam concluídos. A chuva forçada acaba, o fundo vira a manhã, a música normal volta e a van também. */
+function finishStory() {
+  try { for (const k of [EXTRA1_KEY, EXTRA2_KEY, EXTRA3_KEY, EXTRA4_KEY, EXTRA_DONE_KEY]) localStorage.setItem(k, '1'); localStorage.removeItem(BATTLE_CP_SAVE); localStorage.removeItem(NOVAN_KEY); } catch (e) { /* */ }
+  epiMusic.stop();
+  syncNoVan();
+  document.body.classList.remove('extra-on');
+  world.scene.add(walker.object); walker.show(false); walker.setFloor(0);
+  music.suspend(false); fade = 0;
+  menuWorld();
+  if (rig.mode !== 'overview') rig.toggle();
+  rig.snap({ x: van.x, z: van.z, heading: van.heading, speed: 0 });
+  title.show('home'); setState('title');
+  talkBox.fadeBlack(1, 0); setTimeout(() => talkBox.fadeBlack(0, 2500), 60);
+}
+function endEpilogue() {                                 // Voltar no meio do epílogo: nada é concluído (o cartão volta ao combate final)
+  epi.stop(); epiMusic.fadeOut(1.5);
+  document.body.classList.remove('extra-on');
+  world.scene.add(walker.object); walker.show(false); walker.setFloor(0);
+  music.suspend(false); fade = 0; showPlayPanel();
+}
 function startBattle(opts = {}) {
   battleMusic.load();                                    // prepara o áudio antes da apresentação
   const begin = () => {
@@ -2066,7 +2182,7 @@ function startBattle(opts = {}) {
 }
 /** Fim (ou saída) da batalha: volta à tela inicial (toTitle, depois do ponto final provisório) ou ao painel Jogar. Nada é salvo. */
 function endBattle(toTitle) {
-  battle.stop();
+  battle.stop(); frag.stop();
   document.body.classList.remove('extra-on');
   music.suspend(false);
   fade = 0;
@@ -2075,7 +2191,7 @@ function endBattle(toTitle) {
     if (rig.mode !== 'overview') rig.toggle();
     rig.snap({ x: van.x, z: van.z, heading: van.heading, speed: 0 });
     title.show('home'); if (titleDriver) titleDriver.stop();
-    setState('title'); setMenuNight(menuBg() === 'night' && neighborhood === 'grid4');
+    setState('title'); setMenuNight(menuBg().startsWith('night') && neighborhood === 'grid4');
     talkBox.fadeBlack(1, 0); setTimeout(() => talkBox.fadeBlack(0, 1500), 60);
   } else showPlayPanel();
 }
@@ -2697,7 +2813,14 @@ function update(dt, t) {
       van.stop();
       if (Math.abs(battle.camera.aspect - rig.camera.aspect) > 1e-4) { battle.camera.aspect = rig.camera.aspect; battle.camera.updateProjectionMatrix(); }
       battle.update(dt, document.hidden);
-      if (battle.active) fade = battle.fade;
+      if (frag.active) { if (Math.abs(frag.camera.aspect - rig.camera.aspect) > 1e-4) { frag.camera.aspect = rig.camera.aspect; frag.camera.updateProjectionMatrix(); } frag.update(dt, document.hidden); }
+      if (frag.active) fade = frag.fade; else if (battle.active) fade = battle.fade;
+      break;
+    case 'epilogue':                                 // epílogo (cena própria)
+      van.stop();
+      if (Math.abs(epi.camera.aspect - rig.camera.aspect) > 1e-4) { epi.camera.aspect = rig.camera.aspect; epi.camera.updateProjectionMatrix(); }
+      epi.update(dt, menu.isOpen || document.hidden);
+      if (epi.active) fade = epi.fade;
       break;
     case 'extra':                                    // nível extra 1: o vazio, o cubo e a figura (cena própria)
       van.stop();
@@ -2923,7 +3046,8 @@ function touchFrame() {
     case 'inside': joystick = true; break;                            // Grillby's (visão de cima, sem giro)
     case 'gstory': joystick = true; look = true; break;               // 1ª pessoa / resgate (a história decide o que vale)
     case 'extra': joystick = look = !extra.locked; break;
-    case 'battle': joystick = battle.joystick; if (battle.actionLabel) A('Space', battle.actionLabel, '●', true); if (battle.action2Label) A('KeyE', battle.action2Label, '◆', true); break;   // círculo + ação (segurada); no Conduzir também Puxar (os dois juntos)
+    case 'epilogue': joystick = look = !epi.locked; break;
+    case 'battle': if (frag.active) { joystick = frag.joystick; if (frag.actionLabel) A('Space', frag.actionLabel, '●', true); break; } joystick = battle.joystick; if (battle.actionLabel) A('Space', battle.actionLabel, '●', true); if (battle.action2Label) A('KeyE', battle.action2Label, '◆', true); break;   // círculo + ação (segurada); no Conduzir também Puxar (os dois juntos)
     case 'boss': if (monster.phase === 'grace') { joystick = true; if (!monster.robotOn) A('KeyT', 'Robô', 'T'); } break;
     case 'map': joystick = true; A('KeyE', 'Jogar', 'E'); A('KeyM', 'Missões', 'M'); break;
     case 'trolley': if (trolley.choosing) A('KeyE', 'Mudar o trajeto', 'E'); break;
@@ -2937,7 +3061,7 @@ function updateHUD() {
   matchTimer.show((TIMER_PLAY.includes(state) && !approachLock()) || (state === 'fadeOut' && endToMap));   // cenas e aproximação da igreja: escondido
   music.setNowPlaying(nowPlaying());              // nome da faixa ao lado do botão de música
   music.setLift(talkBox.open);
-  back.set(state === 'levelSelect' || state === 'shop' || (state === 'extra' && extra.active && extra.phase !== 'out') || (state === 'battle' && battle.active) || (state === 'map' && !missions.isOpen) || (IN_GAME.includes(state) && !missions.isOpen));
+  back.set(state === 'levelSelect' || state === 'shop' || (state === 'extra' && extra.active && extra.phase !== 'out') || (state === 'battle' && battle.active) || (state === 'epilogue' && epi.active && epi.phase !== 'leave') || (state === 'map' && !missions.isOpen) || (IN_GAME.includes(state) && !missions.isOpen));
   missionsBtn.set(gameMode === 'career' && IN_GAME.includes(state) && !missions.isOpen,
     `MISSÕES ${career.completedCount(careerLevel)}/5`);
   hud.setCounter(game.delivered);
@@ -2951,7 +3075,7 @@ function updateHUD() {
     return;
   }
   lock.set(false);
-  if (state === 'extra' || state === 'battle') {     // nível extra 1 e batalha: sem pista, contador, dica nem cronômetro
+  if (state === 'extra' || state === 'battle' || state === 'epilogue') {     // nível extra 1 e batalha: sem pista, contador, dica nem cronômetro
     hud.setSub('', 'muted'); hud.setMain('', 'clue'); hintBtn.set('hidden'); hud.setPrompt(false);
     hud.setFade(fade);
     return;
@@ -3107,7 +3231,7 @@ renderer.setAnimationLoop(now => {
   elapsed += dt;
   update(dt, elapsed);
   updateHUD();
-  if (inMap()) renderer.render(careerMap.scene, careerMap.camera); else if (state === 'extra' && extra.active) renderer.render(extra.scene, extra.camera); else if (state === 'battle' && battle.active) { battle.prerender(); renderer.render(battle.scene, battle.camera); } else if (insideOn) renderer.render(grillIn.scene, grillIn.camera); else if (state === 'trolley') renderer.render(trolley.scene, trolley.camera); else if (state === 'laser' && fxCine.inSpace) renderer.render(fxCine.scene, fxCine.camera); else if (churchCine.active) churchCine.render(world.scene, rig.camera); else renderer.render(world.scene, rig.camera);
+  if (inMap()) renderer.render(careerMap.scene, careerMap.camera); else if (state === 'extra' && extra.active) renderer.render(extra.scene, extra.camera); else if (state === 'battle' && frag.active) renderer.render(frag.scene, frag.camera); else if (state === 'epilogue' && epi.active) renderer.render(epi.scene, epi.camera); else if (state === 'battle' && battle.active) { battle.prerender(); renderer.render(battle.scene, battle.camera); } else if (insideOn) renderer.render(grillIn.scene, grillIn.camera); else if (state === 'trolley') renderer.render(trolley.scene, trolley.camera); else if (state === 'laser' && fxCine.inSpace) renderer.render(fxCine.scene, fxCine.camera); else if (churchCine.active) churchCine.render(world.scene, rig.camera); else renderer.render(world.scene, rig.camera);
 });
 
 // ---------- Ganchos para testes automatizados ----------
@@ -3129,7 +3253,7 @@ window.ADRESS = {
   moonPlace(p, f) { van.teleport(0, 0, 0); FRAME.reset(new THREE.Vector3(...p).normalize(), new THREE.Vector3(...f), 0, 0); moonAnchor.x = moonAnchor.z = 0; FRAME.toSphere(0, 0, vanSph.p); moonUpdate(0, true); },
   get moonVan() { return { p: vanSph.p.toArray().map(v => +v.toFixed(3)), f: vanSph.f.toArray().map(v => +v.toFixed(3)), y: +van.simY.toFixed(2) }; },
   FRAME, MOONV: () => MOONV,
-  massStory, MASS_KEY, extra, startExtra, battle, battleMusic, startBattle, endBattle, screenShatter, voidMusic, menuMusic, rainFx, rainAudio, menuBg, get menuNight() { return !!nightSaved; }, get rainOn() { return rainOn(); }, menuWorld, lockCP: n => STORY_CP.apply(n), lockCPcur: () => STORY_CP.current(), devMissions: DEV_MISSIONS, get parcelVisible() { return !!parcel.parent; },
+  massStory, MASS_KEY, get extra() { return extra; }, extras, frag, epi, startEpilogue, finishStory, pickExtra, extraToBattle, startExtra, battle, battleMusic, startBattle, endBattle, screenShatter, voidMusic, menuMusic, rainFx, rainAudio, menuBg, get menuNight() { return !!nightSaved; }, get rainOn() { return rainOn(); }, menuWorld, lockCP: n => STORY_CP.apply(n), lockCPcur: () => STORY_CP.current(), devMissions: DEV_MISSIONS, get parcelVisible() { return !!parcel.parent; },
   laser, ursa, solar, reality, startLaser,
   get church() { return church; }, get venK() { return venK; }, startVeniceTalk, churchStage, get greenBell() { return greenBell; }, get churchBell() { return churchBell; },
   churchReveal() { if (churchOn && !churchShown) { approach.phase = 'revealed'; revealChurch(true); } },
@@ -3156,7 +3280,7 @@ window.ADRESS = {
   /** Coloca a van parada no ponto de entrega da casa h, virada para leste. */
   placeVanAtDoor(h) { const p = doorPoint(game.slotOf[h]); van.teleport(p.x, p.z, 0); },
   /** Executa n quadros de simulação com passo fixo (útil quando o requestAnimationFrame está parado). */
-  step(n = 1, dt = 1 / 60) { for (let i = 0; i < n; i++) { elapsed += dt; update(dt, elapsed); updateHUD(); } if (inMap()) renderer.render(careerMap.scene, careerMap.camera); else if (state === 'extra' && extra.active) renderer.render(extra.scene, extra.camera); else if (state === 'battle' && battle.active) { battle.prerender(); renderer.render(battle.scene, battle.camera); } else if (insideOn) renderer.render(grillIn.scene, grillIn.camera); else if (state === 'trolley') renderer.render(trolley.scene, trolley.camera); else if (state === 'laser' && fxCine.inSpace) renderer.render(fxCine.scene, fxCine.camera); else if (churchCine.active) churchCine.render(world.scene, rig.camera); else renderer.render(world.scene, rig.camera); },
+  step(n = 1, dt = 1 / 60) { for (let i = 0; i < n; i++) { elapsed += dt; update(dt, elapsed); updateHUD(); } if (inMap()) renderer.render(careerMap.scene, careerMap.camera); else if (state === 'extra' && extra.active) renderer.render(extra.scene, extra.camera); else if (state === 'battle' && frag.active) renderer.render(frag.scene, frag.camera); else if (state === 'epilogue' && epi.active) renderer.render(epi.scene, epi.camera); else if (state === 'battle' && battle.active) { battle.prerender(); renderer.render(battle.scene, battle.camera); } else if (insideOn) renderer.render(grillIn.scene, grillIn.camera); else if (state === 'trolley') renderer.render(trolley.scene, trolley.camera); else if (state === 'laser' && fxCine.inSpace) renderer.render(fxCine.scene, fxCine.camera); else if (churchCine.active) churchCine.render(world.scene, rig.camera); else renderer.render(world.scene, rig.camera); },
 };
 // depois do 4º sino o fundo dos menus já começa no Bairro 24 (na chuva)
 menuWorld(); syncNoVan();

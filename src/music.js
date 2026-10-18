@@ -23,7 +23,7 @@ const CSS = `
 .music-btn[data-on="0"] { background: #5d6a78; box-shadow: 0 4px 0 #3b444e, 0 8px 18px rgba(0,0,0,.25); }
 `;
 
-export function createMusic(stageEl, src = 'assets/musica-fundo.mp3') {
+export function createMusic(stageEl, src = (typeof __ASSET_BASE__ !== 'undefined' ? __ASSET_BASE__ : 'assets/') + 'musica-fundo.mp3') {
   const style = document.createElement('style');
   style.textContent = CSS;
   document.head.appendChild(style);

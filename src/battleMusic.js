@@ -5,7 +5,7 @@
 // para a posição real do áudio — nunca volta para trás e, se a faixa travar carregando, espera por ela.
 // Sem áudio (arquivo ausente, bloqueado ou em teste), o relógio próprio segue sozinho; uma falha real aparece na tela.
 
-export const BATTLE_TRACK = 'assets/finale-batalha.mp3';
+export const BATTLE_TRACK = (typeof __ASSET_BASE__ !== 'undefined' ? __ASSET_BASE__ : 'assets/') + 'finale-batalha.mp3';   // (versão experimental publicada em /experimento/: usa os arquivos da principal, ../assets/)
 export const BATTLE_TRACK_SECS = 581.856;                 // duração da faixa editada (marks.json: total)
 const BASE = 0.9;                                          // ganho da faixa (o volume da música das Configurações multiplica)
 

@@ -8,6 +8,7 @@
     "build": "node build.mjs",
     "build:dev": "node build.mjs --dev",
     "watch": "node build.mjs --dev --watch",
+    "build:experimento": "node build.mjs --out experimento/index.html --asset-base ../assets/",
     "build:netlify": "node build.mjs --out dist/index.html --with-assets"
   },
   "devDependencies": {
