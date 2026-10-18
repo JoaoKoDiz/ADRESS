@@ -37,6 +37,14 @@ export const PLUS_SCRIPTS = {
   ],
 };
 
+// CONDUZIR aprimorado (depois da virada): os ataques ficaram fortes demais para o REFLETIR — uma demonstração protegida mostra
+// a parede se quebrando (o K segura o golpe). Uma fenda grande se abre atrás da grade (branco contra preto). Segurar a ação
+// atrai os projéteis para o círculo na grade; levar o círculo até a fenda os entrega a ela. Soltar devolve cada um ao alvo.
+// Controles continuam 2D (o círculo na grade). Começa com grupos pequenos.
+PLUS_SCRIPTS.G = [{ wait: 0.5 }, { demo: true }, { wait: 0.6 }, { group: [[-2.4, 4.4], [-0.6, 5.6]], to: ['K', 'P'], v: 5.2 }, { wait: 0.8 }, { group: [[-3.6, 3.2], [-1.2, 4.8], [1.0, 6.2]], to: ['P', 'K', 'K'], v: 5.6 }];
+PLUS_SCRIPTS.G2 = [{ wait: 0.4 }, { group: [[-3.0, 5.0], [-1.0, 3.6], [0.8, 5.8]], to: ['K', 'P', 'K'], v: 5.8 }, { wait: 0.6 }, { group: [[-4.2, 3.0], [-2.2, 6.0], [-0.2, 4.0], [1.6, 3.0]], to: ['P', 'K', 'P', 'K'], v: 6.2, gap: 0.3 }];
+export const RIFT = { u: 4.0, v: 4.2, w: 3.4, h: 4.2, z: -1.7, openT: 1.3 };
+
 const ease = x => x <= 0 ? 0 : x >= 1 ? 1 : x * x * (3 - 2 * x);
 const clamp = (v, a, b) => v < a ? a : v > b ? b : v;
 
@@ -82,6 +90,12 @@ export function createReflectPlus(api) {
     uniforms: { uAlpha: { value: 0.5 }, uFill: { value: 0 }, uSize: { value: new THREE.Vector2(WP.half, WP.L) } } });
   const gMesh = new THREE.Mesh(gGeo, gMat); gMesh.renderOrder = -1; face.add(gMesh);
   lift.visible = false;
+  // a fenda (atrás da grade): recorte irregular branco com borda preta grossa, um pouco tremido
+  const riftG = new THREE.Group(); riftG.position.set(RIFT.u, RIFT.v, RIFT.z); face.add(riftG); riftG.visible = false;
+  const jag = (rx, ry, n, j) => { const sh = new THREE.Shape(); for (let i = 0; i <= n; i++) { const a = i / n * Math.PI * 2, r = 1 + (i % n ? (((i * 7919) % 13) / 13 - 0.5) * j : 0); const x = Math.cos(a) * rx * r, y = Math.sin(a) * ry * r; if (!i) sh.moveTo(x, y); else sh.lineTo(x, y); } return sh; };
+  const riftEdge = new THREE.Mesh(new THREE.ShapeGeometry(jag(RIFT.w / 2 + 0.35, RIFT.h / 2 + 0.35, 26, 0.35)), new THREE.MeshBasicMaterial({ color: '#000000', side: THREE.DoubleSide, toneMapped: false, transparent: true }));
+  const riftIn = new THREE.Mesh(new THREE.ShapeGeometry(jag(RIFT.w / 2, RIFT.h / 2, 26, 0.3)), new THREE.MeshBasicMaterial({ color: '#ffffff', side: THREE.DoubleSide, toneMapped: false, transparent: true }));
+  riftIn.position.z = 0.02; riftG.add(riftEdge, riftIn);
 
   // círculo de controle (disco branco cheio, como no chão)
   const disc = new THREE.Mesh(new THREE.CircleGeometry(api.circleR, 40), new THREE.MeshBasicMaterial({ color: '#ffffff', toneMapped: false, side: THREE.DoubleSide }));
@@ -95,7 +109,8 @@ export function createReflectPlus(api) {
   const flashMat = () => new THREE.SpriteMaterial({ map: glowTex, color: '#ffffff', transparent: true, opacity: 0, depthWrite: false, blending: THREE.AdditiveBlending, toneMapped: false });
 
   const S = { k: 0, want: 0, cu: 0, cv: 3.6, drawing: null, walls: [], projs: [], rets: [], flashes: [], n: 0,
-    script: null, ev: 0, evT: 0, wait: 0, done: false, armed: false, camW: 0, rallyN: 0, plusT: 0 };
+    script: null, ev: 0, evT: 0, wait: 0, done: false, armed: false, camW: 0, rallyN: 0, plusT: 0,
+    mode: 'reflect', attract: false, riftK: 0, through: 0, demoDone: false };
   const W = (u, v, out = new THREE.Vector3()) => out.set(u, v, 0).applyMatrix4(face.matrixWorld);   // ponto da grade → mundo
 
   // ---------- barreiras ----------
@@ -210,15 +225,18 @@ export function createReflectPlus(api) {
         p.pos.lerp(handPos(p.T.u < 0 ? -1 : 1), Math.min(1, dt * 10));
         const k = Math.min(1, p.t / WP.windup); if (p.ret) { p.ret.ring.material.opacity = 0.4 + 0.55 * k; p.ret.g.scale.setScalar(1.5 - 0.5 * k); }
         if (play && p.t >= WP.windup) launch(p);
+      } else if (play && S.mode === 'conduct' && (p.state === 'in' || p.state === 'held' || p.state === 'gone')) {
+        conductStep(p, dt);
       } else if (play) {
         const x0 = p.pos.z; p.pos.addScaledVector(p.vel, dt);
         if (p.state === 'in' && x0 < WP.zp && p.pos.z >= WP.zp) {                     // atravessou a grade
           const f = (WP.zp - x0) / (p.pos.z - x0 || 1), cx = p.pos.x - p.vel.x * dt * (1 - f), cy = p.pos.y - p.vel.y * dt * (1 - f);
           const hit = cross(p, cx, cy);
-          if (hit) rebound(p, hit);
+          if (hit && p.power) { killWall(hit.w); const c = W(hit.x, hit.y); flash(c, 1); api.shards(c.x, c.y, c.z + 0.1, 12, 0, 3.2); api.sfx('fail'); p.state = 'out'; killRet(p.ret); p.ret = null; aim(p, charPt(p.to)); api.L('p:overpower'); }
+          else if (hit) rebound(p, hit);
           else { p.state = 'out'; killRet(p.ret); p.ret = null; aim(p, charPt(p.to)); api.L('p:miss'); }
         } else if (p.state === 'out') {
-          if (p.pos.distanceTo(charPt(p.to)) < WP.hitR) { killProj(p, 10); api.impact(p.to); continue; }
+          if (p.pos.distanceTo(charPt(p.to)) < (p.protect ? 1.2 : WP.hitR)) { killProj(p, 10); if (p.protect) { api.protect && api.protect(p.to); api.L('p:protected'); } else api.impact(p.to); continue; }
         } else if (p.state === 'back') {
           if (p.pos.distanceTo(handPos(p.backSide)) < 0.5 || p.pos.z < WP.hand.z) caught(p);
         } else if (p.state === 'void') {
@@ -233,11 +251,42 @@ export function createReflectPlus(api) {
     }
     S.projs = S.projs.filter(p => p.alive);
   }
-  const _l = new THREE.Vector3();
+  const _l = new THREE.Vector3(), _c = new THREE.Vector3(), _r = new THREE.Vector3();
+  const inRift = () => Math.abs(S.cu - RIFT.u) < RIFT.w / 2 - 0.2 && Math.abs(S.cv - RIFT.v) < RIFT.h / 2 - 0.2;
+  /** Modo conduzir: segurando, persegue o círculo (do lado da figura, rente à grade); com o círculo na fenda, entra nela. */
+  function conductStep(p, dt) {
+    if (p.state === 'gone') { p.pos.lerp(W(RIFT.u, RIFT.v, _r).add(_c.set(0, 0, 0)), Math.min(1, dt * 5)); p.t2 = (p.t2 || 0) + dt; if (p.t2 > 0.45) { killProj(p); } return; }
+    if (S.attract && S.riftK > 0.9 && !p.demo) {
+      const goal = W(S.cu, S.cv, _c); goal.z -= 0.7 + 0.25 * (p.slot || 0);
+      goal.x += Math.cos(S.plusT * 3 + (p.slot || 0) * 2.1) * 0.35; goal.y += Math.sin(S.plusT * 3 + (p.slot || 0) * 2.1) * 0.35;
+      const want = goal.sub(p.pos), d = want.length();
+      if (d > 0.05) { want.normalize().multiplyScalar(Math.min(p.speed * 1.15, d / dt)); p.vel.lerp(want, Math.min(1, dt * 4)); }
+      p.pos.addScaledVector(p.vel, dt);
+      if (p.state === 'in') { p.state = 'held'; killRet(p.ret); p.ret = null; api.L('p:held'); }
+      if (inRift() && d < 1.4) {                                                  // entregue à fenda
+        p.state = 'gone'; p.t2 = 0; S.through++; const c = W(RIFT.u, RIFT.v); flash(c, 0.6); api.sfx('void'); api.L('p:through');
+      }
+      return;
+    }
+    if (p.state === 'held') { p.state = 'in'; aim(p, charPt(p.to)); p.vel.multiplyScalar(1); api.L('p:release'); }   // soltou: volta ao alvo (atravessa a grade)
+    const x0 = p.pos.z; p.pos.addScaledVector(p.vel, dt);
+    if (x0 < WP.zp && p.pos.z >= WP.zp) {
+      const hit = cross(p, p.pos.x, p.pos.y);
+      if (hit) { killWall(hit.w); const c = W(hit.x, hit.y); flash(c, 1); api.shards(c.x, c.y, c.z + 0.1, 12, 0, 3.2); api.sfx('fail'); api.L('p:overpower'); }
+      p.state = 'out'; killRet(p.ret); p.ret = null; aim(p, charPt(p.to));
+    }
+  }
 
   // ---------- roteiro ----------
   function startEvent(e) {
     if (e.wait != null) { S.wait = e.wait; return; }
+    if (e.demo) {                                                                    // demonstração protegida: a parede não segura mais
+      if (S.demoDone) return; S.demoDone = true;
+      addWall([{ u: -2.2, v: 4.6 }, { u: -0.2, v: 4.6 }]);
+      newProj({ T: { u: -1.2, v: 4.6 }, to: 'K', speed: 7.4, lead: 1.0, idx: 0, next: null, power: true, protect: true, demo: true });
+      api.L('p:demo'); return;
+    }
+    if (e.group) { e.group.forEach((pt, i) => { const q = newProj({ T: { u: pt[0], v: pt[1] }, to: e.to[i], speed: e.v, lead: WP.warn + i * (e.gap || 0.35), idx: 0, next: null, power: true }); q.slot = i; }); return; }
     if (e.shot) { newProj({ T: { u: e.shot[0], v: e.shot[1] }, to: e.to, speed: e.v, lead: WP.warn, idx: 0, next: null }); return; }
     if (e.rally) {
       const n = e.rally.length; S.rallyN++;
@@ -251,13 +300,14 @@ export function createReflectPlus(api) {
     if (S.k < 0.999) return;                                                         // nada durante a rotação
     S.plusT += dt;
     if (S.wait > 0) { S.wait -= dt; return; }
-    if (S.projs.some(p => p.state !== 'void' && !(p.state === 'back' && !p.next))) return;   // uma coisa por vez (a volta final e o desvio para o vazio são só visuais)
+    if (S.projs.some(p => p.state !== 'void' && p.state !== 'gone' && !(p.state === 'back' && !p.next))) return;   // uma coisa por vez (a volta final e o desvio para o vazio são só visuais)
     if (S.ev >= S.script.length) { S.done = true; api.L('p:done'); return; }
     startEvent(S.script[S.ev++]);
   }
 
   // ---------- desenho ----------
   function action(act) {
+    if (S.mode === 'conduct') { S.attract = !!act && S.k >= 0.999; return; }        // conduzir: segurar = atrair (sem desenhar)
     if (S.k < 0.999) { if (!act) S.drawing = null; return; }
     if (act && !S.drawing) S.drawing = { pts: [{ u: S.cu, v: S.cv }], len: 0, atLimit: false };   // começar não remove nada
     else if (act && S.drawing) {
@@ -296,6 +346,9 @@ export function createReflectPlus(api) {
     // câmera: segue a grade erguida (sem alternar sozinha)
     S.camW = want ? Math.min(1, S.camW + dt / 1.2) : Math.max(0, S.camW - dt / 1.0);
     disc.visible = S.k > 0.999 && want > 0;
+    S.riftK = S.mode === 'conduct' && want && S.k > 0.999 ? Math.min(1, S.riftK + dt / RIFT.openT) : Math.max(0, S.riftK - dt / 0.6);
+    riftG.visible = S.riftK > 0.001; { const e = ease(S.riftK), j = 1 + 0.03 * Math.sin(S.plusT * 17); riftG.scale.set(e * j, e * (2 - j), 1); riftIn.material.opacity = 0.85 + 0.15 * Math.sin(S.plusT * 9); }
+    disc.scale.setScalar(S.mode === 'conduct' && S.attract ? 1.35 + 0.08 * Math.sin(S.plusT * 14) : 1);
     disc.position.set(S.cu, S.cv, 0.03);
     // prévia
     if (S.drawing && disc.visible) {
@@ -318,12 +371,12 @@ export function createReflectPlus(api) {
   return {
     /** Arma o trecho aprimorado: a grade se ergue (se ainda não estiver) e o roteiro espera o fim da rotação. */
     setup(name) {
-      clearAttacks(); S.want = 1; S.script = PLUS_SCRIPTS[name] || PLUS_SCRIPTS.A; S.ev = 0; S.wait = 0; S.done = false; S.plusT = 0; S.rallyN = 0;
+      clearAttacks(); S.want = 1; S.script = PLUS_SCRIPTS[name] || PLUS_SCRIPTS.A; S.mode = name && name[0] === 'G' ? 'conduct' : 'reflect'; S.attract = false; S.through = 0; S.ev = 0; S.wait = 0; S.done = false; S.plusT = 0; S.rallyN = 0;
       S.cu = 0; S.cv = 3.6; S.drawing = null; api.L('p:setup ' + name);
     },
     lower() { S.want = 0; clearAttacks(); },
     /** Começo/fim da batalha: deitada na hora, sem animação. */
-    reset() { clearAttacks(); for (const w of S.walls) disposeWall(w); S.walls = []; S.want = 0; S.k = 0; S.camW = 0; S.script = null; update(0, false); },
+    reset() { clearAttacks(); for (const w of S.walls) disposeWall(w); S.walls = []; S.want = 0; S.k = 0; S.camW = 0; S.script = null; S.mode = 'reflect'; S.riftK = 0; S.demoDone = false; update(0, false); },
     clearAttacks,
     cancelDraw() { S.drawing = null; },
     update, move, action, step: stepScript,
@@ -335,7 +388,7 @@ export function createReflectPlus(api) {
     get circle() { return { u: S.cu, v: S.cv }; }, _setCircle(u, v) { S.cu = u; S.cv = v; },
     get walls() { return S.walls.filter(w => w.alive).map(w => ({ n: w.n, pts: w.pts.map(p => ({ u: +p.u.toFixed(2), v: +p.v.toFixed(2) })) })); },
     get projs() { return S.projs.map(p => ({ state: p.state, u: p.T.u, v: p.T.v, to: p.to, speed: p.speed, idx: p.idx, z: +p.pos.z.toFixed(2), next: !!p.next })); },
-    get ev() { return S.ev; }, get t() { return S.plusT; }, WP, toWorld: (u, v) => W(u, v).clone(),
+    get ev() { return S.ev; }, get t() { return S.plusT; }, get mode() { return S.mode; }, get through() { return S.through; }, get riftK() { return S.riftK; }, get attract() { return S.attract; }, RIFT, WP, toWorld: (u, v) => W(u, v).clone(),
   };
   function clearAttacks() {
     for (const p of S.projs) killProj(p); S.projs = [];

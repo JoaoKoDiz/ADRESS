@@ -20,8 +20,8 @@ import { createReflectPlus } from './reflectPlus.js';
 export const BATTLE_CP_KEY = 'adress.dev.battle';   // teste pelo cadeado: libera o cartão Sacrifício para começar a batalha
 
 // ---------- constantes (fáceis de ajustar) ----------
-const GRID = { x0: -7, x1: 7, z0: -9, z1: 9, cell: 1 };                // 14 × 18 células inteiras, sem moldura
-const LIM = { x0: -6.5, x1: 6.5, z0: -9, z1: 9 };                  // limites do círculo (os de sempre)          // X = lados, Z = comprimento (figura em −Z, jogador em +Z)
+const GRID = { x0: -8, x1: 8, z0: -4, z1: 10, cell: 1 };               // 16 × 14 células inteiras, sem moldura (mais larga e rasa: cabe na câmera baixa)
+const LIM = { x0: -7.5, x1: 7.5, z0: -3.6, z1: 9.6 };                  // limites do círculo (os de sempre)          // X = lados, Z = comprimento (figura em −Z, jogador em +Z)
 const P_POS = new THREE.Vector3(-1.0, 0, 8.4), K_POS = new THREE.Vector3(0.7, 0, 2.6), F_POS = new THREE.Vector3(0, 0, -11);
 const F_SCALE = [4.6, 5.0, 4.6];
 const FACE_NZ = Math.PI / 2, FACE_PZ = -Math.PI / 2;                 // os modelos olham para +X: π/2 → −Z, −π/2 → +Z
@@ -33,7 +33,9 @@ const camAt = (angle, dist, height) => { const a = angle * Math.PI / 180; return
 const CAMS = {
   // jogo: a 1ª câmera elevada (diagonal atrás/à direita, altura 5, fov 50) com o ângulo e a mira ajustados por busca para
   // caberem a área do círculo à frente do jogador, as fissuras laterais e a figura inteira (antes: 128°, 10,5, mira −0,4/2,3/−3)
-  game: { pos: camAt(136, 11.25, 5.0), look: new THREE.Vector3(-1.73, 1.79, -1.94), fov: 50 },
+  // (experimento) baixa e próxima, atrás e à direita do jogador: ele grande em primeiro plano à esquerda, o K mais à direita,
+  // a figura além da área (arena mais larga e rasa para caber)
+  game: { pos: new THREE.Vector3(2.6, 2.2, 12.8), look: new THREE.Vector3(-1.0, 1.4, 0), fov: 62 },
   // impacto: baixa e próxima (jogador em primeiro plano, K entre os dois, a figura ao fundo) — sobre o 4º quadrado à direita do jogador
   impact: { pos: new THREE.Vector3(3.5, 1.5, 8.8), look: new THREE.Vector3(-11.0, 3.25, -4.96), fov: 68 },
   // grade erguida (REFLETIR aprimorado): baixa, perto, atrás e à direita do jogador, olhando pela lateral dele para a figura
@@ -67,7 +69,7 @@ const T = { fadeIn: 0.7, startFade: 1.5, intro: 1.0, clear: 1.0, out: 0.7, freez
 const RETRY_MIN = 4;                                                  // falha com menos que isso de janela: o trecho não recomeça (a música segue)
 const BOUND = { x: 14, z: 16 };
 // fissuras suspensas nas laterais (fora da grade)
-const FIS = { L1: [-8.4, -6.5], L2: [-8.4, -3.5], L3: [-8.4, -0.5], R1: [8.4, -6.5], R2: [8.4, -2.5], R3: [8.4, 1.5] };
+const FIS = { L1: [-9.4, -5.5], L2: [-9.4, -2.5], L3: [-9.4, 0.5], R1: [9.4, -5.5], R2: [9.4, -1.5], R3: [9.4, 2.5] };
 const COLOR_HEX = { azul: '#003EFF', verde: '#00C000', laranja: '#FCA600', roxo: '#9B00FF' };
 
 // ---------- estrutura: 18 trechos (S), 8 fragmentos (F) e o final (E) ----------
@@ -148,10 +150,10 @@ const SEGMENTS = [
   { mech: 'guide', shots: [[1.2, 'L1', 'K', 5.4], [1.9, 'fig', 'P', 5.4], [2.6, 'R3', 'K', 5.6], [3.3, 'fig', 'K', 5.6]] },
   { mech: 'block', shots: genShots(12, 10, 1.45, 6.5, 7.2, 0.15) },
   { mech: 'reflect', plus: 'A', structs: [st(SB(), 4.8, 6.2, 0.2), st(SD(), 4.8, 6.2, 1.8), st(SA(), 4.8, 6.2, 3.4)], figEvery: 7 },   // 13: depois do 2º azul → grade erguida (reflectPlus.js)
-  { mech: 'guide', shots: [[1.2, 'fig', 'K', 5.6], [1.8, 'L2', 'P', 5.6], [2.4, 'R2', 'K', 5.8], [3.0, 'fig', 'P', 5.8], [3.6, 'L3', 'K', 5.8]] },
+  { mech: 'guide', plus: 'G', shots: [[1.2, 'fig', 'K', 5.6], [1.8, 'L2', 'P', 5.6], [2.4, 'R2', 'K', 5.8], [3.0, 'fig', 'P', 5.8], [3.6, 'L3', 'K', 5.8]] },   // 14: CONDUZIR aprimorado (fenda atrás da grade)
   { mech: 'block', shots: genShots(15, 11, 1.3, 6.8, 7.3, 0.2) },
   { mech: 'reflect', plus: 'B', structs: [st(SA(), 4.6, 6.4, 0.2), st(SD(), 4.6, 6.4, 1.4), st(SB(), 4.6, 6.4, 2.6), st(SC(), 4.6, 6.4, 3.8)], figEvery: 6 },   // 16: grade erguida, trocas mais rápidas
-  { mech: 'guide', shots: [[1.2, 'R1', 'K', 5.8], [1.7, 'fig', 'P', 5.8], [2.2, 'L1', 'K', 6], [2.7, 'fig', 'K', 6], [3.2, 'R3', 'P', 6], [3.7, 'L2', 'K', 6]] },
+  { mech: 'guide', plus: 'G2', shots: [[1.2, 'R1', 'K', 5.8], [1.7, 'fig', 'P', 5.8], [2.2, 'L1', 'K', 6], [2.7, 'fig', 'K', 6], [3.2, 'R3', 'P', 6], [3.7, 'L2', 'K', 6]] },   // 17: CONDUZIR aprimorado, grupos maiores
   // 18: combate final (depois do S2): as imagens dos fragmentos voltam acusando; o K faz uma barreira para si, depois uma para o
   // jogador, depois abre a fenda (portal) sozinho; o jogador conduz a última corrente.
   { mech: 'guide', kOpens: true, kGuard: 2, kDelay: 3.6, images: true, shots: [[0.6, 'fig', 'K', 4.6], [2.0, 'fig', 'P', 4.6],
@@ -160,6 +162,7 @@ const SEGMENTS = [
 const LABEL = {
   block: ['BLOQUEAR · clique esquerdo', 'BLOQUEAR · botão Ação'],
   reflect: ['REFLETIR · segure o clique e mova (WASD)', 'REFLETIR · segure o botão Ação e mova'],
+  plusG: ['CONDUZIR · o REFLETIR não segura mais · segure o clique para atrair e leve o círculo até a fenda', 'CONDUZIR · segure Atrair e leve o círculo até a fenda'],
   plus: ['REFLETIR · segure o clique e desenhe na grade · W/S sobe e desce · A/D lados', 'REFLETIR · segure o botão Ação e desenhe na grade'],
   guide: ['CONDUZIR · segure o clique esquerdo para atrair · sob o objeto, segure o direito e puxe', 'CONDUZIR · segure Atrair · sob o objeto, segure Puxar e arraste'],
 };
@@ -390,11 +393,15 @@ export function createBattle(ctx) {
   const projGeo = new THREE.OctahedronGeometry(0.27, 0), projEdges = new THREE.EdgesGeometry(projGeo);
   const trailGeo = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(0, 0, -0.12), new THREE.Vector3(0, 0, -0.95)]);
   const claimGeo = new THREE.RingGeometry(0.36, 0.41, 32);
+  const markGeo = new THREE.CircleGeometry(0.2, 20), markMat = basic('#ffffff', 0.16, { depthWrite: false });
   const projPool = pool(() => {
     const g = new THREE.Group(), spin = new THREE.Group(); spin.scale.set(0.75, 0.55, 1.7); g.add(spin);
     const edges = new THREE.LineSegments(projEdges, M.edge), trail = new THREE.Line(trailGeo, M.trail);
     spin.add(new THREE.Mesh(projGeo, M.dark), edges); g.add(trail);
     const claim = new THREE.Mesh(claimGeo, basic('#dfe9ff', 0.8, { depthWrite: false, side: THREE.DoubleSide })); claim.rotation.x = -Math.PI / 2; g.add(claim);
+    // marca discreta no chão embaixo do projétil (ajuda a ler a altura): sempre rente ao chão, onde quer que ele voe
+    const mark = new THREE.Mesh(markGeo, markMat); mark.rotation.x = -Math.PI / 2; mark.frustumCulled = false; g.add(mark);
+    mark.onBeforeRender = () => { mark.matrixWorld.elements[13] = 0.02; };
     g.userData = { spin, claim, edges, trail }; return g;
   });
   // estilhaços (impactos, bloqueios)
@@ -560,7 +567,7 @@ export function createBattle(ctx) {
   // REFLETIR aprimorado (grade erguida): só nos trechos marcados com `plus` e depois do 2º fragmento azul (índice 4)
   const PLUS_AFTER = 5;
   const plus = createReflectPlus({ scene, floorRect: gridMat.uniforms.uRect.value, floorZ0: GRID.z0, circleR: CIRCLE_R, speed: CIRCLE_SPEED,
-    sfx, L: m => L(m), impact: who => impact(who), shards: (x, y, z, n, d, sp) => spawnShards(x, y, z, n, d, sp),
+    sfx, L: m => L(m), impact: who => impact(who), protect: who => { spawnShards(K_POS.x, 1.2, K_POS.z - 0.8, 10, 0, 2.4); sfx('barrier'); }, shards: (x, y, z, n, d, sp) => spawnShards(x, y, z, n, d, sp),
     projGet: () => projPool.get(), projPut: o => projPool.put(o), pose, figGest: g => { figGest = g; }, charPos });
   const plusSeg = () => !!(seg && seg.plus);
 
@@ -749,7 +756,7 @@ export function createBattle(ctx) {
       const o = structObjs[j]; o.position.set(s.x, H_PROJ, s.z); o.scale.setScalar(1); o.visible = true; o.userData.em.color.set('#ffffff'); o.userData.em.opacity = 0.9;
       seg.structures.push({ x: s.x, z: s.z, target: s.target, period: s.period, speed: s.speed, next: s.phase, alive: true, busy: false, die: -1, obj: o });
     });
-    if (def.mech === 'guide') setupGuide();
+    if (def.mech === 'guide' && !seg.plus) setupGuide();
     stab.P = stab.K = 100; lastHit.P = lastHit.K = -99; react.P = react.K = 0;
     cpos.x = CIRCLE_HOME.x; cpos.z = CIRCLE_HOME.z; prevAct = true;  // (ação já segurada não conta como clique novo)
     lastKDef = -99; lastBar = -9;
@@ -816,7 +823,7 @@ export function createBattle(ctx) {
   /** Ponto válido para o objeto: na grade, longe dos personagens, visível e com espaço para puxar (vale para qualquer lado de dentro). */
   function pickObjSpot() {
     for (let k = 0; k < 200; k++) {
-      const x = -5.2 + Math.random() * 10.4, z = -7.0 + Math.random() * 13.0;
+      const x = -6.2 + Math.random() * 12.4, z = -3.0 + Math.random() * 9.0;
       if (Math.hypot(x - P_POS.x, z - P_POS.z) < 3.4 || Math.hypot(x - K_POS.x, z - K_POS.z) < 2.6) continue;
       if (Math.hypot(x - CIRCLE_HOME.x, z - CIRCLE_HOME.z) < 1.2) continue;
       return { x, z };
@@ -992,9 +999,10 @@ export function createBattle(ctx) {
   function actionInput() {
     const act = mouseDown || simAct || input.held('Space'), click = act && !prevAct; prevAct = act;
     if (phase !== 'play' || !seg) return;
+    if (seg.plus) { plus.action(act); return; }
     if (seg.mech === 'block') {
       if (click && time - lastBar >= BLOCK.cooldown) { lastBar = time; makeRoom(); addBarrier(cpos.x, cpos.z, 'P'); sfx('barrier'); L('barrier'); pose.setGuard(true); }
-    } else if (seg.mech === 'reflect' && seg.plus) { plus.action(act);
+    } else if (seg.plus) { plus.action(act);
     } else if (seg.mech === 'reflect') {
       if (act && !drawing) { drawing = { pts: [{ x: cpos.x, z: cpos.z }], len: 0, atLimit: false }; setPreview(true); }   // começar a desenhar não remove nada (a troca é ao soltar)
       if (act && drawing) {
@@ -1115,10 +1123,11 @@ export function createBattle(ctx) {
   }
   function updateSegment(dt) {
     seg.t += dt; const def = seg.def;
-    if (seg.mech === 'block') {
+    if (seg.plus) { plus.step(dt); if (plus.done) toClear(); }
+    else if (seg.mech === 'block') {
       while (seg.shotIdx < def.shots.length && seg.t >= def.shots[seg.shotIdx][0]) { const [, from, tg, v] = def.shots[seg.shotIdx++]; createWarning(from, tg, v); }
       if (seg.shotIdx >= def.shots.length && !warnings.length && !projectiles.length) toClear();
-    } else if (seg.mech === 'reflect' && seg.plus) { plus.step(dt); if (plus.done) toClear();
+    } else if (seg.plus) { plus.step(dt); if (plus.done) toClear();
     } else if (seg.mech === 'reflect') {
       for (const s of seg.structures) if (s.alive && !s.busy && seg.t >= s.next) { createWarning(s, s.target, s.speed); s.next = seg.t + s.period; }
       if (def.figEvery && seg.t >= seg.figNext) { createWarning('fig', seg.figTgt++ % 2 ? 'K' : 'P', 6.5); seg.figNext = seg.t + def.figEvery; }
@@ -1288,7 +1297,7 @@ export function createBattle(ctx) {
   let labelOn = false, labelText = '';
   function updateLabel() {
     const on = !!seg && (phase === 'play' || phase === 'clear' || (phase === 'intro' && pt > 0.4));
-    const txt = seg ? LABEL[seg.plus ? 'plus' : seg.mech][document.body.classList.contains('touch-on') ? 1 : 0] : '';
+    const txt = seg ? LABEL[seg.plus ? (seg.def.plus[0] === 'G' ? 'plusG' : 'plus') : seg.mech][document.body.classList.contains('touch-on') ? 1 : 0] : '';
     if (txt !== labelText) { label.textContent = txt; labelText = txt; }
     if (on !== labelOn) { labelOn = on; label.style.display = 'block'; label.style.opacity = on ? '1' : '0'; }
   }
@@ -1399,6 +1408,7 @@ export function createBattle(ctx) {
     /** Teste: leva a música (e o relógio) a t segundos. */
     _time(t) { mt = t; if (music) music._set(t); },
     get musicTime() { return mt; }, get camK() { return camK; }, get occ() { return { P: occ.P, K: occ.K }; },
+    _camGame(o) { Object.assign(CAMS.game, o); },
     _setCircle(x, z) { cpos.x = clamp(x, LIM.x0 + CIRCLE_R, LIM.x1 - CIRCLE_R); cpos.z = clamp(z, LIM.z0 + CIRCLE_R, LIM.z1 - CIRCLE_R); },
     _action(down) { simAct = !!down; },
     _fire({ from = 'fig', target = 'K', speed = 6.5, warn = 0 } = {}) { const w = createWarning(from, target, speed, warn); return w.proj ? w.proj.id : null; },
