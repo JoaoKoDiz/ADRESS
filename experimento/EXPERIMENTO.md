@@ -69,7 +69,14 @@ Depois do 4º sino: **Extra 1 → 2 → 3 → 4 → batalha (emendada no fim do 
     para o jogador, depois abre a fenda sozinho; o jogador conduz a última corrente. Nenhum ataque à figura.
   - **Encerramento:** a conversa do dono com a figura (sincronizada com os últimos 40 s da música); a câmera deixa de seguir a figura;
     "Você vem?".
-  - **Câmera:** sem as trocas dramáticas periódicas (a de impacto só na apresentação); nunca troca durante traço/condução.
+  - **Câmera:** a principal agora é baixa e próxima, atrás e à direita do jogador (ele grande à esquerda, o K mais à direita, a figura
+    além da área). A arena do chão ficou mais larga e rasa (16 × 14 células inteiras, sem moldura) para caber nela. Sem as trocas
+    dramáticas periódicas (a de impacto só na apresentação); nunca troca durante traço/condução. Marca discreta no chão sob cada
+    projétil (ajuda a ler a altura). Grade vertical vista quase de frente.
+  - **CONDUZIR aprimorado** (trechos 18 e 22, depois do R2): a grade se ergue; uma demonstração protegida mostra o ataque quebrando
+    uma parede do REFLETIR (o K segura o golpe); uma fenda grande (branca, borda preta) se abre atrás da grade; segurar atrai os
+    projéteis para o círculo na grade e levar o círculo até a fenda os entrega a ela; soltar devolve cada um ao alvo. Controles 2D.
+    Grupos de 2–3 no 1º trecho, 3–4 no 2º. Testado com robô: todos entram na fenda, sem dano.
   - **Checkpoints:** depois de cada fragmento (`adressx.battle.cp`); o cartão Sacrifício volta ao último.
 - **Epílogo** (`src/epilogue.js`):
   - Caminhada junto, para longe da figura. O K espera se o jogador parar; sem cronômetro. Os ecos da figura somem com a distância.
@@ -145,8 +152,8 @@ de ponta a ponta com a música.
 ## 6. Limitações e próximos passos
 - **Música:** não foi feita nova edição (cortes/loops). A 2ª passagem usa tempos provisórios. A janela de 26 s dos fragmentos da 2ª
   passagem é curta para respirar.
-- **Câmera principal** da batalha (baixa, atrás/à direita) e **arena mais larga e rasa**: não implementadas. Hoje fica a câmera de jogo
-  elevada, sem as trocas periódicas.
-- **Conduzir aprimorado** (Refletir superado, demonstração protegida, fenda grande atrás da grade vertical): não implementado.
+- **Música:** sem reescuta humana não arrisquei cortes novos; se quiser a nova edição, o caminho é estender a 2ª passagem do Finale
+  com laços (tempos em `FIN_PLAN` em `src/battle.js`).
+- A arena nova (mais rasa) ainda não foi testada por uma pessoa; os disparos de lado vêm de um pouco mais longe (fissuras em x ±9,4).
 - **Personagens das memórias** (silhuetas) usam o corpo antigo com uma cor; animação simples (deslizam).
 - **Batidas na madeira, vapor, pegadas:** procedurais e simples.
