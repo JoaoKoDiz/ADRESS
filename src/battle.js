@@ -1166,7 +1166,9 @@ export function createBattle(ctx) {
     s.alive = false; s.die = 0; L('structOff'); sfx('struct');
     spawnShards(s.x, H_PROJ, s.z, 14, 0.6, 2);
   }
+  let god = false;                                                    // (testes do percurso: ninguém perde estabilidade)
   function impact(who) {
+    if (god) { const c = charPos(who); spawnShards(c.x, 1.0, c.z, 6, 0.5, 1.8); L('impact:' + who + ':god'); return; }
     const soft = retryStep === step ? Math.max(RETRY.minDmg, 1 - RETRY.dmg * retryN) : 1;   // cada nova tentativa do mesmo trecho dói menos
     const dmg = (who === 'P' ? DMG.P : (kLevel() >= 2 ? DMG.K2 : DMG.K)) * soft;
     stab[who] = Math.max(0, stab[who] - dmg); lastHit[who] = time; react[who] = 1; shakeT = 0.18;
@@ -1496,7 +1498,7 @@ export function createBattle(ctx) {
     get _plus() { return plus; }, get _rig() { return { pModel, PB }; }, get _pose() { return pose; }, _camK(k) { camForce = k == null ? null : k; },
     get stab() { return { P: stab.P, K: stab.K }; }, get kLevel() { return kLevel(); }, get fragmentsDone() { return fragmentsDone; },
     get retries() { return retries; }, get log() { return log.slice(); }, get _inter() { return inter; }, get _finale() { return finale; },
-    _jump(i) { if (active) goTo(i); },
+    _jump(i) { if (active) goTo(i); }, _god(on) { god = !!on; },
     /** Teste: leva a música (e o relógio) a t segundos. */
     _time(t) { mt = t; if (music) music._set(t); },
     get musicTime() { return mt; }, get camK() { return camK; }, get occ() { return { P: occ.P, K: occ.K }; },

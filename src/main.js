@@ -1157,8 +1157,9 @@ const STORY_STEPS = ['Nada', 'Conversa na casa do personagem — completa', 'Con
   'Trolley Problem — completo', 'Conversa em Veneza — completa', 'Segunda conversa na igreja — completa', "Encontro no Grillby's — completo",
   'Oficina — Entregar a última peça', 'Oficina no Bairro 24 — completa', 'Apresentação da igreja (Bairro 24) — vista', 'Missa e temporal — completos',
   'Batalha após Sacrifício (teste)', 'Batalha — REFLETIR aprimorado (teste)',
-  'História completa — extras 1 a 3 feitos (cartões liberados)', 'História completa — batalha no interlúdio', 'História completa — combate final, encerramento e epílogo', 'História completa — concluída (manhã depois da chuva)'];
-const FULL_CP = 14;      // experimento: 14 extras liberados · 15 batalha no interlúdio · 16 combate final · 17 concluída
+  'História completa — extras 1 a 3 feitos (cartões liberados)', 'História completa — batalha no interlúdio', 'História completa — combate final, encerramento e epílogo', 'História completa — concluída (manhã depois da chuva)',
+  'História completa — batalha depois do R2 (o K começa a agir)'];
+const FULL_CP = 14;      // experimento: 14 extras liberados · 15 batalha no interlúdio · 16 combate final · 17 concluída · 18 batalha depois do R2
 const FULL_CP_KEY = 'adress.dev.fullCp';
 const BATTLE_CP = 12;    // teste da batalha: tudo até a missa + marca que libera o cartão Sacrifício para começar a batalha (não conclui os extras)
 const battleTest = () => flagOn(BATTLE_CP_KEY);
@@ -1201,6 +1202,7 @@ const STORY_CP = {
         if (n >= 15) localStorage.setItem(EXTRA4_KEY, '1');
         if (n === 15) localStorage.setItem(BATTLE_CP_SAVE, '15');   // interlúdio S1→R2
         if (n === 16) localStorage.setItem(BATTLE_CP_SAVE, '26');   // combate final (depois do S2), encerramento e epílogo
+        if (n === 18) localStorage.setItem(BATTLE_CP_SAVE, '17');   // logo depois do R2: a 1ª defesa do K
         if (n === 17) localStorage.setItem(EXTRA_DONE_KEY, '1');
         localStorage.setItem(FULL_CP_KEY, String(n));
       } catch (e) { /* */ }
@@ -1924,6 +1926,7 @@ function menuBg() {
   if (flagOn(EXTRA_DONE_KEY)) return 'morning';           // fim da história: o bairro medieval de manhã, depois da chuva
   if (!flagOn(EXTRA1_KEY)) return 'rain';
   if (!flagOn(EXTRA2_KEY)) return 'night';
+  if (flagOn(EXTRA4_KEY)) return 'night4';                // o extra 4 feito, a batalha ainda não: uma chama roxa pequena no quintal
   return flagOn(EXTRA3_KEY) ? 'night3' : 'night2';        // variações discretas da mesma noite (sem revelar o fim)
 }
 function menuWorld() {
@@ -1968,17 +1971,34 @@ function setMenuNight(on) {
   const spot = sc.getObjectByName('reader-spot');
   const p = new THREE.Vector3(); if (spot) { spot.updateMatrixWorld(true); spot.getWorldPosition(p); }
   if (spot && spot.userData.person) { sv.vis.push([spot.userData.person, spot.userData.person.visible]); spot.userData.person.visible = false; }   // o K não está lá
-  // a luz do quintal da casa do K (a única acesa): lampião baixo ao lado da cadeira vazia
+  // ecos discretos de cada extra (sem revelar o fim): depois do 2º a cadeira dele não está mais lá; depois do 3º a luz do
+  // quintal apaga (o lampião continua) e só um poste laranja fica aceso no fim da rua; com o 4º feito, uma chama roxa pequena
+  const bgK = menuBg(), lampOn = bgK === 'night' || bgK === 'night2';
+  if (spot && spot.userData.chair && bgK !== 'night') { sv.vis.push([spot.userData.chair, spot.userData.chair.visible]); spot.userData.chair.visible = false; }
+  // a luz do quintal da casa do K: lampião baixo ao lado da cadeira (vazia)
   const lamp = sv.lamp = new THREE.Group(); lamp.position.set(p.x + 1.3, 0, p.z - 0.6);
   const post = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.07, 1.9, 6), new THREE.MeshStandardMaterial({ color: '#1d1b18', roughness: 0.8 })); post.position.y = 0.95; lamp.add(post);
-  const bulb = new THREE.Mesh(new THREE.SphereGeometry(0.17, 10, 8), new THREE.MeshBasicMaterial({ color: '#ffe2a8' })); bulb.position.y = 2.0; lamp.add(bulb);
+  const bulb = new THREE.Mesh(new THREE.SphereGeometry(0.17, 10, 8), new THREE.MeshBasicMaterial({ color: lampOn ? '#ffe2a8' : '#2a2620' })); bulb.position.y = 2.0; lamp.add(bulb);
   const cap = new THREE.Mesh(new THREE.ConeGeometry(0.28, 0.2, 6), new THREE.MeshStandardMaterial({ color: '#1d1b18' })); cap.position.y = 2.2; lamp.add(cap);
-  const bgK = menuBg(), dim = bgK === 'night3' ? 0.45 : bgK === 'night2' ? 0.72 : 1;   // cada extra deixa a luz do quintal um pouco mais fraca
-  const pl = new THREE.PointLight(bgK === 'night3' ? '#ffa860' : '#ffc27a', 60 * dim, 26, 1.6); pl.position.y = 1.9; lamp.add(pl);
+  const dim = bgK === 'night2' ? 0.72 : 1;
+  const pl = new THREE.PointLight('#ffc27a', lampOn ? 60 * dim : 0, 26, 1.6); pl.position.y = 1.9; lamp.add(pl);
   const gc = document.createElement('canvas'); gc.width = gc.height = 64; const gg = gc.getContext('2d'), gr = gg.createRadialGradient(32, 32, 0, 32, 32, 32);
   gr.addColorStop(0, 'rgba(255,214,150,0.9)'); gr.addColorStop(0.3, 'rgba(255,190,110,0.35)'); gr.addColorStop(1, 'rgba(255,170,90,0)'); gg.fillStyle = gr; gg.fillRect(0, 0, 64, 64);
   const glow = new THREE.Sprite(new THREE.SpriteMaterial({ map: new THREE.CanvasTexture(gc), blending: THREE.AdditiveBlending, depthWrite: false, transparent: true }));
-  glow.scale.setScalar(4.2 * (0.6 + 0.4 * dim)); glow.position.y = 2.0; lamp.add(glow); glow.material.opacity = 0.5 + 0.5 * dim;
+  glow.scale.setScalar(4.2 * (0.6 + 0.4 * dim)); glow.position.y = 2.0; lamp.add(glow); glow.material.opacity = lampOn ? 0.5 + 0.5 * dim : 0;
+  if (!lampOn) {                                                                 // o poste laranja, pequeno, no fim da rua
+    const st = new THREE.Group(); st.position.set(p.x - 21, 0, p.z + 9); lamp.add(st); st.position.sub(lamp.position);
+    const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.1, 4.2, 6), new THREE.MeshStandardMaterial({ color: '#202024' })); pole.position.y = 2.1; st.add(pole);
+    const lb = new THREE.Mesh(new THREE.SphereGeometry(0.16, 10, 8), new THREE.MeshBasicMaterial({ color: '#ffb35c' })); lb.position.set(0.5, 4.0, 0); st.add(lb);
+    const sl = new THREE.PointLight('#ff9a3c', 26, 14, 1.6); sl.position.set(0.5, 3.8, 0); st.add(sl);
+    const sg = glow.clone(); sg.material = glow.material.clone(); sg.material.opacity = 0.55; sg.scale.setScalar(2.6); sg.position.set(0.5, 4.0, 0); st.add(sg);
+  }
+  if (bgK === 'night4') {                                                        // a vela: uma chama roxa pequena perto de onde a cadeira ficava
+    const cg = new THREE.Group(); cg.position.set(0.9, 0, 0.5); lamp.add(cg);
+    const wax = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.055, 0.12, 10), new THREE.MeshStandardMaterial({ color: '#e8dfcf' })); wax.position.y = 0.06; cg.add(wax);
+    const fl = glow.clone(); fl.material = glow.material.clone(); fl.material.color.set('#9B00FF'); fl.material.opacity = 0.9; fl.scale.setScalar(0.7); fl.position.y = 0.2; cg.add(fl);
+    const cl = new THREE.PointLight('#9B00FF', 3.2, 4, 1.8); cl.position.y = 0.3; cg.add(cl);
+  }
   sc.add(lamp);
   nightCam.p.set(p.x - 13, 11, p.z + 23); nightCam.l.set(p.x - 5, 2.2, p.z - 3);   // de fora da sebe sul, de frente para a casa e o quintal
 }
@@ -2136,6 +2156,8 @@ const epi = createEpilogue({ walker, input, audio, talkBox, onArea: () => playTr
 function startEpilogue() {
   const fk = { x: 0.7, z: 2.6 };                         // (onde o K está na arena: K_POS da batalha)
   frag.stop(); battle.stop();
+  if (titleDriver) titleDriver.stop();
+  title.hide(); levelSelect.close(); document.body.classList.add('extra-on'); talkBox.hide();   // (também quando começa por um ponto de teste)
   epi.camera.aspect = rig.camera.aspect; epi.camera.updateProjectionMatrix();
   epi.start({ player: { x: -1, z: 8.4 }, k: { x: fk.x, z: fk.z } }); renderer.compile(epi.scene, epi.camera);
   try { localStorage.setItem(BATTLE_CP_SAVE, '26'); } catch (e) { /* */ }   // (saindo agora, o cartão volta ao combate final)

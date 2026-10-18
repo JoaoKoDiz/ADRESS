@@ -8,6 +8,7 @@ import { buildStandingReader, walkK } from './models/reader.js';
 import { smoothCharacter } from './models/kit.js';
 import { buildStandingReader as buildFigureBody } from './models/readerClassic.js';   // a figura mantém o formato antigo
 import { buildBody } from './models/driver.js';
+import { memoryize } from './memorySets.js';
 
 export const EXTRA_DONE_KEY = 'adress.extra.done';     // os 4 níveis extras concluídos (fim da chuva) — ainda nunca gravado
 export const EXTRA1_KEY = 'adress.extra.1';            // extra 1 concluído (gravado no instante da quebra da imagem)
@@ -195,6 +196,8 @@ export function createExtraStory(ctx) {
   R.traverse(o => { if (o.isMesh) { o.material = rMat; o.castShadow = false; } }); smoothCharacter(R);   // superfície lisa (mais segmentos)
   RB.arms.forEach((a, i) => { a.sh.rotation.z = 0.05; a.sh.rotation.x = (i ? -1 : 1) * 0.1; a.elbow.rotation.z = 0.16; });   // braços um pouco afastados do vestido
   scene.add(R);
+  // a mesma linguagem das lembranças dos outros extras e dos fragmentos: borda de luz azul (o presente — o jogador, a figura — não tem)
+  memoryize(K, '#003EFF', { rim: 0.5, desat: 0.2 }); memoryize(R, '#003EFF', { rim: 0.35, desat: 0 });
 
   // ---- a figura: humanoide inteiro preto, bem maior ----
   const figMat = new THREE.MeshBasicMaterial({ color: '#000000', transparent: true, opacity: 0 });

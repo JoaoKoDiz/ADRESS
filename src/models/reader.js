@@ -177,7 +177,7 @@ export function buildReaderSpot() {
   const R = 2.4 + 0.045;
   const pivot = new THREE.Group(); pivot.position.y = R; root.add(pivot);         // balança em volta do centro do arco dos balanços
   const content = new THREE.Group(); content.position.y = -R; pivot.add(content);
-  content.add(rockingChair());
+  const chair = rockingChair(); content.add(chair);
   const rd = readerSeated();
   content.add(rd.group);
   root.traverse(o => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = false; } });
@@ -191,6 +191,7 @@ export function buildReaderSpot() {
   const ease = x => x * x * (3 - 2 * x);
   /** true: coloca o jornal de lado (para conversar); false: volta a ler. */
   root.userData.person = rd.group;                                                 // (o K sozinho, sem a cadeira: o fundo noturno dos menus o esconde)
+  root.userData.chair = chair;
   root.userData.setAside = on => { goal = on ? 1 : 0; };
   root.userData.asideDone = () => k === goal;
   root.userData.update = t => {
