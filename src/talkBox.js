@@ -31,6 +31,12 @@ export function createTalkBox(stage) {
       opacity: 0; animation: talkbox-blink 1s steps(2, start) infinite; }
     .talkbox.done .talkbox-next { opacity: .85; }
     .talkbox.auto .talkbox-next { display: none; }
+    /* telas baixas (celular deitado) nas cenas da história: falas automáticas compactas e no alto (o jogador continua agindo
+       embaixo, com o joystick e o botão); as conversas manuais ficam embaixo, um pouco menores */
+    @media (max-height: 520px), (max-width: 640px) {
+      body.extra-on .talkbox { font-size: 17px; min-height: 0; padding: 12px 18px 22px; border-width: 4px; }
+      body.extra-on .talkbox.auto { top: 3%; bottom: auto; width: min(600px, 66%); padding: 7px 14px; font-size: 15px; border-width: 3px; border-radius: 12px; }
+    }
     .gamewarn { position: absolute; left: 50%; top: 13%; transform: translateX(-50%); width: min(620px, 88%); box-sizing: border-box;
       padding: 10px 22px; background: rgba(28,20,14,.86); color: #fff3d6; border: 3px solid #ff5a3a; border-radius: 12px; z-index: 42;
       display: none; pointer-events: none; font: 700 19px/1.4 system-ui, 'Segoe UI', Roboto, sans-serif; text-align: center; }
@@ -88,6 +94,8 @@ export function createTalkBox(stage) {
 
   return {
     get open() { return open; },
+    /** Falas automáticas (cenas sincronizadas): o jogador continua agindo — não bloqueiam os controles de toque. */
+    get auto() { return open && auto; },
     /** Mostra as falas (lista de listas de trechos); cb quando a última termina. */
     show(ls, cb, opts = {}) {
       lines = ls; idx = 0; onDone = cb; open = true; auto = !!opts.auto; onAdvance = opts.onAdvance || null;

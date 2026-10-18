@@ -1987,7 +1987,7 @@ function setMenuNight(on) {
   const glow = new THREE.Sprite(new THREE.SpriteMaterial({ map: new THREE.CanvasTexture(gc), blending: THREE.AdditiveBlending, depthWrite: false, transparent: true }));
   glow.scale.setScalar(4.2 * (0.6 + 0.4 * dim)); glow.position.y = 2.0; lamp.add(glow); glow.material.opacity = lampOn ? 0.5 + 0.5 * dim : 0;
   if (!lampOn) {                                                                 // o poste laranja, pequeno, no fim da rua
-    const st = new THREE.Group(); st.position.set(p.x - 21, 0, p.z + 9); lamp.add(st); st.position.sub(lamp.position);
+    const st = new THREE.Group(); st.position.set(p.x + 9, 0, p.z + 3); lamp.add(st); st.position.sub(lamp.position);   // (à direita do quadro: o lado esquerdo é dos botões)
     const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.1, 4.2, 6), new THREE.MeshStandardMaterial({ color: '#202024' })); pole.position.y = 2.1; st.add(pole);
     const lb = new THREE.Mesh(new THREE.SphereGeometry(0.16, 10, 8), new THREE.MeshBasicMaterial({ color: '#ffb35c' })); lb.position.set(0.5, 4.0, 0); st.add(lb);
     const sl = new THREE.PointLight('#ff9a3c', 26, 14, 1.6); sl.position.set(0.5, 3.8, 0); st.add(sl);
@@ -3055,7 +3055,7 @@ function touchFrame() {
   if (!touch.on) { touch.update(); return; }
   const acts = [], A = (key, label, k, hold) => acts.push({ key, label, k, hold });
   let joystick = false, look = false;
-  const blocked = menu.isOpen || missions.isOpen || talkBox.open || lock.isOpen || fade > 0.5;
+  const blocked = menu.isOpen || missions.isOpen || (talkBox.open && !talkBox.auto) || lock.isOpen || fade > 0.5;   // (fala automática não tira o controle)
   const camLbl = rig.mode === 'chase' ? 'Bairro' : 'Câmera';
   if (!blocked) switch (state) {
     case 'drive':

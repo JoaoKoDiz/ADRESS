@@ -21,17 +21,18 @@
 </style>
 </head>
 <body>
-<div id="exp-badge" style="position:fixed;right:8px;bottom:4px;z-index:9998;pointer-events:none;font:700 11px system-ui,sans-serif;letter-spacing:.08em;color:#fff3d6;background:rgba(48,32,20,.72);border:1px solid #FF7A1A;border-radius:6px;padding:2px 7px">VERSÃO EXPERIMENTAL · história completa</div>
+<div id="exp-badge" style="position:fixed;right:8px;bottom:4px;z-index:9998;pointer-events:none;font:700 11px system-ui,sans-serif;letter-spacing:.08em;color:#fff3d6;background:rgba(48,32,20,.72);border:1px solid #FF7A1A;border-radius:6px;padding:2px 7px">VERSÃO EXPERIMENTAL · história completa · rodada 2</div>
 <div id="app">
   <div id="hud"></div>
   <div id="stage"></div>
 </div>
 <script>
-/* VERSÃO EXPERIMENTAL: salvamento isolado. Toda chave "adress.*" vira "adressx.*" (a versão principal nunca é lida nem alterada).
-   Na 1ª abertura, o progresso da versão principal é COPIADO (nunca movido) para o prefixo experimental. */
+/* VERSÃO EXPERIMENTAL (rodada 2): salvamento isolado. Toda chave "adress.*" vira "adressx2.*" (a versão principal nunca é lida
+   nem alterada; a rodada 1, em "adressx.*", também não). Na 1ª abertura, o progresso da versão principal é COPIADO (nunca
+   movido) para o prefixo experimental. */
 (function () {
   try {
-    var ls = window.localStorage, P = 'adress.', X = 'adressx.', MARK = 'adressx.__copied';
+    var ls = window.localStorage, P = 'adress.', X = 'adressx2.', MARK = 'adressx2.__copied';
     if (!ls.getItem(MARK)) {
       var keys = [];
       for (var i = 0; i < ls.length; i++) { var k = ls.key(i); if (k && k.indexOf(P) === 0) keys.push(k); }
