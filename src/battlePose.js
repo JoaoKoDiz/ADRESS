@@ -111,7 +111,8 @@ export function createPlayerPose(PB, pModel, scene) {
     gh.life = SWEEP.ghostLife; gh.g.visible = true;
   }
 
-  function sweep(wx, wz) {
+  function sweep(wx, wz, power = 0) {
+    sw.power = clamp(power, 0, 1);                                                // trocas seguidas: rastros um pouco mais fortes
     // lado do braço: o da parede (no espaço do jogador); rebates seguidos ficam no mesmo braço
     pModel.updateMatrixWorld(true);
     const lp = pModel.worldToLocal(_p.set(wx, 1, wz));
@@ -241,7 +242,7 @@ export function createPlayerPose(PB, pModel, scene) {
     // rastros somem rápido
     for (const gh of ghosts) {
       if (gh.life <= 0) continue; gh.life -= dt;
-      const k = Math.max(0, gh.life / SWEEP.ghostLife); gh.mat.opacity = SWEEP.ghostOp * k * Math.sqrt(k);
+      const k = Math.max(0, gh.life / SWEEP.ghostLife); gh.mat.opacity = SWEEP.ghostOp * (1 + 0.45 * (sw.power || 0)) * k * Math.sqrt(k);
       if (gh.life <= 0) gh.g.visible = false;
     }
   }
