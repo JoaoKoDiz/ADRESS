@@ -28,8 +28,21 @@ const ADS = [
   { t: 'VANS VELOZ', s: 'Alugue a sua hoje', bg: ['#2a4ac8', '#0a1a6a'], fg: '#ffffff', sym: 'van' },
   { t: 'LAVA-JATO BRILHO', s: 'Sua van brilhando', bg: ['#1ac8c8', '#0a6a7a'], fg: '#ffffff', sym: 'star' },
 ];
-const SIGNS = ['ABERTO', 'LOJA', 'FARMÁCIA', 'LANCHES', 'BAR', 'MODAS', 'ÓTICA', 'SORVETES'];
-const NEON = ['#ff4ad8', '#4ae8ff', '#ffd84a', '#7aff6a', '#ff6a4a'];
+// Neon de cada comércio: o mesmo nome do letreiro do prédio (models/shop.js), numa cor própria, e um símbolo do ramo no letreiro
+// lateral. (Antes o neon era sorteado e contradizia o comércio: "SORVETES" numa barbearia.)
+const SHOP_NEON = {
+  32: { name: 'PADARIA', col: '#ffb35c', pic: 'bread', word: 'PÃO QUENTE' },
+  33: { name: 'FARMÁCIA', col: '#3dff8a', pic: 'cross', word: '24 HORAS' },
+  34: { name: 'RÁDIO E TV', col: '#b98aff', pic: 'tv', word: 'CONSERTOS' },
+  35: { name: 'SORVETERIA', col: '#ff8ae0', pic: 'cone', word: 'SORVETES' },
+  36: { name: 'MERCADINHO', col: '#ffd84a', pic: 'cart', word: 'ABERTO' },
+  37: { name: 'PAPELARIA', col: '#7aa4ff', pic: 'pencil', word: 'CADERNOS' },
+  66: { name: 'FLORICULTURA', col: '#c9ff4a', pic: 'flower', word: 'FLORES' },
+  67: { name: 'LANCHONETE', col: '#ff7a3a', pic: 'burger', word: 'LANCHES' },
+  68: { name: 'BARBEARIA', col: '#ff4a4a', pic: 'scissors', word: 'CORTE E BARBA' },
+  69: { name: 'LAVANDERIA', col: '#6ad8ff', pic: 'shirt', word: 'LAVA E SECA' },
+};
+const SHOP_NEON_FALLBACK = { name: 'ABERTO', col: '#ffd84a', pic: 'cart', word: 'ABERTO' };
 
 const texCache = new Map();
 function adTexture(ad, vertical) {
@@ -63,9 +76,36 @@ function adTexture(ad, vertical) {
 }
 function signTexture(txt, col) {
   const key = 'sign' + txt + col; if (texCache.has(key)) return texCache.get(key);
-  const c = document.createElement('canvas'); c.width = 512; c.height = 128; const g = c.getContext('2d');
-  g.fillStyle = '#120a14'; g.fillRect(0, 0, 512, 128); g.shadowColor = col; g.shadowBlur = 22; g.fillStyle = col; g.strokeStyle = col; g.lineWidth = 6;
-  g.strokeRect(10, 10, 492, 108); g.font = '900 72px "Trebuchet MS", sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText(txt, 256, 68);
+  const c = document.createElement('canvas'); c.width = 512; c.height = 96; const g = c.getContext('2d');
+  g.fillStyle = '#120a14'; g.fillRect(0, 0, 512, 96); g.shadowColor = col; g.shadowBlur = 18; g.fillStyle = col; g.strokeStyle = col; g.lineWidth = 5;
+  g.strokeRect(9, 9, 494, 78); g.textAlign = 'center'; g.textBaseline = 'middle';
+  let px = 62; do { g.font = `900 ${px}px "Trebuchet MS", sans-serif`; px -= 2; } while (g.measureText(txt).width > 450 && px > 20);   // (nomes longos cabem)
+  g.fillText(txt, 256, 50);
+  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; texCache.set(key, t); return t;
+}
+/** Letreiro lateral do comércio: símbolo do ramo em neon e uma palavra embaixo (vertical, 256 × 512). */
+function picTexture(n) {
+  const key = 'pic' + n.pic + n.col; if (texCache.has(key)) return texCache.get(key);
+  const c = document.createElement('canvas'); c.width = 256; c.height = 512; const g = c.getContext('2d');
+  g.fillStyle = '#120a14'; g.fillRect(0, 0, 256, 512);
+  g.shadowColor = n.col; g.shadowBlur = 20; g.strokeStyle = n.col; g.fillStyle = n.col; g.lineWidth = 10; g.lineJoin = g.lineCap = 'round';
+  g.strokeRect(12, 12, 232, 488);
+  const X = 128, Y = 200, P = () => g.beginPath();
+  switch (n.pic) {
+    case 'bread': P(); g.ellipse(X, Y, 84, 46, 0, 0, 7); g.stroke(); for (const dx of [-36, 0, 36]) { P(); g.moveTo(X + dx - 14, Y - 22); g.lineTo(X + dx + 14, Y + 18); g.stroke(); } break;
+    case 'cross': g.fillRect(X - 26, Y - 80, 52, 160); g.fillRect(X - 80, Y - 26, 160, 52); break;
+    case 'tv': g.strokeRect(X - 80, Y - 50, 160, 110); P(); g.moveTo(X - 40, Y - 110); g.lineTo(X, Y - 52); g.lineTo(X + 40, Y - 110); g.stroke(); P(); g.arc(X + 56, Y + 30, 9, 0, 7); g.fill(); break;
+    case 'cone': P(); g.moveTo(X - 50, Y - 10); g.lineTo(X, Y + 110); g.lineTo(X + 50, Y - 10); g.closePath(); g.stroke(); P(); g.arc(X, Y - 40, 50, Math.PI * 0.95, Math.PI * 2.05); g.closePath(); g.stroke(); break;
+    case 'cart': P(); g.moveTo(X - 100, Y - 70); g.lineTo(X - 70, Y - 70); g.lineTo(X - 44, Y + 40); g.lineTo(X + 76, Y + 40); g.lineTo(X + 92, Y - 40); g.lineTo(X - 58, Y - 40); g.stroke(); for (const dx of [-30, 56]) { P(); g.arc(X + dx, Y + 72, 15, 0, 7); g.stroke(); } break;
+    case 'pencil': g.save(); g.translate(X, Y); g.rotate(-0.6); g.strokeRect(-24, -100, 48, 150); P(); g.moveTo(-24, 50); g.lineTo(0, 100); g.lineTo(24, 50); g.stroke(); g.restore(); break;
+    case 'flower': for (let k = 0; k < 6; k++) { const a = k / 6 * Math.PI * 2; P(); g.arc(X + Math.cos(a) * 44, Y - 20 + Math.sin(a) * 44, 28, 0, 7); g.stroke(); } P(); g.arc(X, Y - 20, 18, 0, 7); g.fill(); P(); g.moveTo(X, Y + 30); g.lineTo(X, Y + 120); g.stroke(); break;
+    case 'burger': P(); g.arc(X, Y - 10, 80, Math.PI, 0); g.closePath(); g.stroke(); P(); g.moveTo(X - 88, Y + 22); for (let k = 0; k <= 8; k++) g.lineTo(X - 88 + k * 22, Y + 22 + (k % 2 ? 12 : 0)); g.stroke(); g.strokeRect(X - 84, Y + 46, 168, 34); break;
+    case 'scissors': for (const dy of [-1, 1]) { P(); g.arc(X - 50, Y + dy * 46, 28, 0, 7); g.stroke(); P(); g.moveTo(X - 26, Y + dy * 30); g.lineTo(X + 96, Y - dy * 40); g.stroke(); } break;
+    case 'shirt': P(); g.moveTo(X - 40, Y - 80); g.lineTo(X - 96, Y - 44); g.lineTo(X - 72, Y - 6); g.lineTo(X - 52, Y - 20); g.lineTo(X - 52, Y + 90); g.lineTo(X + 52, Y + 90); g.lineTo(X + 52, Y - 20); g.lineTo(X + 72, Y - 6); g.lineTo(X + 96, Y - 44); g.lineTo(X + 40, Y - 80); g.quadraticCurveTo(X, Y - 46, X - 40, Y - 80); g.stroke(); break;
+  }
+  g.textAlign = 'center'; g.textBaseline = 'middle';
+  let px = 46; do { g.font = `900 ${px}px "Trebuchet MS", sans-serif`; px -= 2; } while (g.measureText(n.word).width > 210 && px > 16);
+  g.fillText(n.word, X, 410);
   const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; texCache.set(key, t); return t;
 }
 function tickerTexture() {
@@ -83,6 +123,7 @@ function glowTex() {
 }
 
 const REGIONS = 9;
+const BLADE_GEO = new THREE.PlaneGeometry(1.3, 2.6); BLADE_GEO.userData.keep = true;
 const WIN_GEO = new THREE.PlaneGeometry(1.0, 0.9);
 const regionOf = (x, z, M) => Math.min(2, Math.floor(x / M * 3)) * 3 + Math.min(2, Math.floor(z / M * 3));
 
@@ -139,12 +180,14 @@ const POLE_GEO = new THREE.CylinderGeometry(0.11, 0.14, 5.6, 6), POLE_MAT = new 
     lights.push({ x: x + nx * 3, y, z: z + nz * 3, c: ads[0].bg[0], i: 22 + w * h, r });
     return m;
   }
-  /** Letreiro perpendicular à fachada (visível de quem passa pela rua), com braço de apoio. */
+  /** Letreiro perpendicular à fachada (visível de quem passa pela rua), com braço de apoio. `ad` = anúncio ou textura pronta. */
   function addBlade(x, y, z, ad, r) {
-    const mat = reg(r, new THREE.MeshBasicMaterial({ map: adTexture(ad, true), toneMapped: false, side: THREE.DoubleSide }));
-    const m = new THREE.Mesh(new THREE.PlaneGeometry(1.3, 2.6), mat); m.position.set(x, y, z); m.rotation.y = Math.PI / 2; root.add(m);
+    const mat = reg(r, new THREE.MeshBasicMaterial({ map: ad.isTexture ? ad : adTexture(ad, true), toneMapped: false }));
+    for (const ry of [Math.PI / 2, -Math.PI / 2]) {                 // duas faces (texto legível dos dois lados, nunca espelhado)
+      const m = new THREE.Mesh(BLADE_GEO, mat); m.position.set(x + Math.sin(ry) * 0.02, y, z); m.rotation.y = ry; root.add(m);
+    }
     const arm = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.08, 1.6), new THREE.MeshStandardMaterial({ color: '#2a2d34' })); arm.position.set(x, y + 1.35, z - 0.2); root.add(arm);
-    lights.push({ x, y, z: z + 1, c: ad.bg[0], i: 8, r });
+    lights.push({ x, y, z: z + 1, c: ad.isTexture ? ad.userData.col : ad.bg[0], i: 8, r });
   }
   /** Marquise iluminada sobre a entrada (luz quente por baixo e no chão). */
   function addMarquee(x, z, w, r) {
@@ -165,7 +208,16 @@ const POLE_GEO = new THREE.CylinderGeometry(0.11, 0.14, 5.6, 6), POLE_MAT = new 
       if (w.sunLight) { w.sunLight.intensity = 1.25; w.sunLight.color.set('#a8bcff'); }
       const hemi = sc.children.find(o => o.isHemisphereLight); if (hemi) { hemi.intensity = 1.9; hemi.color.set('#8a9ad0'); hemi.groundColor.set('#3a3644'); }   // ambiente azulado: fachadas, portas e pistas legíveis
       const sun = sc.getObjectByName('sun'); if (sun) sun.visible = false;
+      if (w.setNight) w.setNight(true);                                  // arredores: janelas acesas, postes e faróis (world.js)
       sc.traverse(o => { if (o.isMesh && o.material && o.material.color && o.material.color.getHexString() === '5d6470') { o.material = o.material.clone(); o.material.color.set('#3a404c'); o.material.roughness = 0.2; o.material.metalness = 0.35; } });
+      // grama de fora do bairro (e do parque em volta): à noite ela recua — antes ficava verde-clara como de dia, mais clara
+      // que o próprio bairro (os gramados dos lotes continuam como estão: são parte das pistas)
+      const GRASS_OUT = new Set(['7fb158', '79ab53', '86b85e', '669347']), night = new THREE.Color('#14202e'), dark = new Map();
+      sc.traverse(o => {
+        if (!o.isMesh || !o.material || !o.material.color || !GRASS_OUT.has(o.material.color.getHexString())) return;
+        let m = dark.get(o.material); if (!m) { m = o.material.clone(); m.color.multiplyScalar(0.42).lerp(night, 0.25); dark.set(o.material, m); }
+        o.material = m;
+      });
       // estrelinhas
       const N = 500, p = new Float32Array(N * 3); let s = 9; const rnd = () => (s = (s * 16807) % 2147483647) / 2147483647;
       for (let i = 0; i < N; i++) { const v = new THREE.Vector3(rnd() - 0.5, rnd() * 0.6 + 0.15, rnd() - 0.5).normalize().multiplyScalar(1200); p.set([v.x + 100, v.y, v.z + 100], i * 3); }
@@ -200,10 +252,12 @@ const POLE_GEO = new THREE.CylinderGeometry(0.11, 0.14, 5.6, 6), POLE_MAT = new 
           const rg = regionOf(o.x + 8.6, o.z + 9, M);
           const vit = new THREE.Mesh(new THREE.PlaneGeometry(9.2, 2.6), reg(rg, new THREE.MeshBasicMaterial({ color: '#ffd28a', transparent: true, opacity: 0.32, blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false })));
           vit.position.set(o.x + 8.6, 1.5, o.z + 8.66); root.add(vit); vit.material.opacity = vit.material.userData.op = 0.6;
-          addBlade(o.x + 13.6, 4.4, o.z + 9.2, pickAds(1, rnd)[0], rg);
+          const nn = SHOP_NEON[h] || SHOP_NEON_FALLBACK, pt = picTexture(nn); pt.userData.col = nn.col;
+          addBlade(o.x + 13.6, 4.4, o.z + 9.2, pt, rg);                                     // letreiro lateral: o símbolo do ramo
           lights.push({ x: o.x + 8.6, y: 2, z: o.z + 11, c: '#ffc880', i: 10, r: rg });
-          const col = NEON[Math.floor(rnd() * NEON.length)], sg = new THREE.Mesh(new THREE.PlaneGeometry(3.6, 0.9), reg(rg, new THREE.MeshBasicMaterial({ map: signTexture(SIGNS[Math.floor(rnd() * SIGNS.length)], col), toneMapped: false })));
-          sg.position.set(o.x + 8.6, 5.25, o.z + 8.66); root.add(sg);
+          // neon por cima do letreiro do prédio (mesmo nome, mesmo lugar: entre o toldo e as janelas de cima, sem cobri-las)
+          const sg = new THREE.Mesh(new THREE.PlaneGeometry(4.6, 0.86), reg(rg, new THREE.MeshBasicMaterial({ map: signTexture(nn.name, nn.col), toneMapped: false })));
+          sg.position.set(o.x + 8.6, 0.12 + 3.2 + 0.9, o.z + 8.67); root.add(sg);
           groundGlow(o.x + 8.6, o.z + LOT + 2, '#ffc070', 11, 0.45, rg, 1.4, 0.8);
         } else if (H.kind === 'house') {                                                   // casas: luz da entrada, caminho iluminado e algumas janelas acesas
           const rg = regionOf(o.x + 8.6, o.z + 10, M);

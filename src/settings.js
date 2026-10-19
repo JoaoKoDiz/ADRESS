@@ -25,12 +25,30 @@ const CSS = `
   font: 700 13px "Trebuchet MS","Segoe UI",system-ui,sans-serif; cursor: pointer; }
 .st-sub { display: none; }
 .st-sub.on { display: block; }
+.st-confirm.on { display: flex; flex-direction: column; justify-content: center; min-height: var(--st-h, auto); }   /* mesma altura do painel principal (o cartão não encolhe ao confirmar) */
+.st-rev { margin: 10px 0 0; text-align: center; font-size: 11px; font-weight: 600; letter-spacing: .02em; color: #a88b66; }
 .st-ctrl { margin: 0; padding: 0; list-style: none; font-size: 14px; line-height: 1.35; }
 .st-ctrl li { display: grid; grid-template-columns: minmax(96px, auto) 1fr; gap: 10px; padding: 5px 0; border-bottom: 1px dashed #e6cc98; }
 .st-ctrl b { white-space: nowrap; }
 .st-ctrl small { color: #7a5536; }
 .st-confirm p { margin: 4px 0 10px; font-size: 15px; line-height: 1.4; text-align: center; }
 .st-two { display: flex; gap: 10px; } .st-two .st-btn { flex: 1; }
+/* tela baixa (celular deitado): tudo mais justo para o Voltar e o rodapé caberem sem rolar */
+@media (max-height: 500px) {
+  .st-card { padding: 10px 18px 8px; border-width: 3px; }
+  .st-card h2 { margin-bottom: 4px; font-size: 19px; }
+  .st-card h3 { margin: 6px 0 2px; font-size: 13px; }
+  .st-row { margin: 3px 0; }
+  .st-btn { margin: 5px 0; padding: .42em 1em; }
+  .st-btn.dark { margin-top: 8px; }
+  .st-reset { margin-top: 4px; }
+  .st-rev { margin-top: 2px; }
+  .st-ctrl { font-size: 13px; } .st-ctrl li { padding: 3px 0; }
+  /* lista de controles em 2 colunas (numa coluna só o Voltar ficava abaixo da tela) */
+  .st-card.wide { width: min(780px, calc(100vw - 32px)); }
+  .st-card.wide .st-ctrl { columns: 2; column-gap: 22px; }
+  .st-card.wide .st-ctrl li { break-inside: avoid; }
+}
 `;
 
 const CONTROLS = [
@@ -44,7 +62,7 @@ const CONTROLS = [
   ['A / D no mapa', 'Andar pela estrada do mapa <small>(Carreira)</small>'],
   ['H', 'Helicóptero; Shift desce <small>(só Modo Livre)</small>'],
   ['F', 'Míssil <small>(só Modo Livre)</small>'],
-  ['Esc ou botão MENU', 'Opções da partida'],
+  ['Esc ou botão MENU', 'Pausar a partida (e opções do Modo Livre)'],
   ['Botão ♪', 'Pausar / continuar a música'],
 ];
 
@@ -68,6 +86,7 @@ export function createSettings({ onChange, onClose } = {}) {
       <button type="button" class="st-btn" data-a="ctrl">Ver controles</button>
       <button type="button" class="st-btn dark" data-a="back">Voltar</button>
       <button type="button" class="st-reset" data-a="reset">Restaurar configurações</button>
+      <div class="st-rev">Revisão de 19/10/2026</div>
     </div>
     <div class="st-sub" data-v="ctrl">
       <h2>CONTROLES</h2>
@@ -95,7 +114,12 @@ export function createSettings({ onChange, onClose } = {}) {
   };
   const apply = () => { if (onChange) onChange(prefs); };
   el.addEventListener('input', e => { const k = e.target.dataset.k; if (!k) return; prefs[k] = (+e.target.value) / 100; paint(); apply(); save(); });
-  const view = v => el.querySelectorAll('.st-sub').forEach(s => s.classList.toggle('on', s.dataset.v === v));
+  const view = v => {
+    const m = el.querySelector('.st-sub[data-v="main"]');
+    if (v === 'confirm' && m.offsetHeight) el.style.setProperty('--st-h', m.offsetHeight + 'px');   // a confirmação ocupa o mesmo espaço
+    el.querySelectorAll('.st-sub').forEach(s => s.classList.toggle('on', s.dataset.v === v));
+    el.querySelector('.st-card').classList.toggle('wide', v === 'ctrl');   // (só muda algo em tela baixa: controles em 2 colunas)
+  };
   let open = false;
   function close() { if (!open) return; open = false; el.classList.remove('on'); view('main'); if (onClose) onClose(); }
   el.addEventListener('click', e => {
@@ -117,7 +141,7 @@ export function createSettings({ onChange, onClose } = {}) {
   window.addEventListener('keydown', e => {
     if (!open) return;
     e.stopImmediatePropagation();
-    if (!/^F\d+$/.test(e.key) && !e.ctrlKey && !e.metaKey) e.preventDefault();   // F5/F11 e atalhos do navegador continuam funcionando   // F5/F11 e atalhos do navegador continuam funcionando
+    if (!/^F\d+$/.test(e.key) && !e.ctrlKey && !e.metaKey) e.preventDefault();   // F5/F11 e atalhos do navegador continuam funcionando
     if (e.key === 'Escape' && !e.repeat) { const cur = el.querySelector('.st-sub.on').dataset.v; cur === 'main' ? close() : view('main'); }
   }, true);
 

@@ -21,7 +21,8 @@ function batcher() {
   return { add, flush };
 }
 
-function stop(g, s) {                                    // parada: cobertura, banco e placa (frente para a rua = +z local)
+function stop(g, s, li = 0) {                            // parada: cobertura, banco e placa (frente para a rua = +z local) na cor da linha
+  const RED = LINE_COL[li % LINE_COL.length];
   const p = new THREE.Group(); p.position.set(s.x, 0, s.z); p.rotation.y = s.ry; g.add(p);
   p.add(at(box(4.2, 0.12, 1.6, '#bdb6a6'), 0, 0.06, 0));
   for (const x of [-1.8, 1.8]) p.add(at(box(0.14, 2.6, 0.14, '#3f4a52'), x, 1.36, -0.55));
@@ -34,6 +35,8 @@ function stop(g, s) {                                    // parada: cobertura, b
   sign.position.set(0, 3.15, 0.2); p.add(sign);
   p.add(at(box(0.1, 3.4, 0.1, '#3f4a52'), 2.05, 1.7, 0.4));
   p.add(at(cyl(0.32, 0.32, 0.06, '#f3e6c8', 12), 2.05, 3.1, 0.45, Math.PI / 2, 0, 0));
+  const num = new THREE.Mesh(new THREE.CircleGeometry(0.27, 16), new THREE.MeshLambertMaterial({ map: textTexture(String(li + 1), { width: 64, height: 64, bg: '#f3e6c8', fg: RED, font: 'bold 48px "Trebuchet MS", sans-serif' }) }));
+  num.position.set(2.05, 3.1, 0.485); p.add(num);                                           // número da linha no disco do poste
 }
 
 /** Parte fixa: trilhos rentes ao asfalto (a van passa por cima) e as duas paradas. */
@@ -47,14 +50,38 @@ export function buildRail(g) {
     }
   }
   b.flush(g);
-  for (const s of RAIL.stops) stop(g, s);
+  RAIL.lines.forEach((l, i) => l.stops.forEach(s => stop(g, s, i)));
   return g;
 }
 
-/** Bonde de duas cabines (frente e trás iguais): local +x = sentido de s crescente. */
-export function buildTram() {
+// Cada linha do bairro tem a sua cor de saia e o número no letreiro (a parada continua a mesma: as pistas falam das paradas).
+const LINE_COL = ['#9e3a26', '#2f6b4a', '#2f5590'];
+/** Faixa de janelas vista de fora: vidro com o interior claro e, em algumas, a silhueta de quem vai sentado (cabeça e ombros). */
+function windowBand(seed) {
+  const c = document.createElement('canvas'); c.width = 512; c.height = 64; const g = c.getContext('2d');
+  let k = seed * 7919 + 13; const r = () => (k = (k * 16807) % 2147483647) / 2147483647;
+  g.fillStyle = '#e9e1cc'; g.fillRect(0, 0, 512, 64);                                     // montantes (creme, como o corpo)
+  const SK = ['#e8b98f', '#c98a62', '#8a5a3c', '#f1c9a5'], CL = ['#3a6fb0', '#c8402f', '#3c8f52', '#efbf2a', '#6b4a8a', '#2b2d33', '#e86aa0'], HR = ['#2a1d14', '#5a3a22', '#c9a36a', '#1a1a1a', '#8a8a8a'];
+  for (let w = 0; w < 6; w++) {
+    const x0 = 6 + w * 84, x1 = x0 + 76;
+    g.fillStyle = '#9fb6c6'; g.fillRect(x0, 4, x1 - x0, 56);                              // vidro com o interior iluminado
+    g.fillStyle = 'rgba(255,255,255,0.18)'; g.fillRect(x0, 4, x1 - x0, 14);
+    for (let p = 0; p < 2; p++) if (r() < 0.55) {                                          // passageiros sentados
+      const px = x0 + 20 + p * 36 + (r() - 0.5) * 8;
+      g.fillStyle = CL[Math.floor(r() * CL.length)]; g.beginPath(); g.ellipse(px, 66, 16, 20, 0, Math.PI, 0); g.fill();   // ombros
+      g.fillStyle = SK[Math.floor(r() * SK.length)]; g.beginPath(); g.arc(px, 34, 9, 0, 7); g.fill();                      // cabeça
+      g.fillStyle = HR[Math.floor(r() * HR.length)]; g.beginPath(); g.arc(px, 31, 9.5, Math.PI * 1.05, Math.PI * 1.95); g.fill();   // cabelo
+    }
+  }
+  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; return t;
+}
+
+/** Bonde de duas cabines (frente e trás iguais): local +x = sentido de s crescente. Sem `opts` é o bonde de sempre (o do
+ *  dilema e o do elevado lá fora); com `opts` ({ line, dest }) ganha a cor da linha, o letreiro e passageiros nas janelas. */
+export function buildTram(opts = null) {
   const t = new THREE.Group(), add = (m, x, y, z, rx = 0, ry = 0, rz = 0) => t.add(at(m, x, y, z, rx, ry, rz));
-  add(box(LEN - 0.4, 0.9, 2.3, RED), 0, 0.85, 0);                                      // saia vermelho queimado
+  const SKIRT = opts ? LINE_COL[opts.line % LINE_COL.length] : RED;
+  add(box(LEN - 0.4, 0.9, 2.3, SKIRT), 0, 0.85, 0);                                    // saia (vermelho queimado; nas linhas do bairro, a cor da linha)
   add(box(LEN - 0.4, 1.5, 2.3, CREAM), 0, 2.05, 0);                                   // corpo creme
   add(box(LEN - 0.2, 0.25, 2.45, '#efe9da'), 0, 2.92, 0);                             // teto claro
   add(box(LEN - 2.4, 0.3, 1.6, '#e2dccc'), 0, 3.15, 0);                               // lanternim
@@ -72,12 +99,26 @@ export function buildTram() {
     add(box(LEN - 0.4, 0.08, 0.05, '#d9b56a'), 0, 1.33, sz * 1.16);                  // friso dourado
   }
   for (const x of [-LEN / 2 + 1.4, LEN / 2 - 1.4]) for (const z of [-GAUGE, GAUGE]) add(cyl(0.32, 0.32, 0.14, '#202022', 10), x, 0.32, z, Math.PI / 2, 0, 0);   // rodinhas nos trilhos
+  if (opts) {
+    for (const sz of [-1, 1]) {                                                             // janelas com gente (por cima dos vidros)
+      const band = new THREE.Mesh(new THREE.PlaneGeometry(LEN - 2.4, 0.86), new THREE.MeshStandardMaterial({ map: windowBand(opts.line * 2 + (sz > 0 ? 1 : 0)), roughness: 0.4 }));
+      band.position.set(0, 2.2, sz * 1.195); band.rotation.y = sz > 0 ? 0 : Math.PI; t.add(band);
+    }
+    const label = `${opts.line + 1}  ${opts.dest.join(' ⇄ ')}`;
+    const tex = textTexture(label, { width: 512, height: 72, bg: '#1d1f22', fg: '#ffd27a', font: 'bold 40px "Trebuchet MS", sans-serif' });
+    for (const sx of [-1, 1]) {                                                             // letreiro de destino nas duas cabines
+      const m = new THREE.Mesh(new THREE.PlaneGeometry(1.9, 0.27), new THREE.MeshStandardMaterial({ map: tex, emissive: '#3a2a10', roughness: 0.6 }));
+      m.position.set(sx * (LEN / 2 + 0.07), 2.74, 0); m.rotation.y = sx * Math.PI / 2; t.add(m);
+      add(box(0.06, 0.33, 1.98, '#1d1f22'), sx * (LEN / 2 + 0.03), 2.74, 0);
+    }
+  }
   return bakeStatic(t);
 }
 
 /** Um bondinho num percurso (`line`). `idx` é a prioridade nos cruzamentos (menor passa primeiro). */
 function createTram(line, idx) {
-  const tram = buildTram();
+  const short = n => n.replace(/^PARADA (DOS |DAS |DO |DA )?/, '');                        // "PARADA DOS GALPÕES" → "GALPÕES"
+  const tram = buildTram({ line: idx, dest: line.stops.map(s => short(s.name)) });
   const solid = { x0: 0, x1: 0, z0: 0, z1: 0 };
   const VMAX = 6.5, ACC = 1.4, DEC = 3.5;
   const T = { idx, line, tram, solid, s0: 0, dir: 1, wait: 0, v: 0, waiting: false };

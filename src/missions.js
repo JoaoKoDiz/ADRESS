@@ -86,7 +86,7 @@ const CSS = `
 .missions.open { display: block; }
 .missions-panel { position: absolute; inset: 6vh 6vw; display: flex; flex-direction: column; gap: clamp(10px, 1.6vh, 18px);
   padding: clamp(16px, 2.4vh, 28px) clamp(18px, 2.4vw, 36px); box-sizing: border-box; overflow: auto;
-  background: #fff3d6; border: 4px solid #e6cc98; border-radius: 22px; box-shadow: 0 18px 50px rgba(0,0,0,.35); color: #3a2a1a; }
+  background: #fff3d6; border: 4px solid #ff7a1a; border-radius: 22px; box-shadow: 0 8px 0 rgba(168,72,11,.3), 0 18px 50px rgba(0,0,0,.35); color: #3a2a1a; }
 .missions-head { display: flex; align-items: center; gap: 14px; }
 .missions-title { flex: 1; font-weight: 900; font-size: clamp(22px, 2.4vw, 36px); letter-spacing: .06em; color: #e8661a; }
 .missions-count { padding: .35em .9em; border-radius: 999px; background: #ffe2b8; font-weight: 800; font-size: clamp(15px, 1.4vw, 21px); color: #5a3c1e; }
@@ -102,6 +102,27 @@ const CSS = `
 .mission-fill { height: 100%; width: 0%; background: #3c9d55; border-radius: 999px; }
 .mission-num { min-width: 3.2em; text-align: right; font-weight: 800; font-size: clamp(14px, 1.25vw, 18px); color: #5a3c1e; }
 .mission-pend { font-weight: 700; font-size: clamp(12px, 1.05vw, 15px); color: #c2570c; }
+.missions-none { margin: auto; max-width: 34em; padding: 1.2em 1.4em; border: 3px dashed #e6cc98; border-radius: 16px; text-align: center;
+  font-size: clamp(15px, 1.3vw, 19px); line-height: 1.5; color: #6b5a40; }
+.missions-none b { display: block; margin-bottom: .35em; font-size: 1.2em; font-weight: 900; color: #3a2a1a; }
+.mission.done .mission-name::after { content: '✔ concluída'; margin-left: .6em; padding: .1em .55em; border-radius: 999px; background: #3c9d55; color: #fff;
+  font-size: .55em; font-weight: 800; letter-spacing: .04em; vertical-align: .25em; }
+.mission.done .mission-num { color: #2e8048; }
+/* tela baixa (celular deitado): painel maior e mais compacto, sem cortar a lista */
+@media (max-height: 500px) {
+  .missions-panel { inset: 3vh 3vw; padding: 12px 18px; gap: 8px; }
+  .missions-title { font-size: 20px; }
+  .missions-list { justify-content: flex-start; gap: 8px; }
+  .mission { gap: 1px; }
+  .mission-name { font-size: 16px; }
+  .mission-desc { font-size: 13px; }
+  .mission-row { margin-top: 2px; }
+  .mission-bar { height: 10px; }
+  .missions-list { justify-content: center; }
+  .mission { display: grid; grid-template-columns: minmax(0, 1fr) minmax(130px, 30%); column-gap: 18px; align-items: center; }
+  .mission-name, .mission-desc, .mission-pend { grid-column: 1; }
+  .mission-row { grid-column: 2; grid-row: 1 / span 2; margin-top: 0; }
+}
 `;
 
 /** Botão "MISSÕES (x/5)" no canto superior direito da área do jogo (fora da barra do topo). */
@@ -158,11 +179,15 @@ export function createMissions(store) {
     const ms = MISSIONS[i], prog = store.progress[i];
     title.textContent = `MISSÕES · ${i === 9 ? 'NÍVEL' : 'BAIRRO'} ${i + 1}${LEVEL_NAMES[i] ? ' — ' + LEVEL_NAMES[i].toUpperCase() : ''}`;
     count.textContent = `${ms.filter((m, k) => prog[k] >= m.goal).length}/${ms.length}`;
+    if (ms.every(m => !m.id)) {                                   // bairro ainda sem missões definidas (modelo vazio): explica em vez de mostrar 5 linhas genéricas
+      list.innerHTML = '<div class="missions-none"><b>Missões em preparação</b>Este bairro ainda não tem missões. Elas serão adicionadas em breve' + (i < MISSIONS.length - 1 ? '; até lá, o próximo bairro continua bloqueado.' : '.') + '</div>';   // (o último bairro não tem "próximo")
+      return;
+    }
     list.innerHTML = ms.map((m, k) => {
       const p = prog[k] || 0;
       const pct = Math.max(0, Math.min(100, p / m.goal * 100));
       const pend = p < m.goal && store.isPending && store.isPending(i, k);   // cumprida nesta partida: falta terminar com a entrega certa
-      return `<div class="mission">
+      return `<div class="mission${p >= m.goal ? ' done' : ''}">
         <div class="mission-name">${m.name}</div>
         <div class="mission-desc">${m.desc}</div>
         <div class="mission-row"><div class="mission-bar"><div class="mission-fill" style="width:${pct}%"></div></div>

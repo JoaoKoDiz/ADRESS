@@ -13,7 +13,57 @@
 //   Trecho vertical (coluna j, entre as linhas i e i+1): I(j,i) — I(j,i+1). A barreira fica no meio e corta o trecho.
 import * as THREE from 'three';
 import { ROAD, GRID, ENTRANCE, GAS_LIST, HOUSE_SLOTS, roadCenter, SOLIDS } from './layout.js';
-import { mat, box, cyl, cone, at, dynamic, bakeStatic } from './models/kit.js';
+import { mat, box, cyl, cone, sphere, at, dynamic, bakeStatic, textTexture, vcMerge } from './models/kit.js';
+
+// Pisca-pisca dos cavaletes e o alerta dos caminhões: dois materiais que se alternam (atualizados no desenho, sem laço próprio).
+const FLASH_A = new THREE.MeshStandardMaterial({ color: '#ff8a1a', emissive: '#ff6a00', emissiveIntensity: 0.9, roughness: 0.6 });
+const FLASH_B = new THREE.MeshStandardMaterial({ color: '#ff8a1a', emissive: '#ff6a00', emissiveIntensity: 0.9, roughness: 0.6 });
+const HAZARD = new THREE.MeshStandardMaterial({ color: '#ff9a1a', emissive: '#ff7a00', emissiveIntensity: 1, roughness: 0.6 });
+let flashFrame = -1;
+// Relógio do jogo (não o relógio real): avança em world.update com o dt do mundo, então o pisca-pisca e a placa PARE/SIGA
+// param junto com o resto do mundo quando o MENU (ou a lista de missões) está aberto.
+let clockT = 0;
+/** Avança o relógio dos bloqueios (chamado por world.update). */
+export function tickBarriers(dt) { clockT += dt || 0; }
+function flashTick() {
+  const t = clockT;
+  if (Math.floor(t * 60) === flashFrame) return;
+  flashFrame = Math.floor(t * 60);
+  const on = (t % 1) < 0.5;
+  FLASH_A.emissiveIntensity = on ? 1.6 : 0.15; FLASH_B.emissiveIntensity = on ? 0.15 : 1.6;
+  HAZARD.emissiveIntensity = (t % 0.9) < 0.45 ? 1.5 : 0.1;
+}
+/** Operário de colete e capacete (frente +Z). pose 'sign': segura a placa PARE/SIGA; 'shovel': apoiado na pá; 'carry': carrega uma caixa. */
+function buildWorker(pose) {
+  const VEST = '#ff7a1a', SHIRT = '#3a6fb0', PANTS = '#3a3d44', SKIN = '#c98a62', HELM = '#ffd21a';
+  const b = new THREE.Group();
+  for (const sx of [-1, 1]) { b.add(at(box(0.2, 0.82, 0.22, PANTS), sx * 0.13, 0.41, 0)); b.add(at(box(0.24, 0.14, 0.34, '#4a3322'), sx * 0.13, 0.07, 0.05)); }
+  b.add(at(box(0.56, 0.68, 0.32, SHIRT), 0, 1.16, 0));
+  b.add(at(box(0.6, 0.5, 0.34, VEST), 0, 1.2, 0));
+  for (const y of [1.08, 1.3]) b.add(at(box(0.62, 0.05, 0.36, '#e8eef2'), 0, y, 0));       // faixas refletivas
+  b.add(at(box(0.16, 0.1, 0.16, SKIN), 0, 1.54, 0));
+  b.add(at(sphere(0.2, SKIN, 10, 8), 0, 1.74, 0));
+  b.add(at(sphere(0.23, HELM, 10, 6), 0, 1.84, 0)); b.add(at(cyl(0.27, 0.27, 0.04, HELM, 12), 0, 1.8, 0));
+  for (const sx of [-1, 1]) b.add(at(sphere(0.03, '#2a2522', 5, 3), sx * 0.07, 1.76, 0.18));
+  if (pose === 'shovel') {                                     // apoiado no cabo da pá, a lâmina no chão
+    b.add(at(box(0.05, 1.3, 0.05, '#8a5a36'), 0.32, 0.75, 0.32, -0.25, 0, 0));
+    b.add(at(box(0.3, 0.36, 0.04, '#7d8187'), 0.32, 0.12, 0.48, -0.25, 0, 0));
+    for (const sx of [-1, 1]) b.add(at(box(0.14, 0.58, 0.16, SHIRT), sx * 0.33, 1.2, 0.12, -0.5, 0, sx * 0.15));
+  } else if (pose === 'carry') {                               // caixa nos braços
+    for (const sx of [-1, 1]) b.add(at(box(0.14, 0.5, 0.16, SHIRT), sx * 0.33, 1.22, 0.16, -0.9, 0, 0));
+    b.add(at(box(0.56, 0.42, 0.42, '#c8955a'), 0, 1.15, 0.42)); b.add(at(box(0.57, 0.06, 0.12, '#e6d3a8'), 0, 1.37, 0.42));
+  } else for (const sx of [-1, 1]) b.add(at(box(0.14, 0.58, 0.16, SHIRT), sx * 0.35, 1.17, 0, 0, 0, sx * 0.06));
+  const g = new THREE.Group(); g.add(vcMerge(b));
+  if (pose === 'sign') {                                       // placa PARE/SIGA girando devagar na mão (só muda o lado de vez em quando)
+    const paddle = new THREE.Group(); paddle.position.set(0.42, 0, 0.18);
+    paddle.add(at(box(0.05, 1.5, 0.05, '#5a5f66'), 0, 0.75, 0));
+    const face = (txt, bg, rot) => { const m = new THREE.Mesh(new THREE.CircleGeometry(0.34, 16), new THREE.MeshStandardMaterial({ map: textTexture(txt, { width: 128, height: 128, bg, fg: '#ffffff', font: 'bold 38px "Trebuchet MS", sans-serif' }), roughness: 0.7 })); m.position.set(0, 1.62, rot ? -0.02 : 0.02); m.rotation.y = rot; return m; };
+    paddle.add(face('PARE', '#d8312a', 0), face('SIGA', '#2f9a4a', Math.PI));
+    g.add(paddle);
+    g.userData.paddle = paddle;
+  }
+  return g;
+}
 
 const START = () => [ENTRANCE.road, 0];   // cruzamento da entrada (rua central, borda norte)
 // Por tipo: distância do centro do cruzamento até o bloqueio (trechos horizontais, perto de uma ponta)
@@ -41,7 +91,9 @@ function stripeTexture() {
   return t;
 }
 
-/** Cavalete de obra atravessando a rua (tábuas listradas ao longo de X, pernas em A, luzinhas). */
+/** Cavalete de obra atravessando a rua (tábuas listradas ao longo de X, pernas em A, sacos de areia nos pés, placa OBRAS
+ *  e pisca-pisca alternado). Tudo dentro da caixa de colisão (meia espessura 0,35 ao longo da rua). Com `obra` (Bairro 3), o
+ *  grupo traz também a obra de verdade: vala sob o cavalete, asfalto novo atrás dele e um operário na calçada. */
 function buildBarrier(stripes) {
   const g = new THREE.Group();
   const W = BARRIER_W;
@@ -52,30 +104,51 @@ function buildBarrier(stripes) {
     g.add(b);
   }
   // tábua listrada deitada no topo: é ela que aparece na visão de cima
-  const top = new THREE.Mesh(new THREE.BoxGeometry(W, 0.1, 0.9), boardMat);
+  const top = new THREE.Mesh(new THREE.BoxGeometry(W, 0.1, 0.6), boardMat);
   top.position.y = 1.25; top.castShadow = true;
   g.add(top);
-  // cones laranja nas pontas
-  const coneMat = mat('#ff7a1a'), stripeMat = mat('#ffffff');
-  for (const x of [-W / 2 - 0.15, W / 2 + 0.15]) for (const s of [1, -1]) {
-    const c = new THREE.Mesh(new THREE.ConeGeometry(0.32, 0.9, 10), coneMat);
-    c.position.set(x, 0.45, s * 0.75); c.castShadow = true;
-    const band = new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.24, 0.14, 10), stripeMat);
-    band.position.set(x, 0.5, s * 0.75);
-    g.add(c, band);
+  const st = new THREE.Group();                                   // partes fixas (fundidas)
+  // cones laranja nas pontas (no meio da espessura: dentro da colisão)
+  for (const x of [-W / 2 - 0.25, W / 2 + 0.25]) {
+    st.add(at(cone(0.28, 0.85, '#ff7a1a', 10), x, 0.43, 0));
+    st.add(at(cyl(0.17, 0.21, 0.13, '#ffffff', 10), x, 0.48, 0));
+    st.add(at(box(0.62, 0.05, 0.62, '#2e3036'), x, 0.025, 0));
   }
-  const legMat = mat('#2e3036');
   for (const x of [-W / 2 + 0.4, W / 2 - 0.4]) for (const s of [1, -1]) {
-    const leg = new THREE.Mesh(new THREE.BoxGeometry(0.12, 1.35, 0.12), legMat);
-    leg.position.set(x, 0.62, s * 0.28); leg.rotation.x = s * 0.35; leg.castShadow = true;
-    g.add(leg);
+    st.add(at(box(0.12, 1.35, 0.12, '#2e3036'), x, 0.62, s * 0.2, s * 0.24, 0, 0));
+    st.add(at(box(0.42, 0.16, 0.26, '#c2a76e'), x, 0.08, s * 0.3, 0, s * 0.2, 0));   // saco de areia no pé
   }
-  const lampMat = mat('#ff8a1a', { emissive: '#ff6a00', emissiveIntensity: 0.9 });
-  for (const x of [-W / 2 + 0.4, W / 2 - 0.4]) {
-    const l = new THREE.Mesh(new THREE.SphereGeometry(0.16, 8, 6), lampMat);
-    l.position.set(x, 1.32, 0);
+  // placa OBRAS no meio, dos dois lados
+  st.add(at(box(0.08, 0.5, 0.08, '#2e3036'), 0, 1.55, 0));
+  st.add(at(box(1.5, 0.56, 0.06, '#2e3036'), 0, 1.98, 0));
+  const plate = textTexture('OBRAS', { width: 256, height: 96, bg: '#ff8a1a', fg: '#1b1b1b', font: 'bold 64px "Trebuchet MS", sans-serif' });
+  const pm = new THREE.MeshStandardMaterial({ map: plate, roughness: 0.7 });
+  for (const r of [0, Math.PI]) { const p = new THREE.Mesh(new THREE.PlaneGeometry(1.4, 0.48), pm); p.position.set(0, 1.98, r ? -0.035 : 0.035); p.rotation.y = r; st.add(p); }
+  st.traverse(o => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
+  bakeStatic(st); g.add(st);
+  for (const [k, x] of [-W / 2 + 0.4, W / 2 - 0.4].entries()) {   // pisca-pisca alternado
+    const l = new THREE.Mesh(new THREE.SphereGeometry(0.16, 8, 6), k ? FLASH_B : FLASH_A);
+    l.position.set(x, 1.38, 0);
+    l.onBeforeRender = flashTick;
     g.add(l);
   }
+  // a obra (só no Bairro 3): vala e terra sob o cavalete, asfalto novo atrás dele e marcas de spray
+  const obra = new THREE.Group(); obra.visible = false;
+  const og = new THREE.Group();
+  og.add(at(box(W + 0.4, 0.02, 0.62, '#5b4630'), 0, 0.012, 0));
+  for (const [x, s] of [[-1.4, 0.55], [0.3, 0.42], [1.7, 0.5]]) { const m = at(sphere(s, '#7a5c3a', 7, 4), x, 0, 0); m.scale.set(1.4, 0.45, 0.5); og.add(m); }   // montinhos de terra
+  og.add(at(box(W + 0.6, 0.012, 2.4, '#3c4048'), 0, 0.006, 1.6));                       // asfalto novo (recapeado), atrás do cavalete
+  for (const x of [-W / 2 - 0.3, W / 2 + 0.3]) og.add(at(box(0.08, 0.014, 2.4, '#ff8a1a'), x, 0.008, 1.6));   // marcas de spray
+  og.add(at(box(1.2, 0.014, 0.08, '#ff8a1a'), -0.8, 0.009, 2.9)); og.add(at(box(0.08, 0.014, 0.5, '#ff8a1a'), -0.2, 0.009, 3.15));
+  og.traverse(o => { if (o.isMesh) { o.castShadow = false; o.receiveShadow = true; } });
+  bakeStatic(og); obra.add(og);
+  const worker = buildWorker('sign'); obra.add(worker);
+  const shovel = buildWorker('shovel'); obra.add(shovel);
+  obra.userData = { worker, shovel, og };
+  g.add(dynamic(obra));
+  g.userData.obra = obra;
+  g.children.forEach(o => { if (o.material === FLASH_A || o.material === FLASH_B) dynamic(o); });
+  bakeStatic(g);                               // tábuas listradas e partes fixas: poucas malhas
   return g;
 }
 
@@ -93,34 +166,64 @@ function buildTruck() {
     g.add(at(cyl(0.5, 0.5, 0.4, '#1f2023', 12), x, 0.5, zz, Math.PI / 2, 0, 0));
   }
   g.add(at(box(6.6, 0.3, 2.0, '#2e3036'), -0.15, 0.55, 0));                      // chassi
-  const lamp = mat('#ff9a1a', { emissive: '#ff7a00', emissiveIntensity: 1 });   // pisca-alerta
-  for (const zz of [1.0, -1.0]) { const l = new THREE.Mesh(new THREE.SphereGeometry(0.16, 8, 6), lamp); l.position.set(3.5, 1.2, zz); g.add(l); }
+  for (const zz of [1.0, -1.0]) {                                                  // pisca-alerta ligado (parado em fila dupla)
+    const l = new THREE.Mesh(new THREE.SphereGeometry(0.16, 8, 6), HAZARD); l.position.set(3.5, 1.2, zz); l.onBeforeRender = flashTick; g.add(l);
+    const r = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.3, 0.3), HAZARD); r.position.set(-3.52, 0.95, zz * 1.05); g.add(r);
+  }
+  const st = new THREE.Group();
+  for (const zz of [1.35, -1.35]) { st.add(at(box(0.12, 0.42, 0.06, '#2e3036'), 3.0, 2.3, zz)); st.add(at(box(0.06, 0.06, 0.3, '#2e3036'), 3.0, 2.3, zz * 0.92)); }   // retrovisores
+  st.add(at(box(2.32, 0.18, 1.6, '#3a3d44'), 2.3, 2.79, 0));                        // teto da cabine
+  st.add(at(box(0.08, 0.6, 0.9, '#2b4a6e'), 2.3, 2.05, 1.26));                       // janela lateral
+  st.add(at(box(0.08, 0.6, 0.9, '#2b4a6e'), 2.3, 2.05, -1.26));
+  // porta de trás do baú aberta (uma folha virada para o lado) e um ajudante descarregando caixas
+  st.add(at(box(0.06, 2.8, 2.5, '#2a2c30'), -3.53, 2.0, 0));                         // vão escuro do baú
+  st.add(at(box(1.25, 2.8, 0.06, '#c9ced6'), -2.88, 2.0, 1.34));                   // folha aberta, encostada na lateral
+  for (const [x, y, z, s] of [[-4.2, 0, -0.6, 0.6], [-4.25, 0.6, -0.55, 0.5], [-4.6, 0, -0.05, 0.5]]) { st.add(at(box(s, s, s, '#c8955a'), x, y + s / 2, z, 0, x * 0.4, 0)); st.add(at(box(s + 0.01, 0.06, s * 0.25, '#e6d3a8'), x, y + s, z, 0, x * 0.4, 0)); }
+  st.traverse(o => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
+  bakeStatic(st); g.add(st);
+  const helper = buildWorker('carry'); helper.position.set(-4.0, 0, 0.75); helper.rotation.y = Math.PI / 2 + 0.5; helper.scale.setScalar(1.25); g.add(helper);
+  const plateT = textTexture('FRETES', { width: 256, height: 96, bg: '#fbf7ee', fg: '#2f3236', font: 'bold 60px "Trebuchet MS", sans-serif' });
+  const pm = new THREE.MeshStandardMaterial({ map: plateT, roughness: 0.8 });
+  for (const zz of [1, -1]) { const p = new THREE.Mesh(new THREE.PlaneGeometry(2.6, 0.95), pm); p.position.set(-0.9, 2.2, zz * 1.315); p.rotation.y = zz > 0 ? 0 : Math.PI; g.add(p); }
   g.traverse(o => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
+  dynamic(cargo);                              // (a cor do baú muda a cada partida; o resto vira poucas malhas)
+  g.children.forEach(o => { if (o.material === HAZARD) dynamic(o); });
+  bakeStatic(g);
   g.scale.setScalar(0.8);                      // menor: na diagonal não toma a rua de ponta a ponta
   g.userData.cargo = cargo;
   return g;
 }
 
-/** Buraco largo no asfalto (atravessa a rua inteira), com pedaços quebrados e cones. */
+/** Buraco largo no asfalto (atravessa a rua inteira): borda de asfalto quebrado e levantado, terra em volta, a parede de
+ *  dentro em degradê (dá profundidade sem furar o chão), água parada no fundo, cones e um cavalete de aviso. */
 function buildHole() {
   const g = new THREE.Group();
-  const dirt = at(cyl(1, 1, 0.04, '#9a7448', 20), 0, 0.02, 0); dirt.scale.set(3.9, 1, 2.35);   // terra solta: destaca de longe
-  g.add(dirt);
-  const outer = at(cyl(1, 1, 0.06, '#141518', 20), 0, 0.03, 0); outer.scale.set(3.5, 1, 1.75);
-  const inner = at(cyl(1, 1, 0.07, '#070708', 16), 0.2, 0.035, 0); inner.scale.set(2.6, 1, 1.2);
-  g.add(outer, inner);
-  for (let k = 0; k < 16; k++) {                                                   // asfalto quebrado na borda
-    const a = k / 16 * Math.PI * 2;
-    const p = at(box(0.7, 0.18, 0.5, k % 2 ? '#5d6470' : '#474c55'), Math.cos(a) * 3.9, 0.08, Math.sin(a) * 2.05,
-      (k % 3) * 0.25, a, (k % 4) * 0.2);
-    g.add(p);
+  const ell = (rx, rz, h, col, y, x = 0, z = 0, seg = 20) => { const m = at(cyl(1, 1, h, col, seg), x, y, z); m.scale.set(rx, 1, rz); g.add(m); return m; };
+  ell(4.0, 2.4, 0.04, '#9a7448', 0.02);                                            // terra solta: destaca de longe
+  ell(3.55, 1.85, 0.05, '#5a4630', 0.03);                                          // parede de dentro (terra úmida)
+  ell(3.15, 1.55, 0.055, '#3a2c1f', 0.035, 0.05, 0.08);
+  ell(2.6, 1.22, 0.06, '#1d1712', 0.04, 0.12, 0.14);                               // fundo escuro, um pouco deslocado (parece mais fundo)
+  ell(1.4, 0.62, 0.065, '#4d5a63', 0.045, 0.3, 0.22, 14);                          // água parada no fundo
+  ell(0.5, 0.18, 0.068, '#8aa0ad', 0.046, 0.0, 0.1, 10);                           // reflexo
+  for (let k = 0; k < 18; k++) {                                                   // asfalto quebrado e levantado na borda
+    const a = k / 18 * Math.PI * 2;
+    g.add(at(box(0.75 + (k % 3) * 0.15, 0.18, 0.5, k % 2 ? '#5d6470' : '#474c55'), Math.cos(a) * 3.85, 0.08, Math.sin(a) * 2.0,
+      (k % 3) * 0.25, a, (k % 4) * 0.22));
   }
-  for (const x of [-3.4, -1.2, 1.2, 3.4]) for (const zz of [2.55, -2.55]) {      // cones de aviso dos dois lados
-    g.add(at(cone(0.3, 0.85, '#ff7a1a', 10), x, 0.43, zz));
-    g.add(at(cyl(0.19, 0.23, 0.13, '#ffffff', 10), x, 0.48, zz));
+  for (const [x, z] of [[2.9, 0.9], [-2.6, -0.8], [1.2, -1.9]]) g.add(at(sphere(0.22, '#8f8a80', 6, 4), x, 0.12, z));   // pedras soltas
+  for (const x of [-3.2, 0, 3.2]) for (const zz of [2.05, -2.05]) {                // cones dos dois lados (dentro da colisão)
+    g.add(at(cone(0.28, 0.85, '#ff7a1a', 10), x, 0.43, zz));
+    g.add(at(cyl(0.17, 0.21, 0.13, '#ffffff', 10), x, 0.48, zz));
   }
+  // cavalete pequeno de aviso numa ponta
+  for (const s of [-1, 1]) g.add(at(box(0.1, 1.2, 0.1, '#2e3036'), 3.9 + s * 0.5, 0.58, -0.6, 0.25, 0, 0));
+  const plate = textTexture('BURACO', { width: 256, height: 96, bg: '#ffc61a', fg: '#1b1b1b', font: 'bold 56px "Trebuchet MS", sans-serif' });
+  const pm = new THREE.MeshStandardMaterial({ map: plate, roughness: 0.7 });
+  for (const r of [0, Math.PI]) { const p = new THREE.Mesh(new THREE.PlaneGeometry(1.4, 0.5), pm); p.position.set(3.9, 1.05, r ? -0.67 : -0.53); p.rotation.y = r; g.add(p); }
+  g.add(at(box(1.46, 0.55, 0.1, '#2e3036'), 3.9, 1.05, -0.6));
   g.scale.setScalar(0.68);                     // mais estreito que a rua
   g.traverse(o => { if (o.isMesh) o.receiveShadow = true; });
+  bakeStatic(g);
   return g;
 }
 
@@ -135,7 +238,7 @@ export function buildCar() {
   for (const x of [-1.4, 1.4]) for (const zz of [0.95, -0.95]) g.add(at(cyl(0.42, 0.42, 0.3, '#1f2023', 10), x, 0.42, zz, Math.PI / 2, 0, 0));
   const brake = mat('#ff3b30', { emissive: '#ff1a1a', emissiveIntensity: 1.1 }), head = mat('#fff3c0', { emissive: '#ffe9a0', emissiveIntensity: 0.4 });
   for (const zz of [0.7, -0.7]) {
-    const r = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.25, 0.4), brake); r.position.set(-2.2, 0.95, zz); g.add(r);   // luzes de freio
+    const r = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.25, 0.4), brake); r.position.set(-2.2, 0.95, zz); r.userData.brake = true; g.add(r);   // luzes de freio
     const f = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.22, 0.4), head); f.position.set(2.2, 0.95, zz); g.add(f);
   }
   g.traverse(o => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
@@ -143,21 +246,61 @@ export function buildCar() {
   return g;
 }
 const JAM_CARS = [-5.4, 0, 5.4];                  // 3 carros por faixa (trecho livre: ~16,8)
+/** Engarrafamento: cada faixa é uma fila que anda um palmo de vez em quando (as luzes de freio apagam enquanto anda) e volta
+ *  devagar, quase sem se notar, para o lugar; as duas faixas e cada engarrafamento em ritmos diferentes. No relógio do jogo. */
+let jamSeed = 0;
 function buildJam() {
   const g = new THREE.Group();
   g.userData.cars = [];
-  for (const lane of [1, -1]) for (const x of JAM_CARS) {
-    const c = buildCar();
-    c.position.set(x, 0, lane * ROAD / 4);
-    c.rotation.y = lane > 0 ? 0 : Math.PI;       // mão dupla: uma faixa para cada lado
-    dynamic(c.userData.body);                     // (a carroceria troca de cor a cada partida: fica separada)
-    g.add(c); g.userData.cars.push(c);
+  for (const lane of [1, -1]) {
+    const lg = dynamic(new THREE.Group()), brake = new THREE.MeshStandardMaterial({ color: '#ff3b30', emissive: '#ff1a1a', emissiveIntensity: 1.1, roughness: 0.5 });
+    for (const x of JAM_CARS) {
+      const c = buildCar();
+      c.position.set(x, 0, lane * ROAD / 4);
+      c.rotation.y = lane > 0 ? 0 : Math.PI;     // mão dupla: uma faixa para cada lado
+      dynamic(c.userData.body);                   // (a carroceria troca de cor a cada partida: fica separada)
+      c.traverse(o => { if (o.userData.brake) o.material = brake; });
+      lg.add(c); g.userData.cars.push(c);
+    }
+    bakeStatic(lg);                               // rodas, vidros, faróis… dos 3 carros da fila viram poucas malhas
+    const period = 9 + ((jamSeed * 5 + (lane > 0 ? 0 : 3)) % 7), ph = (jamSeed * 3.7 + (lane > 0 ? 0 : 4.1)) % period;
+    const tick = lg.children.find(o => o.isMesh && o.material === brake) || lg.children[0];
+    tick.onBeforeRender = () => {
+      const u = (clockT + ph) % period, go = 1.5;   // anda 0,45 em 1,5 s; depois volta 0,45 no resto do ciclo (bem devagar)
+      const k = u < go ? (1 - Math.cos(u / go * Math.PI)) / 2 : 1 - (u - go) / (period - go);
+      lg.position.x = lane * 0.45 * (k - 0.5);
+      brake.emissiveIntensity = u < go ? 0.15 : 1.1;
+    };
+    g.add(lg);
   }
-  bakeStatic(g);                                  // rodas, vidros, faróis… dos 6 carros viram poucas malhas
+  jamSeed++;
   return g;
 }
 
 const key = (...a) => a.join(',');
+
+/** Bairro 3: liga a obra do cavalete e põe os operários na calçada do lado de um lote (fora da pista e da colisão da van). */
+function placeObra(b, c, on) {
+  const o = b.userData.obra; if (!o) return;
+  o.visible = on; if (!on) return;
+  const N = GRID, { worker, shovel, og } = o.userData, SW = ROAD / 2 - 0.15;
+  let lx, along;
+  if (c[0] === 'H') {                                          // rua leste–oeste: local +z = +x do mundo, local −x = +z do mundo
+    const [, , i, side] = c, s = i < N ? 1 : -1;                // calçada do lote ao sul (ou ao norte na última rua)
+    lx = -s * SW; along = side === 'L' ? 1 : -1;               // do lado do trecho sem saída
+  } else {
+    const [, j] = c; lx = j < N ? SW : -SW; along = 1;
+  }
+  og.rotation.y = along > 0 ? 0 : Math.PI;                     // asfalto novo do lado do trecho sem saída (não no cruzamento)
+  worker.position.set(lx, 0.17, along * 1.3); worker.rotation.y = lx > 0 ? -Math.PI / 2 : Math.PI / 2;
+  shovel.position.set(lx, 0.17, along * 2.6); shovel.rotation.y = (lx > 0 ? -Math.PI / 2 : Math.PI / 2) + along * 0.4;
+  worker.userData.t0 = Math.random() * 10;
+  const p = worker.userData.paddle;
+  if (p && !p.userData.hooked) {                               // a placa vira de PARE para SIGA de tempos em tempos
+    p.userData.hooked = true;
+    p.children[0].onBeforeRender = () => { const t = clockT + worker.userData.t0; const k = Math.min(1, Math.max(0, (Math.sin(t * 0.35) + 0.15) * 4)); p.rotation.y = k * Math.PI; };
+  }
+}
 
 /** O conjunto de barreiras deixa tudo alcançável a partir da entrada? (`skipM`: portões dos trechos engarrafados, que ficam de fora de propósito) */
 let TOPO = { blocked: new Set(), skip: new Set(), exclude: new Set(), heightAt: () => 0 };   // ver layout.roadTopology()
@@ -202,6 +345,7 @@ export function createBarriers() {
   /** Sorteia de `min` a `max` bloqueios válidos (dos tipos `types`) e os coloca na cena `scene`. */
   function randomize(scene, { min = 3, max = 5, types = ['barrier'], jams = null, topo = null } = {}) {
     clear();
+    const obraMode = types.length === 1 && types[0] === 'barrier';   // Bairro 3: as obras de verdade
     if (topo) TOPO = topo;
     scene.add(group);
     const N = GRID;
@@ -268,6 +412,7 @@ export function createBarriers() {
         x = roadCenter(j); z = (roadCenter(i) + roadCenter(i + 1)) / 2; alongX = false;
       }
       b.position.set(x, TOPO.heightAt(x, z), z);
+      if (type === 'barrier') placeObra(b, c, obraMode);
       b.rotation.y = type === 'truck'
         ? (Math.random() < 0.5 ? Math.PI / 4 : -Math.PI / 4) + (Math.random() < 0.5 ? Math.PI : 0)   // caminhão parado na diagonal
         : alongX ? Math.PI / 2 : 0;

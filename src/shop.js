@@ -68,15 +68,15 @@ const CSS = `
 .shop-canvas canvas { width: 100%; height: 100%; display: block; }
 .shop-view { position: absolute; left: 0; right: 0; bottom: 12px; text-align: center; font-weight: 900; letter-spacing: .08em; font-size: clamp(13px, 1.2vw, 18px); text-shadow: 0 2px 0 rgba(0,0,0,.5); pointer-events: none; }
 .shop-wcolor { position: absolute; left: 10px; top: 10px; z-index: 2; display: none; flex-direction: column; gap: 5px; padding: 7px 8px; border-radius: 12px;
-  background: rgba(20,12,30,.62); border: 2px solid rgba(255,243,214,.4); font-size: 11px; font-weight: 800; max-width: 62%; }
+  background: rgba(20,12,30,.7); border: 2px solid rgba(255,243,214,.4); font-size: 12px; font-weight: 800; max-width: 62%; }
 .shop-wcolor.on { display: flex; }
 .shop-wcolor small { opacity: .7; font-weight: 700; }
 .shop-wrow { display: flex; align-items: center; gap: 5px; flex-wrap: wrap; }
 .shop-wrow > b { min-width: 3.9em; letter-spacing: .04em; }
-.shop-wrow button { width: 17px; height: 17px; border-radius: 5px; border: 2px solid rgba(255,255,255,.55); padding: 0; cursor: pointer; }
+.shop-wrow button { width: 19px; height: 19px; border-radius: 5px; border: 2px solid rgba(255,255,255,.55); padding: 0; cursor: pointer; }
 .shop-wrow button.sel { border-color: #fff; box-shadow: 0 0 0 2px #8a55c4; }
 .shop-wrow input { width: 5.6em; padding: 2px 5px; border-radius: 6px; border: 2px solid rgba(255,243,214,.6); background: #1d140c; color: #fff3d6;
-  font: 800 11px Consolas, "Courier New", monospace; text-transform: uppercase; }
+  font: 800 12px Consolas, "Courier New", monospace; text-transform: uppercase; }
 .shop-wrow input.bad { border-color: #ff5a4a; }
 .shop-cardw { cursor: pointer; opacity: 1; border-style: solid; border-color: rgba(255,243,214,.35); }
 .shop-cardw:hover { border-color: #fff; }
@@ -109,6 +109,10 @@ const CSS = `
   .shop-cat { flex-wrap: wrap; }
   .shop-savebar { padding-top: 6px; padding-bottom: 6px; }
   .shop-savebar .shop-desc { display: none; }
+  .shop-wcolor { font-size: 10px; padding: 4px 6px; gap: 3px; }   /* pré-visualização pequena: o painel de cor não cobre a van */
+  .shop-wcolor small { display: none; }
+  .shop-wrow button { width: 14px; height: 14px; }
+  .shop-wrow input { width: 5em; font-size: 10px; }
 }
 `;
 
@@ -127,10 +131,10 @@ const COLORS = {
 };
 // sec: 'van' | 'char'. kind: 'items' (à venda; ainda vazio) | 'color' (grátis; key = chave em `colors`)
 const CATS = [
-  { id: 'wheels', sec: 'van', name: 'Rodas', kind: 'items', desc: '8 modelos de roda (o primeiro é o padrão). Só a roda padrão tem cores editáveis, no canto da pré-visualização: as outras 7 são únicas.' },
+  { id: 'wheels', sec: 'van', name: 'Rodas', kind: 'items', desc: '8 modelos de roda. Só a Padrão tem cores editáveis (no canto da pré-visualização); as outras 7 são únicas.' },
   { id: 'rack', sec: 'van', name: 'Bagageiro', kind: 'items', desc: `O que vai em cima da van. O padrão são as caixas de entrega; os outros ${RACK_MODELS.length - 1} modelos têm cores fixas (não dá para mudar).` },
   { id: 'paint', sec: 'van', name: 'Pintura', kind: 'color', key: 'paint', pal: 'paint', desc: 'A cor da lataria da van.' },
-  { id: 'decals', sec: 'van', name: 'Estampas', kind: 'items', desc: `Desenhos na lataria, feitos à mão e diferentes em cada lado. O texto ADRESS fica sempre lá (só as asas chegam a cobrir um pouco). ${DECALS.length - 1} estampas.` },
+  { id: 'decals', sec: 'van', name: 'Estampas', kind: 'items', desc: 'Desenhos na lataria, feitos à mão e diferentes em cada lado. O nome ADRESS continua sempre lá (só as asas cobrem um pouco).' },
   { id: 'caps', sec: 'char', name: 'Bonés', kind: 'items', desc: 'O modelo e a cor do boné (uma cor só para o boné inteiro).' },
   { id: 'shirt', sec: 'char', name: 'Camisas', kind: 'color', key: 'shirt', pal: 'cloth', desc: 'A cor da camisa.' },
   { id: 'pants', sec: 'char', name: 'Calças', kind: 'color', key: 'pants', pal: 'cloth', desc: 'A cor da calça.' },
@@ -271,7 +275,7 @@ export function createShop() {
     useBtn.addEventListener('click', () => tryHex(false));
     if (cat.id !== 'skin') resetBtn.addEventListener('click', () => { input.blur(); setColor(DEFAULTS[cat.key]); });
     wrap.querySelector('.shop-cur .shop-desc').textContent = 'Cor escolhida';
-    const refreshBar = saveBar(st => st ? `Cor salva: ${colors[key].toUpperCase()} (já vale no jogo).` : `Não salva ainda — a salva é ${colors[key].toUpperCase()}.`,
+    const refreshBar = saveBar(st => st ? `Cor salva: ${colors[key].toUpperCase()} (já vale no jogo).` : `Ainda não salva — a cor salva é ${colors[key].toUpperCase()}.`,
       () => !dirtyKeys([key]), () => { save([key]); saved('Cor salva: já vale no jogo.'); });
     paintUi();
   }
@@ -309,9 +313,9 @@ export function createShop() {
 
   // ---------- galeria de modelos (Rodas e Bagageiro) ----------
   const GAL = {
-    wheels: { models: WHEEL_MODELS, get: () => wheelSel, set: v => { wheelSel = v; }, key: 'wheels', eq: 'Equipada', msg: 'Clique num modelo para ver na van e aperte “Salvar” (embaixo) para jogar com ele. Por enquanto todas as rodas são grátis (ainda não há moedas).' },
-    rack: { models: RACK_MODELS, get: () => rackSel, set: v => { rackSel = v; }, key: 'rack', eq: 'Equipado', msg: n => `Clique num modelo para ver na van e aperte “Salvar” (embaixo) para jogar com ele. Por enquanto os ${n + 1} bagageiros são grátis (ainda não há moedas).` },
-    decals: { models: DECALS, get: () => decalSel, set: v => { decalSel = v; }, key: 'decals', eq: 'Equipada', wide: true, msg: n => `Clique numa estampa para ver na van (cada lado é diferente) e aperte “Salvar” (embaixo) para jogar com ela. Por enquanto as ${n} estampas são grátis (ainda não há moedas).` },
+    wheels: { models: WHEEL_MODELS, get: () => wheelSel, set: v => { wheelSel = v; }, key: 'wheels', eq: 'Equipada', msg: 'Clique num modelo para vê-lo na van. Para jogar com ele, aperte “Salvar” (embaixo).' },
+    rack: { models: RACK_MODELS, get: () => rackSel, set: v => { rackSel = v; }, key: 'rack', eq: 'Equipado', msg: 'Clique num modelo para vê-lo na van. Para jogar com ele, aperte “Salvar” (embaixo).' },
+    decals: { models: DECALS, get: () => decalSel, set: v => { decalSel = v; }, key: 'decals', eq: 'Equipada', wide: true, msg: n => `${n} estampas. Clique numa para vê-la na van (cada lado é diferente). Para jogar com ela, aperte “Salvar” (embaixo).` },
   };
   function gallery() {
     const G = GAL[cat.id], models = G.models, th = thumbs(G.key);
@@ -533,8 +537,8 @@ export function createShop() {
       if (now >= pv.holdUntil) pv.angle += dt * 0.55;              // gira sozinho, a menos que o jogador tenha mexido há menos de 10 s
       const a = pv.angle;
       const tall = !char && !item && cat.id === 'rack' ? Math.max(0, pv.rackH - 1.6) : 0;           // carga alta: afasta e sobe a câmera
-      const capV = char && cat.id === 'caps';                     // Bonés: câmera mais perto da cabeça
-      const d = capV ? 3.0 : char ? 6.4 : item ? 8 : 15 + tall * 1.6, hgt = capV ? 1.6 : char ? 2.0 : item ? 2.6 : 4.6 + tall * 1.2, ty = capV ? 1.75 : char ? 1.15 : item ? 1.4 : 1.2 + tall * 0.5;
+      const capV = char && cat.id === 'caps';                     // Bonés: câmera perto da cabeça (sem cortar a aba, mesmo em quadro estreito)
+      const d = capV ? Math.max(3.4, 3.5 / pv.camera.aspect) : char ? 6.4 : item ? 8 : 15 + tall * 1.6, hgt = capV ? 1.6 : char ? 2.0 : item ? 2.6 : 4.6 + tall * 1.2, ty = capV ? 1.75 : char ? 1.15 : item ? 1.4 : 1.2 + tall * 0.5;
       pv.camera.position.set(Math.cos(a) * d, hgt + ty - 1, Math.sin(a) * d);
       pv.camera.lookAt(0, ty, 0);
       if (char) pv.walker.update(dt, { x: 0, z: 0 }, 'car', [], { x: 1e6, z: 1e6 });

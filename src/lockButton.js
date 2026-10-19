@@ -12,7 +12,7 @@ const CSS = `
 .lock-btn:active { transform: translateY(2px); box-shadow: 0 2px 0 #94660c, 0 4px 10px rgba(0,0,0,.25); }
 .lock-btn svg { width: 58%; height: 58%; }
 .lock-btn[data-open="1"] { background: #3c9d55; box-shadow: 0 4px 0 #22643a, 0 8px 18px rgba(0,0,0,.28); }
-.lock-panel { position: absolute; inset: 0; z-index: 12; display: none; place-items: center; background: rgba(20,14,8,.45); }
+.lock-panel { position: absolute; inset: 0; z-index: 46; display: none; place-items: center; background: rgba(20,14,8,.45); }   /* (acima dos créditos da música, z 45) */
 .lock-panel.on { display: grid; }
 .lock-card { min-width: 260px; padding: 20px 24px 18px; border-radius: 18px; background: #fff3d6; border: 4px solid #3a2a1a;
   box-shadow: 0 8px 0 #1d140c, 0 16px 30px rgba(0,0,0,.35); text-align: center; color: #3a2a1a;

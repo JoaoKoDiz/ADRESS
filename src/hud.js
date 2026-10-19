@@ -4,21 +4,27 @@
 
 const FONT = '"Trebuchet MS","Segoe UI",system-ui,sans-serif';
 const LINE_H = 1.22;   // altura de linha do texto principal (em "em")
-const MAX_LINES = 2;
 
 // --au = 1px numa janela de 1920×1080 e encolhe junto com a janela (limitado para continuar legível).
+// Hierarquia da barra: a PISTA (ou a fala do morador) é o texto principal, grande e centralizado; as dicas de teclado
+// ficam numa linha discreta de teclas desenhadas ([W] acelerar …), que se compacta para nunca empurrar a pista.
+// A altura da barra é fixa em cada formato de tela (as linhas da pista são reservadas): o palco 3D não pula quando o texto muda.
 const CSS = `
 :root {
   --au: clamp(0.68px, min(0.0926vh, 0.0521vw), 1.2px);
   /* tamanhos de fonte com piso de legibilidade para janelas pequenas */
-  --ahud-main: max(18px, calc(25 * var(--au)));
+  --ahud-main: max(20px, calc(29 * var(--au)));
   --ahud-sub: max(12.5px, calc(15 * var(--au)));
   --ahud-count: max(14px, calc(17 * var(--au)));
   --ahud-logo: max(21px, calc(28 * var(--au)));
 }
 .ahud {
+  --fit-lines: 2; --fit-min: 15px;
   box-sizing: border-box;
-  padding: calc(7 * var(--au)) calc(22 * var(--au)) calc(6 * var(--au));
+  display: grid; grid-template-columns: 1fr auto 1fr; align-items: center;
+  grid-template-areas: "logo sub count" "main main main";
+  column-gap: calc(16 * var(--au));
+  padding: calc(6 * var(--au)) calc(22 * var(--au)) calc(7 * var(--au));
   background: #fff3d6 linear-gradient(#fff7e2, #fff3d6 55%, #ffefcc);
   border-bottom: max(2px, calc(4 * var(--au))) solid #e6cc98;
   font-family: ${FONT};
@@ -29,15 +35,9 @@ const CSS = `
 }
 .ahud * { box-sizing: border-box; }
 
-/* ---------- linha de cima: logo | legenda | contador ---------- */
-.ahud-top {
-  display: grid;
-  grid-template-columns: 1fr auto 1fr;
-  align-items: center;
-  column-gap: calc(16 * var(--au));
-  min-height: calc(32 * var(--au));
-}
+/* ---------- linha de cima: logo | dicas de teclado | contador ---------- */
 .ahud-logo {
+  grid-area: logo; min-height: calc(30 * var(--au));
   display: flex; align-items: center; gap: calc(8 * var(--au));
   justify-self: start; white-space: nowrap;
 }
@@ -48,15 +48,37 @@ const CSS = `
   color: #e8661a;
   text-shadow: 0 calc(2 * var(--au)) 0 #f6cfa0;
 }
+/* dicas: grupos "teclas + ação" lado a lado, numa linha só; cor apagada para não disputar com a pista */
 .ahud-sub {
-  min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: pre;
-  text-align: center; font-size: var(--ahud-sub); color: #9a8660; line-height: 1.3;
+  grid-area: sub; min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis;
+  display: flex; align-items: center; justify-content: center; gap: .3em 1.05em;
+  font-size: var(--ahud-sub); color: #94805c; line-height: 1.3;
 }
+.ahud-sub.c3 { gap: .3em .7em; font-size: calc(var(--ahud-sub) * .94); }
+.ahud-sub.c4 { display: block; text-align: center; }
+.ahud-sub.c4 .hk { margin: 0 .35em; }
+.hk { display: inline-flex; align-items: center; gap: .32em; flex: none; white-space: nowrap; }
+.hk kbd {
+  display: inline-grid; place-items: center; min-width: 1.5em; height: 1.5em; padding: 0 .32em; margin: 0;
+  border-radius: .36em; background: #f1dcb0; color: #6b4a26; box-shadow: inset 0 -.14em 0 rgba(150, 104, 52, .32);
+  font: inherit; font-size: .84em; font-weight: bold; line-height: 1;
+}
+.hk kbd + kbd { margin-left: -.12em; }
+.hk kbd svg { width: .95em; height: 1.15em; display: block; }
+.hk .alt { color: #b09a74; font-size: .9em; }
+.hk-q { color: #ad9872; }
+.hk-tag {
+  display: inline-block; padding: .12em .55em; border-radius: 999px; background: #e9d3a6; color: #6b4a26;
+  font-size: .82em; font-weight: bold; letter-spacing: .08em;
+}
+.ahud-sub.c1 .alt { display: none; }
+.ahud-sub.c2 .hk-q { display: none; }
 .ahud-sub[data-tone="cont"] { color: #5a3c1e; font-weight: bold; }
-.ahud-sub .ahud-key { height: 1.35em; min-width: 1.35em; font-size: .85em; vertical-align: .08em; margin: 0 .15em; }
+.ahud-sub[data-tone="cont"] kbd, .ahud-sub[data-tone="success"] kbd { background: #e8661a; color: #fff; box-shadow: inset 0 -.16em 0 #b94c0e; }
+.ahud-sub[data-tone="success"] { color: #2a9d4b; font-weight: bold; }
 .ahud-warm { position: absolute; visibility: hidden; pointer-events: none; left: 0; top: 0; }
-.ahud-sub[data-tone="success"] { color: #2a9d4b; font-weight: bold; font-size: calc(var(--ahud-sub) * 1.07); }
 .ahud-count {
+  grid-area: count;
   justify-self: end; display: flex; align-items: center; gap: calc(7 * var(--au));
   height: calc(var(--ahud-count) * 1.76); padding: 0 calc(var(--ahud-count) * .88) 0 calc(var(--ahud-count) * .6);
   border-radius: 999px; background: #ffe2b8; color: #5a3c1e;
@@ -64,32 +86,52 @@ const CSS = `
   font-size: var(--ahud-count); font-weight: bold; white-space: nowrap;
 }
 .ahud-count svg { width: 1.12em; height: 1.12em; flex: none; display: block; }
-/* celular em pé: sem o nome ao lado do ícone (o Voltar ocupa a esquerda) e a linha de cima alta o bastante para a pista não passar por baixo dele */
-@media (max-width: 560px) { .ahud-logo span { display: none; } .ahud-top { min-height: 40px; } }
-/* telas médias: as dicas de teclado quebram linha em vez de sumirem com "…" */
-@media (max-width: 1100px) { .ahud-sub { white-space: normal; text-overflow: clip; } }
 /* no mapa da Carreira o contador de entregas não tem sentido */
 body.on-map .ahud-count { visibility: hidden; }
 .ahud-count b { font-variant-numeric: tabular-nums; }
 
-/* ---------- texto principal (pista / fala), até 2 linhas ---------- */
+/* ---------- texto principal (pista / fala): protagonista, linhas reservadas ---------- */
 .ahud-main {
+  grid-area: main; min-width: 0;
   display: flex; align-items: center; justify-content: center;
   font-size: var(--ahud-main);
-  min-height: calc(${MAX_LINES * LINE_H} * var(--ahud-main));
-  margin-top: calc(2 * var(--au));
+  min-height: calc(var(--fit-lines) * ${LINE_H} * var(--ahud-main));
+  margin-top: calc(1 * var(--au));
 }
 .ahud-main-txt {
-  width: 100%; text-align: center; font-weight: bold;
+  width: 100%; max-width: 64em; text-align: center; font-weight: bold;
   line-height: ${LINE_H};
-  overflow-wrap: anywhere; text-wrap: balance;
+  overflow-wrap: break-word; text-wrap: balance;
 }
-.ahud-main-txt[data-tone="clue"]    { color: #3a2a1a; }
+.ahud-main-txt[data-tone="clue"]    { color: #33230f; }
 .ahud-main-txt[data-tone="ring"]    { color: #8a7355; }
 .ahud-main-txt[data-tone="dialog"]  { color: #7a2e1a; font-weight: 600; }
 .ahud-main-txt[data-tone="success"] { color: #1f7a3a; }
 .ahud-main-txt .who { font-weight: bold; color: #4a2a18; }
 .ahud-main-txt[data-tone="success"] .who { color: #17602d; }
+
+/* janelas médias: as dicas podem ocupar 2 linhas (altura fixa de 2 linhas: a barra não muda de tamanho entre os estados) */
+@media (max-width: 1100px) {
+  .ahud-sub { flex-wrap: wrap; white-space: normal; align-content: center; height: 2.95em; row-gap: .25em; }
+}
+/* celular em pé: sem o nome ao lado do ícone (o Voltar ocupa a esquerda); a pista ganha a largura toda e até 3 linhas legíveis */
+@media (max-width: 560px) {
+  .ahud { --fit-lines: 3; --fit-min: 14.5px; --ahud-main: 17px; padding: 5px 14px 6px;
+    grid-template-areas: "logo . count" "main main main" "sub sub sub"; }
+  .ahud-logo { min-height: 44px; }   /* (o Voltar maior do toque não encosta na 1ª linha da pista) */
+  .ahud-logo span { display: none; }
+  .ahud-main { margin-top: 2px; }
+}
+/* modo toque: as dicas de teclado viram os botões da tela — a linha some de verdade (não deixa espaço vazio) */
+body.touch-on .ahud-sub { display: none; }
+/* celular deitado com toque: barra de uma linha só — logo | pista | contador (sobra altura para o jogo) */
+@media (max-height: 560px) and (min-aspect-ratio: 1/1) {
+  body.touch-on .ahud { --fit-lines: 2; --fit-min: 14px; --ahud-main: 16.5px; grid-template-columns: auto minmax(0, 1fr) auto;
+    grid-template-areas: "logo main count"; padding: 4px 14px 5px; }
+  body.touch-on .ahud-logo span { display: none; }
+  body.touch-on .ahud-main { margin-top: 0; }
+  body.touch-on .ahud-count { --ahud-count: 14px; }
+}
 
 /* ---------- balão "E — Entregar" dentro do palco ---------- */
 .ahud-prompt {
@@ -218,11 +260,9 @@ export function createHUD(hudEl, stageEl) {
   // ---------- faixa superior ----------
   hudEl.classList.add('ahud');
   hudEl.innerHTML = `
-    <div class="ahud-top">
-      <div class="ahud-logo">${VAN_SVG}<span>ADRESS</span></div>
-      <div class="ahud-sub" data-tone="muted"></div>
-      <div class="ahud-count">${BOX_SVG}<span>Entregas: <b>0</b></span></div>
-    </div>
+    <div class="ahud-logo">${VAN_SVG}<span>ADRESS</span></div>
+    <div class="ahud-sub" data-tone="muted"></div>
+    <div class="ahud-count">${BOX_SVG}<span>Entregas: <b>0</b></span></div>
     <div class="ahud-main"><div class="ahud-main-txt" data-tone="clue" aria-live="polite" aria-atomic="true"></div></div>`;
   const subEl = hudEl.querySelector('.ahud-sub');
   const countPill = hudEl.querySelector('.ahud-count');
@@ -256,19 +296,66 @@ export function createHUD(hudEl, stageEl) {
   let counter = 0, subText = '', subTone = 'muted', mainText = '', mainTone = 'clue';
   let promptOn = false, px = NaN, py = NaN, fadeA = 0, promptSide = 'up';
 
-  /** Reduz a fonte do texto principal até caber em no máximo 2 linhas (nunca corta nem transborda). */
+  /** Reduz a fonte do texto principal até caber nas linhas reservadas (--fit-lines; nunca abaixo de --fit-min, nunca corta). */
   function fitMain() {
-    const base = parseFloat(getComputedStyle(mainBox).fontSize) || 25;
-    const minFs = Math.max(11, base * 0.5), step = Math.max(0.5, base * 0.03);
+    const cs = getComputedStyle(mainBox);
+    const base = parseFloat(cs.fontSize) || 20;
+    const maxLines = parseInt(cs.getPropertyValue('--fit-lines'), 10) || 2;
+    const minFs = Math.min(base, parseFloat(cs.getPropertyValue('--fit-min')) || 15), step = Math.max(0.5, base * 0.03);
     let fs = base;
     for (;;) {
       const lh = fs * LINE_H;
       mainEl.style.fontSize = fs + 'px';
       mainEl.style.lineHeight = lh + 'px';
       const lines = Math.round(mainEl.offsetHeight / lh);
-      if (lines <= MAX_LINES || fs <= minFs) break;
+      if (lines <= maxLines || fs <= minFs) break;
       fs = Math.max(minFs, fs - step);
     }
+  }
+
+  /** Dicas de teclado: compacta em etapas (tira teclas alternativas, depois os detalhes entre parênteses, depois aperta
+   *  o espaço) até caber numa linha; só em último caso corta com "…" (o texto inteiro fica no title). */
+  function fitSub() {
+    subEl.classList.remove('c1', 'c2', 'c3', 'c4');
+    if (!subText || subEl.offsetParent === null || !subEl.clientWidth) return;
+    for (const c of ['c1', 'c2', 'c3', 'c4']) {
+      if (subEl.scrollWidth <= subEl.clientWidth + 1 && subEl.scrollHeight <= subEl.clientHeight + 1) return;
+      subEl.classList.add(c);
+    }
+  }
+
+  // ---------- dicas: "W / ↑: acelerar  ·  E: entregar  ·  A PÉ" → grupos de teclas desenhadas + ação ----------
+  const KEY_TOKEN = /^(?:[A-Z]|[↑↓←→]|Espaço|Shift|Esc|Enter|Tab|WASD|Setas|setas)$/;
+  const MOUSE_R = '<svg viewBox="0 0 12 16" aria-hidden="true"><rect x="1" y="1" width="10" height="14" rx="5" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M6 1.2V7h4.8V6A5 5 0 0 0 6 1.2z" fill="currentColor"/></svg>';
+  const kbd = (k, alt) => { const e = document.createElement('kbd'); if (alt) e.className = 'alt'; if (k === 'mouseR') { e.innerHTML = MOUSE_R; e.title = 'botão direito do mouse'; } else e.textContent = k; return e; };
+  /** "pousar (em cima de um prédio…)" → ação + detalhe discreto entre parênteses. */
+  function actionNodes(txt, qual) {
+    const out = [];
+    const m = /^(.*?)\s*(\([^)]*\))\s*$/.exec(txt);
+    out.push(document.createTextNode(m ? m[1] : txt));
+    const q = m ? m[2] : qual ? '(' + qual + ')' : '';
+    if (q) { const s = document.createElement('span'); s.className = 'hk-q'; s.textContent = ' ' + q; out.push(s); }
+    return out;
+  }
+  function renderSeg(seg) {
+    const g = document.createElement('span'); g.className = 'hk';
+    const c = /^(.+?):\s+(.+)$/.exec(seg);
+    if (!c) {                                                       // sem "tecla: ação"
+      if (/\[\w+\]/.test(seg)) { seg.split(/\[(\w+)\]/).forEach((p, i) => { if (i % 2) g.appendChild(kbd(p)); else if (p.trim()) g.appendChild(document.createTextNode(p.trim())); }); return g; }
+      if (seg === seg.toUpperCase() && /[A-ZÀ-Ú]{2}/.test(seg)) { const t = document.createElement('span'); t.className = 'hk-tag'; t.textContent = seg; g.appendChild(t); return g; }   // modo: A PÉ, HELICÓPTERO…
+      g.textContent = seg; return g;
+    }
+    let keyPart = c[1].replace(/[[\]]/g, ''), qual = '';
+    const pq = /\(([^)]*)\)/.exec(keyPart); if (pq) { qual = pq[1]; keyPart = keyPart.replace(pq[0], ' '); }
+    const keys = [], extra = [];
+    if (/botão direito/i.test(keyPart)) { keys.push('mouseR'); keyPart = keyPart.replace(/botão direito/i, ' '); }
+    for (const t of keyPart.split(/\s*\/\s*|\s+/)) { if (!t || t === 'ou') continue; if (KEY_TOKEN.test(t)) keys.push(t); else extra.push(t); }
+    if (!keys.length) { g.appendChild(document.createTextNode(seg)); return g; }
+    if (extra.length) qual = (extra.join(' ') + (qual ? ' ' + qual : '')).trim();
+    const letters = keys.some(k => /^[A-Z]$|^WASD$/.test(k));            // letras + setas: as setas são a alternativa (somem se faltar espaço)
+    for (const k of keys) g.appendChild(kbd(k, letters && /^[↑↓←→]$|^[Ss]etas$/.test(k)));
+    for (const n of actionNodes(c[2], qual)) g.appendChild(n);
+    return g;
   }
 
   // Fala de morador ("Nome: “…”"): o nome ganha destaque; o conteúdo entra sempre como texto puro.
@@ -282,13 +369,17 @@ export function createHUD(hudEl, stageEl) {
     } else mainEl.textContent = text;
   }
 
-  let resizeQueued = false;
-  addEventListener('resize', () => {
-    if (resizeQueued) return;
-    resizeQueued = true;
-    requestAnimationFrame(() => { resizeQueued = false; if (mainText) fitMain(); });
-  });
-  if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => { if (mainText) fitMain(); }).catch(() => {});
+  // refaz o encaixe quando a largura da barra muda (janela, celular girado, modo toque que troca o formato da barra)
+  let lastW = -1, lastTouch = null;
+  const refit = () => { if (mainText) fitMain(); fitSub(); };
+  const watch = () => {
+    const w = hudEl.clientWidth, t = document.body.classList.contains('touch-on');
+    if (w !== lastW || t !== lastTouch) { lastW = w; lastTouch = t; refit(); }
+  };
+  if (typeof ResizeObserver !== 'undefined') new ResizeObserver(watch).observe(hudEl);
+  else addEventListener('resize', () => requestAnimationFrame(watch));
+  if (typeof MutationObserver !== 'undefined') new MutationObserver(watch).observe(document.body, { attributes: true, attributeFilter: ['class'] });
+  if (document.fonts && document.fonts.ready) document.fonts.ready.then(refit).catch(() => {});
 
   return {
     setCounter(n) {
@@ -302,21 +393,16 @@ export function createHUD(hudEl, stageEl) {
       });
     },
 
-    /** Linha de ajuda. "[E]" no texto vira uma tecla desenhada (mesmo estilo do balão "E — Entregar"). */
+    /** Linha de ajuda (dicas de teclado): "W / ↑: acelerar  ·  E: entregar" vira grupos de teclas desenhadas + ação; "[E]" também vira tecla. */
     setSub(text, tone = 'muted') {
       text = text == null ? '' : String(text);
+      if (tone !== subTone) { subTone = tone; subEl.dataset.tone = tone; }
       if (text !== subText) {
         subText = text;
-        const parts = text.split(/\[(\w+)\]/);
-        if (parts.length === 1) subEl.textContent = text;
-        else subEl.replaceChildren(...parts.map((p, i) => {
-          if (!(i % 2)) return document.createTextNode(p);
-          const k = document.createElement('span');
-          k.className = 'ahud-key'; k.textContent = p;
-          return k;
-        }));
+        subEl.title = text.replace(/\[(\w+)\]/g, '$1');
+        subEl.replaceChildren(...text.split(/\s+·\s+/).filter(Boolean).map(renderSeg));
+        fitSub();
       }
-      if (tone !== subTone) { subTone = tone; subEl.dataset.tone = tone; }
     },
 
     setMain(text, tone = 'clue') {

@@ -1,7 +1,7 @@
 // Botão da dica (canto inferior direito da área do jogo). Não rouba o foco do teclado.
 const CSS = `
 .hint-btn { position: absolute; right: clamp(10px, 1.4vw, 20px); bottom: clamp(10px, 1.6vh, 20px); z-index: 3;
-  display: flex; align-items: center; gap: .55em; padding: .6em 1.5em; letter-spacing: .08em; border: 3px solid #fff; border-radius: 999px;
+  display: flex; align-items: center; gap: .5em; padding: .6em 1.2em .6em 1em; letter-spacing: .08em; border: 3px solid #fff; border-radius: 999px;
   background: #e3262e; color: #fff; font: 700 clamp(13px, 1.05vw, 17px) "Trebuchet MS","Segoe UI",system-ui,sans-serif;
   box-shadow: 0 4px 0 #8f1016, 0 8px 18px rgba(0,0,0,.28); cursor: pointer; user-select: none; transition: transform .12s, filter .12s; }
 .hint-btn:hover { transform: translateY(-2px); filter: brightness(1.08); }
@@ -12,6 +12,7 @@ const CSS = `
 .hint-btn[data-state="used"] { background: #8d8676; box-shadow: 0 4px 0 #5e584b, 0 8px 18px rgba(0,0,0,.2); cursor: default; }
 .hint-btn[data-state="used"] kbd { display: none; }
 .hint-btn[data-state="hidden"] { display: none; }
+body.touch-on .hint-btn kbd { display: none; }   /* no toque não há tecla T */
 `;
 
 const ARROW_SVG = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 2h6v10h5l-8 10-8-10h5z" fill="#fff"/></svg>';
@@ -37,7 +38,7 @@ export function createHintButton(stageEl, onClick) {
       current = state;
       btn.dataset.state = state;
       btn.disabled = state !== 'ready';
-      btn.textContent = 'DICA';
+      if (!btn.firstChild) btn.innerHTML = ARROW_SVG + '<span>DICA</span><kbd>T</kbd>';   // a seta lembra a dica que cai do céu
       btn.title = state === 'used' ? 'A dica volta na próxima entrega' : 'Mostra a casa indicada agora (uma vez por rodada)';
     },
   };

@@ -20,9 +20,10 @@ export function createTalkBox(stage) {
   const css = document.createElement('style');
   css.textContent = `
     .talkbox { position: absolute; left: 50%; bottom: 4%; transform: translateX(-50%); width: min(820px, 88%);
-      min-height: 120px; box-sizing: border-box; padding: 22px 30px 30px; background: #FFF3D6; color: #000;
-      border: 5px solid #FF7A1A; border-radius: 18px; box-shadow: 0 6px 0 rgba(0,0,0,.18);
-      font: 600 23px/1.45 system-ui, 'Segoe UI', Roboto, sans-serif; z-index: 40; display: none; pointer-events: none; }
+      min-height: clamp(84px, 16vh, 120px); box-sizing: border-box; padding: clamp(14px, 2.6vh, 22px) clamp(18px, 3vw, 30px) clamp(24px, 3.6vh, 30px);
+      background: #FFF3D6; color: #000; border: clamp(4px, .6vh, 5px) solid #FF7A1A; border-radius: 18px; box-shadow: 0 6px 0 rgba(0,0,0,.18);
+      font: 600 clamp(16px, min(2.9vw, 4.4vh), 23px)/1.45 system-ui, 'Segoe UI', Roboto, sans-serif; z-index: 40; display: none; pointer-events: none; }
+    @media (max-width: 560px) { .talkbox { width: calc(100% - 24px); bottom: 3%; } }
     .talkbox-text b { font-weight: 900; }
     .talkbox-next { position: absolute; right: 18px; bottom: 8px; font-size: 14px; font-weight: 700; color: #FF7A1A;
       opacity: 0; animation: talkbox-blink 1s steps(2, start) infinite; }
@@ -30,13 +31,13 @@ export function createTalkBox(stage) {
     .talkbox.auto .talkbox-next { display: none; }
     .gamewarn { position: absolute; left: 50%; top: 13%; transform: translateX(-50%); width: min(620px, 88%); box-sizing: border-box;
       padding: 10px 22px; background: rgba(28,20,14,.86); color: #fff3d6; border: 3px solid #ff5a3a; border-radius: 12px; z-index: 42;
-      display: none; pointer-events: none; font: 700 19px/1.4 system-ui, 'Segoe UI', Roboto, sans-serif; text-align: center; }
+      display: none; pointer-events: none; font: 700 clamp(15px, min(2.5vw, 3.8vh), 19px)/1.4 system-ui, 'Segoe UI', Roboto, sans-serif; text-align: center; }
     .gamewarn b { color: #ffb08a; font-weight: 900; }
     @keyframes talkbox-blink { to { visibility: hidden; } }
     .gamenote { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); width: min(560px, 86%);
       box-sizing: border-box; padding: 18px 26px 30px; background: #FFF3D6; color: #000; border: 4px solid #FF7A1A;
       border-radius: 14px; box-shadow: 0 10px 30px rgba(0,0,0,.35); z-index: 41; display: none; pointer-events: none;
-      font: 600 21px/1.45 system-ui, 'Segoe UI', Roboto, sans-serif; text-align: center; }
+      font: 600 clamp(16px, min(2.7vw, 4.2vh), 21px)/1.45 system-ui, 'Segoe UI', Roboto, sans-serif; text-align: center; }
     .gamenote-label { display: inline-block; margin-bottom: 10px; padding: 3px 12px; border-radius: 999px; background: #FF7A1A;
       color: #fff; font-size: 13px; font-weight: 800; letter-spacing: .12em; }
     .gamenote-text b { font-weight: 900; }

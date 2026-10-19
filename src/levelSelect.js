@@ -68,17 +68,31 @@ body.lsel-on .title-play, body.lsel-on .title-driver { visibility: hidden; }   /
 .lsel-play:hover { filter: brightness(1.08); }
 .lsel-hint { font-weight: 700; font-size: clamp(12px, 1.1vw, 17px); color: #fff8ea; opacity: .9; text-shadow: 0 2px 4px rgba(0,0,0,.5); }
 .lsel-hint b { display: inline-block; min-width: 1.3em; text-align: center; color: #fff; background: #ff7a1a; border-radius: 5px; padding: .05em .3em; margin: 0 .12em; }
-/* celular em pé: as setas vão para baixo da grade (não saem da tela) */
+/* celular em pé: 2 colunas × 4 fileiras (cartões maiores e legíveis; continuam 8 por página) e as setas embaixo da grade */
 @media (max-width: 600px) {
-  .lsel-row { flex-wrap: wrap; justify-content: center; row-gap: 10px; }
-  .lsel-grid { order: -1; flex-basis: 100%; grid-template-columns: repeat(4, 21.5vw); justify-content: center; }
+  .lsel { padding-top: 58px; gap: 10px; }
+  .lsel h2 { font-size: 26px; }
+  .lsel-row { flex-wrap: wrap; justify-content: center; row-gap: 10px; column-gap: 28px; }
+  .lsel-grid { order: -1; flex-basis: 100%; grid-template-columns: repeat(2, min(42vw, 23vh)); justify-content: center; gap: 9px 12px; }
+  .lsel-card img { aspect-ratio: 16 / 10; }
+  .lsel-card .lbl { font-size: 14px; padding: 0 .7em .5em; }
+  .lsel-card.soon .ph { aspect-ratio: 16 / 10; }
+  .lsel-card.sel { transform: scale(1.03); }
+  /* o "i" fica ao lado da seta (acima dela cobria um cartão) */
+  .lsel-info { left: calc(100% + 12px); bottom: 50%; transform: translateY(50%); }
+  .lsel-info:hover { transform: translateY(50%) scale(1.1); }
+  .lsel-play { margin-top: 0; font-size: 20px; }
 }
+/* toque: sem a legenda de teclado; o "i" com alvo de toque maior */
+body.touch-on .lsel-hint { display: none; }
+body.touch-on .lsel-info { width: 36px; height: 36px; font-size: 19px; }
 /* tela baixa (celular deitado): título, cartões e dica menores para o botão Jogar caber */
 @media (max-height: 500px) {
   .lsel { padding-top: 50px; gap: 6px; }
   .lsel h2 { font-size: 22px; }
   .lsel-grid { grid-template-columns: repeat(4, min(20vw, 25vh)); }
   .lsel-card .lbl { font-size: 12px; }
+  .lsel-card.xtra .xt { font-size: 12px; letter-spacing: 0; }   /* "Maledicência" cabe no cartão estreito */
   .lsel-hint { display: none; }
   .lsel-play { margin-top: 0; font-size: 17px; }
 }
@@ -87,7 +101,7 @@ body.lsel-on .title-play, body.lsel-on .title-driver { visibility: hidden; }   /
 export const NAMES = ['Bairro Raízes', 'Bairro Horizontes', 'Bairro Constância', 'Bairro Veredas', 'Bairro Ofício', 'Bairro Mirante', 'Bairro Altitude', 'Bairro Ápice', 'Bairro Encostas', 'Veneza', 'Bairro Travessia', 'Bairro Trilhos', 'Bairro Morro', 'Bairro Fluxo', 'Bairro Colheita', 'Bairro Nevasca', 'Bairro Jardins', 'Bairro Modernista', 'Bairro Penumbra', 'Lua', 'Bairro Operário', 'Bairro Bosque', 'Bairro Cachoeira', 'Bairro Medieval'];   // 18: reservado
 // título do cartão (o Nível 10, Veneza, é especial: "NÍVEL 10" em vez de "BAIRRO 10")
 const TITLE = i => (i === 9 ? 'NÍVEL ' : 'BAIRRO ') + (i + 1);
-const COLS = 4, PER = 8;                    // 8 por página (4×2); as páginas seguem sozinhas conforme entram bairros
+const COLS = 4, PER = 8;                    // 8 por página (4×2; 2×4 no celular em pé); as páginas seguem sozinhas conforme entram bairros
 
 export function createLevelSelect(onPick, onExtraPick) {
   const style = document.createElement('style');
@@ -134,7 +148,8 @@ export function createLevelSelect(onPick, onExtraPick) {
   }
   /** Página dos 4 níveis extras (posições 25–28): 4 cartões brancos e altos, o 1º abre a introdução do extra 1; os outros ainda sem conteúdo. */
   function showExtra() {
-    const h = grid.getBoundingClientRect().height;               // a altura das 2 fileiras (com o espaço entre elas)
+    const gs = getComputedStyle(grid), rows = 4 / cols(), gap = parseFloat(gs.rowGap) || 0;
+    const h = (grid.getBoundingClientRect().height - gap * (rows - 1)) / rows;   // cartões altos: a grade dos extras ocupa o mesmo espaço da página anterior
     onExtra = true; page = pages(); grid.textContent = ''; grid.classList.add('extra');
     if (!xImgs) { try { xImgs = renderExtraThumbs(); } catch (e) { console.error('[levelSelect] imagens dos extras:', e); xImgs = [null, null, null, null]; } }
     for (let k = 0; k < 4; k++) { const c = document.createElement('div'); c.className = 'lsel-card xtra'; c.dataset.level = String(24 + k); if (h > 0) c.style.height = h + 'px'; grid.appendChild(c);
@@ -144,6 +159,7 @@ export function createLevelSelect(onPick, onExtraPick) {
   }
   function leaveExtra() { onExtra = false; grid.classList.remove('extra'); nextWrap.classList.remove('gone'); playBtn.classList.remove('gone'); }
   const pages = () => Math.ceil(COUNT / PER);
+  const cols = () => { const n = getComputedStyle(grid).gridTemplateColumns.split(' ').filter(Boolean).length; return n === 2 ? 2 : COLS; };   // colunas de verdade na tela
 
   function paint() {
     if (Math.floor(sel / PER) !== page) showPage(Math.floor(sel / PER));
@@ -170,7 +186,7 @@ export function createLevelSelect(onPick, onExtraPick) {
   function goPage(p, row = 0) {
     if (extra && p === pages() && !onExtra) { showExtra(); return; }
     if (p < 0 || p >= pages()) return;
-    sel = Math.min(COUNT - 1, p * PER + row * COLS);         // mesma fila, se houver bairro nela; senão o último disponível
+    sel = Math.min(COUNT - 1, p * PER + row * cols());       // mesma fila, se houver bairro nela; senão o último disponível
     if (Math.floor(sel / PER) !== p) sel = p * PER;
     if (!cards[sel]) { const ok = cards.map((c, i) => (c && Math.floor(i / PER) === p ? i : -1)).filter(i => i >= 0); if (!ok.length) return; sel = ok.reduce((a, b) => (Math.abs(b - sel) < Math.abs(a - sel) ? b : a)); }
     showPage(p); paint();
@@ -204,11 +220,11 @@ export function createLevelSelect(onPick, onExtraPick) {
     /** dx/dy: um passo de seta dentro da página (ignora os "Em breve"); nas bordas laterais, troca de página. */
     move(dx, dy) {
       if (onExtra) { if (dx < 0) { goPage(pages() - 1, 0); } return; }   // página extra: só volta
-      const k = sel % PER, c = k % COLS + dx, r = Math.floor(k / COLS) + dy;
-      if (r < 0 || r >= PER / COLS) return;
+      const C = cols(), k = sel % PER, c = k % C + dx, r = Math.floor(k / C) + dy;
+      if (r < 0 || r >= PER / C) return;
       if (c < 0) return goPage(page - 1, r);
-      if (c >= COLS) return goPage(page + 1, r);
-      const i = page * PER + r * COLS + c;
+      if (c >= C) return goPage(page + 1, r);
+      const i = page * PER + r * C + c;
       if (i >= COUNT || !cards[i]) return;                     // espaço "Em breve": não seleciona
       sel = i; paint();
     },

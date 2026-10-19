@@ -5,6 +5,7 @@ import * as THREE from 'three';
 import { createVan } from './van.js';
 import { box, cone, sphere, cyl, torus, at, mat, textTexture, bakeStatic } from './models/kit.js';
 import { ROOF_COL, WALL_COL } from './data.js';
+import { LEVEL_NAMES, MISSIONS } from './missions.js';
 
 const ROAD_W = 6;
 const SPEED = 14;                 // unidades por segundo ao longo da estrada
@@ -17,6 +18,9 @@ const CSS = `
   color: #3a2a1a; font: 700 clamp(14px, 1.2vw, 18px) "Trebuchet MS","Segoe UI",system-ui,sans-serif; box-shadow: 0 4px 12px rgba(0,0,0,.25); }
 .cmap-prompt.locked { border-color: #8a8a8a; color: #5c5c5c; background: #ececec; }
 .cmap-prompt b { color: #fff; background: #e8661a; border-radius: 6px; padding: 0 .4em; margin-right: .3em; }
+.cmap-prompt .nm { display: block; margin-bottom: .3em; text-align: center; font-weight: 900; font-size: .92em; letter-spacing: .04em; color: #c2570c; }
+.cmap-prompt.locked .nm { color: #6e6e6e; }
+.cmap-prompt .ks { display: block; text-align: center; }
 `;
 
 function roadGeometry(curve, samples) {
@@ -746,9 +750,16 @@ export function createCareerMap(stageEl, audio) {
   document.head.appendChild(style);
   const prompt = document.createElement('div');
   prompt.className = 'cmap-prompt';
-  const PROMPT_OPEN = '<b>E</b> Jogar &nbsp; <b>M</b> Missões';
-  prompt.innerHTML = PROMPT_OPEN;
-  let promptLocked = false;
+  // balão sobre a van: nome do bairro (mesmo título das placas e da tela de missões) + o que dá para fazer ali
+  const TITLE = l => `${l === 9 ? 'Nível' : 'Bairro'} ${l + 1}`;
+  const promptHtml = (l, locked) => {
+    const nm = `<span class="nm">${TITLE(l).toUpperCase()}${LEVEL_NAMES[l] ? ' · ' + LEVEL_NAMES[l] : ''}</span>`;
+    if (!locked) return nm + '<span class="ks"><b>E</b> Jogar &nbsp; <b>M</b> Missões</span>';
+    let pv = l - 1; while (pv > 0 && !MINI_KINDS[pv]) pv--;
+    const none = !MISSIONS[pv] || MISSIONS[pv].every(m => !m.id);          // o anterior ainda não tem missões: não dá para liberar jogando
+    return nm + `<span class="ks">🔒 ${none ? `Bloqueado — o ${TITLE(pv)} ainda não tem missões` : `Bloqueado — conclua as 5 missões do ${TITLE(pv)}`}</span>`;
+  };
+  let promptKey = '';
   stageEl.appendChild(prompt);
 
   const scene = new THREE.Scene();
@@ -832,6 +843,7 @@ export function createCareerMap(stageEl, audio) {
   let moving = 0, near = -1, nearLocked = -1, entered = false;
 
   const camera = new THREE.PerspectiveCamera(26, 1, 1, 2000);
+  let camScale = 1;                       // distância extra da câmera em telas em pé (resize)
   const camTarget = new THREE.Vector3();
 
   function placeVan() {
@@ -843,7 +855,7 @@ export function createCareerMap(stageEl, audio) {
   function updateCamera(dt) {
     const k = dt ? 1 - Math.exp(-4 * dt) : 1;
     camTarget.lerp(van.object.position, k);
-    camera.position.copy(camTarget).add(CAM_OFFSET);
+    camera.position.copy(camTarget).addScaledVector(CAM_OFFSET, camScale);
     camera.lookAt(camTarget);
   }
 
@@ -860,12 +872,25 @@ export function createCareerMap(stageEl, audio) {
       updateCamera(0);
     },
     leave() { prompt.style.display = 'none'; },
-    resize(w, h) { camera.aspect = w / Math.max(1, h); camera.updateProjectionMatrix(); },
+    resize(w, h) {
+      camera.aspect = w / Math.max(1, h);
+      // tela em pé/estreita: garante ~34° de abertura na horizontal (antes só cabia um pedaço da estrada e as placas saíam cortadas)
+      const t0 = Math.tan(THREE.MathUtils.degToRad(13)), need = Math.tan(THREE.MathUtils.degToRad(17)) / camera.aspect;
+      const vt = Math.min(Math.max(t0, need), Math.tan(THREE.MathUtils.degToRad(25)));
+      camera.fov = THREE.MathUtils.radToDeg(2 * Math.atan(vt));
+      camScale = Math.max(1, need / vt);
+      camera.updateProjectionMatrix();
+    },
     /** dir: −1 (A, recua), 0, +1 (D, avança). Retorna true se E foi pedido perto de um bairro. */
     update(dt, dir, play) {
       moving = dir;
       clock += dt;
-      boards.forEach((b, i) => { b.position.y = b.userData.baseY + Math.sin(clock * 2 + i) * 0.5; });   // flutua
+      boards.forEach((b, i) => {                                   // flutua; o quadro do bairro ao lado da van (onde M abre as missões) fica nítido, os outros recuam
+        b.position.y = b.userData.baseY + Math.sin(clock * 2 + i) * 0.5;
+        const on = stops[i].level === near, k = 1 - Math.exp(-8 * dt);
+        b.material.opacity += ((on ? 1 : 0.45) - b.material.opacity) * k;
+        const sc = b.scale.x + ((on ? 10 : 8.4) - b.scale.x) * k; b.scale.set(sc, sc * 0.4, 1);
+      });
       dist = THREE.MathUtils.clamp(dist + dir * SPEED * dt, 0, length);
       placeVan();
       updateCamera(dt);
@@ -873,13 +898,8 @@ export function createCareerMap(stageEl, audio) {
       for (let i = 0; i < stops.length; i++) if (Math.abs(stops[i].d - dist) < NEAR) { if (stops[i].locked) nearLocked = stops[i].level; else near = stops[i].level; }   // índice do nível (com os reservados)
       const shown = near >= 0 ? near : nearLocked;
       if (shown >= 0) {
-        const lockedNow = near < 0;
-        if (lockedNow !== promptLocked) {
-          promptLocked = lockedNow;
-          prompt.classList.toggle('locked', lockedNow);
-        }
-        if (lockedNow) { let pv = shown - 1; while (pv > 0 && !MINI_KINDS[pv]) pv--; prompt.textContent = `🔒 Bloqueado — conclua as 5 missões do Bairro ${pv + 1}`; }
-        else if (prompt.innerHTML !== PROMPT_OPEN) prompt.innerHTML = PROMPT_OPEN;
+        const lockedNow = near < 0, key = shown + (lockedNow ? 'L' : 'O');
+        if (key !== promptKey) { promptKey = key; prompt.classList.toggle('locked', lockedNow); prompt.innerHTML = promptHtml(shown, lockedNow); }
         proj.copy(van.object.position); proj.y += 4;
         proj.project(camera);
         prompt.style.display = 'block';

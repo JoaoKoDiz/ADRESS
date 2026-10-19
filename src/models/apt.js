@@ -58,6 +58,13 @@ export function buildAptLot(apt) {
   for (let f = 1; f < FLOORS; f++) root.add(at(box(W + 0.06, 0.12, D + 0.06, '#80848b'), CX, G + f * FLOOR, (Z0 + Z1) / 2));   // frisos
 
   // térreo: entrada com marquise
+  if (!apt.lounger) {                                           // (o prédio fixo do Bairro 6 fica exatamente como era)
+    root.add(at(box(W + 0.08, 0.55, D + 0.08, '#6f737a'), CX, G + 0.275, (Z0 + Z1) / 2));          // rodapé escuro: o prédio "pisa" no chão
+    root.add(at(box(2.7, 2.75, 0.06, FRAME), A.doorX, G + 1.375, Z1 + 0.03));                       // moldura da porta de entrada
+    root.add(at(box(0.8, 0.55, 0.12, '#5b6068'), A.doorX + 1.85, G + 1.35, Z1 + 0.06));             // caixas de correio
+    for (let k = 0; k < 3; k++) root.add(at(box(0.7, 0.04, 0.02, '#d8d8d8'), A.doorX + 1.85, G + 1.2 + k * 0.15, Z1 + 0.13));
+    root.add(at(box(0.18, 0.28, 0.06, '#d8d8d8'), A.doorX - 1.5, G + 1.35, Z1 + 0.06));             // interfone
+  }
   root.add(at(box(2.2, 2.4, 0.1, GLASS), A.doorX, G + 1.2, Z1 + 0.05));
   root.add(at(box(3.4, 0.2, 1.6, '#e8e6e1'), A.doorX, G + 2.6, Z1 + 0.8));
   for (const x of [X0 + 1.4, X1 - 1.4]) root.add(at(box(1.8, 1.4, 0.1, GLASS), x, G + 1.5, Z1 + 0.05));
@@ -95,10 +102,12 @@ export function buildAptLot(apt) {
       root.add(at(sphere(0.35, '#57a84a', 7, 5), x + 0.8, fy + 0.65, Z1 + 0.75));
     }
   }
-  if (has('fac:ac')) {                                          // ar-condicionados na fachada
-    for (let f = 1; f < FLOORS; f++) for (const x of COLS) {
-      root.add(at(box(0.9, 0.55, 0.45, '#e2e2e2'), x + 1.0, G + f * FLOOR + 2.35, Z1 + 0.25));
-      root.add(at(cyl(0.18, 0.18, 0.05, '#7d8188', 10), x + 1.0, G + f * FLOOR + 2.35, Z1 + 0.49, Math.PI / 2, 0, 0));
+  if (has('fac:ac')) {                                          // ar-condicionados na fachada (no vão entre as janelas, sem encostar nas molduras)
+    for (let f = 1; f < FLOORS; f++) for (const ax of [COLS[0] + 1.65, COLS[1] + 1.65]) {   // (um em cada vão: antes o do 2º vão saía em dobro)
+      const ay = G + f * FLOOR + 2.3;
+      root.add(at(box(0.9, 0.55, 0.45, '#e2e2e2'), ax, ay, Z1 + 0.25));
+      root.add(at(cyl(0.18, 0.18, 0.05, '#7d8188', 10), ax, ay, Z1 + 0.49, Math.PI / 2, 0, 0));
+      root.add(at(box(0.05, 0.05, 0.3, '#7d8188'), ax - 0.3, ay - 0.3, Z1 + 0.2));               // suporte
     }
   }
   if (has('fac:mural')) {                                       // grafite colorido na parede do térreo
