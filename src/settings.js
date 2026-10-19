@@ -1,6 +1,9 @@
 // Configurações (botão da tela inicial): volume da música e dos efeitos, tela cheia, lista de controles e restaurar padrões.
+// No celular (modo toque ligado ou aparelho de toque): "Ver controles" mostra os controles de toque e "Posição dos botões" abre o
+// editor de posição dos botões (touch.js; posições em 'adress.touchLayout.v1', fora do "Restaurar configurações").
 // Preferências em localStorage 'adress.settings.v1' ({ music, sfx } de 0 a 1); aplicadas na hora e ao abrir o jogo.
 // Não mexe em missões, desbloqueios, história nem personalização. Esc fecha sem acionar o que está atrás.
+import { openTouchEditor, isTouchDevice, ICONS, TOUCH_HELP } from './touch.js';
 const KEY = 'adress.settings.v1';
 const DEFAULTS = { music: 1, sfx: 1 };
 
@@ -33,6 +36,17 @@ const CSS = `
 .st-ctrl small { color: #7a5536; }
 .st-confirm p { margin: 4px 0 10px; font-size: 15px; line-height: 1.4; text-align: center; }
 .st-two { display: flex; gap: 10px; } .st-two .st-btn { flex: 1; }
+.st-ctrl-row { display: flex; flex-wrap: wrap; gap: 8px 10px; margin: 8px 0; } .st-ctrl-row .st-btn { flex: 1 1 165px; min-width: 0; margin: 0; }   /* (margens por fora da linha: no computador a altura é a mesma de antes) */
+.st-ctrl-row [data-a="tlayout"] { display: none; }
+.settings.touchy .st-ctrl-row [data-a="tlayout"] { display: block; }
+.settings.editing { background: transparent; } .settings.editing .st-card { visibility: hidden; }
+.st-ctrl .ti { display: inline-grid; place-items: center; width: 30px; height: 30px; margin-right: 8px; vertical-align: middle; border-radius: 50%;
+  background: #3a2a1a; color: #fff3d6; flex: none; }
+.st-ctrl .ti svg { width: 19px; height: 19px; }
+.st-ctrl .ti.txt { width: auto; padding: 0 9px; border-radius: 999px; font: 800 12px/1 "Trebuchet MS","Segoe UI",system-ui,sans-serif; letter-spacing: .04em; }
+.st-ctrl .ti.red { background: #e3262e; } .st-ctrl .ti.blue { background: #2a7fd0; }
+.st-ctrl.touch li { grid-template-columns: minmax(124px, auto) 1fr; align-items: center; }
+.st-ctrl.touch b { display: flex; align-items: center; }
 /* tela baixa (celular deitado): tudo mais justo para o Voltar e o rodapé caberem sem rolar */
 @media (max-height: 500px) {
   .st-card { padding: 10px 18px 8px; border-width: 3px; }
@@ -40,6 +54,7 @@ const CSS = `
   .st-card h3 { margin: 6px 0 2px; font-size: 13px; }
   .st-row { margin: 3px 0; }
   .st-btn { margin: 5px 0; padding: .42em 1em; }
+  .st-ctrl-row { margin: 5px 0; gap: 5px 10px; }
   .st-btn.dark { margin-top: 8px; }
   .st-reset { margin-top: 4px; }
   .st-rev { margin-top: 2px; }
@@ -66,6 +81,12 @@ const CONTROLS = [
   ['Botão ♪', 'Pausar / continuar a música'],
 ];
 
+// controles de toque (com os mesmos símbolos dos botões da tela)
+const TOUCH_LIST = TOUCH_HELP.map(([ic, k, d]) => `<li><b><span class="ti">${ICONS[ic]}</span>${k}</b><span>${d}</span></li>`).join('') +
+  '<li><b><span class="ti txt red">DICA</span></b><span>Seta do céu na casa indicada (1 por entrega).</span></li>' +
+  '<li><b><span class="ti txt">MENU</span></b><span>Pausar a partida (e opções do Modo Livre).</span></li>' +
+  '<li><b><span class="ti blue">♪</span>Música</b><span>Pausar / continuar a música.</span></li>';
+
 export function createSettings({ onChange, onClose } = {}) {
   const style = document.createElement('style'); style.textContent = CSS; document.head.appendChild(style);
   let prefs = { ...DEFAULTS };
@@ -83,7 +104,7 @@ export function createSettings({ onChange, onClose } = {}) {
       <h3>Tela</h3>
       <button type="button" class="st-btn" data-a="fs"></button>
       <h3>Controles</h3>
-      <button type="button" class="st-btn" data-a="ctrl">Ver controles</button>
+      <div class="st-ctrl-row"><button type="button" class="st-btn" data-a="ctrl">Ver controles</button><button type="button" class="st-btn" data-a="tlayout">Posição dos botões</button></div>
       <button type="button" class="st-btn dark" data-a="back">Voltar</button>
       <button type="button" class="st-reset" data-a="reset">Restaurar configurações</button>
       <div class="st-rev">Revisão de 19/10/2026</div>
@@ -91,6 +112,7 @@ export function createSettings({ onChange, onClose } = {}) {
     <div class="st-sub" data-v="ctrl">
       <h2>CONTROLES</h2>
       <ul class="st-ctrl">${CONTROLS.map(([k, d]) => `<li><b>${k}</b><span>${d}</span></li>`).join('')}</ul>
+      <ul class="st-ctrl touch">${TOUCH_LIST}</ul>
       <button type="button" class="st-btn dark" data-a="main">Voltar</button>
     </div>
     <div class="st-sub st-confirm" data-v="confirm">
@@ -119,14 +141,19 @@ export function createSettings({ onChange, onClose } = {}) {
     if (v === 'confirm' && m.offsetHeight) el.style.setProperty('--st-h', m.offsetHeight + 'px');   // a confirmação ocupa o mesmo espaço
     el.querySelectorAll('.st-sub').forEach(s => s.classList.toggle('on', s.dataset.v === v));
     el.querySelector('.st-card').classList.toggle('wide', v === 'ctrl');   // (só muda algo em tela baixa: controles em 2 colunas)
+    const tl = document.body.classList.contains('touch-on');             // no toque, a lista dos controles de toque; com teclado/mouse, a do teclado
+    el.querySelector('.st-ctrl:not(.touch)').style.display = tl ? 'none' : '';
+    el.querySelector('.st-ctrl.touch').style.display = tl ? '' : 'none';
   };
-  let open = false;
-  function close() { if (!open) return; open = false; el.classList.remove('on'); view('main'); if (onClose) onClose(); }
+  let open = false, editor = null;
+  const touchUI = () => document.body.classList.contains('touch-on') || isTouchDevice();
+  function close() { if (!open) return; if (editor) editor.cancel(); open = false; el.classList.remove('on'); view('main'); if (onClose) onClose(); }
   el.addEventListener('click', e => {
     const a = e.target.closest('[data-a]'); if (!a) return; a.blur();
     const k = a.dataset.a;
     if (k === 'back') close();
     else if (k === 'ctrl') view('ctrl');
+    else if (k === 'tlayout') { el.classList.add('editing'); editor = openTouchEditor({ onClose: () => { editor = null; el.classList.remove('editing'); } }); }
     else if (k === 'main') view('main');
     else if (k === 'reset') view('confirm');
     else if (k === 'doreset') { prefs = { ...DEFAULTS }; save(); apply(); paint(); view('main'); }
@@ -142,12 +169,12 @@ export function createSettings({ onChange, onClose } = {}) {
     if (!open) return;
     e.stopImmediatePropagation();
     if (!/^F\d+$/.test(e.key) && !e.ctrlKey && !e.metaKey) e.preventDefault();   // F5/F11 e atalhos do navegador continuam funcionando
-    if (e.key === 'Escape' && !e.repeat) { const cur = el.querySelector('.st-sub.on').dataset.v; cur === 'main' ? close() : view('main'); }
+    if (e.key === 'Escape' && !e.repeat) { if (editor) { editor.cancel(); return; } const cur = el.querySelector('.st-sub.on').dataset.v; cur === 'main' ? close() : view('main'); }
   }, true);
 
   apply(); paint();
   return {
-    open() { open = true; view('main'); paint(); el.classList.add('on'); },
+    open() { open = true; el.classList.toggle('touchy', touchUI()); view('main'); paint(); el.classList.add('on'); },
     close,
     get isOpen() { return open; },
     get prefs() { return { ...prefs }; },
