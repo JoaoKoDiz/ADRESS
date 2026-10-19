@@ -72,17 +72,61 @@ export function createWalker(scene) {
     facing = false; life = false;
     lookYaw += (lookGoal - lookYaw) * Math.min(1, dt * 2.6);
     head.rotation.y += lookYaw; torso.rotation.y += lookYaw * 0.22;
-    carry += ((carryOn ? 1 : 0) - carry) * Math.min(1, dt * 9);
-    if (carry > 0.01) {                                                       // abraça a caixa: braços à frente, cotovelos pouco dobrados (balançam junto com o passo)
-      const k = carry * carry * (3 - 2 * carry);
-      arms.forEach((q, i) => {
-        const sd = q.s || (i ? 1 : -1), ph = Math.sin(g.u * Math.PI * 2 + i * Math.PI) * 0.04 * a;
-        q.sh.rotation.x += (-sd * 0.02 - q.sh.rotation.x) * k; q.sh.rotation.y += (sd * 0.18 - q.sh.rotation.y) * k;
-        q.sh.rotation.z += (1.12 + ph - q.sh.rotation.z) * k; q.elbow.rotation.z += (0.42 - q.elbow.rotation.z) * k;
-        if (q.wrist) q.wrist.rotation.z += (0.25 - q.wrist.rotation.z) * k;
-      });
-      torso.rotation.z += 0.05 * k;                                           // o peso puxa os ombros um pouco para trás
-    }
+    carry += ((carryOn ? 1 : 0) - carry) * Math.min(1, dt * 7);
+    carryK = carry * carry * (3 - 2 * carry);
+    if (carry > 0.01) carryArms(dt, g, a, carryK);
+  }
+
+  // ---- carregando a caixa (Bairro 1): a caixa fica presa ao tronco (encostada na barriga, topo na altura do peito) e as
+  // duas mãos a seguram pelas laterais, na metade de baixo, por IK de 2 ossos (ombro → cotovelo → palma). Cotovelos
+  // dobrados para baixo e para trás, junto ao corpo; antebraços ao longo das laterais da caixa; polegar para cima.
+  // Tudo no espaço do tronco: a caixa e as mãos andam, balançam e giram juntas com ele (não há como se desencontrarem).
+  // Medidas em unidades do corpo (mundo / 0,9). A caixa (main.js) mede 0,56 × 0,42 × 0,52 no mundo.
+  const CARRY = { back: 0.255, len: 0.622, h: 0.467, half: 0.289, top: 0.6, palm: 0.043, gripX: 0.17, gripY: 0.36 };
+  const carryAnchor = new THREE.Group();                       // centro da base da caixa, frente = +X (como o modelo)
+  carryAnchor.position.set(CARRY.back + CARRY.len / 2, CARRY.top - CARRY.h, 0);
+  torso.add(carryAnchor);
+  const ARM_L1 = BODY.upperArm, ARM_L2 = BODY.foreArm + 0.1;  // até o meio da palma (a luva tem o centro a 0,1 do punho)
+  const _S = new THREE.Vector3(), _T = new THREE.Vector3(), _E = new THREE.Vector3(), _P = new THREE.Vector3(), _u = new THREE.Vector3(), _w = new THREE.Vector3();
+  const _x = new THREE.Vector3(), _y = new THREE.Vector3(), _z = new THREE.Vector3(), _hd = new THREE.Vector3(), _m = new THREE.Matrix4(), _q = new THREE.Quaternion(), _qi = new THREE.Quaternion();
+  let carryK = 0, carryT = 0;
+  function carryArms(dt, g, a, k) {
+    carryT += dt;
+    // a caixa "pesa": acompanha o passo com um leve atraso (sobe/desce e inclina um pouco), parada só respira
+    const ph = g.u * Math.PI * 4;
+    carryAnchor.position.set(CARRY.back + CARRY.len / 2, CARRY.top - CARRY.h - 0.012 * Math.sin(ph - 0.6) * a, 0);
+    carryAnchor.rotation.set(0.025 * Math.sin(g.u * Math.PI * 2) * a, 0, -0.03 * Math.sin(ph - 0.9) * a + 0.006 * Math.sin(carryT * 2) * (1 - a));
+    carryAnchor.updateMatrix();
+    torso.rotation.y *= 1 - 0.6 * k;                                         // braços presos à caixa: o tronco quase não contra-gira
+    torso.rotation.z += 0.07 * k;                                            // o peso puxa os ombros um pouco para trás
+    head.rotation.z -= 0.05 * k;                                             // e a cabeça compensa, olhando à frente por cima da caixa
+    arms.forEach((q, i) => {
+      const sd = q.s || (i ? 1 : -1);
+      _S.copy(q.sh.position);
+      // ponto de contato: lateral da caixa, um pouco atrás do meio e abaixo do meio; a palma fica encostada por fora
+      _T.set(-CARRY.len / 2 + CARRY.gripX, CARRY.h * CARRY.gripY, sd * (CARRY.half + CARRY.palm)).applyMatrix4(carryAnchor.matrix);
+      _hd.set(0.86, -0.36, 0).applyMatrix4(_m.makeRotationFromEuler(carryAnchor.rotation)).normalize();   // dedos para a frente e um pouco para baixo
+      _w.copy(_T).addScaledVector(_hd, -0.1);                                // punho (a palma fica 0,1 à frente dele)
+      // IK de 2 ossos até o punho (L2 = antebraço), cotovelo para baixo/trás e um pouco para fora
+      const L1 = ARM_L1, L2 = BODY.foreArm;
+      _u.subVectors(_w, _S); let d = _u.length(); d = Math.min(d, (L1 + L2) * 0.999); _u.normalize();
+      _P.set(-0.55, -0.8, sd * 0.25); _P.addScaledVector(_u, -_P.dot(_u)).normalize();
+      const ca = (L1 * L1 + d * d - L2 * L2) / (2 * L1 * d), sa = Math.sqrt(Math.max(0, 1 - ca * ca));
+      _E.copy(_S).addScaledVector(_u, L1 * ca).addScaledVector(_P, L1 * sa);
+      // base do ombro: +Y aponta do cotovelo para o ombro (o braço pende em −Y); +X = para onde o antebraço dobra
+      _y.subVectors(_S, _E).normalize();
+      _x.subVectors(_w, _E).normalize(); const fd = _x.clone();
+      _x.addScaledVector(_y, -_x.dot(_y)).normalize();
+      _z.crossVectors(_x, _y);
+      _q.setFromRotationMatrix(_m.makeBasis(_x, _y, _z));
+      const bend = Math.atan2(fd.dot(_x), -fd.dot(_y));
+      // punho: a mão segue _hd (no espaço do antebraço)
+      _qi.copy(_q).invert(); _hd.applyQuaternion(_qi).applyAxisAngle(_z.set(0, 0, 1), -bend);
+      const wr = Math.atan2(_hd.x, -_hd.y);
+      q.sh.quaternion.slerp(_q, k);
+      q.elbow.rotation.set(q.elbow.rotation.x * (1 - k), q.elbow.rotation.y * (1 - k), q.elbow.rotation.z + (bend - q.elbow.rotation.z) * k);
+      if (q.wrist) q.wrist.rotation.set(0, 0, q.wrist.rotation.z + (wr - q.wrist.rotation.z) * k);
+    });
   }
 
   return {
@@ -99,12 +143,16 @@ export function createWalker(scene) {
     pose(x, z, heading) { st.x = x; st.z = z; st.heading = heading; visOff = 0; lastHeading = heading; vel = 0; script = null; yAbs = floorY; vy = 0; apply(); },
     /** Multiplica a velocidade a pé (ex.: vento da nevasca). */
     setSpeedMul(k) { speedMul = k; },
-    show(on) { root.visible = on; if (!on) { st.speed = 0; vel = 0; script = null; carry = 0; carryOn = false; visOff = 0; } if (onShow) onShow(on); },
+    show(on) { root.visible = on; if (!on) { st.speed = 0; vel = 0; script = null; carry = 0; carryK = 0; carryOn = false; visOff = 0; } if (onShow) onShow(on); },
     /** Neste quadro o personagem está sob controle do jogador (a pé no bairro): parado, ele olha em volta de vez em quando.
      *  (As cenas que só deixam ele respirando não chamam isto.) */
     liveFrame() { life = true; },
     /** Carregando uma caixa nos braços (Bairro 1: a caixa do K). */
-    setCarry(on, snap = false) { carryOn = !!on; if (snap && !on && carry > 0) { carry = 0; restArms(arms); } },
+    setCarry(on, snap = false) { carryOn = !!on; if (snap && !on && carry > 0) { carry = 0; carryK = 0; restArms(arms); } },
+    /** Onde a caixa fica nos braços (centro da base, preso ao tronco) e quanto da pose de carregar já entrou (0..1). */
+    get carryAnchor() { return carryAnchor; },
+    get carryK() { return carryK; },
+    get _arms() { return arms; },   // (testes)
     /** Avisado a cada show(on) (a van mostra ou esconde o motorista na cabine). */
     set onShow(fn) { onShow = fn; },
     /** Lado da van em que acabou de descer (placeBesideVan): +1 motorista (esquerda), −1 passageiro, 0 = outro ponto. */

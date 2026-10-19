@@ -526,7 +526,8 @@ function cabinModel(c) {
   const FZ = D / 2;
   if (barn) {
     add(box(3.6, 3.2, 0.12, '#7d2620'), 0, 0.4 + 1.6, FZ + 0.04); for (const r of [0.73, -0.73]) add(box(0.14, 4.3, 0.06, TRIM), 0, 0.4 + 1.6, FZ + 0.13, 0, 0, r);   // portão com o X branco (cabe no portão)
-    add(box(3.8, 0.16, 0.1, TRIM), 0, 0.4 + 3.25, FZ + 0.1); add(box(1.0, 1.0, 0.1, '#ffd27a'), 0, 0.4 + H + 1.0, FZ + 0.06);   // janela do feno
+    add(box(3.8, 0.16, 0.1, TRIM), 0, 0.4 + 3.25, FZ + 0.1);
+    add(box(0.08, 1.24, 1.14, TRIM), W / 2, 0.4 + H + 1.0, 0); add(box(0.08, 1.0, 0.9, '#ffd27a'), W / 2 + 0.03, 0.4 + H + 1.0, 0);   // janela do feno, no oitão (antes ficava solta na frente do telhado)
   } else {
     add(box(1.0, 2.0, 0.1, '#3b2c1e'), -W / 2 + 1.6, 0.4 + 1.0, FZ + 0.04); add(box(0.08, 0.08, 0.06, '#ffdf6e'), -W / 2 + 1.95, 0.4 + 1.0, FZ + 0.12);   // porta e maçaneta
     for (const x of farm ? [0.4, 2.8] : [W / 2 - 1.6]) { add(box(1.2, 1.0, 0.08, '#ffd27a'), x, 0.4 + 1.6, FZ + 0.05); add(box(1.36, 0.1, 0.12, TRIM), x, 0.4 + 1.08, FZ + 0.08); add(box(0.08, 1.04, 0.1, TRIM), x, 0.4 + 1.6, FZ + 0.09); }
@@ -553,8 +554,10 @@ export function buildSnowOutskirts(MAP) {
   const R = O.RING, ring = [];
   for (const [cx, cz, a0] of [[MAP, MAP, 0], [0, MAP, Math.PI / 2], [0, 0, Math.PI], [MAP, 0, -Math.PI / 2]]) for (let k = 0; k <= 4; k++) { const a = a0 + k / 4 * Math.PI / 2; ring.push([cx + Math.cos(a) * R, cz + Math.sin(a) * R]); }
   const laneCols = [[-1, EDGE], [-0.55, PACK], [-0.35, RUT], [-0.15, PACK], [0.15, PACK], [0.35, RUT], [0.55, PACK], [1, EDGE]];
-  g.add(ribbon(ring, 5, -0.012, laneCols, true, 1.5));
-  for (const l of O.lanes) g.add(ribbon(l.pts, l.w, -0.016, laneCols));
+  // (alturas: acima das manchas do chão de fora, cujo topo fica em −0,012 e −0,02 — a trilha em −0,012 disputava a mesma
+  //  altura com elas e tremulava —, e abaixo da estrada que cruza, em −0,004)
+  g.add(ribbon(ring, 5, -0.007, laneCols, true, 1.5));
+  for (const l of O.lanes) g.add(ribbon(l.pts, l.w, -0.009, laneCols));
   // estrada que cruza (asfalto com a beirada de neve suja), faixa amarela, montes das máquinas, balizas
   const X0 = -470, X1 = MAP + 470;
   g.add(ribbon([[X0, OJ], [X1, OJ]], RWo + 1.2, -0.004, [[-1, '#cfd6dd'], [-0.84, '#8e959e'], [-0.78, ASPH], [0.78, ASPH], [0.84, '#8e959e'], [1, '#cfd6dd']], false, 6));
@@ -784,20 +787,23 @@ export function buildPlow() {
   for (const sd of [-1, 1]) a(box(0.75, 0.1, 0.1, DK), 1.92, 0.55, sd * 0.55, 0, sd * 0.12, 0.25);   // braços de empurrar
   a(cyl(0.05, 0.05, 0.62, STEEL, 6), 1.98, 0.86, 0, 0, 0, 1.0);          // cilindro hidráulico
   a(box(0.2, 0.3, 0.9, DK), 1.72, 0.66, 0);                             // engate
-  const body = vcMerge(fixed); body.castShadow = true; body.receiveShadow = true; g.add(body);
+  // carroceria (tudo menos as rodas e a neve no chão) num grupo à parte: na curva só ela tomba um pouco para fora, sobre as
+  // molas (pivô na altura dos eixos); as rodas continuam apoiadas na rua (userData.lean, chamado por tractors.js)
+  const chassis = new THREE.Group(), cin = new THREE.Group(); chassis.position.y = 0.6; cin.position.y = -0.6; chassis.add(cin); g.add(chassis);
+  const body = vcMerge(fixed); body.castShadow = true; body.receiveShadow = true; cin.add(body);
   // vidros (um desenho transparente) e o motorista de gorro (dirige pela esquerda)
   const glass = new THREE.MeshStandardMaterial({ color: '#a9d2ea', transparent: true, opacity: 0.42, roughness: 0.1, depthWrite: false });
   const gl = new THREE.Group();
   gl.add(at(new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.58, 1.72), glass), 1.6, 2.03, 0));
   for (const sd of [-1, 1]) gl.add(at(new THREE.Mesh(new THREE.BoxGeometry(1.28, 0.56, 0.04), glass), 0.9, 2.03, sd * 0.955));
   gl.add(at(new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.4, 1.0), glass), 0.2, 2.08, 0));   // vidro de trás (a parede tem um vão)
-  const gm = new THREE.Mesh(mergeGeometries(gl.children.map(m => { m.updateMatrix(); return m.geometry.clone().applyMatrix4(m.matrix); }), false), glass); gm.castShadow = false; g.add(gm);
+  const gm = new THREE.Mesh(mergeGeometries(gl.children.map(m => { m.updateMatrix(); return m.geometry.clone().applyMatrix4(m.matrix); }), false), glass); gm.castShadow = false; cin.add(gm);
   const d = buildFigure({ coat: '#2f5f9a', pants: '#3a3d44', hat: 'beanie', hatColor: '#d8473a', scarf: '#efbf2a', glove: '#2b2b2b', sit: 0.42, moving: ['head', 'armL', 'armR'] });
-  d.root.position.set(0.72, 0.92, -0.45); d.root.rotation.y = Math.PI / 2; d.root.scale.setScalar(0.8); g.add(d.root);
+  d.root.position.set(0.72, 0.92, -0.45); d.root.rotation.y = Math.PI / 2; d.root.scale.setScalar(0.8); cin.add(d.root);
   if (d.armL && d.armR) { d.armL.rotation.x = -1.0; d.armR.rotation.x = -1.0; }   // mãos no volante
-  g.add(at(torus(0.17, 0.03, DK, 5, 12), 1.22, 1.72, -0.45, 0, Math.PI / 2, 0.5));   // volante
-  const lamps = [0, 1].map(k => { const m = new THREE.Mesh(new THREE.SphereGeometry(0.15, 10, 6, 0, Math.PI * 2, 0, Math.PI / 2), new THREE.MeshStandardMaterial({ color: '#ffb020', emissive: '#ff8a00', emissiveIntensity: 0.2 })); m.position.set(1.0, 2.625, k ? 0.32 : -0.32); g.add(m); return m; });
-  const spinner = new THREE.Group(); spinner.position.set(-2.52, 0.78, 0); g.add(spinner);
+  cin.add(at(torus(0.17, 0.03, DK, 5, 12), 1.22, 1.72, -0.45, 0, Math.PI / 2, 0.5));   // volante
+  const lamps = [0, 1].map(k => { const m = new THREE.Mesh(new THREE.SphereGeometry(0.15, 10, 6, 0, Math.PI * 2, 0, Math.PI / 2), new THREE.MeshStandardMaterial({ color: '#ffb020', emissive: '#ff8a00', emissiveIntensity: 0.2 })); m.position.set(1.0, 2.625, k ? 0.32 : -0.32); cin.add(m); return m; });
+  const spinner = new THREE.Group(); spinner.position.set(-2.52, 0.78, 0); cin.add(spinner);
   spinner.add(at(cyl(0.3, 0.3, 0.04, STEEL, 10), 0, 0, 0)); for (let k = 0; k < 4; k++) spinner.add(at(box(0.5, 0.06, 0.04, DK), 0, 0.04, 0, 0, k * Math.PI / 4, 0));
   const wheels = [];
   for (const x of [FA, RA]) for (const sd of [-1, 1]) {
@@ -814,6 +820,7 @@ export function buildPlow() {
   const roll = sphere(1, '#f4f8fb', 9, 5); roll.scale.set(0.42, 0.3, 1.1); g.add(at(roll, 2.46, 0.2, 1.2, 0, -0.3, 0));   // neve rolando na frente da ponta direita
   let T = Math.random() * 3, look = 0, lookT = 3, sp = 0;
   g.userData.ride = { turnR: 7, side: 2.0, tilt: true, lift: 0.065, axle: [FA, RA], track: TR };   // (side: no meio da faixa da direita; a lâmina não raspa os muros das ladeiras)
+  g.userData.lean = r => { chassis.rotation.x = r; };
   g.userData.drive = (dt, v) => {
     T += dt; sp += (Math.min(1, v / 3) - sp) * Math.min(1, dt * 3);
     for (const w of wheels) w.rotation.z -= v * dt / WR;

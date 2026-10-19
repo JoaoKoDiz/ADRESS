@@ -1,8 +1,8 @@
 // Cenário especial dos Bairros 9 (Encostas: áreas elevadas, ladeiras e escadarias) e 10 (Travessia: canal, pontes,
 // passarelas e placas LADO LESTE / LADO OESTE). Só visual: a colisão está em layout.js (SOLIDS) e a altura em TERRAIN.h.
 import * as THREE from 'three';
-import { box, at, mesh, textTexture, dynamic } from './models/kit.js';
-import { cobble, gableRoof, buildLagoonHorizon } from './models/venice.js';
+import { box, at, mesh, textTexture, dynamic, cyl, sphere } from './models/kit.js';
+import { cobble, gableRoof, buildLagoonHorizon, cafeLife } from './models/venice.js';
 import { buildRail } from './train.js';
 import { buildFavelaScene } from './models/favela.js';
 import { buildFluxScene } from './models/flux.js';
@@ -340,28 +340,96 @@ function buildVenice(g) {
       um.position.set(x, 3.75, z); g.add(um);
     }
   }
-  for (const cf of V.cafes) {                                                                   // café / restaurante: maior, girado na diagonal (alinhado com a ponte)
-    const k = new THREE.Group(); k.position.set(cf.cx, 0, cf.cz); k.rotation.y = cf.ang; g.add(k);
-    const w = cf.w, d = cf.d;
-    k.add(at(box(w, 7.0, d, '#e9c98f'), 0, 3.65, 0));
-    gableRoof(k, { cx: 0, cz: 0, y: 7.15, len: w + 0.9, depth: d, rise: 2.0, over: 0.45, color: '#b5532f', wall: '#e9c98f' });
-    for (const fz of [-1, 1]) {                                                               // as duas frentes (dos dois lados)
-      k.add(at(box(w - 1.2, 0.18, 2.2, '#3c8f52'), 0, 3.3, fz * (d / 2 + 0.95), fz * -0.3, 0, 0));
-      for (let x = -w / 2 + 1.5; x < w / 2 - 1; x += 2.4) {
-        if (Math.abs(x) > 1.8) k.add(at(box(1.4, 2.3, 0.08, '#2e3a46'), x, 1.45, fz * (d / 2 + 0.04)));   // vitrines (o meio é a porta)
-        k.add(at(box(1.2, 1.3, 0.08, '#2e3a46'), x, 5.6, fz * (d / 2 + 0.04)));                         // janelas de cima (acima da placa)
-      }
-      k.add(at(box(2.3, 2.9, 0.1, '#e8dfcc'), 0, 1.6, fz * (d / 2 + 0.05)));                        // porta de entrada: moldura,
-      k.add(at(box(1.8, 2.6, 0.14, '#6b3f22'), 0, 1.45, fz * (d / 2 + 0.08)));                       // folhas de madeira com vidro
-      for (const sx of [-0.45, 0.45]) k.add(at(box(0.6, 1.3, 0.16, '#9fc3d8'), sx, 1.85, fz * (d / 2 + 0.09)));
-      k.add(at(box(2.4, 0.18, 1.0, '#cfc6b4'), 0, 0.24, fz * (d / 2 + 0.5)));                        // degrau
-      const tex = textTexture('CAFFÈ · RISTORANTE', { width: 768, height: 128, bg: '#2a5a3a', fg: '#fff3d6', font: 'bold 60px "Trebuchet MS", sans-serif' });
-      const sign = new THREE.Mesh(new THREE.PlaneGeometry(w - 3, 0.85), new THREE.MeshLambertMaterial({ map: tex, side: THREE.DoubleSide }));
-      sign.position.set(0, 4.25, fz * (d / 2 + 0.07));                                             // entre o toldo e as janelas de cima
-      if (fz < 0) sign.rotation.y = Math.PI; k.add(sign);
-      for (const dx of [-4.5, 0, 4.5]) { k.add(at(cylLike(0.75, 0.1, '#f2efe6'), dx, 1.2, fz * (d / 2 + 3.6))); k.add(at(box(0.14, 1.1, 0.14, '#444'), dx, 0.7, fz * (d / 2 + 3.6))); }
+  const seats = [], waiters = [];
+  const seatUp = sat => { for (const p of sat) { const q = sat.find(o => o !== p); p.mate = q ? Math.atan2(q.x - p.x, q.z - p.z) : null; seats.push(p); } };
+  for (const [r, c] of V.zones.purple) {                                                       // gente nas mesas da praça roxa (ao lado dos cafés)
+    const o = cell(r, c);
+    for (let i = 0; i < 3; i++) for (let j = 0; j < 3; j++) {
+      if (rand() > 0.32) continue;
+      const x = o.x + 3.0 + i * 5.6, z = o.z + 3.0 + j * 5.6, sat = [], n = 1 + Math.floor(rand() * 2.6), first = Math.floor(rand() * 4);
+      const D = [[-1, 0], [0, 1], [1, 0], [0, -1]];
+      for (let q = 0; q < n; q++) { const [dx, dz] = D[(first + (n === 2 ? q * 2 : q)) % 4]; sat.push({ x: x + dx * 1.35, z: z + dz * 1.35, face: Math.atan2(-dx, -dz), sit: 0.65 }); }
+      seatUp(sat);
+      for (const [dx, dz] of [[0.25, 0.1], [-0.2, -0.2]]) g.add(at(cylLike(0.08, 0.14, '#ffffff'), x + dx, 1.32, z + dz));   // xícaras e copos
     }
   }
+  for (const cf of V.cafes) {   // café / restaurante: girado na diagonal (alinhado com a ponte); a ENTRADA PRINCIPAL fica na frente — a ponta sob o oitão, voltada para a praça e a Rialto (cf.front); as laterais longas têm vitrines e toldo
+    const k = new THREE.Group(); k.position.set(cf.cx, 0, cf.cz); k.rotation.y = cf.ang; g.add(k);
+    const w = cf.w, d = cf.d, fs = cf.front, FX = fs * w / 2;
+    const GREEN = '#3c8f52', GLASS = '#2e3a46', FRAME = '#e8dfcc', DOOR = '#6b3f22';
+    k.add(at(box(w, 7.0, d, '#e9c98f'), 0, 3.65, 0));
+    k.add(at(box(w + 0.12, 0.5, d + 0.12, '#d6b47a'), 0, 0.4, 0));                                 // rodapé de pedra
+    gableRoof(k, { cx: 0, cz: 0, y: 7.15, len: w + 0.9, depth: d, rise: 2.0, over: 0.45, color: '#b5532f', wall: '#e9c98f' });
+    for (const fz of [-1, 1]) {                                                               // laterais: vitrines, toldo e o nome (sem porta)
+      k.add(at(box(w - 1.2, 0.18, 2.2, GREEN), 0, 3.3, fz * (d / 2 + 0.95), fz * -0.3, 0, 0));
+      for (let x = -w / 2 + 1.5; x < w / 2 - 1; x += 2.4) {
+        k.add(at(box(1.6, 2.4, 0.08, FRAME), x, 1.55, fz * (d / 2 + 0.03)));
+        k.add(at(box(1.4, 2.2, 0.1, GLASS), x, 1.55, fz * (d / 2 + 0.04)));                   // vitrines
+        k.add(at(box(1.2, 1.3, 0.08, GLASS), x, 5.6, fz * (d / 2 + 0.04)));                    // janelas de cima (acima da placa)
+      }
+      const tex = textTexture('CAFFÈ · RISTORANTE', { width: 768, height: 128, bg: '#2a5a3a', fg: '#fff3d6', font: 'bold 60px "Trebuchet MS", sans-serif' });
+      const sign = new THREE.Mesh(new THREE.PlaneGeometry(w - 3, 0.85), new THREE.MeshLambertMaterial({ map: tex, side: THREE.DoubleSide }));
+      sign.position.set(0, 4.25, fz * (d / 2 + 0.07));
+      if (fz < 0) sign.rotation.y = Math.PI; k.add(sign);
+    }
+    // frente (no oitão): porta dupla de madeira e vidro com bandeira e verga de pedra, vitrines dos dois lados, toldo,
+    // letreiro, lanternas, janelas de cima, óculo no oitão, degrau largo, vasos e a lousa do cardápio
+    const F = (m, along, y, out = 0, rz = 0) => k.add(at(m, FX + fs * out, y, along, 0, 0, rz));
+    F(box(0.1, 3.5, 2.9, FRAME), 0, 1.85, 0.04);                                              // moldura da porta
+    F(box(0.16, 2.9, 2.2, DOOR), 0, 1.55, 0.06);
+    for (const al of [-0.52, 0.52]) F(box(0.2, 1.5, 0.7, '#9fc3d8'), al, 1.9, 0.07);          // vidros das folhas
+    F(box(0.2, 2.9, 0.06, '#3a2212'), 0, 1.55, 0.08);                                         // encontro das folhas
+    for (const al of [-0.2, 0.2]) F(box(0.1, 0.36, 0.06, '#c9a441'), al, 1.5, 0.17);          // puxadores
+    F(box(0.18, 0.5, 2.2, '#9fc3d8'), 0, 3.3, 0.06);                                          // bandeira de vidro
+    F(box(0.26, 0.32, 3.2, '#d8cfbe'), 0, 3.72, 0.08);                                        // verga
+    for (const al of [-2.85, 2.85]) {                                                         // vitrines da frente
+      F(box(0.08, 2.6, 1.9, FRAME), al, 1.65, 0.03); F(box(0.1, 2.4, 1.7, GLASS), al, 1.65, 0.05);
+      F(box(0.5, 0.1, 1.9, '#d8cfbe'), al, 0.42, 0.2);                                         // peitoril
+    }
+    for (const al of [-1.75, 1.75]) {                                                         // lanternas ao lado da porta
+      F(box(0.5, 0.06, 0.06, '#2b2b2b'), al, 2.85, 0.25);
+      F(box(0.26, 0.36, 0.26, '#ffd98a'), al, 2.62, 0.48); F(box(0.32, 0.06, 0.32, '#2b2b2b'), al, 2.84, 0.48);
+    }
+    const aw = at(box(1.7, 0.12, 3.4, GREEN), FX + fs * 0.85, 4.25, 0, 0, 0, -fs * 0.32); k.add(aw);   // toldo da porta
+    for (let i = 0; i < 6; i++) F(box(0.04, 0.24, 0.5, i % 2 ? '#fff3d6' : GREEN), -1.45 + i * 0.58, 3.92, 1.68);   // franja
+    const ftex = textTexture('CAFFÈ · RISTORANTE', { width: 768, height: 128, bg: '#2a5a3a', fg: '#fff3d6', font: 'bold 60px "Trebuchet MS", sans-serif' });
+    const fsign = new THREE.Mesh(new THREE.PlaneGeometry(6.4, 1.05), new THREE.MeshLambertMaterial({ map: ftex }));
+    fsign.position.set(FX + fs * 0.07, 5.0, 0); fsign.rotation.y = fs * Math.PI / 2; k.add(fsign);   // letreiro principal
+    for (const al of [-2.2, 2.2]) { F(box(0.08, 1.35, 1.25, FRAME), al, 6.2, 0.03); F(box(0.1, 1.2, 1.05, GLASS), al, 6.2, 0.05); }
+    F(cyl(0.6, 0.6, 0.08, FRAME, 16), 0, 7.95, 0.5, Math.PI / 2);   // (à frente do oitão do telhado)          // óculo no oitão
+    F(cyl(0.48, 0.48, 0.1, GLASS, 16), 0, 7.95, 0.52, Math.PI / 2);
+    F(box(1.2, 0.2, 3.4, '#cfc6b4'), 0, 0.25, 0.6);                                           // degrau largo
+    for (const al of [-1.85, 1.85]) {                                                         // vasos com loureiro
+      F(box(0.6, 0.6, 0.6, '#a8613a'), al, 0.45, 0.55); F(sphere(0.5, '#4f7d3a', 8, 6), al, 1.2, 0.55);
+    }
+    const easel = new THREE.Group();                                                          // lousa do cardápio
+    easel.add(at(box(0.06, 1.0, 0.7, '#5a3c22'), 0, 0.55, 0, 0, 0, 0.12), at(box(0.08, 0.7, 0.56, '#1f2a24'), 0.03, 0.66, 0, 0, 0, 0.12));
+    easel.add(at(box(0.04, 0.04, 0.4, '#e8e8e8'), 0.08, 0.8, 0, 0, 0, 0.12), at(box(0.04, 0.04, 0.3, '#e8e8e8'), 0.08, 0.66, 0, 0, 0, 0.12));
+    easel.position.set(FX + fs * 1.5, 0.15, 1.6); easel.rotation.y = fs > 0 ? Math.PI : 0; k.add(easel);
+    // mesinhas (frente e laterais), cadeiras de bistrô e quem está sentado
+    for (const t of cf.tables) {
+      g.add(at(cylLike(0.62, 0.08, '#f2efe6'), t.x, 1.18, t.z)); g.add(at(box(0.1, 1.0, 0.1, '#333'), t.x, 0.65, t.z));
+      g.add(at(box(0.5, 0.05, 0.5, '#333'), t.x, 0.17, t.z));
+      // duas cadeiras de bistrô: na frente, uma de cada lado da mesa para fora (o caminho até a porta fica livre); nas laterais, ao longo da fachada
+      const lx = { x: Math.cos(cf.ang), z: -Math.sin(cf.ang) }, pick = Math.floor(rand() * 4), sat = [];   // 0 vazia, 1–2 uma pessoa, 3 duas
+      for (const sd of [-1, 1]) {
+        const cx = t.x + lx.x * sd * 1.0, cz = t.z + lx.z * sd * 1.0, face = Math.atan2(-lx.x * sd, -lx.z * sd);
+        const c = new THREE.Group(); c.position.set(cx, 0.15, cz); c.rotation.y = face;
+        c.add(at(box(0.52, 0.07, 0.5, '#7a4a2a'), 0, 0.62, 0), at(box(0.52, 0.6, 0.06, '#7a4a2a'), 0, 0.95, -0.24));
+        for (const [a, b] of [[-0.22, -0.2], [0.22, -0.2], [-0.22, 0.2], [0.22, 0.2]]) c.add(at(box(0.05, 0.6, 0.05, '#2b2b2b'), a, 0.3, b));
+        g.add(c);
+        if (pick === 3 || (pick && sd === (pick === 1 ? -1 : 1))) sat.push({ x: cx, z: cz, face, sit: 0.65 });
+      }
+      seatUp(sat);
+      for (const [dx, dz] of [[0.2, 0.1], [-0.18, -0.12]]) g.add(at(cylLike(0.07, 0.12, '#ffffff'), t.x + dx, 1.28, t.z + dz));   // xícaras
+    }
+    const o0 = cf.at(0, 0), o1 = cf.at(0, 1), faceOut = Math.atan2(o1.x - o0.x, o1.z - o0.z);   // de costas para a porta, olhando a praça
+    const ft = cf.tables.filter(t => t.k === 'f');
+    const faceT = (p, t) => Math.atan2(t.x - p.x, t.z - p.z);
+    const pA = cf.at(1.7, 3.4), pB = cf.at(-1.7, 3.4);
+    waiters.push({ path: [{ ...cf.at(0, 0.9), pause: 4, face: faceOut }, { ...pA, pause: 3.5, face: faceT(pA, ft[0]) }, { ...pB, pause: 3, face: faceT(pB, ft[1]) }], offset: cf.cx * 0.13 });
+  }
+  cafeLife(g, seats, waiters);
 
   // Ponte de Rialto em diagonal (de uma praça à outra): pedra clara, grande arco, degraus e lojinhas cobertas
   const R = V.rialto, rg = new THREE.Group();
@@ -394,4 +462,8 @@ function buildVenice(g) {
   signPost(g, '⚓ ATRACAR AQUI', lotX(3) + LOT - 2, lotZ(5) + 0.4, Math.PI, '#c8402f');
   g.add(buildLagoonHorizon());   // horizonte da laguna (ilhas, campanário, barcos ao longe; acompanha a câmera)
 }
-function cylLike(r, h, color) { return new THREE.Mesh(new THREE.CylinderGeometry(r, r, h, 10), new THREE.MeshLambertMaterial({ color })); }
+const LAMBERT = new Map();   // (um material por cor: o cenário assado junta tudo da mesma cor numa malha só)
+function cylLike(r, h, color) {
+  if (!LAMBERT.has(color)) LAMBERT.set(color, new THREE.MeshLambertMaterial({ color }));
+  return new THREE.Mesh(new THREE.CylinderGeometry(r, r, h, 10), LAMBERT.get(color));
+}

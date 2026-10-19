@@ -113,11 +113,13 @@ export function createTractors(audio) {
         const H = TERRAIN.h, a = ride.axle || [1.6, -1.6], w = ride.track || 1.0, rx = -t.uz, rz = t.ux;
         const hf = H(p.x + t.ux * a[0], p.z + t.uz * a[0]), hb = H(p.x + t.ux * a[1], p.z + t.uz * a[1]);
         const hl = H(p.x - rx * w, p.z - rz * w), hr = H(p.x + rx * w, p.z + rz * w);
-        const y = Math.max(H(p.x, p.z), hb + (hf - hb) * (-a[1]) / (a[0] - a[1]));
+        const y = hb + (hf - hb) * (-a[1]) / (a[0] - a[1]);           // (na reta entre os eixos: as rodas tocam a rua também no alto e no pé das ladeiras)
         const lean = t.path.smooth ? Math.max(-0.05, Math.min(0.05, -t.v * t.v * t.k * 0.012)) : 0;   // na curva a carroceria tomba um pouco para fora
         t.roll += (lean - t.roll) * 0.2;
+        const lf = t.mesh.userData.lean;                                // (modelo com carroceria separada: só ela tomba; as rodas ficam no chão)
+        if (lf) lf(t.roll);
         t.mesh.position.set(p.x, y + (ride.lift || 0), p.z);
-        t.mesh.rotation.set(Math.atan2(hl - hr, 2 * w) + t.roll, yaw, Math.atan2(hf - hb, a[0] - a[1]));
+        t.mesh.rotation.set(Math.atan2(hl - hr, 2 * w) + (lf ? 0 : t.roll), yaw, Math.atan2(hf - hb, a[0] - a[1]));
       } else {
         t.mesh.position.set(p.x, TERRAIN.h(p.x, p.z) + (ride && ride.lift || 0), p.z); t.mesh.rotation.y = yaw;
       }

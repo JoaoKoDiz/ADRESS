@@ -21,25 +21,39 @@ function batcher() {
   return { add, flush };
 }
 
-function stop(g, s, li = 0) {                            // parada: cobertura, banco e placa (frente para a rua = +z local) na cor da linha
-  const RED = LINE_COL[li % LINE_COL.length];
-  const p = new THREE.Group(); p.position.set(s.x, 0, s.z); p.rotation.y = s.ry; g.add(p);
-  p.add(at(box(4.2, 0.12, 1.6, '#bdb6a6'), 0, 0.06, 0));
-  for (const x of [-1.8, 1.8]) p.add(at(box(0.14, 2.6, 0.14, '#3f4a52'), x, 1.36, -0.55));
-  p.add(at(box(4.4, 0.15, 1.7, RED), 0, 2.72, 0));
-  p.add(at(box(3.8, 1.6, 0.06, '#cfe3f2'), 0, 1.5, -0.62));
-  p.add(at(box(2.6, 0.12, 0.5, '#8a5a36'), 0, 0.55, -0.25));
-  for (const x of [-1.1, 1.1]) p.add(at(box(0.1, 0.45, 0.4, '#444'), x, 0.3, -0.25));
+/** Parada na calçada (faixa livre de um prédio): piso de calçada, abrigo estreito (fundo de vidro voltado para o lote), banco,
+ *  cobertura e letreiro na cor da linha, mapa da linha e poste com o número. Frente (+z local) para a rua dos trilhos. */
+function stop(s, li = 0) {
+  const RED = LINE_COL[li % LINE_COL.length], POST = '#3f4a52';
+  const p = new THREE.Group(); p.name = 'rail-stop';
+  p.add(at(box(3.9, 0.2, 1.15, '#d4cdbb'), 0, 0.1, 0));                                   // piso no nível da calçada
+  p.add(at(box(3.9, 0.012, 0.16, '#e2bd3a'), 0, 0.206, 0.48));                            // faixa tátil na borda
+  for (const x of [-1.8, 1.8]) p.add(at(box(0.12, 2.62, 0.12, POST), x, 1.51, -0.42));
+  p.add(at(box(3.5, 1.55, 0.05, '#cfe3f2'), 0, 1.35, -0.44));                             // vidro do fundo
+  p.add(at(box(3.62, 0.08, 0.08, POST), 0, 2.15, -0.44));
+  p.add(at(box(3.62, 0.08, 0.08, POST), 0, 0.56, -0.44));
+  p.add(at(box(0.05, 1.45, 0.62, '#cfe3f2'), -1.8, 1.4, -0.1));                           // vidro lateral (lado de onde vem o vento)
+  p.add(at(box(4.2, 0.12, 1.4, RED), 0, 2.88, 0.05));                                     // cobertura
+  p.add(at(box(4.2, 0.05, 1.4, '#e9e4d8'), 0, 2.8, 0.05));
+  p.add(at(box(2.5, 0.08, 0.42, '#8a5a36'), 0.25, 0.62, -0.18));                          // banco
+  for (const x of [-0.75, 1.25]) p.add(at(box(0.08, 0.42, 0.36, '#444'), x, 0.41, -0.2));
+  p.add(at(box(0.82, 1.15, 0.03, '#f3e6c8'), -1.15, 1.45, -0.41));                        // mapa da linha no vidro
+  p.add(at(box(0.82, 0.16, 0.035, RED), -1.15, 1.95, -0.41));
+  for (let k = 0; k < 4; k++) p.add(at(box(0.07, 0.07, 0.04, RED), -1.42 + k * 0.18, 1.5 - (k % 2) * 0.22, -0.405));
   const tex = textTexture(s.name, { width: 640, height: 128, bg: RED, fg: '#fff3d6', font: 'bold 56px "Trebuchet MS", sans-serif' });
   const sign = new THREE.Mesh(new THREE.PlaneGeometry(3.4, 0.68), new THREE.MeshLambertMaterial({ map: tex, side: THREE.DoubleSide }));
-  sign.position.set(0, 3.15, 0.2); p.add(sign);
-  p.add(at(box(0.1, 3.4, 0.1, '#3f4a52'), 2.05, 1.7, 0.4));
-  p.add(at(cyl(0.32, 0.32, 0.06, '#f3e6c8', 12), 2.05, 3.1, 0.45, Math.PI / 2, 0, 0));
-  const num = new THREE.Mesh(new THREE.CircleGeometry(0.27, 16), new THREE.MeshLambertMaterial({ map: textTexture(String(li + 1), { width: 64, height: 64, bg: '#f3e6c8', fg: RED, font: 'bold 48px "Trebuchet MS", sans-serif' }) }));
-  num.position.set(2.05, 3.1, 0.485); p.add(num);                                           // número da linha no disco do poste
+  sign.position.set(0, 3.3, 0.2); p.add(sign);
+  p.add(at(box(0.1, 3.5, 0.1, POST), 2.05, 1.85, 0.32));                                  // poste com o número da linha (dos dois lados)
+  p.add(at(cyl(0.32, 0.32, 0.06, '#f3e6c8', 16), 2.05, 3.3, 0.32, Math.PI / 2, 0, 0));
+  for (const z of [0.355, 0.285]) {
+    const num = new THREE.Mesh(new THREE.CircleGeometry(0.27, 16), new THREE.MeshLambertMaterial({ map: textTexture(String(li + 1), { width: 64, height: 64, bg: '#f3e6c8', fg: RED, font: 'bold 48px "Trebuchet MS", sans-serif' }) }));
+    num.position.set(2.05, 3.3, z); if (z < 0.3) num.rotation.y = Math.PI; p.add(num);
+  }
+  const g = bakeStatic(p); g.name = 'rail-stop';
+  return g;
 }
 
-/** Parte fixa: trilhos rentes ao asfalto (a van passa por cima) e as duas paradas. */
+/** Parte fixa: trilhos rentes ao asfalto (a van passa por cima). As paradas ficam no bonde (createTrain): mudam de lote a cada partida. */
 export function buildRail(g) {
   const b = batcher();
   for (const line of RAIL.lines) for (let s = 0; s < line.S; s += 0.8) {
@@ -50,7 +64,6 @@ export function buildRail(g) {
     }
   }
   b.flush(g);
-  RAIL.lines.forEach((l, i) => l.stops.forEach(s => stop(g, s, i)));
   return g;
 }
 
@@ -141,6 +154,13 @@ function createTram(line, idx) {
 export function createTrain() {
   const root = new THREE.Group(); root.name = 'trams';
   let trams = [];
+  const stopsG = new THREE.Group(); stopsG.name = 'rail-stops'; root.add(stopsG);
+  let stopObjs = [], stopVer = -1, stopRail = null;
+  const placeStops = () => {                              // paradas: construídas uma vez, reposicionadas quando a partida muda o anfitrião
+    if (!stopObjs.length) RAIL.lines.forEach((l, i) => l.stops.forEach(s => { const o = stop(s, i); stopsG.add(o); stopObjs.push(o); }));
+    stopObjs.forEach((o, i) => { const s = RAIL.stops[i]; o.position.set(s.x, 0, s.z); o.rotation.y = s.ry; });
+    stopVer = RAIL.stopVer; stopRail = RAIL;
+  };
   const M = 2.2, NEAR = 16;                               // M: folga do cruzamento (meia largura do outro bonde + sobra)
   const blockedByVan = (T, van) => {
     if (!van) return false;
@@ -202,10 +222,12 @@ export function createTrain() {
       if (!RAIL) return;
       if (!trams.length) trams = RAIL.lines.map((l, i) => { const t = createTram(l, i); root.add(t.tram); return t; });
       for (const t of trams) { t.reset(); const i = SOLIDS.indexOf(t.solid); if (i >= 0) SOLIDS.splice(i, 1); }
+      placeStops();
     },
     detach() { for (const t of trams) { const i = SOLIDS.indexOf(t.solid); if (i >= 0) SOLIDS.splice(i, 1); } if (root.parent) root.parent.remove(root); },
     update(dt, van, foot = null) {
       if (!RAIL) return;
+      if (RAIL.stopVer !== stopVer || RAIL !== stopRail) placeStops();
       for (const T of trams) {
         const end = T.line.S - LEN;
         T.waiting = false;

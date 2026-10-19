@@ -114,7 +114,10 @@ function buildGround(venice = false, SP = null) {
       const O = SNOWV.outside, jw = O.ORW / 2 + 0.6, rw = 3.1;
       g.add(slab(x, -OUT, x + 0.3, O.OJ - jw, CURB, 0.12, 0.14), slab(x, O.OJ + jw, x + 0.3, -O.RING - rw, CURB, 0.12, 0.14), slab(x, -O.RING + rw, x + 0.3, 0, CURB, 0.12, 0.14));
     } else if (!SP) g.add(slab(x, -OUT, x + 0.3, 0, CURB, 0.12, 0.14));
-    else g.add(slab(x, -OUT, x + 0.3, jz0, CURB, 0.12, 0.14), slab(x, jz1, x + 0.3, 0, CURB, 0.12, 0.14));
+    else {                                                       // (o meio-fio abre nos cruzamentos: a estrada que cruza e a rua de contorno)
+      const cuts = [[jz0, jz1], ...(SP.ringN ? [SP.ringN] : [])].sort((p, q) => p[0] - q[0]);
+      let z0 = -OUT; for (const [a, b] of cuts) { g.add(slab(x, z0, x + 0.3, a, CURB, 0.12, 0.14)); z0 = b; } g.add(slab(x, z0, x + 0.3, 0, CURB, 0.12, 0.14));
+    }
   }
   if (SP) for (const r of SP.roads) {                           // estrada que cruza, ruas laterais e a do sul
     g.add(at(plane(r.x1 - r.x0, r.z1 - r.z0, r.dirt ? SP.laneCol : ASPHALT), (r.x0 + r.x1) / 2, r.dirt ? -0.006 : 0, (r.z0 + r.z1) / 2));
@@ -142,12 +145,14 @@ function buildGround(venice = false, SP = null) {
   if (!MEDV && !SP) dashes(-120, -1.2, m => g.add(at(box(LW, 0.02, DASH, CENTER_LINE), cx, 0.01, m)));
   if (SP) {
     dashes(-120, jz0 - 1.2, m => g.add(at(box(LW, 0.02, DASH, CENTER_LINE), cx, 0.01, m)));
-    dashes(jz1 + 1.2, -1.2, m => g.add(at(box(LW, 0.02, DASH, CENTER_LINE), cx, 0.01, m)));
-    for (const r of SP.roads) if (!r.dirt) {
+    if (SP.ringN) { dashes(jz1 + 1.2, SP.ringN[0] - 1.2, m => g.add(at(box(LW, 0.02, DASH, CENTER_LINE), cx, 0.01, m))); dashes(SP.ringN[1] + 1.2, -1.2, m => g.add(at(box(LW, 0.02, DASH, CENTER_LINE), cx, 0.01, m))); }
+    else dashes(jz1 + 1.2, -1.2, m => g.add(at(box(LW, 0.02, DASH, CENTER_LINE), cx, 0.01, m)));
+    for (const r of SP.roads) if (!r.dirt && !r.lane) {
       if (r.axis === 'x') dashes(r.x0 + 1.5, r.x1 - 1.5, m => g.add(at(box(DASH, 0.02, LW, CENTER_LINE), m, 0.01, (r.z0 + r.z1) / 2)));
       else dashes(r.z0 + 1.5, r.z1 - 1.5, m => g.add(at(box(LW, 0.02, DASH, CENTER_LINE), (r.x0 + r.x1) / 2, 0.01, m)));
     }
     for (const z of [jz0 - 0.5, jz1 + 0.5]) g.add(slab(ENTRANCE.x0 + 0.3, z - 0.2, ENTRANCE.x1 - 0.3, z + 0.2, ZEBRA, 0.012));   // faixas de parada do cruzamento
+    if (SP.ringN) for (const z of [SP.ringN[0] - 0.6, SP.ringN[1] + 0.6]) for (let x = ENTRANCE.x0 + 0.7; x < ENTRANCE.x1 - 0.5; x += 0.95) g.add(slab(x, z - 1.3, x + 0.5, z + 1.3, ZEBRA, 0.012));   // faixa de pedestres onde a rua de contorno cruza
   }
 
   // sombra "falsa" da sebe do lado de fora (oeste e norte): a grama de fora não recebe sombras reais
@@ -549,14 +554,22 @@ function surroundKind({ venice, moon, farm, snow, dry }) {
   return 'trade';                          // Bairro 5 (Ofício): oficinas e galpões entre as casas
 }
 
-/** Planta dos arredores: estradas, casas/prédios ao longo delas e os terrenos (só dados; nada é desenhado aqui). */
+/** Planta dos arredores: estradas, casas/prédios ao longo delas e os terrenos (só dados; nada é desenhado aqui).
+ *  As vias vêm antes dos edifícios: nos Bairros 1 a 5 uma rua de contorno passa em volta da sebe (cruza a estrada de acesso e
+ *  se liga às ruas laterais por travessas), e as casas de fora ficam de frente para uma rua, com calçada e caminho até a porta;
+ *  nas cidades as vias de fora ficam nas linhas das ruas da cidade de longe, que continuam até elas (sem ruas cortadas). */
 function planSurroundings(kind, dry, flavor = null) {
   const rand = rng(41 + GRID * 7 + (PLAZA ? 3 : 0) + (kind === 'city' ? 11 : 0) + (flavor ? flavor.length * 5 : 0));
   const M = MAP, cx = (ENTRANCE.x0 + ENTRANCE.x1) / 2;
-  const city = kind === 'city', rural = kind === 'rural';
+  const city = kind === 'city', rural = kind === 'rural', town = kind === 'town', trade = kind === 'trade';
+  const gridCity = city && flavor !== 'encostas';                // (Encostas: morros em volta, sem a malha de ruas)
   const RW = city ? 8.4 : 6.8, RL = city ? 7.6 : 5.6;          // largura da estrada que cruza e das laterais
-  const XW = -46, XE = M + 46, ZS = M + 62;                      // ruas laterais e a do sul
-  const XL = -OUT_R + 10, XR = M + OUT_R - 10;
+  // cidade: as ruas laterais e a do sul ficam sobre linhas da malha da cidade de longe (quadras de TILE, origem na estrada de
+  // acesso e na que cruza): assim as ruas de longe chegam até elas e formam cruzamentos, em vez de acabar no calçamento
+  const lineOut = (o, a, s, dmin) => s < 0 ? o + TILE * Math.floor((a - dmin - o) / TILE) : o + TILE * Math.ceil((a + dmin - o) / TILE);
+  const XW = gridCity ? lineOut(cx, 0, -1, 26) : -46, XE = gridCity ? lineOut(cx, M, 1, 26) : M + 46;
+  const ZS = gridCity ? lineOut(J_ROAD, M, 1, 26) : M + 62;
+  const XL = gridCity ? XW - RL / 2 : -OUT_R + 10, XR = gridCity ? XE + RL / 2 : M + OUT_R - 10;
   const southRoad = !rural;                                     // Bairros 1 e 3: o sul fica aberto (na direção do sol)
   const laneEnd = southRoad ? ZS - RW / 2 : M - 16;
   const laneDirt = rural || kind === 'roads';
@@ -567,9 +580,31 @@ function planSurroundings(kind, dry, flavor = null) {
     { x0: XE - RL / 2, x1: XE + RL / 2, z0: J_ROAD + RW / 2, z1: laneEnd, dirt: laneDirt, axis: 'z' },
   ];
   if (southRoad) roads.push({ x0: XL, x1: XR, z0: ZS - RW / 2, z1: ZS + RW / 2, dirt: kind === 'roads', axis: 'x' });
+  // Bairros 1 a 5: rua de contorno em volta da sebe (no sul só onde há a estrada do sul) e travessas até as ruas de fora.
+  // (rua estreita de bairro, sem faixa no meio: `lane`)
+  const RO = 11, RH = 2.8, local = [];
+  let ringN = null;
+  if (!city) {
+    const dirt = kind === 'roads', zEnd = rural ? M - 14 + RH : M + RO + RH;
+    const add = (r, d = dirt) => { const q = { ...r, dirt: d, lane: true }; roads.push(q); local.push(q); return q; };
+    ringN = add({ x0: -RO - RH, x1: M + RO + RH, z0: -RO - RH, z1: -RO + RH, axis: 'x', ring: 'n' });
+    add({ x0: -RO - RH, x1: -RO + RH, z0: -RO + RH, z1: zEnd, axis: 'z', ring: 'w' });
+    add({ x0: M + RO - RH, x1: M + RO + RH, z0: -RO + RH, z1: zEnd, axis: 'z', ring: 'e' });
+    if (!rural) add({ x0: -RO - RH, x1: M + RO + RH, z0: M + RO - RH, z1: M + RO + RH, axis: 'x', ring: 's' });
+    // travessas: ligam o contorno às ruas laterais (na altura das ruas de dentro do bairro) e, ao norte/sul, às estradas
+    for (const z of rural ? [M - 14] : [roadCenter(1), roadCenter(GRID - 1)]) {
+      add({ x0: XW - (rural ? RL / 2 : -RL / 2 + 0.3), x1: -RO - RH + 0.3, z0: z - RH, z1: z + RH, axis: 'x' }, rural || dirt);
+      add({ x0: M + RO + RH - 0.3, x1: XE + (rural ? RL / 2 : -RL / 2 + 0.3), z0: z - RH, z1: z + RH, axis: 'x' }, rural || dirt);
+    }
+    for (const x of [roadCenter(1), roadCenter(GRID - 1)]) {
+      if (Math.abs(x - cx) < 24) continue;                       // (a estrada de acesso fica livre: corredor da cena do monstro)
+      add({ x0: x - RH, x1: x + RH, z0: J_ROAD + RW / 2 - 0.3, z1: -RO - RH + 0.3, axis: 'z' });
+      if (southRoad) add({ x0: x - RH, x1: x + RH, z0: M + RO + RH - 0.3, z1: ZS - RW / 2 + 0.3, axis: 'z' });
+    }
+  }
   // reservas: o bairro com folga, o corredor da estrada de acesso (cena do monstro), as estradas e, nos Bairros 1/3, o sul
   const reserved = [
-    { x0: -26, x1: M + 26, z0: -26, z1: M + 26 },
+    city ? { x0: -26, x1: M + 26, z0: -26, z1: M + 26 } : { x0: -7, x1: M + 7, z0: -7, z1: M + 7 },
     { x0: cx - 20, x1: cx + 20, z0: -500, z1: 0 },
     ...roads.map(r => ({ x0: r.x0 - 3, x1: r.x1 + 3, z0: r.z0 - 3, z1: r.z1 + 3 })),
   ];
@@ -584,24 +619,49 @@ function planSurroundings(kind, dry, flavor = null) {
     const r = { x0: b.x - hw - pad, x1: b.x + hw + pad, z0: b.z - hd - pad, z1: b.z + hd + pad };
     if (!free(r.x0, r.z0, r.x1, r.z1)) return false;
     reserved.push(r); b.box = { x0: b.x - hw, x1: b.x + hw, z0: b.z - hd, z1: b.z + hd }; builds.push(b); return true; };
-  const houseDims = () => ({ w: 7.4 + rand() * 2.2, d: 6.0 + rand() * 1.4, h: rand() < 0.22 ? 5.5 : 2.9 + rand() * 0.3, rise: 1.8 + rand() * 0.5 });
+  const houseDims = () => ({ w: 7.4 + rand() * 2.2, d: 6.0 + rand() * 1.4, h: rand() < (trade ? 0.32 : 0.22) ? 5.5 : 2.9 + rand() * 0.3, rise: 1.8 + rand() * 0.5 });
   const cityDims = () => ({ w: 11 + rand() * 9, d: 10 + rand() * 6, floors: 3 + Math.floor(rand() * (BUILD_H > 20 ? 6 : 4)) });
   // ao longo das estradas: a casa/prédio olha para a estrada (e, portanto, para o bairro)
   const fill = (along, from, to, step, place, chance) => { for (let t = from; t < to; t += step * (0.85 + rand() * 0.4)) if (rand() < chance) place(t); };
   const front = (type, x, z, ry, dims) => take({ type, x, z, ry, ...dims });
-  const pick = () => (city ? (rand() < 0.75 ? 'block' : 'ware') : kind === 'trade' && rand() < 0.3 ? 'shed' : 'house');
+  const pick = () => (city ? (rand() < 0.75 ? 'block' : 'ware') : trade && rand() < 0.3 ? 'shed' : 'house');
   const dimsOf = t => t === 'block' ? cityDims() : t === 'ware' ? { w: 18 + rand() * 8, d: 13 + rand() * 4 } : t === 'shed' ? { w: 11 + rand() * 4, d: 9 + rand() * 2 } : houseDims();
-  const dens = city ? 0.72 : kind === 'town' ? 0.85 : kind === 'trade' ? 0.75 : rural ? 0.45 : 0.55;
-  const stepH = city ? 24 : kind === 'town' ? 19 : 23;
-  for (const side of [-1, 1]) {
+  /** Fileira de casas de um lado de uma rua (side −1: lado de menor coordenada), de frente para ela, a `gap` da beira. */
+  const row = (r, side, dens, step, gap = 5, typeOf = pick) => {
+    if (r.axis === 'x') { const ze = side < 0 ? r.z0 : r.z1; fill('x', r.x0 + 6, r.x1 - 6, step, x => { const ty = typeOf(), dm = dimsOf(ty); front(ty, x, ze + side * (gap + dm.d / 2), side < 0 ? 0 : Math.PI, { ...dm, gap }); }, dens); }
+    else { const xe = side < 0 ? r.x0 : r.x1; fill('z', r.z0 + 6, r.z1 - 6, step, z => { const ty = typeOf(), dm = dimsOf(ty); front(ty, xe + side * (gap + dm.d / 2), z, side < 0 ? Math.PI / 2 : -Math.PI / 2, { ...dm, gap }); }, dens); }
+  };
+  const dens = city ? 0.72 : town ? 0.85 : trade ? 0.75 : rural ? 0.45 : 0.55;
+  const stepH = city ? 24 : town ? 19 : 23;
+  // 1º as casas da rua de contorno (as mais perto do bairro: a vila continua do outro lado da sebe)
+  if (!city) {
+    const out = { n: -1, s: 1, w: -1, e: 1 };
+    const rd = rural ? 0.85 : kind === 'roads' ? 0.45 : 0.95, rs = town ? 16.5 : 18;
+    for (const r of local) if (r.ring && (kind !== 'roads' || r.ring === 'n')) row(r, out[r.ring], r.ring === 'n' || !rural ? rd : rd * 0.7, rs, 5, () => (trade && rand() < 0.22 ? 'shed' : 'house'));
+    if (town || trade) {                                         // o outro lado da quadra: casas de frente para as estradas de fora
+      row(roads[0], 1, 0.8, rs); row(roads[1], 1, 0.8, rs); row(roads[2], 1, 0.8, rs); row(roads[3], -1, 0.8, rs);
+      if (southRoad) row(roads[4], -1, 0.75, rs);
+      for (const r of local) if (!r.ring) { row(r, -1, 0.7, rs); row(r, 1, 0.7, rs); }   // travessas: casas dos dois lados
+    }
+  }
+  // cidade: entre o parque em volta do bairro e as ruas de fora, uma fileira de prédios de frente para a rua (onde couber)
+  if (gridCity) {
+    const side = (r, s) => { const room = r.axis === 'z' ? (s > 0 ? -26 - r.x1 : r.x0 - (M + 26)) : (r.z0 - (M + 26)); if (room < 15) return;
+      const d = Math.min(14, room - 4.5);
+      if (r.axis === 'z') fill('z', J_ROAD + RW / 2 + 12, laneEnd - 10, 19, z => front('block', s > 0 ? r.x1 + 3 + d / 2 : r.x0 - 3 - d / 2, z, 0, { w: d, d: 12 + rand() * 4, floors: 3 + Math.floor(rand() * (BUILD_H > 20 ? 5 : 3)), gap: 3 }), 0.9);
+      else fill('x', XW + 14, XE - 14, 19, x => front('block', x, r.z0 - 3 - d / 2, 0, { w: 12 + rand() * 4, d, floors: 3 + Math.floor(rand() * 3), gap: 3 }), 0.9); };
+    side(roads[2], 1); side(roads[3], -1); if (southRoad) side(roads[4], -1);
+  }
+  const outD = city ? dens : town ? 0.45 : rural ? 0.3 : dens;   // (Bairros 2 e 3: depois da vila, as plantações dominam)
+  if (!gridCity) for (const sd of [-1, 1]) {
     // estrada do norte, lado de fora (olhando para o sul)
-    fill('x', 32, OUT_R - 40, stepH, t => { const x = cx + side * t, ty = pick(), dm = dimsOf(ty); front(ty, x, J_ROAD - RW / 2 - 6 - dm.d / 2, 0, dm); }, dens);
+    fill('x', 32, OUT_R - 40, stepH, t => { const x = cx + sd * t, ty = pick(), dm = dimsOf(ty); front(ty, x, J_ROAD - RW / 2 - 6 - dm.d / 2, 0, dm); }, outD);
     // estrada do sul (se houver), lado de fora (olhando para o norte)
-    if (southRoad) fill('x', 0, OUT_R - 40 + M / 2, stepH, t => { const x = M / 2 + side * t, ty = pick(), dm = dimsOf(ty); front(ty, x, ZS + RW / 2 + 6 + dm.d / 2, Math.PI, dm); }, dens * 0.9);
+    if (southRoad) fill('x', 0, OUT_R - 40 + M / 2, stepH, t => { const x = M / 2 + sd * t, ty = pick(), dm = dimsOf(ty); front(ty, x, ZS + RW / 2 + 6 + dm.d / 2, Math.PI, dm); }, outD * 0.9);
   }
   // ruas laterais: lado de fora, olhando para o bairro
-  for (const [X, s] of [[XW, -1], [XE, 1]]) {
-    fill('z', J_ROAD + RW / 2 + 12, laneEnd - 8, stepH, t => { const ty = pick(), dm = dimsOf(ty); front(ty, X + s * (RL / 2 + 6 + dm.d / 2), t, s < 0 ? Math.PI / 2 : -Math.PI / 2, dm); }, dens);
+  if (!gridCity) for (const [X, s] of [[XW, -1], [XE, 1]]) {
+    fill('z', J_ROAD + RW / 2 + 12, laneEnd - 8, stepH, t => { const ty = pick(), dm = dimsOf(ty); front(ty, X + s * (RL / 2 + 6 + dm.d / 2), t, s < 0 ? Math.PI / 2 : -Math.PI / 2, dm); }, outD);
   }
   // Bairros 1/3: as estradas de terra terminam num sítio (casa, celeiro e silo)
   const farms = [];
@@ -611,29 +671,66 @@ function planSurroundings(kind, dry, flavor = null) {
     front('barn', X + s * 16, z + 4, s < 0 ? Math.PI / 2 : -Math.PI / 2, { w: 12, d: 9 });
     front('silo', X + s * 15, z - 10, 0, { w: 4.4, d: 4.4 });
   }
-  // terrenos: retalhos de ~34 m no anel em volta (o que não cabe vira gramado)
+  // terrenos: retalhos de ~34 m no anel em volta (o que não cabe vira gramado); na cidade, as quadras da malha de longe
   const cells = [], C = 34;
-  for (let x = XL; x < XR - C; x += C) for (let z = -OUT_R + 10; z < M + OUT_R - 10 - C; z += C) {
-    let x0 = x + 1.5, x1 = x + C - 1.5, z0 = z + 1.5, z1 = z + C - 1.5;
-    const ed = Math.hypot(Math.max(-(x0 + x1) / 2, 0, (x0 + x1) / 2 - M), Math.max(-(z0 + z1) / 2, 0, (z0 + z1) / 2 - M));
-    if (ed > OUT_R - (city ? 50 : 20)) continue;                 // (a cidade é mais pesada: anel um pouco mais estreito)
-    for (const r of reserved) if (r.corr && hitRect(r, x0, z0, x1, z1)) {   // corredor (elevado, rio): a quadra encolhe para o lado que sobra
-      if (r.corr === 'z') { if (r.z0 - z0 >= z1 - r.z1) z1 = r.z0 - 1; else z0 = r.z1 + 1; }
-      else { if (r.x0 - x0 >= x1 - r.x1) x1 = r.x0 - 1; else x0 = r.x1 + 1; }
+  const inner = { x0: XW - RL / 2, x1: XE + RL / 2, z0: J_ROAD - RW / 2, z1: ZS + RW / 2 };
+  const inside = (x0, z0, x1, z1) => x0 >= inner.x0 && x1 <= inner.x1 && z0 >= inner.z0 && z1 <= inner.z1;
+  const shrink = (q) => {                                       // corredor (elevado, rio): a quadra encolhe para o lado que sobra
+    for (const r of reserved) if (r.corr && hitRect(r, q.x0, q.z0, q.x1, q.z1)) {
+      if (r.corr === 'z') { if (r.z0 - q.z0 >= q.z1 - r.z1) q.z1 = r.z0 - 1; else q.z0 = r.z1 + 1; }
+      else { if (r.x0 - q.x0 >= q.x1 - r.x1) q.x1 = r.x0 - 1; else q.x0 = r.x1 + 1; }
     }
+    return q;
+  };
+  const near = q => {                                           // rua mais perto de um terreno (lado e distância)
+    let best = null;
+    for (const r of roads) {
+      if (r.axis === 'x' && Math.min(q.x1, r.x1) - Math.max(q.x0, r.x0) > 12) for (const [s, d] of [['n', q.z0 - r.z1], ['s', r.z0 - q.z1]]) { if (d > -1 && (!best || d < best.d)) best = { side: s, d, edge: s === 'n' ? r.z1 : r.z0 }; }
+      if (r.axis === 'z' && Math.min(q.z1, r.z1) - Math.max(q.z0, r.z0) > 12) for (const [s, d] of [['w', q.x0 - r.x1], ['e', r.x0 - q.x1]]) { if (d > -1 && (!best || d < best.d)) best = { side: s, d, edge: s === 'w' ? r.x1 : r.x0 }; }
+    }
+    return best;
+  };
+  for (let x = XL; x < XR - C; x += C) for (let z = -OUT_R + 10; z < M + OUT_R - 10 - C; z += C) {
+    const q = shrink({ x0: x + 1.5, x1: x + C - 1.5, z0: z + 1.5, z1: z + C - 1.5 });
+    const ed = Math.hypot(Math.max(-(q.x0 + q.x1) / 2, 0, (q.x0 + q.x1) / 2 - M), Math.max(-(q.z0 + q.z1) / 2, 0, (q.z0 + q.z1) / 2 - M));
+    if (ed > OUT_R - (city ? 50 : 20)) continue;                 // (a cidade é mais pesada: anel um pouco mais estreito)
+    if (gridCity && !inside(q.x0, q.z0, q.x1, q.z1)) continue;   // (cidade: fora das vias, as quadras da malha — abaixo)
+    const { x0, x1, z0, z1 } = q;
     if (x1 - x0 < 14 || z1 - z0 < 14) continue;
-    const mx = (x0 + x1) / 2, mz = (z0 + z1) / 2, small = x1 - x0 < 26 || z1 - z0 < 26;
+    const small = x1 - x0 < 26 || z1 - z0 < 26;
     if (reserved.some(r => hitRect(r, x0, z0, x1, z1))) continue;
     const south = openSouth && hitRect(openSouth, x0, z0, x1, z1);
-    const r = rand();
+    const r = rand(), villa = ed < 75;                           // (perto da vila: hortas, pomares e pastos; longe: lavouras)
     let type;
     if (city) type = r < 0.42 ? 'block' : r < 0.52 ? 'ware' : r < 0.6 ? 'lot' : r < 0.77 ? 'park' : 'parking';   // (a cidade continua: mais quadras, estacionamentos)
-    else if (kind === 'town') type = r < 0.32 ? 'homes' : r < 0.5 ? 'grove' : r < 0.62 ? 'lot' : r < 0.8 ? 'crop' : 'meadow';
-    else if (kind === 'trade') type = r < 0.22 ? 'homes' : r < 0.42 ? 'ware' : r < 0.58 ? 'grove' : r < 0.7 ? 'lot' : r < 0.85 ? 'crop' : 'meadow';
+    else if (town) type = villa ? (r < 0.4 ? 'homes' : r < 0.6 ? 'garden' : r < 0.75 ? 'grove' : r < 0.88 ? 'orchard' : 'lot')
+      : (r < 0.3 ? 'crop' : r < 0.55 ? 'wheat' : r < 0.68 ? 'plowed' : r < 0.78 ? 'stubble' : r < 0.88 ? 'pasture' : 'grove');
+    else if (trade) type = villa ? (r < 0.34 ? 'homes' : r < 0.56 ? 'ware' : r < 0.68 ? 'garden' : r < 0.8 ? 'grove' : 'lot')
+      : (r < 0.2 ? 'homes' : r < 0.35 ? 'ware' : r < 0.6 ? 'crop' : r < 0.72 ? 'grove' : r < 0.85 ? 'pasture' : 'meadow');
+    else if (rural && villa) type = r < 0.3 ? 'garden' : r < 0.5 ? 'orchard' : r < 0.72 ? 'pasture' : r < 0.86 ? 'crop' : 'grove';
     else type = r < 0.22 ? 'crop' : r < 0.36 ? 'wheat' : r < 0.48 ? 'plowed' : r < 0.62 ? 'pasture' : r < 0.72 ? 'orchard' : r < 0.86 ? 'grove' : 'stubble';
     if (south && !['crop', 'wheat', 'plowed', 'meadow'].includes(type)) type = rand() < 0.5 ? 'wheat' : 'crop';   // caminho da igreja: só plantação rasteira
     if (small && city) type = rand() < 0.5 ? 'park' : 'parking';                                 // (quadra encolhida pelo corredor)
-    cells.push({ x0, x1, z0, z1, type, south, along: rand() < 0.5 ? 'x' : 'z' });
+    const cell = { x0, x1, z0, z1, type, south, along: rand() < 0.5 ? 'x' : 'z' };
+    if (type === 'homes' || type === 'ware') {                  // casas e galpões só com rua na frente (senão, outra coisa)
+      const n = near(cell);
+      if (n && n.d < 9) cell.face = n; else cell.type = type === 'ware' ? 'grove' : villa ? 'garden' : 'crop';
+    }
+    cells.push(cell);
+  }
+  // cidade: fora das vias, as quadras da malha da cidade de longe (mesmo alinhamento), até onde ela começa
+  if (gridCity) {
+    const half = TILE / 2 - STREET / 2 - 1.8, NI = Math.ceil((FAR0 + M / 2) / TILE) + 1;
+    for (let i = -NI; i <= NI; i++) for (let j = -NI; j <= NI; j++) {
+      const tx = cx + TILE / 2 + i * TILE, tz = J_ROAD + TILE / 2 + j * TILE;
+      if (Math.hypot(Math.max(-tx, 0, tx - M), Math.max(-tz, 0, tz - M)) >= FAR0) continue;
+      const q = shrink({ x0: tx - half, x1: tx + half, z0: tz - half, z1: tz + half });
+      if (hitRect(inner, q.x0, q.z0, q.x1, q.z1) || q.x1 - q.x0 < 12 || q.z1 - q.z0 < 12) continue;
+      if (reserved.some(r => !r.corr && hitRect(r, q.x0, q.z0, q.x1, q.z1))) continue;
+      const r = rand(), small = q.x1 - q.x0 < 26 || q.z1 - q.z0 < 26;
+      const type = small ? (r < 0.4 ? 'one' : r < 0.75 ? 'park' : 'parking') : r < 0.5 ? 'block' : r < 0.62 ? 'ware' : r < 0.7 ? 'one' : r < 0.84 ? 'park' : 'parking';
+      cells.push({ ...q, type, south: false, along: 'x', tile: true });
+    }
   }
   // cidade: os vãos que sobraram entre as estradas, as fileiras de prédios e os corredores viram quadrinhas de 14 m (um prédio,
   // uma pracinha ou um estacionamento) — nada de terreno vazio no meio da cidade
@@ -642,12 +739,13 @@ function planSurroundings(kind, dry, flavor = null) {
     for (let x = XL; x < XR - S; x += S) for (let z = -OUT_R + 10; z < M + OUT_R - 10 - S; z += S) {
       const x0 = x + 1.5, x1 = x + S - 1.5, z0 = z + 1.5, z1 = z + S - 1.5, mx = (x0 + x1) / 2, mz = (z0 + z1) / 2;
       if (Math.hypot(Math.max(-mx, 0, mx - M), Math.max(-mz, 0, mz - M)) > OUT_R - 50) continue;
+      if (gridCity && !inside(x0, z0, x1, z1)) continue;
       if (reserved.some(r => hitRect(r, x0, z0, x1, z1)) || cells.some(c => hitRect(c, x0 - 1, z0 - 1, x1 + 1, z1 + 1))) continue;
       const r = rand();
       cells.push({ x0, x1, z0, z1, type: r < 0.45 ? 'one' : r < 0.8 ? 'park' : 'parking', south: false, along: 'x' });
     }
   }
-  return { kind, roads, builds, cells, farms, reserved, openSouth, RW, RL, XW, XE, ZS, J: J_ROAD, southRoad, laneEnd, rand, laneCol: dry ? '#a08562' : '#a88d66', flavor, feat };
+  return { kind, roads, builds, cells, farms, reserved, openSouth, RW, RL, XW, XE, ZS, J: J_ROAD, southRoad, laneEnd, rand, laneCol: dry ? '#a08562' : '#a88d66', flavor, feat, gridCity, ringN: ringN ? [ringN.z0, ringN.z1] : null, RO };
 }
 
 /** O que cada bairro urbano tem nos arredores (além da cidade que continua):
@@ -744,12 +842,17 @@ function buildSurroundings(P, dryPal, L = null) {
     let [x, z] = P2(0, 0);
     I.add('box', U_BOX, x, 0, z, w, h, d, 0, ry, wall);
     I.add('gable', U_GABLE, x, h, z, w, rise, d, 0, ry, wall);
-    const L = (d / 2 + ov) / Math.cos(th), T = 0.2;
-    for (const sg of [1, -1]) {                                 // duas águas, com beiral
+    if (opts.trim !== false) I.add('box', U_BOX, x, 0, z, w + 0.1, 0.3, d + 0.1, 0, ry, '#cdc2aa');   // barrado (como nas casas do bairro)
+    const L = (d / 2 + ov) / Math.cos(th), T = 0.2, dark = lerpHex(roof, '#1a1410', 0.42);
+    for (const sg of [1, -1]) {                                 // duas águas, com beiral (laje escura por baixo, como em house.js)
       const zm = sg * (d / 2 + ov) / 2, ym = h + rise - (d / 2 + ov) / 2 * Math.tan(th);
       [x, z] = P2(0, zm + sg * Math.sin(th) * T / 2);
       I.add('cbox', U_CBOX, x, ym + Math.cos(th) * T / 2, z, w + 2 * ov * 0.8, T, L, sg * th, ry, roof);
+      [x, z] = P2(0, zm - sg * Math.sin(th) * 0.06);
+      I.add('cbox', U_CBOX, x, ym - Math.cos(th) * 0.06, z, w + 2 * ov * 0.8 + 0.14, 0.12, L + 0.1, sg * th, ry, dark);
     }
+    [x, z] = P2(0, 0);
+    I.add('cbox', U_CBOX, x, h + rise + T / Math.cos(th) - 0.06, z, w + 2 * ov * 0.8 + 0.1, 0.3, 0.3, Math.PI / 4, ry, dark);   // cumeeira
     if (opts.chimney) { [x, z] = P2(w * 0.25, -d * 0.15); I.add('box', U_BOX, x, h + rise * 0.3, z, 0.65, rise * 0.75 + 0.5, 0.65, 0, ry, BRICK); }
     return P2;
   };
@@ -766,41 +869,86 @@ function buildSurroundings(P, dryPal, L = null) {
     if (shadeOn) shade(x + sd.x * Math.min(H, 18) * 0.45, z + sd.z * Math.min(H, 18) * 0.45, w * 0.62, d * 0.62);
     return H;
   };
+  /** Casa de fora no jeito das casas do bairro (barrado, porta com moldura, janelas de batente branco, beiral escuro e cumeeira),
+   *  sem as cores nem os objetos que servem de pista. Tem acesso: degrau, caminho até a calçada da rua, caixa de correio; às vezes
+   *  varanda, cerquinha com portão, entrada de carro com o carro parado. `gap`: da fachada até a beira da rua. */
+  const drawHouse = (b) => {
+    const P2 = local(b), ry = b.ry, farm = b.type === 'farmhouse';
+    const at2 = (key, geo, lx, y, lz, sx, sy, sz, col, rx = 0) => { const [x, z] = P2(lx, lz); I.add(key, geo, x, y, z, sx, sy, sz, rx, ry, col); };
+    const wall = WALLS[Math.floor(rand() * WALLS.length)], roof = farm ? '#8a5040' : ROOFS[Math.floor(rand() * ROOFS.length)];
+    gableHouse(b, wall, roof, { chimney: rand() < 0.4 || farm });
+    const fz = b.d / 2, dx = (rand() < 0.5 ? -1 : 1) * b.w * 0.18, dcol = DOORS[Math.floor(rand() * DOORS.length)];
+    at2('cbox', U_CBOX, dx, 1.16, fz + 0.04, 1.3, 2.32, 0.1, '#3b2c1e');                        // moldura da porta
+    at2('cbox', U_CBOX, dx, 1.08, fz + 0.09, 1.0, 2.1, 0.1, dcol);
+    at2('cbox', U_CBOX, dx, 0.08, fz + 0.5, 1.7, 0.16, 0.8, '#cdc2aa');                         // degrau
+    const win = (lx, y, lz, back = false) => {                                                  // janela: batente branco, vidro e peitoril
+      const s = back ? -1 : 1;
+      at2('cbox', U_CBOX, lx, y, lz + s * 0.04, 1.42, 1.2, 0.08, '#f4f0e6');
+      at2('cbox', U_CBOX, lx, y, lz + s * 0.09, 1.16, 0.94, 0.06, GLASS);
+      at2('cbox', U_CBOX, lx, y, lz + s * 0.12, 0.07, 0.94, 0.04, '#f4f0e6');                   // travessa do meio
+      at2('cbox', U_CBOX, lx, y - 0.66, lz + s * 0.12, 1.55, 0.09, 0.22, '#e6dfd0');            // peitoril
+    };
+    for (const wx of [-1, 1]) {
+      const xx = wx * b.w * 0.3; if (Math.abs(xx - dx) < 1.3) continue;
+      win(xx, 1.6, fz);
+      if (b.h > 4) win(xx, 4.2, fz);
+    }
+    if (b.h > 4) win(dx, 4.2, fz);
+    win(0, 1.6, -fz, true);                                                                      // janela dos fundos
+    const gap = b.gap ?? 6;
+    if (farm) {                                                                                  // varanda do sítio
+      for (const px of [-b.w / 2 + 0.4, -1.4, 1.4, b.w / 2 - 0.4]) at2('box', U_BOX, px, 0, fz + 2.0, 0.18, 2.5, 0.18, '#f2ead8');
+      at2('cbox', U_CBOX, 0, 2.6, fz + 1.1, b.w + 0.3, 0.16, 2.4, '#7a4a3a', 0.12);
+      at2('cbox', U_CBOX, 0, 0.12, fz + 1.1, b.w, 0.24, 2.2, '#b99a72');
+    } else {
+      if (b.h < 4 && rand() < 0.35) {                                                            // varandinha coberta sobre a porta
+        for (const px of [dx - 1.25, dx + 1.25]) at2('box', U_BOX, px, 0, fz + 1.5, 0.16, 2.45, 0.16, '#f4f0e6');
+        at2('cbox', U_CBOX, dx, 2.55, fz + 0.8, 3.0, 0.14, 1.75, lerpHex(roof, '#1a1410', 0.3), 0.14);
+        at2('cbox', U_CBOX, dx, 0.1, fz + 0.85, 2.8, 0.2, 1.6, '#cdc2aa');
+      }
+      const sw = Math.max(1.2, Math.min(1.8, gap - 3.2));                                       // calçada na frente do lote, até a rua
+      at2('cbox', U_CBOX, 0, 0.012, fz + gap - sw / 2, b.w + 4, 0.03, sw, '#d2cab8');
+      const pz0 = fz + 0.9, pz1 = fz + gap - sw;                                                 // caminho da porta até a calçada
+      if (pz1 > pz0 + 0.2) at2('cbox', U_CBOX, dx, 0.01, (pz0 + pz1) / 2, 1.1, 0.03, pz1 - pz0, '#e2d9c5');
+      const [mx, mz] = P2(dx + 1.0, pz1 - 0.3);                                                  // caixa de correio
+      I.add('box', U_BOX, mx, 0, mz, 0.08, 1.0, 0.08, 0, ry, '#5a4a3a');
+      I.add('cbox', U_CBOX, mx, 1.05, mz, 0.3, 0.26, 0.42, 0, ry, '#4d5a4a');
+      if (gap >= 4.6 && rand() < 0.55) {                                                         // cerquinha baixa, com o portão no caminho
+        const fz2 = fz + gap - sw - 0.25;
+        for (let k = -4; k <= 4; k++) if (Math.abs(k * b.w / 9 - dx) > 0.9) at2('box', U_BOX, k * b.w / 9, 0, fz2, 0.12, 0.7, 0.08, '#f4efe4');
+        for (const sg of [-1, 1]) { const a = sg > 0 ? dx + 0.9 : -b.w / 2, c = sg > 0 ? b.w / 2 : dx - 0.9; if (c - a > 0.3) at2('cbox', U_CBOX, (a + c) / 2, 0.45, fz2, c - a, 0.08, 0.06, '#f4efe4'); }
+        const [f0x, f0z] = P2(-b.w / 2, fz2), [f1x, f1z] = P2(b.w / 2, fz2);
+        solid(Math.min(f0x, f1x) - 0.15, Math.max(f0x, f1x) + 0.15, Math.min(f0z, f1z) - 0.15, Math.max(f0z, f1z) + 0.15);
+      }
+      for (const sg of [-1, 1]) if (Math.abs(sg * b.w * 0.42 - dx) > 1.3) {                     // arbustos junto da fachada
+        const [bx, bz] = P2(sg * b.w * 0.42, fz + 0.75); I.add('ico', U_ICO, bx, 0.38, bz, 0.7, 0.5, 0.55, rand(), ry, PAL.leaves[Math.floor(rand() * PAL.leaves.length)]);
+      }
+      const side = dx > 0 ? -1 : 1;
+      if (rand() < 0.4) {                                                                        // entrada de carro ao lado da casa
+        const cxl = side * (b.w / 2 + 1.7);
+        at2('cbox', U_CBOX, cxl, 0.011, (fz - 2 + fz + gap) / 2, 2.8, 0.03, gap + 2, '#bdb6a6');
+        if (rand() < 0.6) {
+          const col = ['#8f959c', '#f2f2f2', '#3a5a7a', '#7a3a34', '#2b2d33', '#c9b98f'][Math.floor(rand() * 6)];
+          at2('cbox', U_CBOX, cxl, 0.2, fz + 0.4, 1.6, 0.4, 3.2, '#26282c');
+          at2('cbox', U_CBOX, cxl, 0.7, fz + 0.4, 1.8, 0.66, 3.9, col);
+          at2('cbox', U_CBOX, cxl, 1.25, fz + 0.2, 1.6, 0.5, 2.0, '#c9d6e0');
+          const [c0x, c0z] = P2(cxl, fz + 0.4); solid(c0x - 2, c0x + 2, c0z - 2, c0z + 2);
+        }
+      } else if (rand() < 0.55) { const [tx, tz] = P2(side * (b.w / 2 + 2.3), fz + 1.2); tree(tx, tz, rand() < 0.3 ? 'birch' : 'round', 0.75 + rand() * 0.3); }
+    }
+    solid(b.box.x0 - 0.2, b.box.x1 + 0.2, b.box.z0 - 0.2, b.box.z1 + 0.2);
+    shade(b.x + sd.x * 2.5, b.z + sd.z * 2.5, b.w * 0.62, b.d * 0.62);
+  };
   const quad = city ? (x, z) => { I.suffix = '#q' + farKey(x, z, 0).slice(2); } : () => {};   // (cidade: um pedaço por quadrante, para a câmera recortar)
   for (const b of P.builds) {
     quad(b.x, b.z);
     const P2 = local(b), ry = b.ry;
     const at2 = (key, geo, lx, y, lz, sx, sy, sz, col, rx = 0) => { const [x, z] = P2(lx, lz); I.add(key, geo, x, y, z, sx, sy, sz, rx, ry, col); };
     if (b.type === 'house' || b.type === 'farmhouse') {
-      const wall = WALLS[Math.floor(rand() * WALLS.length)], roof = b.type === 'farmhouse' ? '#8a5040' : ROOFS[Math.floor(rand() * ROOFS.length)];
-      gableHouse(b, wall, roof, { chimney: rand() < 0.4 || b.type === 'farmhouse' });
-      const dx = (rand() < 0.5 ? -1 : 1) * b.w * 0.18;
-      at2('cbox', U_CBOX, dx, 1.05, b.d / 2 + 0.05, 1.0, 2.1, 0.12, DOORS[Math.floor(rand() * DOORS.length)]);
-      at2('cbox', U_CBOX, dx, 0.08, b.d / 2 + 0.5, 1.6, 0.16, 0.8, '#cfc5b0');                     // degrau
-      for (const wx of [-1, 1]) {
-        const xx = wx * b.w * 0.3; if (Math.abs(xx - dx) < 1.2) continue;
-        at2('cbox', U_CBOX, xx, 1.55, b.d / 2 + 0.05, 1.3, 1.05, 0.1, GLASS);
-        if (b.h > 4) at2('cbox', U_CBOX, xx, 4.15, b.d / 2 + 0.05, 1.2, 1.0, 0.1, GLASS);
-      }
-      if (b.h > 4) at2('cbox', U_CBOX, dx, 4.15, b.d / 2 + 0.05, 1.2, 1.0, 0.1, GLASS);
-      at2('cbox', U_CBOX, 0, 1.6, -b.d / 2 - 0.05, 1.3, 1.0, 0.1, GLASS);                          // janela dos fundos
-      if (b.type === 'farmhouse') {                                                              // varanda do sítio
-        for (const px of [-b.w / 2 + 0.4, -1.4, 1.4, b.w / 2 - 0.4]) at2('box', U_BOX, px, 0, b.d / 2 + 2.0, 0.18, 2.5, 0.18, '#f2ead8');
-        at2('cbox', U_CBOX, 0, 2.6, b.d / 2 + 1.1, b.w + 0.3, 0.16, 2.4, '#7a4a3a', 0.12);
-        at2('cbox', U_CBOX, 0, 0.12, b.d / 2 + 1.1, b.w, 0.24, 2.2, '#b99a72');
-      } else if (rand() < 0.5) {                                                                 // cerquinha baixa na frente
-        const fz = b.d / 2 + 3.4;
-        for (let k = -4; k <= 4; k++) if (Math.abs(k * b.w / 9 - dx) > 0.9) at2('box', U_BOX, k * b.w / 9, 0, fz, 0.12, 0.7, 0.08, '#f4efe4');
-        for (const sg of [-1, 1]) { const a = sg > 0 ? dx + 0.9 : -b.w / 2, c = sg > 0 ? b.w / 2 : dx - 0.9; if (c - a > 0.3) at2('cbox', U_CBOX, (a + c) / 2, 0.45, fz, c - a, 0.08, 0.06, '#f4efe4'); }
-        const [f0x, f0z] = P2(-b.w / 2, fz), [f1x, f1z] = P2(b.w / 2, fz);
-        solid(Math.min(f0x, f1x) - 0.15, Math.max(f0x, f1x) + 0.15, Math.min(f0z, f1z) - 0.15, Math.max(f0z, f1z) + 0.15);
-      }
-      if (rand() < 0.55) { const [tx, tz] = P2((rand() < 0.5 ? -1 : 1) * (b.w / 2 + 2.5), b.d / 2 + 1.5); tree(tx, tz, rand() < 0.3 ? 'birch' : 'round', 0.75 + rand() * 0.3); }
-      solid(b.box.x0 - 0.2, b.box.x1 + 0.2, b.box.z0 - 0.2, b.box.z1 + 0.2);
-      shade(b.x + sd.x * 2.5, b.z + sd.z * 2.5, b.w * 0.62, b.d * 0.62);
+      drawHouse(b);
     } else if (b.type === 'barn') {
       const B = { ...b, h: 4.6, rise: 3.0 };
-      gableHouse(B, '#8a4a3a', '#6d6a66', { over: 0.35 });
+      gableHouse(B, '#8a4a3a', '#6d6a66', { over: 0.35, trim: false });
       at2('cbox', U_CBOX, 0, 1.75, b.d / 2 + 0.06, 3.6, 3.5, 0.12, '#f1e8d6');
       at2('cbox', U_CBOX, 0, 1.7, b.d / 2 + 0.12, 3.1, 3.2, 0.12, '#6a3a2e');
       for (const sg of [1, -1]) { const [x, z] = P2(0, b.d / 2 + 0.2); I.add('cbox', U_CBOX, x, 1.7, z, 0.18, 4.1, 0.06, 0, ry, '#f1e8d6', sg * 0.72); }   // travessas em X na porta
@@ -915,29 +1063,57 @@ function buildSurroundings(P, dryPal, L = null) {
         if (city && rand() < 0.5) fence(r.x0 + 2, r.z0 + 2, r.x1 - 2, r.z0 + 2, '#8d9093');
         break;
       }
-      case 'homes': {                                                                                // casinhas no miolo da quadra de fora
-        for (const [ox, oz] of [[0.27, 0.3], [0.73, 0.68]]) {
-          const dm = { w: 7.4 + rand() * 1.6, d: 6.2, h: 2.9, rise: 2 };
-          const b = { type: 'house', x: r.x0 + ox * w, z: r.z0 + oz * d, ry: [0, Math.PI, Math.PI / 2, -Math.PI / 2][Math.floor(rand() * 4)], ...dm };
-          const hw = (Math.abs(Math.sin(b.ry)) > 0.5 ? b.d : b.w) / 2, hd = (Math.abs(Math.sin(b.ry)) > 0.5 ? b.w : b.d) / 2;
+      case 'homes': {                                                                                // casinhas de frente para a rua ao lado do terreno
+        const f = c.face, alongX = f.side === 'n' || f.side === 's', sg = f.side === 'n' || f.side === 'w' ? 1 : -1;
+        const ry = { n: Math.PI, s: 0, w: -Math.PI / 2, e: Math.PI / 2 }[f.side];
+        for (const t of [0.27, 0.73]) {
+          const dm = { w: 7.4 + rand() * 1.8, d: 6.0 + rand() * 1.2, h: rand() < 0.2 ? 5.5 : 2.9, rise: 1.9 + rand() * 0.4 }, gap = Math.max(5, f.d + 2.5);
+          const off = f.edge + sg * (gap + dm.d / 2);
+          const b = { type: 'house', x: alongX ? r.x0 + t * w : off, z: alongX ? off : r.z0 + t * d, ry, gap, ...dm };
+          const hw = (alongX ? b.w : b.d) / 2, hd = (alongX ? b.d : b.w) / 2;
           b.box = { x0: b.x - hw, x1: b.x + hw, z0: b.z - hd, z1: b.z + hd };
-          gableHouse(b, WALLS[Math.floor(rand() * WALLS.length)], ROOFS[Math.floor(rand() * ROOFS.length)], { chimney: rand() < 0.3 });
-          const [dx, dz] = local(b)(0, b.d / 2 + 0.05); I.add('cbox', U_CBOX, dx, 1.05, dz, 1.0, 2.1, 0.12, 0, b.ry, DOORS[0]);
-          solid(b.box.x0 - 0.2, b.box.x1 + 0.2, b.box.z0 - 0.2, b.box.z1 + 0.2);
-          shade(b.x + sd.x * 2.5, b.z + sd.z * 2.5, b.w * 0.6, b.d * 0.6);
+          drawHouse(b);
         }
-        for (let k = 0; k < 3; k++) tree(r.x0 + 3 + rand() * (w - 6), r.z0 + 3 + rand() * (d - 6), treeType(), 0.8 + rand() * 0.4);
+        for (let k = 0; k < 2; k++) {                                                              // quintais dos fundos
+          const u = rand(), v = 0.7 + rand() * 0.22, tx = alongX ? r.x0 + 3 + u * (w - 6) : (sg > 0 ? r.x0 + v * w : r.x1 - v * w), tz = alongX ? (sg > 0 ? r.z0 + v * d : r.z1 - v * d) : r.z0 + 3 + u * (d - 6);
+          tree(tx, tz, treeType(), 0.8 + rand() * 0.4);
+        }
+        break;
+      }
+      case 'garden': {                                                                               // horta: canteiros em fileiras, cerca e um ranchinho
+        const inset = { x0: r.x0 + 3, x1: r.x1 - 3, z0: r.z0 + 3, z1: r.z1 - 3 };
+        plane(inset, fieldMat(rand() < 0.5 ? '#6f9a42' : '#82a54c', dryPal ? '#8a6d4c' : '#7d5f40', 3), 2.4, c.along);
+        fenceBox({ x0: inset.x0 - 0.8, x1: inset.x1 + 0.8, z0: inset.z0 - 0.8, z1: inset.z1 + 0.8 }, nearRoad(r));
+        const hb = { type: 'shed', x: inset.x0 + 3.2, z: inset.z0 + 2.6, ry: 0, w: 4.2, d: 3.4, h: 2.3, rise: 1.1 };
+        hb.box = { x0: hb.x - 2.1, x1: hb.x + 2.1, z0: hb.z - 1.7, z1: hb.z + 1.7 };
+        gableHouse(hb, '#a7835a', '#6d5a4a', { over: 0.25, trim: false });
+        I.add('cbox', U_CBOX, hb.x + 0.6, 0.95, hb.z + 1.75, 0.9, 1.9, 0.08, 0, 0, '#5a4030');
+        solid(hb.box.x0 - 0.2, hb.box.x1 + 0.2, hb.box.z0 - 0.2, hb.box.z1 + 0.2);
+        if (rand() < 0.6) {                                                                          // espantalho
+          const ex = mx + (rand() - 0.5) * 8, ez = mz + (rand() - 0.5) * 8;
+          I.add('box', U_BOX, ex, 0, ez, 0.1, 1.9, 0.1, 0, 0, '#6b4a2e');
+          I.add('cbox', U_CBOX, ex, 1.45, ez, 1.4, 0.1, 0.1, 0, 0, '#6b4a2e');
+          I.add('cbox', U_CBOX, ex, 1.3, ez, 0.5, 0.6, 0.3, 0, 0, '#a14a3a');
+          I.add('ico', U_ICO, ex, 1.85, ez, 0.2, 0.2, 0.2, 0, 0, '#e3cf9a');
+          I.add('cyl', U_CYL, ex, 1.98, ez, 0.36, 0.06, 0.36, 0, 0, '#c9a457');
+        }
         break;
       }
       case 'ware': {
-        const b = { type: 'ware', x: mx, z: mz, ry: 0, w: 22, d: 14 };
-        b.box = { x0: b.x - 11, x1: b.x + 11, z0: b.z - 7, z1: b.z + 7 };
+        const f = c.face;
+        const ry = f ? { n: Math.PI, s: 0, w: -Math.PI / 2, e: Math.PI / 2 }[f.side] : 0, alongX = !f || f.side === 'n' || f.side === 's';
+        const sg = f && (f.side === 'n' || f.side === 'w') ? 1 : -1, gap = f ? Math.max(6, f.d + 3) : 0;
+        const off = f ? f.edge + sg * (gap + 7) : 0;
+        const b = { type: 'ware', x: f && !alongX ? off : mx, z: f && alongX ? off : mz, ry, w: 22, d: 14 };
+        b.box = alongX ? { x0: b.x - 11, x1: b.x + 11, z0: b.z - 7, z1: b.z + 7 } : { x0: b.x - 7, x1: b.x + 7, z0: b.z - 11, z1: b.z + 11 };
         flat(r.x0 + 1, r.z0 + 1, r.x1 - 1, r.z1 - 1, dryPal ? '#a49d8c' : '#a8a497');               // pátio
+        const P2 = local(b);
         gableHouse({ ...b, h: 6.5, rise: 1.6 }, ['#aab1b6', '#b9ad96', '#9fa7a0'][Math.floor(rand() * 3)], '#7d8489', { over: 0.3 });
-        I.add('cbox', U_CBOX, b.x - 4, 2.3, b.z + 7.06, 5, 4.6, 0.12, 0, 0, '#5c636a');
-        for (let k = 0; k < 3; k++) I.add('box', U_BOX, b.x + 4 + k * 1.3, 0, b.z + 9.5, 1.1, 0.9, 1.1, 0, rand(), '#b08a5a');   // caixotes
+        let [px, pz] = P2(-4, 7.06); I.add('cbox', U_CBOX, px, 2.3, pz, 5, 4.6, 0.12, 0, ry, '#5c636a');
+        for (let k = 0; k < 3; k++) { [px, pz] = P2(4 + k * 1.3, 9.5); I.add('box', U_BOX, px, 0, pz, 1.1, 0.9, 1.1, 0, rand(), '#b08a5a'); }   // caixotes
+        if (f) { [px, pz] = P2(-4, 7 + gap / 2); I.add('cbox', U_CBOX, px, 0.01, pz, 6, 0.03, gap, 0, ry, '#9a968b'); }   // acesso do portão até a rua
         solid(b.box.x0 - 0.2, b.box.x1 + 0.2, b.box.z0 - 0.2, b.box.z1 + 0.2);
-        shade(b.x + sd.x * 3, b.z + sd.z * 3, 13, 8.5);
+        shade(b.x + sd.x * 3, b.z + sd.z * 3, alongX ? 13 : 8.5, alongX ? 8.5 : 13);
         break;
       }
       case 'block': {
@@ -1229,10 +1405,11 @@ function buildCityOuter(P, ctx) {
   const cuts = river ? [[river.x0, river.x1]] : [];
   const paveM = cheapMat(L, { color: dryPal ? '#b6af9f' : '#b2afa6' }); lamps.dim.push(paveM);
   const hills = flavor === 'encostas' ? hillField(M, cx, cheapMat(L, { vertexColors: true })) : null;
-  if (!hills) for (const [x0, z0, x1, z1] of frameRects(mid, inner, cuts)) { const m = tilePlane(x0, z0, x1, z1, 0, 0, paveM, -0.026); if (m) fields.add(m); }   // (Encostas: gramado até os morros)
+  // (as vias de fora ficam nas linhas da malha: as ruas da cidade começam logo depois delas, sem a faixa de calçamento liso)
+  if (!hills && !P.gridCity) for (const [x0, z0, x1, z1] of frameRects(mid, inner, cuts)) { const m = tilePlane(x0, z0, x1, z1, 0, 0, paveM, -0.026); if (m) fields.add(m); }   // (Encostas: gramado até os morros)
   if (!hills) {
     const stM = cheapMat(L, { map: streetTexture(dryPal) }); lamps.dim.push(stM);
-    for (const [x0, z0, x1, z1] of frameRects(outer, mid, cuts)) { const m = tilePlane(x0, z0, x1, z1, cx, P.J, stM, -0.026); if (m) fields.add(m); }
+    for (const [x0, z0, x1, z1] of frameRects(outer, P.gridCity ? inner : mid, cuts)) { const m = tilePlane(x0, z0, x1, z1, cx, P.J, stM, -0.026); if (m) fields.add(m); }
   } else fields.add(hills.mesh);
   const hAt = hills ? hills.h : () => 0;
   if (hills) ctx.hillH = hills.h;                                                 // (Encostas: a van sobe os morros — createWorld)
@@ -1362,7 +1539,7 @@ function buildCityOuter(P, ctx) {
   for (let z = P.J - 20; z > -420; z -= 26) lampAt(cx + 4.4, z);
   if (!hills) for (let i = -NI; i <= NI; i += 1) for (let j = -NI; j <= NI; j += 1) {               // esquinas das ruas de longe
     const x = cx + i * TILE, z = P.J + j * TILE, e = edge(x, z);
-    if (e > FAR0 - 10 && e < FAR1 - 40 && !inRiver(x - 2, x + 2) && (i + j) % 2 === 0) { I.suffix = farKey(x, z, e); lampAt(x + 4.6, z + 4.6); I.suffix = ''; }
+    if (e > (P.gridCity ? 20 : FAR0 - 10) && e < FAR1 - 40 && !inRiver(x - 2, x + 2) && (i + j) % 2 === 0 && !(x > inner.x0 - 6 && x < inner.x1 + 6 && z > inner.z0 - 6 && z < inner.z1 + 6)) { I.suffix = farKey(x, z, e); lampAt(x + 4.6, z + 4.6); I.suffix = ''; }
   }
 
   // ---- o que é de cada bairro ----
@@ -1388,7 +1565,8 @@ function buildCityOuter(P, ctx) {
     }
     for (let x = L0 + 20; x < L1; x += 36) {                                                        // pilares (fora das estradas)
       if (Math.abs(x - cx) < 14 || (river && x > river.x0 - 3 && x < river.x1 + 3)) continue;
-      if (F.kind === 'road' && (Math.abs(x - P.XW) < P.RL / 2 + 3 || Math.abs(x - P.XE) < P.RL / 2 + 3)) continue;
+      if (Math.abs(x - P.XW) < P.RL / 2 + 3 || Math.abs(x - P.XE) < P.RL / 2 + 3) continue;
+      if (P.gridCity && Math.abs(((x - cx) % TILE + TILE) % TILE - TILE / 2) > TILE / 2 - STREET / 2 - 2) continue;   // (nem no meio das ruas da malha)
       I.add('deck', U_CBOX, x, (Y - 1.3) / 2, z, 1.8, Y - 1.3, 2.6, 0, 0, '#b3ada1');
       I.add('deck', U_CBOX, x, Y - 1.5, z, 2.6, 0.8, H2 * 2 - 1.2, 0, 0, '#b3ada1');
       solid(x - 1.1, x + 1.1, z - 1.5, z + 1.5).post = true;
@@ -2030,7 +2208,7 @@ function buildPlazaLife() {
   const pg = new THREE.Group();                                        // pombo (instanciado)
   // corpo arredondado, peito mais claro, pescoço furta-cor, asas com as duas faixas escuras, cauda de ponta escura,
   // bico, olhinhos laranja e pés rosados (liso, como as pessoas; antes eram 4 peças facetadas)
-  const pgS = (r, c, x, y, z, sx = 1, sy = 1, sz = 1, ws = 12, hs = 9) => { const m = at(sphere(r, c, ws, hs), x, y, z); m.scale.set(sx, sy, sz); pg.add(m); };
+  const pgS = (r, c, x, y, z, sx = 1, sy = 1, sz = 1, ws = 10, hs = 7) => { const m = at(sphere(r, c, ws, hs), x, y, z); m.scale.set(sx, sy, sz); pg.add(m); };
   pgS(0.13, '#9aa0a9', 0, 0.15, -0.01, 1, 0.82, 1.42);                                    // corpo
   pgS(0.1, '#b9bdc4', 0, 0.14, 0.08, 1, 0.85, 1.0);                                       // peito
   pgS(0.07, '#6e8a80', 0, 0.225, 0.11, 1.05, 1.1, 0.95);                                  // pescoço (verde-arroxeado)

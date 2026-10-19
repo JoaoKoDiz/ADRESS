@@ -11,7 +11,7 @@ import { createWorkTraffic } from './workTraffic.js';
 import { buildMedLot } from './models/medieval.js';
 import { createMedievalLife } from './medievalLife.js';
 import { buildCar, CAR_COLORS } from './barriers.js';
-import { MAP, doorPoint, slotOrigin, DELIVERY_RADIUS, DELIVERY_MAX_SPEED, VAN, VAN_START, LOT_ANCHORS, SOLIDS, ENTRANCE, HEDGE, GRID, PLAZA, HOUSE_SLOTS, configureGrid, roadCenter, setGasStations, GAS_LIST, GAS_CANOPY, GAS_ISLANDS, GAS_PARTS, TERRAIN, CANAL, VENICE, RAIL, FAVELA, FLUX, FARMLAND, SPOTS, SNOWV, MOONV, GARDV, FORESTV, MEDV, slotPlaceTags, roadTopology, WARE_LIST, WALK as L_WALK, LOT as L_LOT, ROAD as L_ROAD, slotY as L_slotY } from './layout.js';
+import { MAP, doorPoint, slotOrigin, DELIVERY_RADIUS, DELIVERY_MAX_SPEED, VAN, VAN_START, LOT_ANCHORS, SOLIDS, ENTRANCE, HEDGE, GRID, PLAZA, HOUSE_SLOTS, configureGrid, roadCenter, setGasStations, GAS_LIST, GAS_CANOPY, GAS_ISLANDS, GAS_PARTS, TERRAIN, CANAL, VENICE, RAIL, FAVELA, FLUX, FARMLAND, SPOTS, SNOWV, MOONV, GARDV, FORESTV, MEDV, slotPlaceTags, roadTopology, WARE_LIST, WALK as L_WALK, LOT as L_LOT, ROAD as L_ROAD, slotY as L_slotY, arrangeRailStops } from './layout.js';
 import { createLaser, disposeFx } from './laser.js';
 import { createUrsa } from './ursa.js';
 import { createSolar } from './solar.js';
@@ -334,6 +334,7 @@ function composeRound() {
     const nApts = Math.min(28, Math.max(24, rest - 32));                 // (com menos postos/galpões sobram mais lotes)
     pool = wares.concat(shuffled(SHOPS).slice(0, nShops), shuffled([...Array(28).keys()].map(k => 38 + k)).slice(0, nApts),
       shuffled(allHouses).slice(0, rest - nApts));
+    game.arrange = (layout, free) => arrangeRailStops(layout, free, h => h >= 0 && HOUSES[h].kind === 'apt');   // paradas do bonde na calçada de um prédio
   } else if (canal) {                           // Bairro 10: galpões (fixos nos pares sorteados), 2–3 pares de gêmeas, comércio, prédios e casas
     const wares = shuffled(WARES).slice(0, wareList.length);
     fixed = {}; wareList.forEach((p, i) => { fixed[p[0]] = wares[i]; });
@@ -468,45 +469,74 @@ function updateBoat(dt) {
   }
   const w = boat.userData.wake; w.material.opacity = Math.min(0.35, Math.abs(van.speed) * 0.025); w.scale.x = 0.6 + Math.min(1.4, Math.abs(van.speed) * 0.08);
 }
-// barcos que circulam devagar (obstáculos móveis; vão e voltam por canais longos, nunca param no caminho)
+// barcos que circulam devagar (obstáculos móveis): vão e voltam por canais longos que não cortam as praças nem passam
+// sob pontes, sempre pela DIREITA do canal (a lancha passa pelo outro lado). Nas pontas: param antes do cruzamento um
+// tempo diferente a cada vez (e esperam a lancha se afastar), entram no meio do cruzamento, giram devagar e voltam.
+// Aceleram e freiam aos poucos; balançam de leve na água. Lancha logo à frente: freiam e esperam.
 const npcBoats = (() => {
   const root = new THREE.Group(); root.name = 'npcBoats';
   const list = [];
-  const ROUTES = () => [                                              // [x0, z0, x1, z1]: canais retos sem vielas no caminho
-    [roadCenter(0) + 4, roadCenter(1), roadCenter(8) - 4, roadCenter(1)],   // (canais que não cortam as praças)
-    [roadCenter(7), roadCenter(1) + 4, roadCenter(7), roadCenter(8) - 4],
+  const ROUTES = () => [                                              // [x0, z0, x1, z1]: de cruzamento a cruzamento
+    [roadCenter(0), roadCenter(1), roadCenter(8), roadCenter(1)],
+    [roadCenter(7), roadCenter(2), roadCenter(7), roadCenter(8)],
     [roadCenter(1), roadCenter(8), roadCenter(6), roadCenter(8)],
-    [roadCenter(5), roadCenter(5), roadCenter(5), roadCenter(8) - 4],
+    [roadCenter(5), roadCenter(5), roadCenter(5), roadCenter(7)],
   ];
+  const SIZE = [[3.8, 0.7], [2.95, 1.02], [3.8, 0.7], [2.85, 0.97]];   // meia-medida (comprimento, largura) de cada barco
+  const V0 = [2.5, 2.0, 2.9, 3.3], SIDES = [2.35, 2.05, 2.35, 2.1], ZONE = 7, TURN = 4.8;   // (rente ao cais da direita: o meio do canal fica livre para a lancha)
+  const ss = (a, b, x) => { const t = Math.max(0, Math.min(1, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
   let clock = 0;
   return {
     object: root,
     reset() {
       const R = ROUTES();
       R.forEach((r, k) => {
-        if (!list[k]) { const m = buildBoatNpc(k); root.add(m); list[k] = { m, solid: { x0: 0, x1: 0, z0: 0, z1: 0 } }; }
-        Object.assign(list[k], { r, t: (k * 0.37) % 1, dir: 1 });
+        if (!list[k]) { const m = buildBoatNpc(k); m.rotation.order = 'YXZ'; root.add(m); list[k] = { m, k, solid: { x0: 0, x1: 0, z0: 0, z1: 0 } }; }
+        Object.assign(list[k], { r, t: 0.2 + (k * 0.29) % 0.6, dir: k % 2 ? -1 : 1, v: 0, mode: 'go', timer: 0, cleared: false, seed: k * 3 + 1, turnK: 0 });
       });
+      clock = 0;
     },
     detach() { for (const b of list) { const i = SOLIDS.indexOf(b.solid); if (i >= 0) SOLIDS.splice(i, 1); } if (root.parent) root.parent.remove(root); },
     update(dt, boat = null) {
       clock += dt;
       for (const b of list) {
-        const [x0, z0, x1, z1] = b.r, L = Math.hypot(x1 - x0, z1 - z0);
-        let stop = false;                                              // lancha logo à frente: espera; parada demais, dá meia-volta
-        if (boat) {
-          const px = x0 + (x1 - x0) * b.t, pz = z0 + (z1 - z0) * b.t, ux = (x1 - x0) / L * b.dir, uz = (z1 - z0) / L * b.dir;
-          const ahead = (boat.x - px) * ux + (boat.z - pz) * uz, side = Math.abs((boat.x - px) * uz - (boat.z - pz) * ux);
-          stop = ahead > 0 && ahead < 7.5 && side < 3.4;
+        const [x0, z0, x1, z1] = b.r, L = Math.hypot(x1 - x0, z1 - z0), ux = (x1 - x0) / L, uz = (z1 - z0) / L;
+        const endX = b.dir > 0 ? x1 : x0, endZ = b.dir > 0 ? z1 : z0;
+        const eAhead = (b.dir > 0 ? 1 - b.t : b.t) * L, eBack = L - eAhead;
+        const farLancha = !boat || Math.hypot(boat.x - endX, boat.z - endZ) > 11;
+        let target = V0[b.k] * (1 + 0.12 * Math.sin(clock * 0.17 + b.k * 2));
+        if (b.mode === 'turn') {
+          b.timer += dt; target = 0;
+          if (b.timer >= TURN) { b.mode = 'go'; b.dir = -b.dir; b.cleared = false; b.timer = 0; }
+        } else if (b.mode === 'hold') {                                 // parado antes do cruzamento (descanso + espera da lancha)
+          b.timer -= dt; target = 0;
+          if (b.timer <= 0 && farLancha) { b.mode = 'go'; b.cleared = true; }
+        } else {
+          if (!b.cleared && eAhead <= ZONE) { b.mode = 'hold'; b.seed = (b.seed * 16807) % 2147483647; b.timer = 1.5 + (b.seed % 1000) / 1000 * 5; target = 0; }
+          else if (eAhead < 0.05) { b.mode = 'turn'; b.timer = 0; b.v = 0; target = 0; }
+          else target *= (0.3 + 0.7 * ss(0, ZONE, eAhead)) * (0.4 + 0.6 * ss(0, ZONE, eBack));
+          if (boat && b.mode === 'go') {                                // lancha logo à frente, do lado do barco: freia e espera
+            const px = x0 + (x1 - x0) * b.t, pz = z0 + (z1 - z0) * b.t, hx = ux * b.dir, hz = uz * b.dir;
+            const ahead = (boat.x - px) * hx + (boat.z - pz) * hz, side = (boat.x - px) * -hz + (boat.z - pz) * hx;
+            if (ahead > 0 && ahead < 9 && Math.abs(side - SIDES[b.k]) < SIZE[b.k][1] + 1.7) target = 0;
+          }
         }
-        b.wait = stop ? (b.wait || 0) + dt : 0;
-        if (b.wait > 4) { b.dir = -b.dir; b.wait = 0; }
-        else if (!stop) b.t += b.dir * dt * 3.2 / L;
-        if (b.t > 1) { b.t = 1; b.dir = -1; } else if (b.t < 0) { b.t = 0; b.dir = 1; }
-        const x = x0 + (x1 - x0) * b.t, z = z0 + (z1 - z0) * b.t, hx = (x1 - x0) / L * b.dir, hz = (z1 - z0) / L * b.dir;
-        b.m.position.set(x, Math.sin(clock * 1.4 + x) * 0.05, z); b.m.rotation.y = -Math.atan2(hz, hx);
-        const ax = Math.abs(hx) > 0.5;
-        Object.assign(b.solid, { x0: x - (ax ? 3 : 1), x1: x + (ax ? 3 : 1), z0: z - (ax ? 1 : 3), z1: z + (ax ? 1 : 3) });
+        b.v += Math.max(-1.6 * dt, Math.min(0.9 * dt, target - b.v));   // acelera e freia aos poucos
+        if (b.mode !== 'turn') b.t = Math.max(0, Math.min(1, b.t + b.dir * b.v * dt / L));
+        if (b.mode === 'hold' && b.v < 0.02) b.v = 0;
+        // posição: pela direita do sentido, voltando ao meio só dentro dos cruzamentos das pontas
+        const eA = (b.dir > 0 ? 1 - b.t : b.t) * L, eB = L - eA;
+        const off = SIDES[b.k] * Math.min(ss(0.5, ZONE - 1, eA), ss(0.5, ZONE - 1, eB));
+        let yaw = Math.atan2(-uz * b.dir, ux * b.dir), sgn = b.dir;
+        if (b.mode === 'turn') yaw += Math.PI * ss(0, TURN, b.timer);   // gira no lugar, devagar
+        const hx = Math.cos(yaw), hz = -Math.sin(yaw);
+        const x = x0 + (x1 - x0) * b.t + -uz * sgn * off, z = z0 + (z1 - z0) * b.t + ux * sgn * off;
+        const ph = b.k * 1.7, turning = b.mode === 'turn' ? Math.sin(Math.PI * b.timer / TURN) : 0;
+        b.m.position.set(x, Math.sin(clock * 1.3 + ph) * 0.035 - 0.02, z);
+        b.m.rotation.set(Math.sin(clock * 1.05 + ph) * 0.022 + turning * 0.035, yaw, Math.sin(clock * 0.8 + ph * 2) * 0.012 - (target - b.v) * 0.01);
+        b.m.userData.speed = b.mode === 'turn' ? 1.2 : b.v; b.m.userData.rowing = b.mode === 'turn' || b.v > 0.15;
+        const [hl, hw] = SIZE[b.k], ex = Math.abs(hx) * hl + Math.abs(hz) * hw, ez = Math.abs(hz) * hl + Math.abs(hx) * hw;
+        Object.assign(b.solid, { x0: x - ex, x1: x + ex, z0: z - ez, z1: z + ez });
         if (SOLIDS.indexOf(b.solid) < 0) SOLIDS.push(b.solid);
       }
     },
@@ -1496,17 +1526,19 @@ const PARCEL_AT = { x: 15.7, z: 2.3 };                  // coordenadas do lote 0
 const parcel = (() => {
   const g = new THREE.Group(), m = c => new THREE.MeshStandardMaterial({ color: c, roughness: 0.85, flatShading: true });
   const add = (w, h, d, c, x, y, z) => { const o = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), m(c)); o.position.set(x, y, z); o.castShadow = true; g.add(o); };
-  add(0.7, 0.52, 0.7, '#c8925a', 0, 0.26, 0);            // papelão
-  add(0.72, 0.525, 0.14, '#e8d3a0', 0, 0.26, 0);          // fita
-  add(0.14, 0.53, 0.72, '#e8d3a0', 0, 0.26, 0);
-  add(0.26, 0.01, 0.18, '#ffffff', 0.18, 0.531, 0.2);     // etiqueta
+  // medidas casadas com a pose de carregar (walker.js, CARRY): cabe entre as mãos, encostada na barriga, abaixo do queixo
+  add(0.56, 0.42, 0.52, '#c8925a', 0, 0.21, 0);          // papelão
+  add(0.572, 0.425, 0.12, '#e8d3a0', 0, 0.21, 0);        // fita
+  add(0.12, 0.43, 0.532, '#e8d3a0', 0, 0.21, 0);
+  add(0.21, 0.01, 0.15, '#ffffff', 0.15, 0.431, 0.15);   // etiqueta
   g.name = 'k-parcel';
   return g;
 })();
+let parcelFrom = null;                     // de onde a caixa saiu ao ser pega (para subir do chão até os braços)
 let carrying = false, parcelGiven = false;   // parcelGiven: já entregue nesta partida (fica ao lado dele, sem poder pegar de volta)
 const isL1 = () => neighborhood === 'grid4' && (gameMode === 'career' ? careerLevel : freeLevel) === 0;
 function resetParcel() {
-  carrying = false; parcelGiven = false;
+  carrying = false; parcelGiven = false; parcelFrom = null;
   if (parcel.parent) parcel.parent.remove(parcel);
   if (!isL1() || parcelDone) return;
   const o = slotOrigin(0);
@@ -2643,10 +2675,20 @@ function vanDoorStep(out) {
   if (out) van.jolt(side, 1);
   return true;
 }
-/** A caixa do K nos braços do personagem: junto do peito, acompanhando o passo. */
+/** A caixa do K nos braços do personagem: presa ao tronco (walker.carryAnchor), entre as mãos. Ao pegar, ela sobe do
+ *  chão até os braços enquanto eles se fecham nela (walker.carryK vai de 0 a 1). */
+const _pq = new THREE.Quaternion(), _pp = new THREE.Vector3();
 function carryParcel() {
-  const f = walker.facing, hc = Math.cos(f), hs = Math.sin(f), by = walker.object.children[0] ? walker.object.children[0].position.y : 0;
-  parcel.position.set(walker.x + hc * 0.5, walker.floor + 0.68 + by, walker.z + hs * 0.5); parcel.rotation.set(0, -f, 0);
+  if (!parcelFrom) parcelFrom = { p: parcel.position.clone(), q: parcel.quaternion.clone() };
+  const an = walker.carryAnchor, k = walker.carryK;
+  an.updateWorldMatrix(true, false);
+  an.getWorldPosition(_pp); an.getWorldQuaternion(_pq);
+  if (k < 0.999) {                                        // pegando: sai do chão num arco curto
+    const e = k * k * (3 - 2 * k);
+    _pp.lerpVectors(parcelFrom.p, _pp, e); _pp.y += 0.12 * Math.sin(Math.PI * e);
+    _pq.slerpQuaternions(parcelFrom.q, _pq, e);
+  }
+  parcel.position.copy(_pp); parcel.quaternion.copy(_pq);
 }
 function enterVanNow() {
   if (carrying) resetParcel();

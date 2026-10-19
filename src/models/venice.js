@@ -261,91 +261,221 @@ export function buildBoat() {
   return g;
 }
 
+/** Casco de barco (frente = +X), leve e legível: perfil lateral com a borda (amurada) subindo nas pontas e o fundo
+ *  levantando até elas; na planta, a largura afina até a proa (e até a popa, se `stern` = 'point'; 'flat' = espelho de
+ *  popa). Por baixo é mais estreito que em cima (bojo). `top(u, bow)`/`bot(u, bow)` dão as alturas (u = 0 no meio, 1 na ponta). */
+function hullGeo({ L, W, top, bot, stern = 'point', lean = 0, n = 18 }) {
+  const h = L / 2, sh = new THREE.Shape(), U = i => -1 + 2 * i / n;
+  for (let i = 0; i <= n; i++) { const u = U(i), x = u * h, y = bot(Math.abs(u), u > 0); i ? sh.lineTo(x, y) : sh.moveTo(x, y); }
+  for (let i = n; i >= 0; i--) { const u = U(i); sh.lineTo(u * h, top(Math.abs(u), u > 0)); }
+  const g = new THREE.ExtrudeGeometry(sh, { depth: 1, bevelEnabled: false, steps: 1 });
+  g.translate(0, 0, -0.5);
+  const p = g.attributes.position;
+  for (let i = 0; i < p.count; i++) {
+    const x = p.getX(i), y = p.getY(i), u = Math.min(1, Math.abs(x) / h), bow = x > 0;
+    const yt = top(u, bow), yb = bot(u, bow), k = Math.max(0, Math.min(1, (y - yb) / Math.max(0.01, yt - yb)));
+    let hw = bow || stern === 'point' ? Math.pow(Math.max(0, 1 - Math.pow(u, 2.1)), 0.62) : 1 - 0.22 * Math.pow(u, 3);
+    hw = Math.max(0.035, hw) * W * (0.72 + 0.28 * Math.sqrt(k));
+    p.setZ(i, p.getZ(i) * hw + lean * (1 - u * u) * (y - yb));
+  }
+  g.computeVertexNormals();
+  return g;
+}
+// água em volta do casco: anel claro (a "linha d'água" que toca o casco) e esteira em V que só aparece com o barco andando
+const RIPPLE_GEO = new THREE.RingGeometry(0.86, 1, 28).rotateX(-Math.PI / 2);
+const WAKE_GEO = (() => {                                                                       // V aberto atrás da popa
+  const g = new THREE.BufferGeometry(), v = [], w = 0.22;
+  for (const s of [-1, 1]) {
+    const a = [0, 0, s * 0.35], b = [-6, 0, s * 2.6];
+    v.push(a[0], 0, a[2], b[0], 0, b[2], b[0], 0, b[2] + s * w * 3, a[0], 0, a[2], b[0], 0, b[2] + s * w * 3, a[0], 0, a[2] + s * w);
+  }
+  g.setAttribute('position', new THREE.Float32BufferAttribute(v, 3));
+  return g;
+})();
+function waterMarks(g, hl, hw, sternX) {
+  const rm = new THREE.MeshBasicMaterial({ color: '#d8eef8', transparent: true, opacity: 0.5, depthWrite: false });
+  const ring = new THREE.Mesh(RIPPLE_GEO, rm); ring.scale.set(hl, 1, hw); ring.position.y = 0.075; ring.renderOrder = 1; g.add(ring);
+  const wm = new THREE.MeshBasicMaterial({ color: '#e6f4fa', transparent: true, opacity: 0, depthWrite: false, side: THREE.DoubleSide });
+  const wake = new THREE.Mesh(WAKE_GEO, wm); wake.position.set(sternX, 0.07, 0); wake.renderOrder = 1; g.add(wake);
+  for (const m of [ring, wake]) { m.castShadow = false; m.receiveShadow = false; }
+  return (t, speed) => {
+    const k = Math.min(1, speed / 3.2);
+    ring.scale.set(hl * (1 + Math.sin(t * 1.3) * 0.02 + k * 0.05), 1, hw * (1.06 + Math.sin(t * 1.7 + 1) * 0.04 + k * 0.1));
+    rm.opacity = 0.32 + 0.12 * Math.sin(t * 0.9) + k * 0.15;
+    wm.opacity = k * 0.42; wake.scale.set(0.5 + k * 0.6, 1, 0.7 + k * 0.4);
+  };
+}
+// gondoleiro em pé na popa com o remo apoiado na forcola (lado direito): as mãos acompanham o cabo do remo
+function gondolier(g, k, ph, deckY) {
+  const gl = buildFigure({ shirt: '#f6f4ee', stripes: '#1f3a68', pants: '#1d1d22', band: '#c8402f', hat: 'gondolier', hair: k ? '#2a1d14' : '#6b4428', moving: ['armL', 'armR', 'head'] });
+  gl.root.position.set(-2.7, deckY, -0.16); gl.root.rotation.y = Math.PI / 2; g.add(gl.root);
+  const FORC = new THREE.Vector3(-1.95, deckY + 0.62, 0.5);
+  const oar = new THREE.Group(); oar.position.copy(FORC); g.add(oar);
+  const blade = new THREE.Group();                                                            // remo ao longo do +X local: cabo atrás, pá na água
+  blade.add(at(cyl(0.035, 0.045, 4.6, '#c9a46a', 6), 1.55, 0, 0, 0, 0, Math.PI / 2));
+  blade.add(at(box(0.9, 0.05, 0.2, '#b8925a'), 3.75, 0, 0)); blade.add(at(box(0.16, 0.08, 0.08, '#6b4428'), -0.72, 0, 0));
+  const oarM = vcMerge(blade); oar.add(oarM);
+  const BASE = new THREE.Vector3(0.8, -0.42, 0.42).normalize();                             // direção da forcola até a pá (para a frente, para fora, para baixo)
+  const q = new THREE.Quaternion(), X = new THREE.Vector3(1, 0, 0), d = new THREE.Vector3(), Y = new THREE.Vector3(0, 1, 0);
+  let st = Math.random() * 6;
+  return (dt, t, speed, rowing) => {
+    // remada: puxa o cabo para trás (a pá vai para trás na água), volta com a pá levantada; parado, segura o remo e espera
+    if (rowing) st += dt * (0.55 + speed * 0.12) * Math.PI * 2;
+    const sw = rowing ? Math.sin(st) : Math.sin(t * 0.5 + ph) * 0.06, lift = rowing ? Math.max(0, Math.cos(st)) : 0.2;
+    d.copy(BASE).applyAxisAngle(Y, sw * 0.32); d.y -= -lift * 0.12; d.normalize();
+    q.setFromUnitVectors(X, d); oar.quaternion.copy(q);
+    gl.body.rotation.x = 0.1 + sw * 0.14;                                                   // empurra com o corpo todo
+    gl.armL.rotation.set(-1.15 - sw * 0.3, 0, -0.05); gl.armR.rotation.set(-1.0 - sw * 0.3, 0, -0.6);   // (as duas mãos no cabo, do lado da forcola)
+    gl.head.rotation.y = Math.sin(t * 0.21 + ph) * 0.35 + (rowing ? 0 : Math.sin(t * 0.13 + ph) * 0.3);
+  };
+}
+
 /** Barcos que circulam (frente = +X; main.js os move pelos canais): 0 gôndola com um casal passeando, 1 barca de frutas e
  *  verduras com o barqueiro no leme, 2 gôndola só com o gondoleiro voltando, 3 táxi aquático de madeira envernizada.
- *  O casco e o que não mexe são uma malha só; o gondoleiro rema no ritmo do quanto o barco anda (parado, ele espera
- *  apoiado no remo) e as pessoas olham em volta, cada uma no seu tempo. */
+ *  Cascos com perfil de barco (borda que sobe nas pontas, bojo, proa afinando), assentos, e a água em volta (anel na
+ *  linha d'água e esteira que abre com a velocidade). main.js informa `userData.speed` e `userData.rowing`; o gondoleiro
+ *  rema no ritmo da velocidade (parado, espera apoiado no remo) e as pessoas olham em volta, cada uma no seu tempo. */
 export function buildBoatNpc(k) {
   const g = new THREE.Group(), fixed = new THREE.Group(), ph = k * 2.3;
   const a = (m, x, y, z, rx = 0, ry = 0, rz = 0) => fixed.add(at(m, x, y, z, rx, ry, rz));
   const anims = [];
-  if (k === 0 || k === 2) {                                                                   // gôndola
-    const BLK = '#17171b';
-    a(box(4.4, 0.5, 1.3, BLK), 0, 0.1, 0); a(box(4.0, 0.06, 1.1, '#5a3a22'), 0, 0.33, 0);
-    a(box(1.4, 0.42, 0.95, BLK), 2.75, 0.32, 0, 0, 0, 0.32); a(box(1.0, 0.3, 0.55, BLK), 3.55, 0.72, 0, 0, 0, 0.62);   // proa subindo
-    a(box(0.08, 0.95, 0.34, '#d9d9d9'), 4.0, 1.25, 0, 0, 0, -0.12);                       // ferro da proa
-    for (let t = 0; t < 6; t++) a(box(0.24, 0.05, 0.3, '#d9d9d9'), 3.9 - 0.02 * t, 0.9 + t * 0.13, 0);
-    a(box(1.3, 0.42, 0.95, BLK), -2.7, 0.32, 0, 0, 0, -0.3); a(box(0.7, 0.26, 0.5, BLK), -3.4, 0.62, 0, 0, 0, -0.6);    // popa
-    a(box(0.32, 0.6, 0.18, '#5a3a22'), -1.65, 0.62, 0.52); a(box(0.08, 0.18, 0.22, '#5a3a22'), -1.65, 0.98, 0.52);   // forcola (apoio do remo)
-    a(box(1.0, 0.32, 1.0, '#8a2a2a'), 0.25, 0.5, 0); a(box(0.18, 0.62, 1.0, '#8a2a2a'), -0.22, 0.78, 0);          // banco de veludo
-    for (const sd of [-1, 1]) a(box(1.0, 0.08, 0.08, '#c9a441'), 0.25, 0.7, sd * 0.5);
-    const gl = buildFigure({ shirt: '#f6f4ee', stripes: '#1f3a68', pants: '#1d1d22', band: '#c8402f', hat: 'gondolier', hair: k ? '#2a1d14' : '#6b4428', moving: ['armL', 'armR', 'head'] });
-    gl.root.position.set(-2.45, 0.38, -0.05); gl.root.rotation.y = Math.PI / 2; g.add(gl.root);
-    const oar = new THREE.Group(); oar.position.set(-1.65, 1.02, 0.52); g.add(oar);           // remo apoiado na forcola
-    oar.add(vcMerge(new THREE.Group().add(at(cyl(0.04, 0.04, 4.2, '#c9a46a', 5), 0, 0, 0, 0, 0, 1.15), at(box(0.06, 0.62, 0.16, '#c9a46a'), 1.85, -0.85, 0, 0, 0, 1.15))));
-    for (const arm of [gl.armL, gl.armR]) arm.rotation.set(-1.0, 0, 0);
-    anims.push((dist, t, rowing) => {
-      const st = dist / 3.4 * Math.PI * 2;                                            // uma remada a cada 3,4 de caminho
-      const sw = rowing ? Math.sin(st) : Math.sin(t * 0.6 + ph) * 0.15;
-      oar.rotation.y = sw * 0.32; oar.rotation.x = (rowing ? Math.max(0, Math.cos(st)) : 0) * 0.08;
-      gl.body.rotation.x = 0.12 + sw * 0.16;                                             // inclina para empurrar e volta
-      gl.armL.rotation.x = -1.0 - sw * 0.35; gl.armR.rotation.x = -0.85 - sw * 0.35;
-      gl.armL.rotation.z = -0.35; gl.armR.rotation.z = 0.5;
-      gl.head.rotation.y = Math.sin(t * 0.27 + ph) * 0.45;
-    });
-    if (k === 0) {                                                                         // casal passeando no banco de veludo
-      const p1 = buildFigure({ shirt: '#e9dcc6', pants: '#3d4a66', hair: '#3a2a1a', hat: 'straw', sit: 0.32, moving: ['head'] });
-      const p2 = buildFigure({ shirt: '#d99a94', pants: '#2f3b52', hair: '#8a5a36', longHair: true, sit: 0.32, moving: ['head', 'armR'] });
-      for (const [p, z] of [[p1, -0.25], [p2, 0.25]]) { p.root.position.set(0.18, 0.62 - 0.34, z); p.root.rotation.y = Math.PI / 2; p.root.scale.setScalar(0.9); g.add(p.root); }
-      anims.push((dist, t) => {
-        p1.head.rotation.y = Math.sin(t * 0.33 + 1) * 0.6; p2.head.rotation.y = Math.sin(t * 0.41) * 0.5 - 0.2;
-        const snap = Math.max(0, Math.sin(t * 0.21) - 0.8) * 5;                              // de vez em quando aponta alguma coisa
+  let marks;
+  if (k === 0 || k === 2) {                                                                   // gôndola: preta, longa e esguia, pontas altas
+    const BLK = '#141418', GOLD = '#c9a441', L = 7.6;
+    const top = (u, bow) => 0.46 + (bow ? 0.62 : 0.4) * Math.pow(u, 2.6), bot = (u, bow) => -0.16 + (bow ? 0.86 : 0.6) * Math.pow(u, 2.2);
+    fixed.add(new THREE.Mesh(hullGeo({ L, W: 1.34, top, bot, lean: 0.05 }), mat(BLK)));
+    a(box(3.6, 0.05, 0.98, '#5a3a22'), -0.2, 0.47, 0);                                       // tablado do meio
+    for (const sd of [-1, 1]) a(box(3.4, 0.05, 0.05, GOLD), -0.2, 0.5, sd * 0.6);            // friso dourado da borda
+    a(box(0.12, 0.98, 0.3, '#dcdcdc'), 3.72, 1.2, 0, 0, 0, -0.08);                           // ferro da proa: lâmina e seis dentes
+    for (let t = 0; t < 6; t++) a(box(0.26, 0.05, 0.08, '#dcdcdc'), 3.86, 0.86 + t * 0.1, 0);
+    a(box(0.22, 0.12, 0.26, '#dcdcdc'), 3.66, 1.73, 0, 0, 0, 0.5);
+    a(box(0.32, 0.26, 0.3, BLK), -3.58, 0.92, 0, 0, 0, -0.5);                                // ponta da popa
+    a(box(0.9, 0.06, 1.0, '#5a3a22'), -2.65, 0.63, 0);                                        // plataforma do gondoleiro
+    a(box(0.14, 0.5, 0.16, '#6b4428'), -1.95, 0.72, 0.5); a(box(0.1, 0.16, 0.24, '#6b4428'), -1.95, 1.02, 0.5, 0, 0, 0.3);   // forcola
+    a(box(0.95, 0.24, 0.96, '#8a2a2a'), 0.35, 0.6, 0); a(box(0.16, 0.6, 0.98, '#8a2a2a'), -0.08, 0.86, 0, 0, 0, 0.12);   // poltrona de veludo
+    for (const sd of [-1, 1]) { a(box(0.9, 0.3, 0.08, BLK), 0.35, 0.78, sd * 0.5); a(box(0.92, 0.04, 0.1, GOLD), 0.35, 0.94, sd * 0.5); }   // braços com friso
+    a(box(0.34, 0.2, 0.9, '#5a3a22'), 1.75, 0.6, 0); a(box(0.34, 0.06, 0.9, '#8a2a2a'), 1.75, 0.72, 0);   // banquinho da frente
+    a(box(0.28, 0.32, 0.22, GOLD), 1.1, 0.6, 0.48); a(sphere(0.1, GOLD, 6, 4), 1.1, 0.82, 0.48);   // cavalinho (enfeite de latão)
+    anims.push(gondolier(g, k, ph, 0.66));
+    if (k === 0) {                                                                             // casal passeando
+      const p1 = buildFigure({ shirt: '#e9dcc6', pants: '#3d4a66', hair: '#3a2a1a', hat: 'straw', sit: 0.3, moving: ['head'] });
+      const p2 = buildFigure({ shirt: '#d99a94', pants: '#2f3b52', hair: '#8a5a36', longHair: true, sit: 0.3, moving: ['head', 'armR'] });
+      for (const [p, z] of [[p1, -0.24], [p2, 0.24]]) { p.root.position.set(0.15, 0.42, z); p.root.rotation.y = Math.PI / 2; p.root.scale.setScalar(0.88); g.add(p.root); }
+      anims.push((dt, t) => {
+        const look = Math.sin(t * 0.13 + 2) > 0.55;                                            // de vez em quando se olham
+        p1.head.rotation.y = look ? -0.7 : Math.sin(t * 0.33 + 1) * 0.6; p2.head.rotation.y = look ? 0.7 : Math.sin(t * 0.41) * 0.5 - 0.2;
+        const snap = Math.max(0, Math.sin(t * 0.21) - 0.8) * 5;                              // e ela aponta alguma coisa
         p2.armR.rotation.set(-snap * 1.5, 0, 0.1 + snap * 0.2);
       });
     }
-  } else if (k === 1) {                                                                       // barca de frutas e verduras
-    a(box(4.4, 0.7, 2.0, '#3f6a4a'), 0, 0.1, 0); a(box(4.45, 0.12, 2.05, '#e8dfcc'), 0, 0.48, 0);
-    const bow = new THREE.Shape(); bow.moveTo(0, -1.0); bow.lineTo(1.0, 0); bow.lineTo(0, 1.0); bow.lineTo(0, -1.0);
-    const bg = new THREE.ExtrudeGeometry(bow, { depth: 0.7, bevelEnabled: false }); bg.rotateX(-Math.PI / 2); bg.translate(2.2, -0.25, 0);
-    fixed.add(new THREE.Mesh(bg, mat('#3f6a4a')));
-    a(box(3.0, 0.06, 1.7, '#7a5434'), 0.3, 0.46, 0);
-    const FR = [['#ff8c1a', 'orange'], ['#e8312f', 'tomato'], ['#7bc950', 'greens'], ['#ffd23f', 'lemon'], ['#8a3a8a', 'grapes'], ['#7bc950', 'greens']];
-    FR.forEach(([c], i) => {                                                                // caixotes com frutas e verduras
-      const x = -0.6 + (i % 3) * 0.95, z = i < 3 ? -0.45 : 0.45;
-      a(box(0.85, 0.42, 0.75, '#b8804a'), x, 0.7, z); for (let q = 0; q < 4; q++) a(sphere(0.17, c, 6, 4), x - 0.22 + (q % 2) * 0.44, 0.95, z - 0.17 + (q > 1 ? 0.34 : 0));
+    marks = waterMarks(g, 3.7, 0.95, -3.4);
+  } else if (k === 1) {                                                                       // barca de frutas e verduras (casco largo, popa reta)
+    const GRN = '#3f6a4a';
+    const top = (u, bow) => 0.5 + (bow ? 0.3 : 0.06) * Math.pow(u, 2.4), bot = (u, bow) => -0.12 + (bow ? 0.5 : 0.1) * Math.pow(u, 2.6);
+    fixed.add(new THREE.Mesh(hullGeo({ L: 5.8, W: 2.0, top, bot, stern: 'flat' }), mat(GRN)));
+    for (const sd of [-1, 1]) a(box(4.6, 0.1, 0.08, '#e8dfcc'), -0.2, 0.52, sd * 0.98);      // borda creme
+    a(box(3.4, 0.05, 1.7, '#7a5434'), 0.0, 0.51, 0);
+    const FR = ['#ff8c1a', '#e8312f', '#7bc950', '#ffd23f', '#8a3a8a', '#7bc950'];
+    FR.forEach((c, i) => {                                                                     // caixotes com frutas e verduras
+      const x = -0.75 + (i % 3) * 0.95, z = i < 3 ? -0.45 : 0.45;
+      a(box(0.85, 0.42, 0.75, '#b8804a'), x, 0.74, z); for (let q = 0; q < 4; q++) a(sphere(0.17, c, 6, 4), x - 0.22 + (q % 2) * 0.44, 0.99, z - 0.17 + (q > 1 ? 0.34 : 0));
     });
-    a(box(0.08, 1.3, 0.08, '#5a3a22'), 1.55, 1.1, 0); a(box(1.2, 0.05, 0.9, '#c8402f'), 1.2, 1.75, 0, 0, 0, -0.15);   // toldinho na proa
-    a(box(0.5, 0.5, 0.5, '#3a3a3a'), -2.2, 0.55, 0); a(box(0.6, 0.06, 0.06, '#5a3a22'), -1.85, 0.95, 0.15, 0, 0.4, 0);   // motor de popa e cana do leme
-    const bm = buildFigure({ shirt: '#3a78d4', pants: '#3d4a66', hair: '#d8d4cc', hat: 'cap', hatColor: '#1f3a68', apron: '#e7d3a8', moving: ['head', 'armL'] });
-    bm.root.position.set(-1.6, 0.48, -0.25); bm.root.rotation.y = Math.PI / 2; g.add(bm.root);
-    bm.armL.rotation.set(-0.5, 0, -0.2);
-    anims.push((dist, t) => { bm.head.rotation.y = Math.sin(t * 0.25 + 2) * 0.7; bm.armL.rotation.x = -0.5 + Math.sin(t * 0.8) * 0.05; });
+    a(box(0.08, 1.3, 0.08, '#5a3a22'), 1.55, 1.15, 0); a(box(1.2, 0.05, 0.9, '#c8402f'), 1.2, 1.8, 0, 0, 0, -0.15);   // toldinho na proa
+    a(box(0.45, 0.24, 1.0, '#5a3a22'), -1.95, 0.64, 0);                                        // banco do barqueiro
+    a(box(0.44, 0.5, 0.42, '#3a3a3a'), -2.95, 0.72, 0); a(box(0.12, 0.6, 0.12, '#3a3a3a'), -3.05, 0.3, 0);   // motor de popa
+    a(box(0.7, 0.05, 0.05, '#5a3a22'), -2.45, 0.88, 0.18, 0, 0.35, 0);                         // cana do leme
+    const bm = buildFigure({ shirt: '#3a78d4', pants: '#3d4a66', hair: '#d8d4cc', hat: 'cap', hatColor: '#1f3a68', apron: '#e7d3a8', sit: 0.24, moving: ['head', 'armR'] });
+    bm.root.position.set(-1.95, 0.52, -0.05); bm.root.rotation.y = Math.PI / 2; g.add(bm.root);
+    anims.push((dt, t, speed) => {
+      bm.head.rotation.y = Math.sin(t * 0.25 + 2) * 0.7;
+      bm.armR.rotation.set(0.25 + Math.sin(t * 0.5) * 0.05 + (speed < 0.3 ? 0 : Math.sin(t * 0.9) * 0.05), 0, 0.5);   // mão na cana do leme
+    });
+    marks = waterMarks(g, 3.05, 1.25, -2.9);
   } else {                                                                                    // táxi aquático (madeira envernizada)
-    a(box(4.2, 0.7, 1.9, '#8a4f2a'), 0, 0.1, 0);
-    const bow = new THREE.Shape(); bow.moveTo(0, -0.95); bow.lineTo(1.2, 0); bow.lineTo(0, 0.95); bow.lineTo(0, -0.95);
-    const bg = new THREE.ExtrudeGeometry(bow, { depth: 0.7, bevelEnabled: false }); bg.rotateX(-Math.PI / 2); bg.translate(2.1, -0.25, 0);
-    fixed.add(new THREE.Mesh(bg, mat('#8a4f2a')));
-    a(box(4.25, 0.08, 1.95, '#f1e6cf'), 0, 0.47, 0);
-    for (let x = -1.8; x < 2; x += 0.45) a(box(0.04, 0.02, 1.7, '#6b3a1e'), x, 0.52, 0);   // frisos do convés
-    a(box(1.5, 0.75, 1.6, '#f1e6cf'), -1.15, 0.88, 0); a(box(1.55, 0.06, 1.65, '#8a4f2a'), -1.15, 1.28, 0);   // cabine baixa (atrás)
-    for (const sd of [-1, 1]) a(box(1.1, 0.32, 0.04, '#2b3d52'), -1.15, 0.98, sd * 0.81);
-    a(box(0.5, 0.5, 0.6, '#8a4f2a'), 0.55, 0.75, -0.35); a(cyl(0.2, 0.2, 0.04, '#2b2b2b', 10), 0.42, 1.1, -0.35, 0, 0, 1.1);   // painel e volante
-    a(box(0.06, 0.4, 1.5, '#9fc3d6'), 0.95, 1.12, 0, 0, 0, -0.35);                          // para-brisa
-    for (const sd of [-1, 1]) a(box(3.6, 0.06, 0.06, '#d9d9d9'), 0.2, 0.62, sd * 0.97);     // frisos cromados
-    const pl = buildFigure({ shirt: '#ffffff', pants: '#1d2a3a', hair: '#3a2a1a', hat: 'cap', hatColor: '#ffffff', moving: ['head'] });
-    pl.root.position.set(0.0, 0.48, -0.35); pl.root.rotation.y = Math.PI / 2; pl.root.scale.setScalar(0.92); g.add(pl.root);
-    anims.push((dist, t) => { pl.head.rotation.y = Math.sin(t * 0.35 + 4) * 0.5; });
+    const WD = '#8a4f2a';
+    const top = (u, bow) => 0.5 + (bow ? 0.34 : 0.04) * Math.pow(u, 2.2), bot = (u, bow) => -0.14 + (bow ? 0.62 : 0.08) * Math.pow(u, 2.0);
+    fixed.add(new THREE.Mesh(hullGeo({ L: 5.6, W: 1.9, top, bot, stern: 'flat' }), mat(WD)));
+    a(box(3.2, 0.05, 1.6, '#f1e6cf'), -0.4, 0.52, 0);
+    for (let x = -1.8; x < 1.2; x += 0.45) a(box(0.04, 0.02, 1.5, '#6b3a1e'), x, 0.55, 0);   // frisos do convés
+    a(box(1.5, 0.72, 1.5, '#f1e6cf'), -1.2, 0.9, 0); a(box(1.58, 0.06, 1.6, WD), -1.2, 1.28, 0);   // cabine baixa (atrás)
+    for (const sd of [-1, 1]) a(box(1.1, 0.3, 0.04, '#2b3d52'), -1.2, 0.98, sd * 0.76);
+    a(box(0.5, 0.5, 0.6, WD), 0.6, 0.78, -0.3); a(cyl(0.2, 0.2, 0.04, '#2b2b2b', 10), 0.47, 1.12, -0.3, 0, 0, 1.1);   // painel e volante
+    a(box(0.06, 0.4, 1.4, '#9fc3d6'), 1.0, 1.12, 0, 0, 0, -0.35);                          // para-brisa
+    a(box(0.5, 0.22, 0.5, '#f1e6cf'), -0.1, 0.66, -0.3);                                     // banco do piloto
+    for (const sd of [-1, 1]) a(box(3.4, 0.05, 0.05, '#d9d9d9'), -0.1, 0.62, sd * 0.93);     // frisos cromados
+    const pl = buildFigure({ shirt: '#ffffff', pants: '#1d2a3a', hair: '#3a2a1a', hat: 'cap', hatColor: '#ffffff', sit: 0.22, moving: ['head'], armPose: { L: [-1.1, 0, 0.1], R: [-1.1, 0, -0.1] } });
+    pl.root.position.set(-0.1, 0.55, -0.3); pl.root.rotation.y = Math.PI / 2; pl.root.scale.setScalar(0.92); g.add(pl.root);
+    anims.push((dt, t) => { pl.head.rotation.y = Math.sin(t * 0.35 + 4) * 0.5; });
+    marks = waterMarks(g, 2.95, 1.2, -2.8);
   }
   const hull = vcMerge(fixed); g.add(hull);
-  let lx = null, lz = 0, dist = 0, still = 0;
+  g.userData.speed = 0; g.userData.rowing = false;
+  let last = performance.now() / 1000;
   hull.onBeforeRender = () => {                                                               // anima só quando aparece na tela
-    const x = g.position.x, z = g.position.z, step = lx === null ? 0 : Math.hypot(x - lx, z - lz);
-    lx = x; lz = z; dist += step; still = step > 0.001 ? 0 : still + 1;
-    const t = performance.now() / 1000;
-    for (const f of anims) f(dist, t, still < 10);
+    const t = performance.now() / 1000, dt = Math.min(0.1, t - last); last = t;
+    const sp = g.userData.speed, rowing = g.userData.rowing;
+    for (const f of anims) f(dt, t, sp, rowing);
+    marks(t, sp);
   };
-  g.traverse(o => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
+  g.traverse(o => { if (o.isMesh && !o.material.transparent) { o.castShadow = true; o.receiveShadow = true; } });
   return g;
+}
+
+/** Gente nas mesas das praças e do café (Veneza): cada pessoa sentada numa cadeira (`seats`: x, z, ângulo para a mesa,
+ *  vizinho de mesa), conversando com quem está junto — olha para ele, acena com a cabeça, gesticula, toma um gole — ou
+ *  olhando o movimento; cada uma no seu tempo (nada sincronizado). `waiters`: garçons que saem pela porta da frente do
+ *  café, param ao lado de duas mesas e voltam (caminho reto e livre, em `path`). Só a cabeça e um braço mexem (o resto
+ *  é assado com o cenário); a animação roda quando a pessoa aparece na tela. */
+export function cafeLife(g, seats, waiters) {
+  let n = 0;
+  const T = () => performance.now() / 1000;
+  for (const s of seats) {
+    const look = VEN_LOOKS[(n * 5 + 3) % VEN_LOOKS.length], drinks = n % 3 === 0, ph = n * 1.37 + (n % 5) * 0.61, k = n++;
+    const f = buildFigure({ ...look, sit: s.sit || 0.65, moving: drinks ? ['head', 'armR'] : ['head'] });
+    f.root.position.set(s.x, 0.15, s.z); f.root.rotation.y = s.face; g.add(f.root);
+    const pal = s.mate == null ? null : Math.atan2(Math.sin(s.mate - s.face), Math.cos(s.mate - s.face));   // virar a cabeça para o vizinho
+    f.head.children[0].castShadow = false;
+    let cup = null;
+    if (drinks) { cup = new THREE.Group(); cup.add(at(cyl(0.08, 0.06, 0.16, k % 2 ? '#f2efe6' : '#c97a3a', 8), 0, -0.6, 0.06)); f.armR.add(cup); f.armR.children[0].castShadow = false; }
+    const rate = 0.8 + (k % 7) * 0.06;
+    f.head.children[0].onBeforeRender = () => {
+      const t = T() * rate + ph;
+      const talk = pal != null && Math.sin(t * 0.21) > -0.25;                                  // fase de conversa ou de olhar em volta
+      const yaw = talk ? Math.max(-1.1, Math.min(1.1, pal)) * 0.85 + Math.sin(t * 0.9) * 0.08 : Math.sin(t * 0.23) * 0.75 + Math.sin(t * 0.61) * 0.2;
+      f.head.rotation.y += (yaw - f.head.rotation.y) * 0.08;
+      f.head.rotation.x = talk ? Math.max(0, Math.sin(t * 2.3)) * 0.12 : 0.05;               // acena com a cabeça ao falar
+      f.body.rotation.x = talk ? 0.1 + Math.sin(t * 0.5) * 0.04 : 0.02;
+      if (drinks) {                                                                          // gole de vez em quando; senão, gesto ao falar ou mão na mesa
+        const sip = Math.max(0, Math.sin(t * 0.27 + 1.3) - 0.86) * 7.1, gest = talk ? Math.max(0, Math.sin(t * 1.3)) * 0.35 : 0;
+        f.armR.rotation.set(-0.95 - sip * 1.15 - gest, 0, 0.12 + gest * 0.4 - sip * 0.25);
+      }
+    };
+  }
+  for (const w of waiters) {                                                                 // garçom: avental branco, bandeja na mão
+    const f = buildFigure({ shirt: '#f4f1ea', pants: '#1d1d22', hair: '#2a1d14', apron: '#ffffff', moving: ['legL', 'legR', 'armL', 'head'] });
+    dynamic(f.root); g.add(f.root);
+    const tray = new THREE.Group(); tray.add(at(cyl(0.34, 0.34, 0.04, '#c0c0c0', 12), 0, -0.56, 0.22), at(cyl(0.07, 0.05, 0.14, '#f2efe6', 8), 0.08, -0.47, 0.25));
+    f.armL.add(tray);
+    const P = w.path, seg = [];
+    let tot = 0;
+    for (let i = 0; i < P.length; i++) { const a = P[i], b = P[(i + 1) % P.length], L = Math.hypot(b.x - a.x, b.z - a.z); seg.push({ a, b, L, t0: tot, pause: a.pause || 0 }); tot += a.pause + L / 1.1; }
+    const off = w.offset || 0;
+    f.body.children[0].onBeforeRender = () => {
+      const tt = (T() + off) % tot;
+      let s = seg[seg.length - 1];
+      for (const q of seg) if (tt >= q.t0) s = q;
+      const into = tt - s.t0, walking = into > s.pause, u = walking ? Math.min(1, (into - s.pause) * 1.1 / s.L) : 0;
+      const x = s.a.x + (s.b.x - s.a.x) * u, z = s.a.z + (s.b.z - s.a.z) * u;
+      f.root.position.set(x, 0.15, z);
+      const want = walking ? Math.atan2(s.b.x - s.a.x, s.b.z - s.a.z) : (s.a.face ?? f.root.rotation.y);
+      f.root.rotation.y += Math.atan2(Math.sin(want - f.root.rotation.y), Math.cos(want - f.root.rotation.y)) * 0.12;
+      const sw = walking ? Math.sin((into - s.pause) * 1.1 / 0.62 * Math.PI) : 0;            // um passo a cada 0,62
+      f.legL.rotation.x = sw * 0.45; f.legR.rotation.x = -sw * 0.45;
+      f.armL.rotation.set(-1.45 + sw * 0.04, 0, -0.1);
+      f.head.rotation.y = walking ? 0 : Math.sin(tt * 0.7) * 0.35;
+      f.body.position.y = (f.body.userData.y0 ??= f.body.position.y) + Math.abs(sw) * 0.03;
+    };
+  }
 }
 
 /** Horizonte da laguna (para o cenário de Veneza): ilhas baixas ao longe com casinhas coloridas, campanários e ciprestes,
