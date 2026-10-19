@@ -666,10 +666,11 @@ function createPelada(F) {
     } else if (k.act === 'stumble') { dvx = k.vx * 0.5; dvz = k.vz * 0.5; }
     // afastamento dos outros (e do personagem a pé)
     for (const o of players) if (o !== k) { const dx = k.x - o.x, dz = k.z - o.z, d = hyp(dx, dz); if (d < 0.75 && d > 1e-3) { dvx += dx / d * (0.75 - d) * 4; dvz += dz / d * (0.75 - d) * 4; } }
-    if (wv) { const dx = k.x - wv.x, dz = k.z - wv.z, d = hyp(dx, dz); if (d < 1.1 && d > 1e-3) { dvx += dx / d * (1.1 - d) * 5; dvz += dz / d * (1.1 - d) * 5; } }
+    if (wv) { const dx = k.x - wv.x, dz = k.z - wv.z, d = hyp(dx, dz); if (d < 1.5 && d > 1e-3) { dvx += dx / d * (1.5 - d) * 7; dvz += dz / d * (1.5 - d) * 7; } }
     const acc = (hyp(dvx, dvz) > k.v ? 6 : 8) * dt, ex = dvx - k.vx, ez = dvz - k.vz, el = hyp(ex, ez);
     if (el > acc) { k.vx += ex / el * acc; k.vz += ez / el * acc; } else { k.vx = dvx; k.vz = dvz; }
     k.x += k.vx * dt; k.z += k.vz * dt;
+    if (wv) { const dx = k.x - wv.x, dz = k.z - wv.z, d = hyp(dx, dz); if (d < 0.62) { const u = d > 1e-3 ? 1 / d : 0; k.x = wv.x + (u ? dx * u : 1) * 0.62; k.z = wv.z + (u ? dz * u : 0) * 0.62; } }   // nunca dentro do personagem
     if (k.act === 'fetch' || k.relax) k.x = clamp(k.x, FX0 + 0.3, FX1 - 0.3);             // buscando a bola: até o alambrado
     else k.x = clamp(k.x, GL[0] + (k.gk ? -0.25 : 0.25), GL[1] - (k.gk ? -0.25 : 0.25));
     const zMin = k.x > bench.x0 - 0.4 && k.x < bench.x1 + 0.4 ? bench.front + 0.3 : FZ0 + 0.3;

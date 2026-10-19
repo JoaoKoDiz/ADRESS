@@ -244,15 +244,15 @@ export function buildSnowScene(g, V, MAP, HEDGE) {
       g.add(new THREE.Mesh(place(ex, mx), mat(STONE2)));
       const yTop = r.h1 + 0.9, c0 = toW((uE + L) / 2, side, (r.h0 - 0.4 + yTop) / 2);
       add(box(ax ? 0.6 : L - uE, yTop - r.h0 + 0.4, ax ? L - uE : 0.6, STONE2), ...c0);        // trecho no recorte do patamar
-      const capIn = toW((uE + L) / 2, side, yTop + 0.06); add(box(ax ? 0.74 : L - uE + 0.1, 0.14, ax ? L - uE + 0.1 : 0.74, SNOWC), ...capIn);
+      const capIn = toW((uE + L) / 2, side, yTop + 0.06); add(box(ax ? 0.74 : L - uE - 0.04, 0.14, ax ? L - uE - 0.04 : 0.74, SNOWC), ...capIn);   // (2 cm para dentro nas duas pontas: termina dentro do pilar do alto)
       for (let i = 0; i < Math.ceil(uE); i++) {                          // neve no alto da mureta inclinada
         const u0 = i, u1 = Math.min(uE, i + 1), y0 = hu(u0) + 0.9, y1 = hu(u1) + 0.9, um = (u0 + u1) / 2, sl = Math.atan2(y1 - y0, u1 - u0), l = Math.hypot(u1 - u0, y1 - y0) + 0.06;
         const c = toW(um, side, (y0 + y1) / 2 + 0.06);
         if (ax) add(box(0.74, 0.14, l, SNOWC), ...c, -sl, 0, 0); else add(box(l, 0.14, 0.74, SNOWC), ...c, 0, 0, sl);
       }
-      for (const [u, top] of [[0.35, r.h0 + 1.15], [L - 0.35, r.h1 + 1.15]]) {   // pilares nas pontas
-        const c = toW(u, side, (r.h0 - 0.4 + top) / 2), k = toW(u, side, top + 0.07);   // (da largura do muro: não entra na pista)
-        add(box(ax ? 0.6 : 0.8, top - r.h0 + 0.4, ax ? 0.8 : 0.6, STONE), ...c); add(box(ax ? 0.74 : 0.9, 0.14, ax ? 0.9 : 0.74, SNOWC), ...k);
+      for (const [u, top] of [[0.35, r.h0 + 1.15], [L - 0.35, r.h1 + 1.15]]) {   // pilares nas pontas: um pouco mais grossos que o muro
+        const ls = side + (side < 0 ? -0.04 : 0.04), c = toW(u, ls, (r.h0 - 0.45 + top) / 2), k = toW(u, ls, top + 0.07);   // (para fora; só 2 cm para dentro da pista)
+        add(box(ax ? 0.72 : 0.8, top - r.h0 + 0.45, ax ? 0.8 : 0.72, STONE), ...c); add(box(ax ? 0.86 : 0.94, 0.14, ax ? 0.94 : 0.86, SNOWC), ...k);   // (nenhuma face no plano do muro)
       }
     }
   }
@@ -268,7 +268,7 @@ export function buildSnowScene(g, V, MAP, HEDGE) {
     return a + (b - a) * sx + (c - a) * sz + (a - b - c + d) * sx * sz;
   };
   const cWet = new THREE.Color('#5d6a78'), cIce = new THREE.Color(ICE), cWhite = new THREE.Color('#eef8ff'), cSnow = new THREE.Color(SNOWC), cSnow2 = new THREE.Color(SNOW2), tmp = new THREE.Color();
-  for (const p of V.ice) {
+  for (const [pi, p] of V.ice.entries()) {
     const [ax0, az0] = p.seg.a, [bx0, bz0] = p.seg.b, L = p.L, ux = (bx0 - ax0) / L, uz = (bz0 - az0) / L, nx = -uz, nz = ux;
     const U0 = p.t0 * L, U1 = p.t1 * L, NU = Math.ceil((U1 - U0) / 0.5), NL = 10, IH = V.ICE_HALF;
     const vx = [], cov = [];
@@ -307,7 +307,7 @@ export function buildSnowScene(g, V, MAP, HEDGE) {
         const u = F0 + (F1 - F0) * i / NF, x0 = ax0 + ux * u, z0 = az0 + uz * u, fade = Math.min(1, (u - F0) / 2.5, (F1 - u) / 2.5);
         const wv = (0.25 + 0.55 * vnoise(x0 * 1.7 + sd * 40, z0 * 1.7)) * (0.35 + 0.65 * fade), lo = RW / 2 - wv, hi = RW / 2 + 0.05;
         const P1 = [x0 + nx * sd * lo, z0 + nz * sd * lo], P2 = [x0 + nx * sd * hi, z0 + nz * sd * hi];
-        const y = V.h(x0, z0) + 0.088;                                   // (altura do eixo da rua: na ladeira a beirada é muro, não patamar)
+        const y = V.h(x0, z0) + 0.097 + 0.003 * (pi % 4);                                   // (altura do eixo da rua: na ladeira a beirada é muro, não patamar; 1 cm acima do gelo; as franjas de dois trechos vizinhos que se cruzam perto de um nó ficam em alturas diferentes)
         row.push([[P1[0], y, P1[1]], [P2[0], y, P2[1]], vnoise(x0 * 3, z0 * 3)]);
       }
       for (let i = 0; i < NF; i++) {
@@ -525,7 +525,7 @@ function cabinModel(c) {
   // frente: porta, janelas acesas, varanda
   const FZ = D / 2;
   if (barn) {
-    add(box(3.6, 3.2, 0.12, '#7d2620'), 0, 0.4 + 1.6, FZ + 0.04); for (const r of [0.73, -0.73]) add(box(0.14, 4.3, 0.06, TRIM), 0, 0.4 + 1.6, FZ + 0.12, 0, 0, r);   // portão com o X branco (cabe no portão)
+    add(box(3.6, 3.2, 0.12, '#7d2620'), 0, 0.4 + 1.6, FZ + 0.04); for (const r of [0.73, -0.73]) add(box(0.14, 4.3, 0.06, TRIM), 0, 0.4 + 1.6, FZ + 0.13, 0, 0, r);   // portão com o X branco (cabe no portão)
     add(box(3.8, 0.16, 0.1, TRIM), 0, 0.4 + 3.25, FZ + 0.1); add(box(1.0, 1.0, 0.1, '#ffd27a'), 0, 0.4 + H + 1.0, FZ + 0.06);   // janela do feno
   } else {
     add(box(1.0, 2.0, 0.1, '#3b2c1e'), -W / 2 + 1.6, 0.4 + 1.0, FZ + 0.04); add(box(0.08, 0.08, 0.06, '#ffdf6e'), -W / 2 + 1.95, 0.4 + 1.0, FZ + 0.12);   // porta e maçaneta

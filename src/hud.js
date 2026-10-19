@@ -455,6 +455,11 @@ export function createHUD(hudEl, stageEl) {
       if (side === 'up') {                                         // perto da borda: o balão inteiro continua na tela (no celular ele é um botão)
         const W = prompt.parentElement ? prompt.parentElement.clientWidth : innerWidth;
         if (x < 160 || x > W - 160 || y < 80) { const w = prompt.offsetWidth || 0, h = prompt.offsetHeight || 0; x = Math.min(Math.max(x, w / 2 + 8), W - w / 2 - 8); y = Math.max(y, h + 8); }
+        // toque: o balão é o botão (entrar na van, entregar…) — projetado abaixo da tela (van pousada num terraço, por exemplo)
+        // ele para embaixo, no meio (longe do joystick e da coluna de botões; acima de DICA/MENU e dos créditos da música),
+        // para continuar alcançável. (No computador nada muda: lá vale o E.)
+        const H = prompt.parentElement ? prompt.parentElement.clientHeight : innerHeight, lim = W <= 560 ? 108 : 80;
+        if (touchOn() && y > H - lim) { y = H - lim; x = W / 2; }
       }
       x = Math.round(x); y = Math.round(y);
       if (side !== promptSide) {

@@ -550,7 +550,7 @@ export function buildFavelaOutside(F) {
     box: new THREE.BoxGeometry(1, 1, 1).translate(0, 0.5, 0),
     pane: new THREE.PlaneGeometry(1, 1),
     tank: new THREE.CylinderGeometry(0.75, 0.68, 1.15, 8).translate(0, 0.575, 0),
-    trunk: new THREE.CylinderGeometry(0.22, 0.32, 2.0, 6).translate(0, 1.0, 0),
+    trunk: new THREE.CylinderGeometry(0.22, 0.32, 2.0, 6, 1, true).translate(0, 1.0, 0),   // (sem tampas: a base fica no chão e o topo dentro da copa)
     crown: new THREE.IcosahedronGeometry(1, 0),
     pole: new THREE.CylinderGeometry(0.6, 0.8, 1, 6).translate(0, 0.5, 0),
   };

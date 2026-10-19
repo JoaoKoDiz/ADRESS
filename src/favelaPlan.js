@@ -212,9 +212,9 @@ function planOutside(MAP, HEDGE, EX) {
   const TONES = 13;
   for (const c of cells) {
     const R = c.R;
-    if (c.kind === 'forest') {                                             // mata: 3 a 5 árvores no chão do morro
+    if (c.kind === 'forest') {                                             // mata: 3 a 5 árvores no chão do morro (base no ponto mais baixo em volta: na malha de 4 m o tronco nunca fica no ar)
       const n = 3 + Math.floor(rnd() * 3);
-      for (let k = 0; k < n; k++) { const x = c.x0 + 0.8 + rnd() * (c.cw - 1.6), z = c.z0 + 0.8 + rnd() * (c.cd - 1.6); if (!inRock(x, z, 1)) trees.push({ x, z, y: hill(x, z) - 0.15, s: 1.0 + rnd() * 0.75, wild: true, c: rnd() }); }
+      for (let k = 0; k < n; k++) { const x = c.x0 + 0.8 + rnd() * (c.cw - 1.6), z = c.z0 + 0.8 + rnd() * (c.cd - 1.6); if (!inRock(x, z, 1)) trees.push({ x, z, y: Math.min(hill(x, z), hill(x + 2, z), hill(x - 2, z), hill(x, z + 2), hill(x, z - 2)) - 0.15, s: 1.0 + rnd() * 0.75, wild: true, c: rnd() }); }
       continue;
     }
     if (c.kind === 'rock') continue;

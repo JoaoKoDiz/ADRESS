@@ -2228,12 +2228,14 @@ function buildPlazaLife() {
     if (G.mode === 'sniff') { G.sniff -= dt; if (G.sniff < 0 && D.pause <= 0) G.mode = 'follow'; }
     if (n.talking) G.sit = Math.min(1, G.sit + dt * 0.8); else G.sit = Math.max(0, G.sit - dt * 3);
     let tx = G.mode === 'sniff' ? G.sx : D.x + latX * D.side * 0.85 + fwX * 0.35, tz = G.mode === 'sniff' ? G.sz : D.z + latZ * D.side * 0.85 + fwZ * 0.35;
-    if (G.sit > 0.5) { tx = D.x + latX * D.side * 0.8 + fwX * 0.25; tz = D.z + latZ * D.side * 0.8 + fwZ * 0.25; }
+    if (G.sit > 0.5) { tx = D.x + latX * D.side * 1.0 + fwX * 0.3; tz = D.z + latZ * D.side * 1.0 + fwZ * 0.3; }
     const ddx = tx - G.x, ddz = tz - G.z, dd = Math.hypot(ddx, ddz);
     const vmax = dd > 1.2 ? 1.9 : 1.1, vt = dd > 0.08 ? Math.min(vmax, dd * 2.2) : 0;
     G.v += (vt - G.v) * Math.min(1, dt * 4);
     if (dd > 0.01) { G.x += ddx / dd * G.v * dt; G.z += ddz / dd * G.v * dt; }
-    { const rx = G.x - D.x, rz = G.z - D.z, r = Math.hypot(rx, rz); if (r < 0.62 && r > 1e-4) { G.x = D.x + rx / r * 0.62; G.z = D.z + rz / r * 0.62; } if (r > 2.2) { G.x = D.x + rx / r * 2.2; G.z = D.z + rz / r * 2.2; } }   // nunca dentro dele; a guia segura
+    { const rx = G.x - D.x, rz = G.z - D.z, r = Math.hypot(rx, rz);    // nunca dentro dele (virado para ele, o focinho também fica fora das pernas); a guia segura
+      const toward = r > 1e-4 ? -(Math.sin(G.yaw) * rx + Math.cos(G.yaw) * rz) / r : 0, rMin = 0.62 + 0.38 * Math.max(0, toward);
+      if (r < rMin && r > 1e-4) { G.x = D.x + rx / r * rMin; G.z = D.z + rz / r * rMin; } if (r > 2.2) { G.x = D.x + rx / r * 2.2; G.z = D.z + rz / r * 2.2; } }
     const dyaw = G.v > 0.15 ? Math.atan2(ddx, ddz) : G.mode === 'sniff' ? Math.atan2(G.sx - G.x, G.sz - G.z) : Math.atan2(D.x - G.x, D.z - G.z);
     G.yaw += THREE.MathUtils.clamp(wrapA(dyaw - G.yaw), -3, 3) * Math.min(1, dt * 5);
     G.ph += G.v * dt * Math.PI / 0.28;
