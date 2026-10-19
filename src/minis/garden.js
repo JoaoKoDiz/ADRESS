@@ -29,6 +29,10 @@ export function build(ctx) {
   const V = planGarden(MAP, HEDGE), CX = V.CX;
   const mx = x => (x - CX) * F, mz = z => (z - CX) * F;
   const M = (geo, c) => new THREE.Mesh(geo, mat(c));
+  const PL = new THREE.PlaneGeometry(1, 1).rotateX(-Math.PI / 2), VP = new THREE.PlaneGeometry(1, 1), CI = {};
+  const fl = (w, d, c) => { const m = M(PL, c); m.scale.set(w, 1, d); return m; };                      // retângulo deitado (2 triângulos)
+  const vp = (w, h, c, two) => { const m = new THREE.Mesh(VP, mat(c, two ? { side: THREE.DoubleSide } : {})); m.scale.set(w, h, 1); return m; };   // retângulo em pé, virado para +z
+  const dk = (r, c, n) => { const m = M(CI[n] || (CI[n] = new THREE.CircleGeometry(1, n).rotateX(-Math.PI / 2)), c); m.scale.set(r, 1, r); return m; };   // disco deitado
   const ASF = G('#5d6470', '#6e6e6e'), SW = G('#d9d3c4', '#c2c2c2'), PAVE = G('#e6dcc6', '#c8c8c8'), GRASS = G('#8fca62', '#a8a8a8');
   const HEDGEC = G('#3f7d3a', '#7f7f7f'), LAWN = G('#9ed46e', '#b0b0b0');
   const flat = (pts, y, h, c) => {                           // polígono plano (contorno em metros do bairro) com espessura h
@@ -47,18 +51,18 @@ export function build(ctx) {
   for (const s of V.segs) {
     const [ax, az] = s.a, [bx, bz] = s.b, len = Math.hypot(bx - ax, bz - az) * F, ry = Math.atan2(bx - ax, bz - az);
     const x = mx((ax + bx) / 2), z = mz((az + bz) / 2);
-    add(box(SWW, 0.03, len, SW), x, Y + 0.015, z, 0, ry, 0);
-    add(box(RW, 0.03, len, ASF), x, Y + 0.035, z, 0, ry, 0);
+    add(fl(SWW, len, SW), x, Y + 0.012, z, 0, ry, 0);
+    add(fl(RW, len, ASF), x, Y + 0.024, z, 0, ry, 0);
   }
-  for (const [x, z] of Object.values(V.N)) { add(cyl(SWW / 2, SWW / 2, 0.03, SW, 12), mx(x), Y + 0.016, mz(z)); add(cyl(RW / 2, RW / 2, 0.03, ASF, 12), mx(x), Y + 0.036, mz(z)); }
+  for (const [x, z] of Object.values(V.N)) { add(dk(SWW / 2, SW, 10), mx(x), Y + 0.013, mz(z)); add(dk(RW / 2, ASF, 10), mx(x), Y + 0.025, mz(z)); }
   for (const r of V.rounds) {
-    add(cyl(r.r * F + 0.08, r.r * F + 0.08, 0.03, SW, 22), mx(r.x), Y + 0.017, mz(r.z)); add(cyl(r.r * F, r.r * F, 0.03, ASF, 22), mx(r.x), Y + 0.037, mz(r.z));
+    add(dk(r.r * F + 0.08, SW, 20), mx(r.x), Y + 0.014, mz(r.z)); add(dk(r.r * F, ASF, 20), mx(r.x), Y + 0.026, mz(r.z));
     add(cyl(r.island * F, r.island * F, 0.06, G('#e2d8c4', '#c4c4c4'), 14), mx(r.x), Y + 0.08, mz(r.z));
     add(cyl(r.island * F - 0.03, r.island * F - 0.03, 0.03, LAWN, 14), mx(r.x), Y + 0.12, mz(r.z));
     for (let k = 0; k < 5; k++) { const a = k * 1.2566; add(sphere(0.045, G(['#e0402a', '#f2c23a', '#ff7ab0'][k % 3], '#b8b8b8'), 5, 3), mx(r.x) + Math.cos(a) * 0.13, Y + 0.16, mz(r.z) + Math.sin(a) * 0.13); }
   }
   for (const c of V.culs) {
-    add(cyl(c.r * F + 0.08, c.r * F + 0.08, 0.03, SW, 18), mx(c.x), Y + 0.017, mz(c.z)); add(cyl(c.r * F, c.r * F, 0.03, ASF, 18), mx(c.x), Y + 0.037, mz(c.z));
+    add(dk(c.r * F + 0.08, SW, 16), mx(c.x), Y + 0.014, mz(c.z)); add(dk(c.r * F, ASF, 16), mx(c.x), Y + 0.026, mz(c.z));
     add(cyl(0.12, 0.12, 0.05, LAWN, 10), mx(c.x), Y + 0.07, mz(c.z));
   }
 
@@ -123,7 +127,7 @@ export function build(ctx) {
   // ---- parque: gramado, caminhos, cerca viva, praça do chafariz, coreto, playground, quadra, flores ----
   const P = V.PARK;
   add(box((P.x1 - P.x0) * F, 0.02, (P.z1 - P.z0) * F, LAWN), mx((P.x0 + P.x1) / 2), Y + 0.01, mz((P.z0 + P.z1) / 2));
-  for (const p of V.parkPaths) add(box((p.x1 - p.x0) * F, 0.02, (p.z1 - p.z0) * F, PAVE), mx((p.x0 + p.x1) / 2), Y + 0.022, mz((p.z0 + p.z1) / 2));
+  for (const p of V.parkPaths) add(fl((p.x1 - p.x0) * F, (p.z1 - p.z0) * F, PAVE), mx((p.x0 + p.x1) / 2), Y + 0.021, mz((p.z0 + p.z1) / 2));
   for (const h of V.hedges) add(box(Math.max(0.07, (h.x1 - h.x0) * F), 0.11, Math.max(0.07, (h.z1 - h.z0) * F), HEDGEC), mx((h.x0 + h.x1) / 2), Y + 0.055, mz((h.z0 + h.z1) / 2));
   { const pl = V.plaza, x = mx(pl.x), z = mz(pl.z);
     add(cyl(pl.r * F, pl.r * F, 0.02, PAVE, 16), x, Y + 0.034, z);
@@ -179,7 +183,7 @@ export function build(ctx) {
     const two = (i * 11) % 3 === 0 && model !== 'garage', H = (two ? 6 : 3) * VS;
     const body = (x0, x1, z0, z1, h = H) => a(box((x1 - x0) * HS, h, (z1 - z0) * HS, wall), (x0 + x1) / 2, h / 2 + 0.02, (z0 + z1) / 2);
     const roof = (cx, cz, len, half, rise, top, rot = 0) => { const r = M(prism(THREE), roofc); r.scale.set(len * HS, rise * VS, half * 2 * HS); a(r, cx, top + 0.02, cz, rot); };
-    a(box(16 * HS, 0.02, 16 * HS, LAWN), 0, 0.01, 0);             // gramado do lote
+    a(fl(16 * HS, 16 * HS, LAWN), 0, 0.008, 0);             // gramado do lote
     let doorX = 0, doorZ = 0.2;
     if (model === 'ell') { body(-4.6, 4.6, -7.2, -2.0); body(-4.6, -0.4, -2.0, 1.4); roof(0, -4.6, 9.8, 2.9, 2.0, H); roof(-2.5, -1.0, 5.2, 2.4, 2.0, H, Math.PI / 2); doorX = 1.3; doorZ = -2.0; }
     else if (model === 'garage') { body(-1.4, 4.6, -7.2, 0.2); roof(1.6, -3.5, 6.6, 4.0, 2.2, H); body(-4.8, -1.4, -6.6, 0.2, 2.7 * VS);
@@ -187,13 +191,13 @@ export function build(ctx) {
       a(box(2.6 * HS, 2.1 * VS, 0.02, G('#9aa0a8', '#9a9a9a')), -3.1, 1.05 * VS + 0.02, 0.22);
       a(box(2.6 * HS, 0.012, 7.6 * HS, G('#cfc8b8', '#bfbfbf')), -3.1, 0.026, 4.4); doorX = 1.2; }
     else { body(-4.6, 4.6, -7.2, 0.2); if (model === 'chalet') roof(0, -3.5, 8.2, 5.0, 3.6, H, Math.PI / 2); else roof(0, -3.5, 10, 4.1, 2.4, H); }
-    a(box(1.5 * HS, 2.2 * VS, 0.02, G(DOORS[(i * 2) % 5], '#777777')), doorX, 1.1 * VS + 0.02, doorZ + 0.02);
-    for (const wx of model === 'ell' ? [-2.5] : model === 'garage' ? [3.0] : [-2.85, 2.85]) a(box(1.6 * HS, 1.1 * VS, 0.02, G('#8fc6e8', '#a8a8a8')), wx, 1.5 * VS + 0.02, (model === 'ell' ? 1.4 : 0.2) + 0.02);
-    if (two) for (const wx of model === 'ell' ? [-2.5] : [-2.85, 2.85]) a(box(1.6 * HS, 1.1 * VS, 0.02, G('#8fc6e8', '#a8a8a8')), wx, 4.5 * VS + 0.02, (model === 'ell' ? 1.4 : 0.2) + 0.02);
+    a(vp(1.5 * HS, 2.2 * VS, G(DOORS[(i * 2) % 5], '#777777')), doorX, 1.1 * VS + 0.02, doorZ + 0.12);
+    for (const wx of model === 'ell' ? [-2.5] : model === 'garage' ? [3.0] : [-2.85, 2.85]) a(vp(1.6 * HS, 1.1 * VS, G('#8fc6e8', '#a8a8a8')), wx, 1.5 * VS + 0.02, (model === 'ell' ? 1.4 : 0.2) + 0.12);
+    if (two) for (const wx of model === 'ell' ? [-2.5] : [-2.85, 2.85]) a(vp(1.6 * HS, 1.1 * VS, G('#8fc6e8', '#a8a8a8')), wx, 4.5 * VS + 0.02, (model === 'ell' ? 1.4 : 0.2) + 0.12);
     if (i % 3 !== 1) a(box(3.0 * HS, 0.05, 0.9 * HS, G(FLOW[i % 4], '#b8b8b8')), model === 'garage' ? 3.2 : -2.9, 0.045, (model === 'ell' ? 1.4 : 0.2) + 0.7);   // canteiro de flores
     const gx = model === 'garage' ? 1.2 : doorX, dz = doorZ + 0.4;
-    a(box(1.3 * HS, 0.012, (8.3 - dz) * HS, PAVE), gx, 0.026, (dz + 8.3) / 2);   // caminho de pedras até o portão
-    for (const [x0, x1] of [[-8.3, gx - 1.4], [gx + 1.4, 8.3]]) if (x1 - x0 > 0.5) a(box((x1 - x0) * HS, 0.07, 0.02, G('#fbf8f1', '#e6e6e6')), (x0 + x1) / 2, 0.055, 8.3);   // cerca branca
+    a(fl(1.3 * HS, (8.3 - dz) * HS, PAVE), gx, 0.016, (dz + 8.3) / 2);   // caminho de pedras até o portão
+    for (const [x0, x1] of [[-8.3, gx - 1.4], [gx + 1.4, 8.3]]) if (x1 - x0 > 0.5) a(vp((x1 - x0) * HS, 0.07, G('#fbf8f1', '#e6e6e6'), true), (x0 + x1) / 2, 0.045, 8.3);   // cerca branca
   });
 
   // ---- árvores do plano (sem as que cairiam sobre casas ou no meio do parque e das ruas) ----
@@ -211,9 +215,9 @@ export function build(ctx) {
       continue;
     }
     const h = 0.16 * s, r = (t.type === 'tall' ? 0.13 : t.type === 'willow' ? 0.19 : 0.17) * s;
-    add(cyl(0.022, 0.03, h + 0.04, G('#6b4526', '#6a6a6a'), 4), x, Y + (h + 0.04) / 2, z);
+    add(cyl(0.022, 0.03, h + 0.04, G('#6b4526', '#6a6a6a'), 3), x, Y + (h + 0.04) / 2, z);
     const col = t.type === 'ipe' ? ['#f2c23a', '#ff8fb8', '#f2c23a'][c] : t.type === 'willow' ? '#7fb54a' : (crowns[t.type] || crowns.round)[c];
-    const cr = sphere(r, G(col, '#8a8a8a'), 6, 4);
+    const cr = sphere(r, G(col, '#8a8a8a'), 5, 3);
     if (t.type === 'tall') cr.scale.set(0.85, 1.6, 0.85); else if (t.type === 'willow') cr.scale.set(1, 0.8, 1);
     add(cr, x, Y + h + r * (t.type === 'tall' ? 1.25 : 0.7), z);
   }
