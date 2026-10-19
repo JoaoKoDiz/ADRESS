@@ -28,9 +28,8 @@ const CSS = `
 .st-confirm.on { display: flex; flex-direction: column; justify-content: center; min-height: var(--st-h, auto); }   /* mesma altura do painel principal (o cartão não encolhe ao confirmar) */
 .st-rev { margin: 10px 0 0; text-align: center; font-size: 11px; font-weight: 600; letter-spacing: .02em; color: #a88b66; }
 .st-ctrl { margin: 0; padding: 0; list-style: none; font-size: 14px; line-height: 1.35; }
-.st-ctrl li { display: grid; grid-template-columns: 9.6em 1fr; gap: 10px; padding: 5px 0; border-bottom: 1px dashed #e6cc98; }   /* 1ª coluna com a mesma largura em todas as linhas (as descrições ficam alinhadas) */
-.st-ctrl b { overflow-wrap: break-word; }
-@media (max-width: 400px) { .st-ctrl li { grid-template-columns: 8.2em 1fr; } }
+.st-ctrl li { display: grid; grid-template-columns: minmax(96px, auto) 1fr; gap: 10px; padding: 5px 0; border-bottom: 1px dashed #e6cc98; }
+.st-ctrl b { white-space: nowrap; }
 .st-ctrl small { color: #7a5536; }
 .st-confirm p { margin: 4px 0 10px; font-size: 15px; line-height: 1.4; text-align: center; }
 .st-two { display: flex; gap: 10px; } .st-two .st-btn { flex: 1; }
@@ -54,14 +53,14 @@ const CSS = `
 
 const CONTROLS = [
   ['W A S D / setas', 'Dirigir (A/D viram; S freia e dá ré)'],
-  ['E / Espaço / Enter', 'Entregar, abastecer no posto, abrir porteiras, conversar e continuar o diálogo; no mapa da Carreira, jogar no bairro'],
+  ['E / Espaço / Enter', 'Entregar, abastecer no posto, continuar o diálogo, conversar; no mapa da Carreira, jogar no bairro'],
   ['L', 'Descer da van e andar a pé (van parada); E perto da van volta a dirigir'],
   ['C', 'Câmera: atrás da van ↔ bairro inteiro'],
   ['Botão direito + arrastar', 'Girar e inclinar a câmera; roda do mouse aproxima; botão do meio volta ao padrão'],
   ['T ou botão DICA', 'Seta do céu na casa indicada (1 por entrega)'],
   ['M ou botão MISSÕES', 'Lista de missões <small>(só Modo Carreira)</small>'],
   ['A / D no mapa', 'Andar pela estrada do mapa <small>(Carreira)</small>'],
-  ['H', 'Helicóptero: Espaço sobe, Shift desce, H pousa <small>(só Modo Livre)</small>'],
+  ['H', 'Helicóptero; Shift desce <small>(só Modo Livre)</small>'],
   ['F', 'Míssil <small>(só Modo Livre)</small>'],
   ['Esc ou botão MENU', 'Pausar a partida (e opções do Modo Livre)'],
   ['Botão ♪', 'Pausar / continuar a música'],

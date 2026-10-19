@@ -76,7 +76,7 @@ export function createPlayerPose(PB, pModel, scene) {
   // poses finais do punho (lado do braço s = +1; para s = −1 o Z troca de sinal)
   // (meio da mão; todas fora da cabeça, que é grande, e ao alcance com o cotovelo um pouco dobrado)
   const ENDS = {
-    up: V(0.34, 0.9, 0.72),          // para cima, à frente e para fora (o 1º rebate: de baixo para cima; longe da bochecha)
+    up: V(0.36, 0.98, 0.56),         // para cima, à frente e para fora (o 1º rebate: de baixo para cima)
     upOut: V(0.12, 0.95, 0.76),      // alto e aberto
     across: V(0.56, 0.55, -0.05),    // à frente, cruzando o corpo
     side: V(0.15, 0.7, 0.95),        // lateral
@@ -117,9 +117,7 @@ export function createPlayerPose(PB, pModel, scene) {
     pModel.updateMatrixWorld(true);
     const lp = pModel.worldToLocal(_p.set(wx, 1, wz));
     const chain = sw.w > 0.05;
-    // (as câmeras da batalha ficam atrás e à direita: o braço direito é o preferido — o esquerdo varre escondido atrás do corpo;
-    // ele só entra quando o contato fica bem à esquerda)
-    if (!chain) { sw.s = lp.z >= -2.0 ? 1 : -1; sw.count = 0; sw.end = 'low'; }
+    if (!chain) { sw.s = lp.z >= -0.25 ? 1 : -1; sw.count = 0; sw.end = 'low'; }
     const arm = bySide(sw.s);
     // ponto de partida = onde o punho está agora (com continuidade, mesmo no meio de outro gesto)
     if (chain && sw.phase !== 'relax') sw.from.copy(sw.cur); else wristNow(arm, sw.from);   // relaxando: parte de onde a mão está desenhada

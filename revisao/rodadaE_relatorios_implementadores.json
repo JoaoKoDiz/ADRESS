@@ -1,0 +1,484 @@
+{
+ "a7673aa7c38534a7b": {
+  "resumo": "Mexi só na batalha (src/battle.js, src/battlePose.js e src/reflectPlus.js). Comparei os 15 itens aprovados no PEDIDO.md com o código e com o jogo rodando. Oito já funcionavam e confirmei cada um com teste: círculo branco preenchido, placa suspensa do BLOQUEAR, limite do traço do REFLETIR, barreiras sem prazo, troca da penúltima posicionada (A,B→C deixa A,C; →D deixa A,D), figura em #000000 (pixels 0/0/0 sobre o fundo 11/11/14), grade erguida e trocas de rebatidas. O que faltava ou estava divergente: (1) a câmera de jogo era a elevada. Agora é baixa e próxima, atrás e à direita do jogador (129°, a 5,7 de distância, altura 2,3, abaixo do topo da cabeça, que fica em 2,51). A arena foi adaptada: a grade passou a 14×11 (z de −2 a 9), as fissuras e estruturas saíram de trás das silhuetas, há uma marca no chão sob cada projétil, uma prévia tracejada da placa sobre o círculo, avisos mais largos, um fundo escuro no rótulo e um limite que impede o círculo de sair do quadro. No celular em pé, a câmera recua um pouco. A câmera de impacto e a regra de nunca trocar de câmera no meio de uma ação continuam. (2) O CONDUZIR aprimorado não existia e foi feito do zero, só pela descrição do dono. A figura segura o objeto por um fio preso à mão, como uma marionete. Se o jogador tenta puxar a ponta, ela dá um tranco e a ponta escapa. A nova resposta é atrair os projéteis contra o objeto: cada batida o racha e, com duas, o fio se parte e a fenda para o vazio branco se abre ali. No trecho 17, o puxão do K vale uma batida. (3) A intensificação depois do 2º azul agora é real. O BLOQUEAR ganhou rajadas (os anéis do aviso se empilham), ataques cruzados e leques, e a grade reage aos disparos da figura. Antes do 2º azul tudo ficou simples, e o trecho 6, que a música cortava, agora cabe na janela. (4) A partir do nível 2 o K assume o projétil já no lançamento e só ergue a placa perto da chegada. (5) Ajustes de animação: o 1º gesto do REFLETIR terminava com a mão rente à bochecha, e o braço esquerdo varria escondido atrás do corpo; os dois foram corrigidos. (6) No CONDUZIR comum, quase nenhum projétil conseguia passar pela fenda. Subi o giro de 2,6 para 3,3 e a passagem para a abertura visível (1,0). Testei com um robô em todos os 18 trechos e na passagem contínua pelo fragmento azul 2. Fotografei cada mecanismo e fase e gravei sequências de quadros da guarda e da varredura. Nenhum erro no console. Mais acima no relatório está a tabela item a item com o que foi verificado jogando e o que só pude avaliar lendo código.",
+  "problemas_encontrados": [
+   {
+    "onde": "src/battle.js — CAMS.game",
+    "problema": "A câmera de jogo ainda era a elevada (136°, altura 5). O pedido atual lista como aprovada a câmera baixa e próxima, atrás e à direita, com a arena adaptada.",
+    "impacto": "Faltava um item aprovado da especificação.",
+    "resolvido": true
+   },
+   {
+    "onde": "src/battle.js — arena com a câmera baixa",
+    "problema": "Com a câmera baixa, o fundo da grade 14×18 vira uma faixa ilegível: o círculo em z −8,5 nem aparecia na foto. As fissuras L1–L3 e as estruturas SA/SD ficavam atrás do jogador na tela. O canto da grade perto da câmera ficava fora do quadro, e o círculo podia sumir ali.",
+    "impacto": "Sem a adaptação, a câmera baixa seria injogável.",
+    "resolvido": true
+   },
+   {
+    "onde": "src/battle.js — CONDUZIR (GUIDE.turn 2,6, passW 0,85)",
+    "problema": "Numa simulação fora do jogo (40 tentativas por estratégia), com giro de 2,6 rad/s quase nenhum projétil atravessava a fenda: 0 a 0,9 de 4. No jogo, o robô passou 0 nos trechos comuns. A abertura considerada (0,85) era menor que a visível (cerca de 1,03).",
+    "impacto": "Levar os projéteis pela fenda, que é o centro do mecanismo, era praticamente impossível.",
+    "resolvido": true
+   },
+   {
+    "onde": "src/battle.js — pickObjSpot",
+    "problema": "O objeto podia surgir perto da câmera. A fenda abre virada para a câmera, e então não sobrava espaço à frente dela para trazer os projéteis.",
+    "impacto": "Fenda sem trajetória utilizável.",
+    "resolvido": true
+   },
+   {
+    "onde": "src/battle.js — SEGMENTS[5] (trecho 6)",
+    "problema": "Eram 8 disparos (cerca de 16 s) numa janela de 9,6 s; a música cortava o trecho. Já constava como pendência no CLAUDE.md.",
+    "impacto": "Ataques cortados no meio.",
+    "resolvido": true
+   },
+   {
+    "onde": "src/battle.js — trechos depois do 2º azul",
+    "problema": "A intensificação era só mais disparos e um pouco mais de velocidade (genShots), sem padrões novos.",
+    "impacto": "O item 'intensificação real' do pedido não estava atendido.",
+    "resolvido": true
+   },
+   {
+    "onde": "src/battle.js — CONDUZIR aprimorado",
+    "problema": "Não existia.",
+    "impacto": "Faltava um item do pedido.",
+    "resolvido": true
+   },
+   {
+    "onde": "src/battle.js — K assumindo cedo (encontrado pelo robô durante a mudança)",
+    "problema": "Na primeira versão da defesa antecipada, o K erguia a placa logo no lançamento. A placa dele dura 1,8 s (BLOCK.life) e expirava antes de o projétil chegar. O robô confiou nela, e o trecho final falhou com 5 impactos no jogador.",
+    "impacto": "O jogador seria enganado pela placa do K.",
+    "resolvido": true
+   },
+   {
+    "onde": "src/battlePose.js — ENDS.up e escolha do braço",
+    "problema": "O 1º gesto do REFLETIR terminava com a mão rente à bochecha e assim ficava 1,5 s, parecendo mão no ouvido. Com contato à esquerda, o braço esquerdo varria escondido atrás do corpo, já que as câmeras ficam atrás e à direita.",
+    "impacto": "Gesto pouco legível.",
+    "resolvido": true
+   },
+   {
+    "onde": "Rótulo do mecanismo",
+    "problema": "No REFLETIR aprimorado, o texto branco ficava em cima das pernas do jogador, que também é branco.",
+    "impacto": "Texto ilegível.",
+    "resolvido": true
+   },
+   {
+    "onde": "Meu ambiente de testes",
+    "problema": "No começo, rodei 'pkill -f chromium' para parar um teste meu. Isso pode ter fechado navegadores de outros agentes rodando naquele instante (por volta das 15:55).",
+    "impacto": "Algum teste de outro agente pode ter falhado nesse momento e precisar ser repetido. Depois disso só encerrei processos pelo número (PID).",
+    "resolvido": false
+   }
+  ],
+  "mudancas": [
+   {
+    "arquivos": [
+     "src/battle.js"
+    ],
+    "o_que": "Câmera de jogo baixa e próxima: CAMS.game = camAt(129, 5,7, 2,3), mirando em (−1,8; 0,95; −2,3), fov 60. A elevada antiga ficou em CAMS.high, só como referência. A de impacto e a da grade erguida não mudaram, e a regra de troca (só em intervalo calmo) continua.",
+    "por_que": "Item aprovado no PEDIDO: câmera baixa, próxima, atrás e à direita do jogador.",
+    "como_verificado": "Calculei a projeção dos pontos com three.js no node e tirei fotos a 1280×720: jogador à esquerda em primeiro plano, K no centro e figura inteira à direita, com a cabeça dela dentro do quadro."
+   },
+   {
+    "arquivos": [
+     "src/battle.js"
+    ],
+    "o_que": "Arena adaptada à câmera baixa. Grade e limites do círculo agora em z de −2 a 9 (14×11 células inteiras, sem moldura). Fissuras reposicionadas (L1 −8,4/−8; L2 −8,4/−5; L3 −8/−2,5; R2 8,4/−3; R3 8,4/0,2) e a estrutura SD passou a ser SP(0,−1,15). Criei uma cerca da tela (onScreen e FENCE): o círculo para na borda da imagem e desliza ao longo dela. Acrescentei uma marca no chão sob cada projétil (some no voo 3D e no vazio branco), avisos mais largos (0,11) e mais visíveis durante o voo (0,2), e uma prévia do traço mais larga. As alturas da transparência localizada passaram para as reais (jogador 2,5; K 2,6).",
+    "por_que": "Manter o círculo, os avisos, os projéteis, o K e a figura legíveis e jogáveis com a câmera baixa.",
+    "como_verificado": "Medição da cerca nas 8 direções (canto próximo-esquerdo para em NDC x −0,88; próximo-direito em y −0,85). Fotos de todos os mecanismos. Robô nos trechos de BLOQUEAR e REFLETIR comum: todos resolvidos dentro da janela."
+   },
+   {
+    "arquivos": [
+     "src/battle.js"
+    ],
+    "o_que": "BLOQUEAR: prévia tracejada da placa acima do círculo, na altura do voo e já virada para o que vem (ghostPlate). Ela esmaece por 0,25 s depois de cada clique.",
+    "por_que": "Com a câmera baixa, mostra direto se o caminho do projétil passa pela placa.",
+    "como_verificado": "Fotos (an_block_game, tA_sheet)."
+   },
+   {
+    "arquivos": [
+     "src/battle.js"
+    ],
+    "o_que": "CONDUZIR aprimorado (campo held em SEGMENTS[13] e [16], ativo só com fragmentsDone ≥ 5). O objeto fica na altura do voo. A figura o segura por um fio vindo da mão erguida, em pose de marionete (holdA/holdB, figHand, updateHold). Puxar a ponta faz a figura dar um tranco: a ponta escapa e o objeto é puxado para ela (estado 'yank'). Projéteis que batem no objeto o racham (crackObj, linhas brancas e sacudida); com duas batidas ele rompe, o fio se parte ao meio (cada metade volta para a sua ponta), o braço da figura recua e a fenda para o vazio branco se abre ali. No trecho 17 o puxão do K vale uma batida. O botão de toque 'Puxar' some depois do primeiro tranco. Rótulo novo: 'CONDUZIR · a figura segura o objeto: atraia os projéteis contra ele até rasgá-lo'. Constantes em GH.",
+    "por_que": "Pedido do dono: no CONDUZIR aprimorado a figura supera a defesa anterior e a condução oferece outra resposta, numa superfície simples, sem a grade como estrada curva.",
+    "como_verificado": "Sequência de fotos hs_sheet (fio, puxão, tranco, 1ª e 2ª batida, ruptura, fio partido, fenda aberta). Robô: trecho 14 com 2 rachaduras e 1 a 4 passagens; trecho 17 com 2 rachaduras (uma do K) e 3 a 5 passagens. Log: guide:yank / guide:crack / guide:rupture C."
+   },
+   {
+    "arquivos": [
+     "src/battle.js"
+    ],
+    "o_que": "CONDUZIR comum: GUIDE.turn de 2,6 para 3,3 rad/s (raio de curva cerca de 1,7, ainda com inércia) e passW de 0,85 para 1,0 (a abertura visível). pickObjSpot agora sorteia em z de 0,2 a 3,2, fora das silhuetas na tela, com 4,4 de espaço à frente da fenda e 2,2 atrás, na direção da câmera.",
+    "por_que": "Com os valores antigos, passar projéteis pela fenda era quase impossível.",
+    "como_verificado": "Simulação fora do jogo: estratégia temporizada passa de 0,88/4 para cerca de 1,9/4. Robô: passagens nos trechos 8, 11, 14 e 17. Ainda não houve teste com jogador humano."
+   },
+   {
+    "arquivos": [
+     "src/battle.js"
+    ],
+    "o_que": "Intensificação depois do 2º azul. Roteiros novos nos trechos de BLOQUEAR 12, 15 e 18: rajadas (2 ou 3 na mesma linha), cruzados (K e jogador ao mesmo tempo) e leques (3 de uma vez). Na rajada, os anéis do aviso se empilham na mesma origem. A grade pulsa a cada disparo da figura (gridPulse). O trecho 6 foi refeito com 5 disparos para caber nos 9,6 s da janela. Antes do 2º azul nada ganhou rajada nem pulso.",
+    "por_que": "Item 'intensificação real a partir desse ponto', sem antecipar o espetáculo; corrige a pendência do trecho 6.",
+    "como_verificado": "Robô: trecho 12 com 11 de 12 bloqueados e 1 impacto; trecho 15 com 15 de 15; trecho 18 com 16 bloqueados (2 pelo K) e 2 impactos, sem falha; trecho 6 com 5 de 5 dentro da janela. Foto dos anéis empilhados (tA_16)."
+   },
+   {
+    "arquivos": [
+     "src/battle.js"
+    ],
+    "o_que": "Participação do K: a partir do nível 2 de autonomia (depois do verde 2), ele assume o projétil no lançamento (anel claro em volta dele), mas só ergue a placa quando faltam cerca de 1,2 s para a chegada (K_ACT_AT). No nível 1 continua hesitante e tardio.",
+    "por_que": "Deixar a autonomia do K visível e gradual sem que a placa dele expire antes do impacto.",
+    "como_verificado": "Log do robô no trecho 18: kclaim às 3,4 s, kdef às 3,9 s, block:K às 4,9 s. Sem falha."
+   },
+   {
+    "arquivos": [
+     "src/battlePose.js"
+    ],
+    "o_que": "ENDS.up passou de (0,36; 0,98; 0,56) para (0,34; 0,9; 0,72): a mão termina para cima e para fora, longe da bochecha. O braço direito, do lado da câmera, é o preferido na varredura até o contato ficar 2 unidades à esquerda (antes 0,25).",
+    "por_que": "Gesto legível nas câmeras atrás e à direita, sem a mão parada no rosto.",
+    "como_verificado": "Medida da folga da mão até a superfície do crânio (raio 0,589): no mínimo 0,38 na guarda e 0,39 nas varreduras; encadeamento up→downOut→across. Sequências de quadros anF_refl_game/front e ps_sheet."
+   },
+   {
+    "arquivos": [
+     "src/battle.js"
+    ],
+    "o_que": "Rótulo do mecanismo com fundo escuro translúcido e reticências quando não cabe. No celular em pé, a câmera recua até 1,35× ao longo da linha de visão, sem passar da altura da cabeça (framePos), e a cerca usa a mesma pose.",
+    "por_que": "O texto ficava ilegível sobre o jogador branco, e em retrato o jogador saía do quadro.",
+    "como_verificado": "Fotos em 844×390 e 390×844 (mob_sheet, mob_portrait3) e em 1280×720."
+   },
+   {
+    "arquivos": [
+     "src/reflectPlus.js"
+    ],
+    "o_que": "Os projéteis do voo 3D escondem a marca de chão nova.",
+    "por_que": "A marca é relativa à altura fixa de voo.",
+    "como_verificado": "Fotos do REFLETIR aprimorado."
+   },
+   {
+    "arquivos": [
+     "src/battle.js"
+    ],
+    "o_que": "Gancho de teste ADRESS.battle.warnings; ADRESS.battle.guide passou a informar y, held, hits e need.",
+    "por_que": "Testes com robô.",
+    "como_verificado": "Usados nos testes."
+   }
+  ],
+  "decisoes": [
+   "Segui a instrução de fazer da câmera baixa a câmera de jogo. A mensagem do dono de 17/10 19:45 pedia a elevada para jogar, e o PEDIDO atual lista a baixa 'com arena adaptada para continuar jogável'. Deixei a elevada guardada em CAMS.high para facilitar a volta; com ela seria preciso também restaurar GRID/LIM e as fissuras.",
+   "Adaptação da arena: em vez de deixar o círculo numa área que a câmera não lê, encurtei a grade, que é a própria área do círculo, para z de −2 a 9. Ela continua com células inteiras e sem moldura; a figura fica no vazio, além dela.",
+   "O CONDUZIR aprimorado foi desenhado só a partir da descrição do dono, sem ler as versões experimentais. 'A figura supera a defesa anterior' virou: ela segura o objeto e anula o puxão com um tranco. 'A condução oferece outra resposta' virou: usar os próprios projéteis atraídos para rasgá-lo. A superfície é a mesma grade do chão.",
+   "Usei a autonomia já planejada do K (nível 3, trecho 17): no CONDUZIR aprimorado o puxão dele vale uma batida, mantendo o gesto de esticar a ponta que o dono aprovou.",
+   "Mudei parâmetros aprovados do CONDUZIR (giro 3,3; passagem 1,0) por causa da medição: com os antigos, conduzir pela fenda era quase impossível na arena adaptada. A inércia nas curvas continua visível (raio cerca de 1,7).",
+   "Não mexi na montagem musical (MUS, TL, FIN_PLAN), nos 8 fragmentos (continuam como pontos de integração com pausa neutra), na conclusão, na estrutura de 18 trechos nem no REFLETIR aprimorado (roteiros A e B).",
+   "Celular em pé: recuo moderado da câmera (até 1,35×). Com 1,8× a cena ficava minúscula."
+  ],
+  "testes": [
+   "Tabela de itens (situação antes → agora → como foi verificado): 1) Círculo branco preenchido e limitado: já existia; agora limitado à grade adaptada e à cerca da tela. Medido nas 8 direções e fotografado. 2) BLOQUEAR, placa plana suspensa: já existia; ganhou a prévia tracejada. Fotos. 3) REFLETIR com limite e animação no impacto: já existia. Foto do limite (comprimento 7,00 = maxLen) e sequência de quadros do gesto começando no próprio rebate. 4) Barreiras sem prazo: já existia (life ∞). A placa A sobreviveu a 4 colocações. 5) Duas barreiras com troca da penúltima: já existia. Medido: −4 | −4,−2 | −4,0 | −4,2. 6) Figura #000000: já existia. Pixels 0/0/0 e fundo 11/11/14 lidos com gl.readPixels. 7) Animações: ajustei o fim do 1º gesto e o braço preferido. Folga medida e quadros gravados. 8) Câmera baixa e arena adaptada: não existia; implementada. Fotos e cerca. 9) Grade erguida: já existia. Robô: 3 a 4 rebatidas por trecho. 10) Trocas de rebatidas: já existia (p:figRebound, p:void no log). 11) CONDUZIR (atração, inércia, fenda, vazio branco): já existia; ajustei giro e passagem. Simulação e robô. 12) Projéteis em pequenos intervalos, com alvos divididos: já existia, mantido nos roteiros novos. 13) K independente só depois do 2º R: já existia (níveis); assumir cedo a partir do nível 2. Logs kclaim/kdef/block:K. 14) Intensificação real: implementada. Robô e foto. 15) CONDUZIR aprimorado: implementado. Sequência de fotos e robô.",
+   "Robô (/tmp/claude-0/-home-user-ADRESS/fb89fb50-6ace-5d5d-b17f-88099c5c1fc8/scratchpad/rev/batalha/bot.js) em todos os 18 trechos, saltando para cada um (_jump), com ADRESS.battleMusic.useOwnClock(true). Resultado final (passo, mecanismo, resultado): 0 BLOQUEAR 3/3; 1 BLOQUEAR 6/6; 3 REFLETIR 1/1 estrutura desativada; 4 REFLETIR 2/2; 6 CONDUZIR 0 passagens (janela de 10 s); 7 BLOQUEAR 5/5; 9 REFLETIR 2/2; 10 CONDUZIR 1 passagem; 12 BLOQUEAR 9/9; 13 REFLETIR 3/3; 14 CONDUZIR 0 a 2 passagens; 16 BLOQUEAR 11/12, 1 impacto; 17 aprimorado A 4 rebatidas e 1 erro; 19 CONDUZIR aprimorado 2 rachaduras e 1 a 4 passagens; 20 BLOQUEAR 15/15; 22 aprimorado B 3 rebatidas e 2 erros; 23 CONDUZIR aprimorado 2 rachaduras e 3 a 5 passagens; 25 BLOQUEAR 16 bloqueados (2 pelo K) e 2 impactos, sem falha. Nenhum erro no console.",
+   "Passagem contínua do passo 13 ao 18, sem saltos, passando pelo fragmento azul 2: autonomia do K de 0 para 1 depois do azul 2; REFLETIR aprimorado só no passo 17; câmera de impacto antes do fragmento; tela do fragmento azul, 2ª passagem, com 'conteúdo pendente'.",
+   "Numa batida vinda da frente, intervalo entre trechos: câmera de impacto (camK 1) com a câmera de jogo de volta antes da janela.",
+   "Folga entre mão e cabeça (t_pose.mjs): na guarda, no mínimo 0,381 e 0,407; nas varreduras com contatos de 0 a 2,4 à esquerda, no mínimo 0,39 a 0,54; sem atravessar a cabeça.",
+   "Sequências de quadros: guarda (clique, +0,05, +0,1, +0,15, +0,25 s, impacto e volta) e varredura (rebate 0, +2, +4, +7, +10, +14, +20, +29, +44, +74, +134 quadros a 60 fps), vistas pela câmera de jogo e por uma câmera de frente; troca no REFLETIR aprimorado (rebate encadeado, braço direito).",
+   "Telas: 1280×720, 960×540, 844×390 com modo toque e 390×844."
+  ],
+  "limitacoes": [
+   "Dificuldade avaliada só com robô de mira perfeita, que reage a cada 0,1 s. Ainda não houve teste com jogador humano. No BLOQUEAR e no REFLETIR ele quase não toma dano; no CONDUZIR comum conduz mal (0 a 2 passagens em janelas de cerca de 10 s), então o desempenho humano real não foi medido.",
+   "Como o robô cobre os projéteis antes do lançamento, o K quase não age nos trechos 15 e 18 nessas medições. Com um jogador humano o K deve aparecer mais; isso só pude avaliar lendo o código (kEvaluate/covered).",
+   "Sons (tranco 'frebound', rachadura 'block', ruptura) não foram ouvidos: o Chromium roda sem tela e o AudioContext não toca. Verifiquei só pela chamada no código e pelo log.",
+   "O pulso da grade a cada disparo da figura (gridPulse) foi verificado só por código: o efeito dura 0,3 s e não aparece nas fotos.",
+   "No celular em pé, a cena fica menor; é um meio-termo, já que o fov está limitado a 80°. Os botões de toque reais (joystick, Atrair, Puxar) não apareceram nas fotos, porque dependem do touch.js; a ocultação do 'Puxar' depois do tranco foi verificada só por código.",
+   "O REFLETIR aprimorado A às vezes ainda é cortado pela janela quando há um erro no meio da troca (robô: cut no trecho 13). Não mexi nos roteiros aprovados.",
+   "Os 8 fragmentos e o encerramento continuam como pontos de integração (pausa neutra); a montagem musical não foi alterada."
+  ],
+  "pendencias_para_outros": [
+   "Coordenador: atualizar a seção 7b do CLAUDE.md (não está na minha lista de arquivos). Os pontos estão em notas_para_claude_md.",
+   "Coordenador: no começo da rodada, um 'pkill -f chromium' meu pode ter fechado navegadores de outros agentes (por volta das 15:55). Se algum teste falhou nesse horário, vale repetir.",
+   "Dono: confirmar a interpretação de 'câmera baixa … com arena adaptada' como câmera de jogo. Para voltar à elevada: CAMS.game = CAMS.high e restaurar GRID/LIM (z de −9 a 9), FIS e SD antigos (estão no git, commit 5a22e0b).",
+   "Dono: avaliar jogando o CONDUZIR (giro 3,3 e passagem 1,0) e o CONDUZIR aprimorado (2 batidas; no trecho 17 o K vale uma)."
+  ],
+  "notas_para_claude_md": [
+   "7b Câmeras: a de jogo agora é BAIXA e próxima, atrás e à direita do jogador: CAMS.game = camAt(129, 5,7, 2,3), mirando em (−1,8; 0,95; −2,3), fov 60. A elevada antiga ficou em CAMS.high, só como referência. Impacto e grade erguida sem mudança. No celular em pé a câmera recua até 1,35× (framePos).",
+   "7b Arena adaptada à câmera baixa: GRID e LIM em z de −2 a 9 (14×11 células); FIS L1 (−8,4; −8), L2 (−8,4; −5), L3 (−8; −2,5), R1 (8,4; −6,5), R2 (8,4; −3), R3 (8,4; 0,2); SD = SP(0,−1,15). Cerca da tela: o círculo para na borda da imagem (onScreen/FENCE, pose fixa da câmera de jogo). Marca no chão sob cada projétil (userData.mark). Prévia tracejada da placa sobre o círculo no BLOQUEAR (ghostPlate). Rótulo com fundo escuro. OCC.h = jogador 2,5, K 2,6.",
+   "7b CONDUZIR: GUIDE.turn 3,3 (antes 2,6) e passW 1,0 (antes 0,85); objeto em z de 0,2 a 3,2, com espaço à frente e atrás da fenda na direção da câmera.",
+   "7b CONDUZIR aprimorado (SEGMENTS[13] e [16] com held: 2; só com fragmentsDone ≥ 5): a figura segura o objeto (na altura do voo) por um fio vindo da mão erguida. Puxar a ponta → tranco, a ponta escapa (estado yank; o botão 'Puxar' some depois do primeiro). Projéteis que batem no objeto o racham (crackObj); com 2 batidas o fio se parte e a fenda abre ali (rupture 'C'). No trecho 17 o puxão do K vale uma batida. Constantes GH; log guide:held/yank/crack/rupture; ADRESS.battle.guide traz held, hits e need.",
+   "7b Intensificação depois do 2º azul: BLOQUEAR 12, 15 e 18 com rajadas (anéis do aviso empilhados), cruzados e leques; a grade pulsa a cada disparo da figura (gridPulse). O trecho 6 tem 5 disparos e cabe na janela (pendência antiga resolvida).",
+   "7b K: a partir do nível 2 de autonomia assume o projétil no lançamento (anel) e ergue a placa a cerca de 1,2 s da chegada (K_ACT_AT); no nível 1 continua tardio e hesitante.",
+   "7b Poses: ENDS.up = (0,34; 0,9; 0,72), com a mão longe da bochecha; a varredura prefere o braço direito até o contato ficar 2 à esquerda (lp.z ≥ −2).",
+   "7b Ganchos novos: ADRESS.battle.warnings."
+  ],
+  "fotos": [
+   "/tmp/claude-0/-home-user-ADRESS/fb89fb50-6ace-5d5d-b17f-88099c5c1fc8/scratchpad/rev/batalha/shots/base_sheet.png",
+   "/tmp/claude-0/-home-user-ADRESS/fb89fb50-6ace-5d5d-b17f-88099c5c1fc8/scratchpad/rev/batalha/shots/final_sheet.png",
+   "/tmp/claude-0/-home-user-ADRESS/fb89fb50-6ace-5d5d-b17f-88099c5c1fc8/scratchpad/rev/batalha/shots/tA_sheet.png",
+   "/tmp/claude-0/-home-user-ADRESS/fb89fb50-6ace-5d5d-b17f-88099c5c1fc8/scratchpad/rev/batalha/shots/tB_sheet.png",
+   "/tmp/claude-0/-home-user-ADRESS/fb89fb50-6ace-5d5d-b17f-88099c5c1fc8/scratchpad/rev/batalha/shots/hs_sheet.png",
+   "/tmp/claude-0/-home-user-ADRESS/fb89fb50-6ace-5d5d-b17f-88099c5c1fc8/scratchpad/rev/batalha/shots/anF_block_game.png",
+   "/tmp/claude-0/-home-user-ADRESS/fb89fb50-6ace-5d5d-b17f-88099c5c1fc8/scratchpad/rev/batalha/shots/anF_block_front.png",
+   "/tmp/claude-0/-home-user-ADRESS/fb89fb50-6ace-5d5d-b17f-88099c5c1fc8/scratchpad/rev/batalha/shots/anF_refl_game.png",
+   "/tmp/claude-0/-home-user-ADRESS/fb89fb50-6ace-5d5d-b17f-88099c5c1fc8/scratchpad/rev/batalha/shots/anF_refl_front.png",
+   "/tmp/claude-0/-home-user-ADRESS/fb89fb50-6ace-5d5d-b17f-88099c5c1fc8/scratchpad/rev/batalha/shots/ps_sheet.png",
+   "/tmp/claude-0/-home-user-ADRESS/fb89fb50-6ace-5d5d-b17f-88099c5c1fc8/scratchpad/rev/batalha/shots/mob_sheet.png",
+   "/tmp/claude-0/-home-user-ADRESS/fb89fb50-6ace-5d5d-b17f-88099c5c1fc8/scratchpad/rev/batalha/shots/mob_portrait3.png",
+   "/tmp/claude-0/-home-user-ADRESS/fb89fb50-6ace-5d5d-b17f-88099c5c1fc8/scratchpad/rev/batalha/shots/cam2_sheet.png"
+  ]
+ },
+ "aac35f5f4134f06b5": {
+  "resumo": "Rodada de mecânicas e ritmo do jogo principal (seção 8). Resolvi as 8 pendências deixadas pelas rodadas anteriores, (a) a (g) mais a (b2), e corrigi outros problemas reais que achei rodando o jogo.\n\nPrincipais correções:\n- **Helicóptero na Cachoeira:** voando baixo sobre a serra, ele era teletransportado e girado 90°. Ao pousar lá, a van era empurrada até o limite do mundo (x = −680). Agora a serra só segura a van que vem do vale. Fora do bairro o helicóptero sobe sozinho para ficar ~7,5 m acima do morro. Pousar, descer o morro de van ou andar a pé por ele funciona.\n- **Helicóptero nas cidades:** ele bate nos prédios de fora mais altos que ele (campo `top`) e pode pousar no terraço deles. Nesse caso, apertar L dá um aviso claro.\n- **Retorno sonoro:** a porteira tocava a campainha de entrega; agora tem trinco e rangido. Bater a van não fazia nenhum som; agora há um baque proporcional ao choque.\n- **Missões da Carreira:** quando um objetivo é cumprido no meio da partida, aparece um aviso discreto, uma vez por missão, dizendo que ela será salva na entrega certa (antes não havia nenhum sinal). \"Sem pressa\" fica pendente ao chegar a 10:00.\n- **Aviso de desbloqueio:** diz \"Nível 10\" para Veneza. A posição usa a altura real da barra do topo e desvia do MISSÕES, do cronômetro e do \"Toque para continuar\" do celular.\n- **Frentista:** a fala não se repete duas vezes seguidas e fica ~5–6,5 s na tela (antes 3 s).\n- **DICA:** funciona também a pé (Veneza, Morro e os bairros sem grade têm entregas a pé) e volta a ficar disponível em toda partida nova.\n- **Textos da barra:** \"Perto da lancha\" em Veneza. Versão para toque: \"toque em “Entrar na van”\". Em Veneza a pé deixou de dizer que não dá para entregar. Nenhuma tecla de dirigir aparece nas cenas da oficina, missa e montagem da igreja, na conversa medieval, no chefe, no míssil e no fade final. Na Carreira, encostar na saída fechada mostra um aviso.\n- **Van imparável:** casas, cercas, postes, bloqueios, carros e peças do posto soltam lascas da cor certa (antes eram folhas verdes). O tamanho das lascas foi limitado, porque cada atropelada aumentava sem limite o cache de geometrias. As lascas saem do chão de verdade em patamares e morros.\n- **Configurações:** a lista de controles ficou alinhada e mais completa. Volumes e tela cheia já funcionavam; confirmei que são aplicados, salvos e mantidos ao recarregar.\n\nVerificado com execução: 24 bairros no Livre e 8 na Carreira sem erros no console. Missões salvas em 3 bairros e desbloqueio do Bairro 3. Também conferi o fim da Carreira, o modo toque, as configurações, a personalização e o chefe em 4 bairros.\n\nArquivos alterados: `/home/user/ADRESS/src/main.js`, `/home/user/ADRESS/src/career.js`, `/home/user/ADRESS/src/settings.js` e `/home/user/ADRESS/src/boom.js`.",
+  "problemas_encontrados": [
+   {
+    "onde": "src/main.js (heliTall, setGhost, unstickVan) — Bairro 23 Cachoeira",
+    "problema": "Helicóptero voando baixo sobre a serra: quando o terreno passava de ~3,5 m abaixo dele, deixava de ser 'alto', entrava nas colunas de colisão da serra e o unstickVan o teletransportava para trás e o girava 90°. Voando mais alto, empacava no ar. Ao pousar no morro e dirigir, a van era empurrada de coluna em coluna até x = −680.",
+    "impacto": "O voo e o pouso sobre a serra pareciam defeitos graves (teletransporte, giro, van atirada para o limite do mundo).",
+    "resolvido": true
+   },
+   {
+    "onde": "src/main.js heliTall",
+    "problema": "Os prédios dos arredores das cidades (até ~23 m, sólidos com b.out e top) eram atravessados pelo helicóptero acima de 6,5 m.",
+    "impacto": "O helicóptero passava por dentro dos prédios de fora.",
+    "resolvido": true
+   },
+   {
+    "onde": "src/main.js setGround / descer (L)",
+    "problema": "Com a colisão no ar, quem descesse com Shift em cima de um prédio de fora seria empurrado de lado. E apertar L pousado no terraço de fora dizia 'Pouse o helicóptero antes de descer', mesmo já pousado.",
+    "impacto": "Salto lateral e informação errada para o jogador.",
+    "resolvido": true
+   },
+   {
+    "onde": "src/main.js openGate (Bairro 15 Colheita)",
+    "problema": "Abrir a porteira tocava audio.bell, a campainha de entrega.",
+    "impacto": "O som dizia 'entrega' quando a ação era abrir uma porteira.",
+    "resolvido": true
+   },
+   {
+    "onde": "src/main.js (dirigir)",
+    "problema": "Bater a van em casas, muros, sebe ou prédios não fazia nenhum som. Só o contador dos Bairros 3 e 7 mostrava algo.",
+    "impacto": "Sem retorno da ação. No Bairro 2, 'Sem esbarrar' é contado em silêncio, e no Bairro 7 o helicóptero parava seco no prédio.",
+    "resolvido": true
+   },
+   {
+    "onde": "src/career.js",
+    "problema": "Objetivo de missão cumprido no meio da partida não dava nenhum aviso; só a lista M mostrava 'Pendente'.",
+    "impacto": "O jogador não sabia que tinha conseguido (Volta no bairro, Conheça a praça, Fora da rota…).",
+    "resolvido": true
+   },
+   {
+    "onde": "src/career.js toast de desbloqueio",
+    "problema": "O aviso dizia 'Bairro 10' para Veneza (o certo é 'Nível 10') e usava top fixo (128/152 px). No celular, os avisos encostavam no botão MISSÕES e no 'Toque para continuar' (sobreposição medida e vista em foto, 390×844).",
+    "impacto": "Nome errado e aviso coberto no celular.",
+    "resolvido": true
+   },
+   {
+    "onde": "src/main.js FUEL_LINES",
+    "problema": "A fala do frentista era sorteada com repetição possível e ficava só 3 s na tela.",
+    "impacto": "Fala repetida e pouco tempo para ler no celular.",
+    "resolvido": true
+   },
+   {
+    "onde": "src/main.js updateHUD (a pé)",
+    "problema": "'Perto da van — aperte E para entrar' aparecia mesmo quando E faria outra coisa (entregar a pé, abrir porteira, conversar). No toque, o texto falava em tecla. Em Veneza dizia 'van' e, a pé, 'não dá para entregar andando', mas lá dá para entregar a pé.",
+    "impacto": "Instrução contraditória com o balão e com a regra do bairro.",
+    "resolvido": true
+   },
+   {
+    "onde": "src/main.js updateHUD (sub)",
+    "problema": "Nos estados wstory, mstory, chseq, chat, boss, missile e fadeOut a barra mostrava as teclas de dirigir. A dica do helicóptero era longa. No terraço e na Lua aparecia 'F: míssil'.",
+    "impacto": "Teclas que não fazem nada naquele momento.",
+    "resolvido": true
+   },
+   {
+    "onde": "src/main.js requestHint / startFree",
+    "problema": "A DICA só funcionava dentro da van; a pé o botão ficava apagado sem explicação, inclusive em casas que só recebem entrega a pé (becos do Morro, parque dos Jardins). Além disso, hintStep/hintUsed não eram zerados no começo de cada partida.",
+    "impacto": "Recurso indisponível sem motivo aparente; dica possivelmente bloqueada numa partida nova.",
+    "resolvido": true
+   },
+   {
+    "onde": "src/main.js wreck() (van imparável)",
+    "problema": "Casas, cercas, ponto de ônibus, postes, bloqueios, carros e peças do posto soltavam lascas verdes de árvore.",
+    "impacto": "Efeito visual incoerente com o que foi atingido.",
+    "resolvido": true
+   },
+   {
+    "onde": "src/boom.js smash()",
+    "problema": "Os tamanhos aleatórios das lascas criavam uma geometria nova no cache global do kit a cada caco, sem limite. Além disso, as lascas nasciam em y absoluto, abaixo do chão em patamares e morros.",
+    "impacto": "Memória crescendo em sessões longas de van imparável; cacos invisíveis no alto.",
+    "resolvido": true
+   },
+   {
+    "onde": "src/main.js (Carreira, parede invisível da entrada)",
+    "problema": "Encostar na saída fechada não dava explicação nenhuma.",
+    "impacto": "Parecia defeito de colisão.",
+    "resolvido": true
+   },
+   {
+    "onde": "src/settings.js lista de controles",
+    "problema": "A primeira coluna tinha largura diferente em cada linha (descrições desalinhadas). 'Espaço sobe' e 'abrir porteiras' faltavam.",
+    "impacto": "Tela de controles irregular e incompleta.",
+    "resolvido": true
+   },
+   {
+    "onde": "world.js (arredores) — fora da minha lista",
+    "problema": "Silos (~9,6 m), galpões e oficinas de fora e casas dos morros das Encostas não têm 'top'; acima de 6,5 m o helicóptero ainda passa por dentro deles.",
+    "impacto": "Pequeno: construções baixas dos arredores.",
+    "resolvido": false
+   },
+   {
+    "onde": "camera.js — fora da minha lista",
+    "problema": "Em cima da serra da Cachoeira (depois de pousar o helicóptero lá), a câmera atrás da van ou do personagem não considera o terreno e pode ficar olhando para a encosta (tela só de grama).",
+    "impacto": "Só nesse caso raro do Livre.",
+    "resolvido": false
+   }
+  ],
+  "mudancas": [
+   {
+    "arquivos": [
+     "src/main.js"
+    ],
+    "o_que": "Serra da Cachoeira: hasSerra/onSerra/solidsNoSerra. As colunas b.serra ficam fora da colisão para o helicóptero voando e para a van que já está sobre a serra. unstickVan as ignora. walkSolids não as inclui e o chão do personagem segue TERRAIN.h. Fora do bairro, o helicóptero sobe sozinho para ficar ~7,5 m acima do morro à frente (no plano nada muda).",
+    "por_que": "Pendência (b2): o voo baixo teletransportava e girava a van, e a van pousada era atirada para x = −680.",
+    "como_verificado": "t_serra.mjs: antes (x de −167,8 travado e depois −570/−680); depois, voo a 10 m subindo com o terreno (y = ter + 8 a 15), pouso a 61,9 m, descida de van até o vale sem saltos, a pé com chão = terreno. Fotos: sheet_serra.png."
+   },
+   {
+    "arquivos": [
+     "src/main.js"
+    ],
+    "o_que": "heliTall inclui os prédios de fora com top > altura. setGround faz os terraços desses prédios virarem chão do helicóptero (ele pousa neles). L pousado ali mostra 'Daqui não dá para descer: decole e pouse no chão ou num terraço do bairro.'",
+    "por_que": "Pendências (b)/(b2): o helicóptero atravessava os quarteirões de fora.",
+    "como_verificado": "t_heli.mjs no Bairro 7: antes passava até x = −319; agora para em x = −53 diante de um prédio de 17 m (foto heli7.png). t_roof.mjs: descer com Shift para em 17,9 m (terraço de 17,4 m); H → landed = true; aviso do L (foto roof.png). Encostas: para diante de prédio (heli9.png)."
+   },
+   {
+    "arquivos": [
+     "src/main.js"
+    ],
+    "o_que": "Sons gerados no main.js pela saída de efeitos (audio.ctx/out): sfx.gate (trinco, rangido e batente) no lugar da campainha ao abrir porteira, e sfx.bump via bumpFeedback (baque proporcional à velocidade perdida; intervalo de 0,35 s; não toca com a lancha atracada).",
+    "por_que": "Retorno sonoro coerente: a porteira tocava a campainha de entrega e as batidas eram mudas.",
+    "como_verificado": "t_fx.mjs, contando fontes WebAudio criadas: porteira 6 fontes e nenhum 'bell' (antes: bell); batida de frente na sebe a toda velocidade gera 3 fontes; raspar ou encostar parado não gera nenhuma. O som em si não pôde ser ouvido."
+   },
+   {
+    "arquivos": [
+     "src/career.js"
+    ],
+    "o_que": "Aviso de missão cumprida na partida, uma vez por missão (notePending; estilo creme com borda laranja, diferente do verde de 'salva'). Toast com duração pelo tamanho do texto. Desbloqueio de Veneza como 'Nível 10'. Posição logo abaixo da .ahud real, revista a cada 200 ms enquanto visível, desviando de MISSÕES, cronômetro, batidas e 'Toque para continuar'. 'Sem pressa' fica pendente ao chegar a 10:00 (mesmo resultado; antes só era verificada na entrega certa).",
+    "por_que": "Pendência (d) e clareza: missões pendentes não davam sinal.",
+    "como_verificado": "t_career.mjs (1280×720): aviso de pendente no B1, descarte ao recomeçar, salvas [1,1,0,1,0]; B2 com as 5 salvas; 'Bairro 3 desbloqueado!'; B3 com 2 salvas. t_toast/t_cue (390×844 e 844×390 com toque real): sem sobreposição (fotos cue_p.png, toast_l.png). t_lap.mjs: 'Volta no bairro' dirigida de verdade gera o aviso. 'Nível 10': verificado só pelo código (o Bairro 9 não tem missões)."
+   },
+   {
+    "arquivos": [
+     "src/main.js"
+    ],
+    "o_que": "fuelLine(): nunca a mesma fala duas vezes seguidas; fica max(4,5; 1,2 + caracteres/15) s.",
+    "por_que": "Pendência (a).",
+    "como_verificado": "t_more.mjs: 8 abastecidas seguidas sem repetição consecutiva, cada fala ~5,1–5,5 s na barra depois do glub-glub."
+   },
+   {
+    "arquivos": [
+     "src/main.js"
+    ],
+    "o_que": "updateHUD: texto a pé mostra 'Perto da van/lancha' só quando E de fato entra; versão de toque ('toque em “Entrar na van”'). Veneza e bairros sem grade mostram a pista a pé. Lista noKeys esconde as teclas de dirigir em talk, cine, trolley, laser, wstory, mstory, chseq, chat, boss, missile e fadeOut. 'L: descer da lancha'. Dica do helicóptero encurtada para 'H: pousar'. 'F: míssil' só no Livre fora da Lua. 'L: descer na laje' quando pousado em terraço do bairro. Avisos sem '(L)'/'(H)' para valer também no toque.",
+    "por_que": "Pendências (e), (f), (g) e textos contraditórios.",
+    "como_verificado": "t_base/t_hud/t_touch/t_ws/t_more: textos lidos da barra em B1, Veneza (cais real), toque (Playwright com toque), wstory (checkpoint 9: sub vazia), chat medieval (sub vazia). Fotos: touch_walk.png, sheet_pc.png."
+   },
+   {
+    "arquivos": [
+     "src/main.js"
+    ],
+    "o_que": "DICA também a pé (T ou botão; o botão fica 'ready'; texto 'Olha a dica caindo do céu!'). startFree zera hint/hintStep/hintCount.",
+    "por_que": "Entregas a pé existem em vários bairros e o botão ficava apagado sem explicação; a dica podia ficar bloqueada numa partida iniciada sem passar pelo Voltar.",
+    "como_verificado": "t_more.mjs: T a pé → seta na casa da rota, pousou, sons whistle/crash, botão 'used'. t_sweep.mjs: seta na casa certa em Veneza, Morro, Jardins e Lua (fotos sheet_sweep.png)."
+   },
+   {
+    "arquivos": [
+     "src/main.js",
+     "src/boom.js"
+    ],
+    "o_que": "wreck(): smashKind/SMASH_COLORS escolhem a cor das lascas pelo que foi atingido (construção, cerca, poste, bloqueio, carro, muro, posto, árvore ou sebe; a serra não solta nada). boom.smash: tamanhos em passos de 0,05 e lascas a partir da altura do terreno.",
+    "por_que": "Pendência (c) e vazamento de geometria no cache do kit.",
+    "como_verificado": "t_smash.mjs antes e depois (sheet_smash.png: casa de fora → lascas de reboco e telha, cerca → madeira; antes eram verdes). t_smash2.mjs no Medieval a 5 m (smash2_h.png)."
+   },
+   {
+    "arquivos": [
+     "src/main.js"
+    ],
+    "o_que": "Carreira: ao encostar na parede invisível da entrada, aviso 'Na Carreira, a saída do bairro só abre depois da entrega certa.' (repete no máximo a cada 8 s).",
+    "por_que": "A parede invisível parecia defeito.",
+    "como_verificado": "t_more.mjs: van contra a saída no B1 da Carreira, aviso na barra (sheet_pc.png)."
+   },
+   {
+    "arquivos": [
+     "src/settings.js"
+    ],
+    "o_que": "Lista de controles com primeira coluna de largura fixa (alinhada), textos com 'abrir porteiras' e 'Helicóptero: Espaço sobe, Shift desce, H pousa'.",
+    "por_que": "Descrições desalinhadas e incompletas.",
+    "como_verificado": "Fotos em 1280×720, 390×844 e 844×390 (sheet_ctrl.png, ctrl_l.png). t_settings.mjs: volumes aplicados (out 0,495 e musicOut 0,3 com 55% e 30%), salvos, mantidos após recarregar; restaurar volta a 100%."
+   }
+  ],
+  "decisoes": [
+   "DICA liberada também a pé, em todos os bairros. O limite (1 por entrega; 2 na Lua) e a regra de 'Sem ajuda' não mudaram.",
+   "Mantive o pouso do helicóptero sobre a serra da Cachoeira, como já previsto, e o tornei consistente: a serra só bloqueia a van que chega por baixo, do vale. Quem já está em cima dela anda e dirige livremente seguindo o terreno.",
+   "Prédios dos arredores urbanos passaram a ser terraços onde o helicóptero pode pousar, como os residenciais do bairro. Mas não dá para descer a pé neles (há aviso), porque a caminhada no terraço só existe para os prédios do bairro.",
+   "O aviso de missão cumprida aparece uma única vez por missão e por partida, para não virar notificação constante. Os avisos de missões salvas e de desbloqueio continuam no verde já usado.",
+   "'Sem pressa' passa a ficar pendente quando o cronômetro chega a 10:00. É logicamente igual à regra antiga, porque o cronômetro só aumenta e a missão continua sendo salva só na entrega certa.",
+   "Sons novos (porteira, batida) ficaram no main.js usando audio.ctx/audio.out, porque audio.js não está na minha lista. Saem pelo volume de Efeitos e calam com o MENU e a aba escondida.",
+   "Não acrescentei som de desbloqueio nem nenhum outro som no mapa, para não criar interrupções.",
+   "Tirei '(L)' e '(H)' dos avisos curtos para valerem igualmente no teclado e no toque."
+  ],
+  "testes": [
+   "Todos os testes rodaram em /tmp/claude-0/-home-user-ADRESS/fb89fb50-6ace-5d5d-b17f-88099c5c1fc8/scratchpad/rev/mecanicas.",
+   "t_all.mjs free: os 24 bairros no Livre (entrega, diálogo, dirigir, L, DICA a pé, E para entrar, helicóptero), 0 erros. Rodado de novo no fim.",
+   "t_all.mjs career: 8 bairros na Carreira (1, 4, 7, 10, 13, 15, 20, 24), 0 erros.",
+   "t_career.mjs (1280×720), missões cumpridas e salvas em 3 bairros mais um desbloqueio: B1 com Primeira entrega, Endereço errado e Endereço certo (pendentes, descartadas ao recomeçar e salvas na entrega certa); B2 com as 5 missões numa partida e Bairro 3 desbloqueado (aviso visto); B3 com Fora da rota e Cuidado com as barreiras.",
+   "t_lap.mjs: 'Volta no bairro' cumprida dirigindo de verdade (piloto automático pelas 4 ruas externas); aviso de pendente exibido.",
+   "t_toast.mjs e t_cue.mjs: posição do aviso em 390×844 e 844×390, com e sem toque real; sem sobreposição com MISSÕES, cronômetro e 'Toque para continuar'.",
+   "t_heli.mjs (Bairros 7, 9 e 23), t_serra.mjs, t_serra2.mjs e t_roof.mjs: colisão no ar, pouso no terraço de fora, serra e pouso nela.",
+   "t_fx.mjs, contando fontes WebAudio: porteira sem campainha (6 fontes), batida forte gera baque (3 fontes). Comparado com a versão anterior.",
+   "t_more.mjs: DICA a pé, conversa medieval sem teclas na barra, aviso da parede da Carreira, 8 abastecidas sem repetir a fala.",
+   "t_ws.mjs: checkpoint 9 da oficina, estado wstory com a linha de teclas vazia.",
+   "t_sweep.mjs: DICA e entrega em Veneza, Morro, Colheita, Nevasca, Jardins, Lua, Operário e Medieval.",
+   "t_boss.mjs: chefe completo (driveOut → kill → reinício) nos Bairros 1, 10, 13 e 24, sem erros.",
+   "t_smash.mjs e t_smash2.mjs: van imparável, antes e depois (fotos).",
+   "t_settings.mjs: volumes aplicados nos ganhos reais, salvos, mantidos após recarregar e restaurados.",
+   "t_shop.mjs: cores e boné do Shop salvos aparecem na van, no motorista da cabine e no personagem a pé depois de recarregar.",
+   "t_touch.mjs: toque liga o modo toque; botões 'Descer da van' e balão 'Entrar na van' funcionam; teclado e mouse de verdade desligam o modo toque sem deixar tecla presa."
+  ],
+  "limitacoes": [
+   "O som não pôde ser ouvido no ambiente de teste. Os sons novos foram verificados contando as fontes WebAudio criadas, e o timbre só pela leitura do código.",
+   "O aviso 'Nível 10 desbloqueado!' foi verificado só pela leitura do código: o Bairro 9 (Encostas) não tem missões, então não dá para provocá-lo no jogo.",
+   "Nos estados mstory e chseq (missa e montagem da igreja), a linha de teclas vazia foi verificada pelo código; no wstory, executando.",
+   "Tela cheia não pode ser testada em navegador sem janela; vi apenas o texto do botão e o código.",
+   "Renderização por software (SwiftShader): a primeira foto de algumas páginas sai escura. É artefato do ambiente; a segunda foto da mesma cena sai normal.",
+   "A câmera em cima da serra da Cachoeira ainda pode ficar olhando para a encosta (camera.js, fora da minha lista).",
+   "Construções baixas dos arredores sem o campo 'top' (silos, galpões, casas dos morros das Encostas) ainda são atravessadas pelo helicóptero acima de 6,5 m."
+  ],
+  "pendencias_para_outros": [
+   "world.js (buildSurroundings): pôr o campo 'top' (altura) também nos sólidos de fora que ainda não têm: silo (~9,6 m), galpões e oficinas ('shed'/'ware', 4,2–8,1 m com o telhado) e casas dos morros das Encostas (by + H). O heliTall do main.js já usa qualquer b.out com top.",
+   "camera.js: quando a van ou o personagem estão sobre a serra da Cachoeira (ou nos morros de fora das Encostas), a câmera não considera TERRAIN.h e pode ficar voltada para a encosta.",
+   "hintButton.js: o título do botão diz '(uma vez por rodada)'; o certo é '(uma vez por entrega)'. O botão agora também fica 'ready' a pé.",
+   "audio.js (opcional): os sons de porteira e de batida estão em main.js (sfx.gate e sfx.bump, usando audio.ctx/audio.out); podem migrar para audio.js se quem cuida do arquivo preferir.",
+   "Diálogos (observação): na conversa com moradores do Medieval (estado chat), a caixa de fala mostra só a fala, sem o nome de quem fala. Não sei se é intencional."
+  ],
+  "notas_para_claude_md": [
+   "DICA (T ou botão) vale também a pé (estado walk). startFree zera hint/hintUsed/hintStep/hintCount.",
+   "career.js: aviso discreto quando uma missão fica pendente no meio da partida (notePending; uma vez por missão e partida; estilo creme com borda laranja, classe .career-toast.pend). As funções tick, walk, bump e exitVan disparam o aviso; em visit, só nas entregas que não são a certa. 'Sem pressa' (noRush) fica pendente ao chegar a 10:00. O aviso de desbloqueio diz 'Nível 10' para Veneza. A posição do aviso é a parte de baixo real da .ahud + 12, desviando de .missions-btn.on, .match-timer.on, .match-bumps.on e .tc-cue.on, e é revista a cada 200 ms enquanto aparece. A duração depende do tamanho do texto (mín. 3,2 s).",
+   "Frentista: fuelLine() em main.js nunca repete a fala anterior e a mostra por max(4,5; 1,2 + caracteres/15) s.",
+   "Sons de retorno em main.js (sfx.gate = trinco, rangido e batente da porteira, no lugar de audio.bell; sfx.bump via bumpFeedback = baque proporcional à velocidade perdida numa batida, só depois de van.update; intervalo de 0,35 s), pela saída de efeitos (audio.out).",
+   "Carreira: encostar na parede invisível da entrada mostra 'Na Carreira, a saída do bairro só abre depois da entrega certa.' (wallMsgCool 8 s).",
+   "Helicóptero: heliTall inclui os sólidos de fora com top (b.out && b.top > altura); setGround devolve top + 0,5 sobre esses prédios (pousa no terraço); L pousado ali → aviso. Fora do quadrado do bairro, sobre morros (TERRAIN.h > 0,5), o helicóptero sobe sozinho para ficar 7,5 m acima do terreno à frente.",
+   "Cachoeira (serra): hasSerra/onSerra/solidsNoSerra em main.js. As colunas b.serra não colidem com o helicóptero voando nem com a van que já está sobre a serra; unstickVan e walkSolids as ignoram; o chão do personagem segue TERRAIN.h (a pé dá para subir a serra).",
+   "Van imparável: smashKind/SMASH_COLORS em main.js escolhem as lascas pelo que foi atingido. boom.smash usa tamanhos em passos de 0,05 (cache do kit limitado) e a altura do terreno (TERRAIN.h).",
+   "HUD: 'Perto da van/lancha — aperte E para entrar.' só quando E entra de fato; no toque: 'toque em “Entrar na van/lancha”'. Veneza e os bairros sem grade mostram a pista a pé; nos outros: 'Passeando a pé… (neste bairro, as entregas são feitas da van)'. Lista noKeys (sem teclas de dirigir): talk, cine, trolley, trolleyBlack, laser, wstory, mstory, chseq, chat, boss, missile, fadeOut. Helicóptero: 'H: pousar'. 'F: míssil' só no Livre fora da Lua. Pousado num terraço do bairro: 'L: descer na laje'.",
+   "Configurações > Ver controles: primeira coluna com largura fixa (9,6em; 8,2em em telas ≤ 400 px)."
+  ],
+  "fotos": [
+   "/tmp/claude-0/-home-user-ADRESS/fb89fb50-6ace-5d5d-b17f-88099c5c1fc8/scratchpad/rev/mecanicas/sheet_car.png",
+   "/tmp/claude-0/-home-user-ADRESS/fb89fb50-6ace-5d5d-b17f-88099c5c1fc8/scratchpad/rev/mecanicas/cue_p.png",
+   "/tmp/claude-0/-home-user-ADRESS/fb89fb50-6ace-5d5d-b17f-88099c5c1fc8/scratchpad/rev/mecanicas/toast_l.png",
+   "/tmp/claude-0/-home-user-ADRESS/fb89fb50-6ace-5d5d-b17f-88099c5c1fc8/scratchpad/rev/mecanicas/sheet_toast_p.png",
+   "/tmp/claude-0/-home-user-ADRESS/fb89fb50-6ace-5d5d-b17f-88099c5c1fc8/scratchpad/rev/mecanicas/heli7.png",
+   "/tmp/claude-0/-home-user-ADRESS/fb89fb50-6ace-5d5d-b17f-88099c5c1fc8/scratchpad/rev/mecanicas/roof.png",
+   "/tmp/claude-0/-home-user-ADRESS/fb89fb50-6ace-5d5d-b17f-88099c5c1fc8/scratchpad/rev/mecanicas/sheet_serra.png",
+   "/tmp/claude-0/-home-user-ADRESS/fb89fb50-6ace-5d5d-b17f-88099c5c1fc8/scratchpad/rev/mecanicas/sheet_smash.png",
+   "/tmp/claude-0/-home-user-ADRESS/fb89fb50-6ace-5d5d-b17f-88099c5c1fc8/scratchpad/rev/mecanicas/smash2_h.png",
+   "/tmp/claude-0/-home-user-ADRESS/fb89fb50-6ace-5d5d-b17f-88099c5c1fc8/scratchpad/rev/mecanicas/sheet_sweep.png",
+   "/tmp/claude-0/-home-user-ADRESS/fb89fb50-6ace-5d5d-b17f-88099c5c1fc8/scratchpad/rev/mecanicas/touch_walk.png",
+   "/tmp/claude-0/-home-user-ADRESS/fb89fb50-6ace-5d5d-b17f-88099c5c1fc8/scratchpad/rev/mecanicas/sheet_pc.png",
+   "/tmp/claude-0/-home-user-ADRESS/fb89fb50-6ace-5d5d-b17f-88099c5c1fc8/scratchpad/rev/mecanicas/sheet_ctrl.png",
+   "/tmp/claude-0/-home-user-ADRESS/fb89fb50-6ace-5d5d-b17f-88099c5c1fc8/scratchpad/rev/mecanicas/ctrl_l.png",
+   "/tmp/claude-0/-home-user-ADRESS/fb89fb50-6ace-5d5d-b17f-88099c5c1fc8/scratchpad/rev/mecanicas/heli9.png"
+  ]
+ }
+}

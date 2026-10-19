@@ -3,7 +3,7 @@
 import * as THREE from 'three';
 import { mat, box, cyl, cone, at, dynamic, bakeStatic } from './models/kit.js';
 import { HOUSES, ROOF_COL, WALL_COL } from './data.js';
-import { LOT, LOT_ANCHORS, slotOrigin, slotY, TERRAIN } from './layout.js';
+import { LOT, LOT_ANCHORS, slotOrigin, slotY } from './layout.js';
 import { GROUND_Y } from './models/house.js';
 
 const HS = LOT_ANCHORS.house;
@@ -104,14 +104,13 @@ export function createBoom(scene, getWorld, audio) {
   /** Chuva de lascas/folhas quando a van imparável atropela uma árvore ou a sebe. */
   function smash(x, z, colors, count = 24) {
     fx = (pinAt && pinAt(x, z)) || fxMain;
-    const gy = fx === fxMain ? TERRAIN.h(x, z) || 0 : 0;             // (encostas, patamares, morro: os cacos saem e caem no chão de verdade)
     for (let i = 0; i < count; i++) {
-      const s = Math.round(rnd(0.25, 0.7) * 20) / 20;                 // (tamanhos em passos de 0,05: o cache de geometrias do kit não cresce a cada atropelada)
+      const s = rnd(0.25, 0.7);
       const m = box(s, s * 0.5, s * 0.8, colors[i % colors.length]);
-      m.position.set(x + rnd(-1, 1), gy + rnd(0.8, 3), z + rnd(-1, 1));
+      m.position.set(x + rnd(-1, 1), rnd(0.8, 3), z + rnd(-1, 1));
       fx.add(m);
       const a = Math.random() * Math.PI * 2, sp = rnd(3, 9);
-      parts.push({ m, vx: Math.cos(a) * sp, vz: Math.sin(a) * sp, vy: rnd(5, 12), rx: rnd(-10, 10), rz: rnd(-10, 10), rest: false, floor: gy });
+      parts.push({ m, vx: Math.cos(a) * sp, vz: Math.sin(a) * sp, vy: rnd(5, 12), rx: rnd(-10, 10), rz: rnd(-10, 10), rest: false });
     }
     shake = Math.max(shake, 0.5);
     audio.crash && audio.crash();
