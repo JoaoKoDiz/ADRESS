@@ -89,6 +89,7 @@ const CSS = `
   transition: opacity .25s, transform .25s; width: max-content; max-width: min(92vw, 720px); text-align: center; box-sizing: border-box; }
 @media (max-width: 560px) { .career-toast { top: 152px; border-radius: 18px; } }
 .career-toast.on { opacity: 1; transform: translate(-50%, 0); }
+.career-toast.pend { background: #fff3d6; color: #5a3c1e; border: 2px solid #ff7a1a; }   /* cumprida nesta partida, ainda não salva */
 `;
 
 export function createCareer() {
@@ -99,11 +100,30 @@ export function createCareer() {
   toastEl.className = 'career-toast';
   document.body.appendChild(toastEl);
   let toastTimer = 0;
-  function toast(text) {
+  // logo abaixo da barra do topo (a altura dela muda com a tela e o modo toque); se encostar no botão MISSÕES ou no
+  // cronômetro, desce para baixo deles
+  function placeToast() {
+    const bar = document.querySelector('.ahud'), r = bar && bar.offsetParent ? bar.getBoundingClientRect() : null;
+    let top = (r && r.height ? r.bottom : 0) + 12;
+    toastEl.style.top = top + 'px';
+    const t = toastEl.getBoundingClientRect();
+    for (const el of document.querySelectorAll('.missions-btn.on, .match-timer.on, .match-bumps.on')) {
+      const o = el.getBoundingClientRect();
+      if (!o.width || !o.height || getComputedStyle(el).display === 'none' || getComputedStyle(el).visibility === 'hidden') continue;
+      if (o.left < t.right && o.right > t.left && o.top < top + t.height && o.bottom > top) top = o.bottom + 8;
+    }
+    toastEl.style.top = top + 'px';
+  }
+  /** Aviso curto abaixo da barra; fica o tempo de ler (mín. 3,2 s). pend: missão cumprida nesta partida, ainda não salva. Devolve a duração (ms). */
+  function toast(text, pend = false) {
     toastEl.textContent = text;
+    toastEl.classList.toggle('pend', pend);
+    try { placeToast(); } catch (e) { /* sem layout: fica na posição do CSS */ }
     toastEl.classList.add('on');
     clearTimeout(toastTimer);
-    toastTimer = setTimeout(() => toastEl.classList.remove('on'), 3200);
+    const ms = Math.max(3200, 1200 + text.length * 50);
+    toastTimer = setTimeout(() => toastEl.classList.remove('on'), ms);
+    return ms;
   }
 
   // progresso salvo: progress[nível][missão]
@@ -173,13 +193,27 @@ export function createCareer() {
     MISSIONS[l].forEach((m, i) => { if (m.id && ids.has(m.id) && progress[l][i] < m.goal) { progress[l][i] = m.goal; names.push(m.name); } });
     if (!names.length) return;
     save();
-    toast(names.length === 1 ? `✔ Missão concluída: ${names[0]}` : `✔ Missões concluídas: ${names.join(', ')}`);
+    const ms = toast(names.length === 1 ? `✔ Missão concluída: ${names[0]}` : `✔ Missões concluídas: ${names.join(', ')}`);
     let nx = l + 1; while (RESERVED.includes(nx)) nx++;
-    if (!wasDone && levelDone(l) && nx < LEVELS && !allOpen) setTimeout(() => toast(`🔓 Bairro ${nx + 1} desbloqueado!`), 3400);
+    if (!wasDone && levelDone(l) && nx < LEVELS && !allOpen) setTimeout(() => toast(`🔓 ${nx === 9 ? 'Nível' : 'Bairro'} ${nx + 1} desbloqueado!`), ms + 200);   // (Veneza é o "Nível 10", como no cartão e na placa)
   }
 
   // tentativa atual (Carreira): o que foi cumprido fica PENDENTE e só é salvo se esta partida terminar com a entrega certa
   let level = -1, active = false, pending = new Set(), hintUsed = false;
+  // aviso discreto (uma vez por missão e partida) quando um objetivo é cumprido no meio da partida: antes só a lista de missões
+  // mostrava o "Pendente", e o jogador não sabia que tinha conseguido. As que se cumprem na própria entrega certa já saem salvas.
+  let announced = new Set();
+  function notePending() {
+    if (!active || level < 0) return;
+    const fresh = [];
+    for (const id of pending) {
+      if (announced.has(id)) continue;
+      announced.add(id);
+      const i = MISSIONS[level].findIndex(m => m.id === id);
+      if (i >= 0 && !done(level, i)) fresh.push(MISSIONS[level][i].name);
+    }
+    if (fresh.length) toast(fresh.length === 1 ? `Missão cumprida: ${fresh[0]} — será salva na entrega certa.` : `Missões cumpridas: ${fresh.join(', ')} — serão salvas na entrega certa.`, true);
+  }
   // Bairro 1, "Volta no bairro": cada rua externa é dividida em 8 trechos; vale com 6 de 8 em cada lado (folga nas esquinas)
   const LAP_BINS = 8, LAP_NEED = 6;
   let lapBins = null;
@@ -195,7 +229,7 @@ export function createCareer() {
   // Bairro 7: batidas em veículos, espera atrás do engarrafamento, recuo diante do caminhão
   let vehHits = 0, jamWait = null, jamArmed = null, backOff = null;
 
-  return {
+  const api = {
     get progress() { return progress; },
     isDone: done,
     isUnlocked: unlocked,
@@ -231,7 +265,7 @@ export function createCareer() {
 
     /** Nova partida da Carreira na fase l: tudo que foi cumprido na tentativa anterior (e não salvo) é descartado. */
     startMatch(l) {
-      level = l; active = l >= 0; pending = new Set(); hintUsed = false;
+      level = l; active = l >= 0; pending = new Set(); hintUsed = false; announced = new Set();
       legs = new Map(); barHits = new Map(); barHitN = 0; offRoute = new Set();
       deliveries = 0; fueled = false; fuelStops = 0; lastDelT = null; lastH = null; rev = null; look = null; stopAt = null; lookSet = new Set(); prevPos = null;
       man = null; vanLaps = new Map(); footLaps = new Map(); prevFoot = null;
@@ -240,7 +274,7 @@ export function createCareer() {
       lapBins = { n: new Array(LAP_BINS).fill(false), s: new Array(LAP_BINS).fill(false), w: new Array(LAP_BINS).fill(false), e: new Array(LAP_BINS).fill(false) };
     },
     /** Fim do acompanhamento (saiu da partida): descarta o que estava pendente. */
-    stop() { active = false; pending = new Set(); },
+    stop() { active = false; pending = new Set(); announced = new Set(); },
 
     /** A cada quadro dirigindo (Carreira). ctx = { speed (da van; < 0 = ré), time (s no cronômetro), bars (barriers.list) }. */
     tick(x, z, heading = 0, ctx = {}) {
@@ -442,7 +476,7 @@ export function createCareer() {
         pending.add('firstDelivery');                                    // Primeira entrega: qualquer entrega (certa ou falsa)
         if (!success && !indicated) pending.add('wrongAddress');         // Endereço errado: numa casa diferente da indicada
       }
-      if (!success) return;
+      if (!success) { notePending(); return; }
       if (level === 0) {
         pending.add('rightAddress');
         if ((ctx.time || 0) >= 600) pending.add('noRush');               // Sem pressa: 10 min no cronômetro
@@ -485,4 +519,6 @@ export function createCareer() {
     /** O jogador usou a DICA (botão ou T). */
     hint() { if (active) hintUsed = true; },
   };
+  for (const k of ['tick', 'walk', 'bump', 'exitVan']) { const f = api[k]; api[k] = (...a) => { f(...a); notePending(); }; }   // objetivo cumprido no meio da partida: avisa
+  return api;
 }
