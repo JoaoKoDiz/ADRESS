@@ -21,7 +21,7 @@ export function build(ctx) {
   const SOIL = G('#6e5a40', '#6c6c6c'), GRASS = G('#93c866', '#a3a3a3'), MOSS = G('#5f8a3e', '#8a8a8a');
   const LEAF = [G('#4f8f3a', '#8a8a8a'), G('#3f7d34', '#7e7e7e'), G('#6aa046', '#959595')];
   const PINE = G('#2f6b33', '#767676'), TRUNK = G('#6b4526', '#6a6a6a');
-  const WATER = G('#3f97d4', '#9a9a9a'), DEEP = G('#2f7fb8', '#8e8e8e'), FOAM = G('#f2fbff', '#d6d6d6');
+  const WATER = G('#3f97d4', '#9a9a9a'), FOAM = G('#f2fbff', '#d6d6d6');
   const CONC = G('#c4beb2', '#b0b0b0'), CONC2 = G('#a8a296', '#9c9c9c'), RAILC = G('#4f555c', '#727272');
   const HEDGE = G('#3f7d3a', '#7a7a7a'), WOOD = G('#8a5a34', '#6e6e6e');
 
@@ -96,7 +96,10 @@ export function build(ctx) {
     for (const x of [5.2, 6.4]) add(box(0.5 + rnd() * 0.4, 0.4, 0.14, ROCK[3]), s * x, PY + 0.6 + rnd() * 0.5, FZ + 0.08);
   }
   slab(-1.65, 1.65, 0.3, MY - 0.32, -7.5, FZ, ROCK[3]);              // meio (atrás da queda)
-  slab(-1.66, 1.66, MY - 0.32, MY - 0.06, -7.5, FZ, DEEP);            // rio lá em cima, embutido entre as margens
+  slab(-1.66, 1.66, MY - 0.32, MY - 0.06, -7.5, FZ, WATER);            // rio lá em cima, embutido entre as margens
+  for (const [x, z, w] of [[-0.8, -7.0, 0.6], [0.5, -6.5, 0.7], [-0.3, -5.8, 0.8], [0.9, -5.4, 0.5], [-1.0, -5.0, 0.5], [0.2, -4.95, 0.9]])
+    add(box(w, 0.03, 0.09, FOAM), x, MY - 0.045, z, 0, (rnd() - 0.5) * 0.3, 0);      // correnteza chegando na beira
+  for (const [x, z] of [[1.2, -6.9], [-1.25, -6.1]]) add(sphere(0.2, ROCK[2], 6, 4), x, MY - 0.08, z);
   slab(-1.75, 1.75, MY - 0.42, MY - 0.24, FZ - 0.05, FZ + 0.25, ROCK[2]);   // beira da queda
 
   // ---- cachoeira: lâmina que vira na beira e desce acelerando (perfil curvo), com faixas de espuma
@@ -152,7 +155,7 @@ export function build(ctx) {
     for (let x = -3.4; x <= 3.41; x += 0.5) add(box(0.04, 0.2, 0.04, RAILC), x, PY + 0.25, BZ + dz);
   }
   for (const x of [-1.8, 1.8]) {                                               // postes de luz
-    add(cyl(0.035, 0.045, 0.75, RAILC, 6), x, PY + 0.53, BZ + 0.72);
+    add(cyl(0.035, 0.045, 1.18, RAILC, 6), x, 3.92 + 0.59, BZ + 0.71);    // preso por fora do tabuleiro
     add(sphere(0.09, G('#ffe39a', '#dadada'), 7, 5), x, PY + 0.95, BZ + 0.72);
   }
   const A0 = 2.1, AY0 = 1.5, AY1 = 3.68;                                       // arco: nasce no degrau de baixo
