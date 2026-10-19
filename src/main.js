@@ -71,7 +71,7 @@ import { createSettings } from './settings.js';
 import { createTitle } from './title.js';
 import { createBarriers } from './barriers.js';
 import { createTitleDriver } from './titleDriver.js';
-import { createCareerMap } from './careerMap.js';
+import { createCareerMap, renderMini } from './careerMap.js';
 import { createJamSound } from './jamSound.js';
 import { createCityAmbience } from './cityAmbience.js';
 import { createShop } from './shop.js';
@@ -3473,7 +3473,7 @@ window.ADRESS = {
   moonPlace(p, f) { van.teleport(0, 0, 0); FRAME.reset(new THREE.Vector3(...p).normalize(), new THREE.Vector3(...f), 0, 0); moonAnchor.x = moonAnchor.z = 0; FRAME.toSphere(0, 0, vanSph.p); moonUpdate(0, true); },
   get moonVan() { return { p: vanSph.p.toArray().map(v => +v.toFixed(3)), f: vanSph.f.toArray().map(v => +v.toFixed(3)), y: +van.simY.toFixed(2) }; },
   FRAME, MOONV: () => MOONV,
-  massStory, MASS_KEY, extra, startExtra, battle, battleMusic, startBattle, endBattle, screenShatter, voidMusic, menuMusic, rainFx, rainAudio, menuBg, get menuNight() { return !!nightSaved; }, get rainOn() { return rainOn(); }, menuWorld, lockCP: n => STORY_CP.apply(n), lockCPcur: () => STORY_CP.current(), devMissions: DEV_MISSIONS, get parcelVisible() { return !!parcel.parent; },
+  renderMini, massStory, MASS_KEY, extra, startExtra, battle, battleMusic, startBattle, endBattle, screenShatter, voidMusic, menuMusic, rainFx, rainAudio, menuBg, get menuNight() { return !!nightSaved; }, get rainOn() { return rainOn(); }, menuWorld, lockCP: n => STORY_CP.apply(n), lockCPcur: () => STORY_CP.current(), devMissions: DEV_MISSIONS, get parcelVisible() { return !!parcel.parent; },
   laser, ursa, solar, reality, startLaser,
   get church() { return church; }, get venK() { return venK; }, startVeniceTalk, churchStage, get greenBell() { return greenBell; }, get churchBell() { return churchBell; },
   churchReveal() { if (churchOn && !churchShown) { approach.phase = 'revealed'; revealChurch(true); } },

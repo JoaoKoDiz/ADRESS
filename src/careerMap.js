@@ -6,6 +6,7 @@ import { createVan } from './van.js';
 import { box, cone, sphere, cyl, torus, at, mat, textTexture, bakeStatic } from './models/kit.js';
 import { ROOF_COL, WALL_COL } from './data.js';
 import { LEVEL_NAMES, MISSIONS } from './missions.js';
+import { MINI_MODULES } from './minis/index.js';
 
 const ROAD_W = 6;
 const SPEED = 14;                 // unidades por segundo ao longo da estrada
@@ -55,12 +56,26 @@ function roadGeometry(curve, samples) {
 //   venice   — canais, fachadas venezianas coloridas e a Ponte de Rialto (Nível 12, Veneza)
 export const MINI_KINDS = ['houses', 'plaza', 'barriers', 'trucks', 'gas', 'city', 'jam', 'jam8', 'hill', 'venice', 'canal', 'rail', 'favela', 'flux', 'farm', 'snow', 'garden', 'modern', 'night', 'moon', 'work', 'forest', 'canyon', 'medieval'];   // 21 reservado, 22 = Bosque, 23 = Cachoeira   // 17–19 reservados (null), 20 = Lua   // 13 = Morro, 14 = Fluxo, 15 = Colheita, 16 = Nevasca, 17 = Órbita   // 10 = Veneza, 11 = Travessia, 12 = Trilhos
 
+/** Maquete de arquivo próprio (src/minis/): mesmas peças e convenções das outras. */
+function miniFromModule(MOD, g, add, G, roof, gray) {
+  const ROADC = G('#5d6470', '#6e6e6e');
+  const base = () => {
+    add(box(15, 0.3, 15, G('#d4cdbb', '#b9b9b9')), 0, 0.15, 0);
+    add(box(14, 0.4, 14, G('#95cc68', '#a3a3a3')), 0, 0.2, 0);
+    for (const [x, z, w, d] of [[0, -7, 14.4, 0.6], [0, 7, 14.4, 0.6], [-7, 0, 0.6, 14.4], [7, 0, 0.6, 14.4]]) add(box(w, 0.9, d, G('#3f7d3a', '#7a7a7a')), x, 0.65, z);
+  };
+  MOD.build({ THREE, g, add, G, roof, gray, base, ROADC, WALL_COL, box, cone, sphere, cyl, torus, at, mat, textTexture });
+  return g;
+}
+
 /** Bairro em miniatura do tipo `kind`: base de grama, sebe, ruas e o que caracteriza o bairro. gray = fase bloqueada. */
 function miniNeighborhood(kind, colors, gray = false) {
   const G = (c, gc) => (gray ? gc : c);          // fase bloqueada: tudo em tons de cinza
   const roof = i => G(colors[i % colors.length], '#8c8c8c');
   const g = new THREE.Group();
   const add = (m, x, y, z, rx = 0, ry = 0, rz = 0) => g.add(at(m, x, y, z, rx, ry, rz));
+  const MOD = MINI_MODULES[kind === 'farmThumb' ? 'farm' : kind];
+  if (MOD && MOD.build) return bakeStatic(miniFromModule(MOD, g, add, G, roof, gray));
   if (kind !== 'moon' && kind !== 'canyon' && kind !== 'medieval') {     // base com sebe (a Lua não tem: só a esfera; o Medieval tem muralha)
     add(box(15, 0.3, 15, G('#d4cdbb', '#b9b9b9')), 0, 0.15, 0);
     add(box(14, 0.4, 14, G('#95cc68', '#a3a3a3')), 0, 0.2, 0);
@@ -731,9 +746,11 @@ export function renderMiniThumbnails(w = 480, h = 360) {
     scene.add(mini);
     // enquadra a maquete inteira (prédios altos incluídos), sempre do mesmo ângulo
     const sph = new THREE.Box3().setFromObject(mini).getBoundingSphere(new THREE.Sphere());
-    const dir = (kind === 'farm' ? new THREE.Vector3(-11, 17, 21) : new THREE.Vector3(-6, 24, 27)).normalize(), t = Math.tan(THREE.MathUtils.degToRad(cam.fov / 2));   // Colheita: três quartos
-    const dist = sph.radius / Math.min(t, t * cam.aspect) * (kind === 'moon' ? 0.7 : kind === 'medieval' ? 0.74 : kind === 'farm' ? 0.84 : 0.92);   // a lua: maior, sem cortar as bordas
-    if (kind === 'farm') sph.center.y -= 1.6;               // Colheita: centraliza a base (as construções puxam o centro para cima)
+    const TH = MINI_MODULES[kind] && MINI_MODULES[kind].build && MINI_MODULES[kind].thumb;   // maquetes de arquivo próprio: enquadramento delas
+    const dir = (TH && TH.dir ? new THREE.Vector3(...TH.dir) : kind === 'farm' ? new THREE.Vector3(-11, 17, 21) : new THREE.Vector3(-6, 24, 27)).normalize(), t = Math.tan(THREE.MathUtils.degToRad(cam.fov / 2));   // Colheita: três quartos
+    const dist = sph.radius / Math.min(t, t * cam.aspect) * (TH && TH.k ? TH.k : kind === 'moon' ? 0.7 : kind === 'medieval' ? 0.74 : kind === 'farm' ? 0.84 : 0.92);   // a lua: maior, sem cortar as bordas
+    if (TH) sph.center.y += TH.dy || 0;
+    else if (kind === 'farm') sph.center.y -= 1.6;               // Colheita: centraliza a base (as construções puxam o centro para cima)
     cam.position.copy(sph.center).addScaledVector(dir, dist);
     cam.lookAt(sph.center);
     r.render(scene, cam);
@@ -742,6 +759,23 @@ export function renderMiniThumbnails(w = 480, h = 360) {
   });
   r.dispose(); r.forceContextLoss();
   return urls;
+}
+
+/** Teste/desenvolvimento: miniatura de um bairro (índice 0–23) do mesmo jeito da seleção do Livre; gray = versão bloqueada. */
+export function renderMini(i, w = 480, h = 360, gray = false) {
+  const kind = MINI_KINDS[i], r = new THREE.WebGLRenderer({ antialias: true, alpha: true, preserveDrawingBuffer: true });
+  r.setSize(w, h, false);
+  const cam = new THREE.PerspectiveCamera(30, w / h, 1, 200), scene = new THREE.Scene();
+  scene.add(new THREE.HemisphereLight('#fff6e0', '#7aa35a', 1.5));
+  const sun = new THREE.DirectionalLight('#ffffff', 2.0); sun.position.set(-30, 60, 40); scene.add(sun);
+  const mini = miniNeighborhood(kind === 'farm' && !gray ? 'farmThumb' : kind, gray ? [] : PALETTES[i].map(c => ROOF_COL[c]), gray); scene.add(mini);
+  const TH = MINI_MODULES[kind] && MINI_MODULES[kind].build && MINI_MODULES[kind].thumb;
+  const sph = new THREE.Box3().setFromObject(mini).getBoundingSphere(new THREE.Sphere());
+  const dir = new THREE.Vector3(...(TH && TH.dir ? TH.dir : [-6, 24, 27])).normalize(), t = Math.tan(THREE.MathUtils.degToRad(15));
+  sph.center.y += (TH && TH.dy) || 0;
+  cam.position.copy(sph.center).addScaledVector(dir, sph.radius / Math.min(t, t * cam.aspect) * ((TH && TH.k) || 0.92)); cam.lookAt(sph.center);
+  r.render(scene, cam); const url = r.domElement.toDataURL('image/png'); r.dispose(); r.forceContextLoss();
+  return url;
 }
 
 export function createCareerMap(stageEl, audio) {
@@ -811,13 +845,14 @@ export function createCareerMap(stageEl, audio) {
     const signTexGray = textTexture(`${i === 9 ? 'NÍVEL' : 'BAIRRO'} ${i + 1}`, { width: 512, height: 160, bg: '#8a8a8a', fg: '#e6e6e6', font: signFont });
     const sign = new THREE.Sprite(new THREE.SpriteMaterial({ map: signTex }));
     sign.scale.set(9, 2.8, 1);
-    sign.position.set(p.x + nx * 14, kind === 'jam8' ? 19.5 : city ? 12.5 : 9, p.z + nz * 14);   // na cidade, acima dos prédios da maquete
+    const MS = MINI_MODULES[kind] && MINI_MODULES[kind].build && MINI_MODULES[kind].signY;   // maquetes de arquivo próprio: altura da placa
+    sign.position.set(p.x + nx * 14, MS || (kind === 'jam8' ? 19.5 : city ? 12.5 : 9), p.z + nz * 14);   // na cidade, acima dos prédios da maquete
     scene.add(sign);
     // quadro "MISSÕES" flutuando acima da maquete (M perto dela abre a lista)
     const boardTex = boardTexture(), boardTexGray = boardTexture(true);
     const board = new THREE.Sprite(new THREE.SpriteMaterial({ map: boardTex }));
     board.scale.set(10, 4, 1);
-    board.position.set(p.x + nx * 14, kind === 'jam8' ? 25.5 : city ? 18.5 : 15, p.z + nz * 14);
+    board.position.set(p.x + nx * 14, MS ? MS + 6 : kind === 'jam8' ? 25.5 : city ? 18.5 : 15, p.z + nz * 14);
     board.userData.baseY = board.position.y;
     scene.add(board);
     boards.push(board);
