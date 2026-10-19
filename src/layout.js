@@ -214,18 +214,27 @@ function makeLine(P, R = 7) {
 }
 function setupRail(kind) {
   if (kind !== 'rail8') { RAIL = null; return; }
-  const rc = roadCenter, hr = ROAD / 2, W = -Math.PI / 2;          // W: parada na beira leste de uma rua vertical, virada para ela
+  const rc = roadCenter, hr = ROAD / 2;
+  // Paradas na calçada, dentro da faixa livre de um prédio residencial (pátio calçado ao lado/atrás do prédio), nunca na pista.
+  // Cada parada tem lotes "anfitriões" em ordem de preferência (o lote junto da ponta do percurso, onde o bonde para; depois o
+  // vizinho mais perto): `arrangeRailStops` garante, a cada partida, que o anfitrião escolhido seja um prédio residencial
+  // (só troca lotes de lugar; a composição não muda). edge: lado do lote voltado para a rua dos trilhos; l: posição ao longo dele.
+  const st = (name, hosts) => ({ name, hosts, host: 0, x: 0, z: 0, ry: 0 });
   const defs = [
     { P: [[rc(1) + STEP / 2, rc(0)], [rc(3), rc(0)], [rc(3), rc(3)], [rc(6), rc(3)], [rc(6), rc(6)], [rc(4) + 5, rc(6)]],
-      stops: [{ x: rc(1) + STEP / 2 + 1, z: rc(0) - 3.0, ry: 0, name: 'PARADA ENTRADA' }, { x: rc(4) + 4, z: rc(6) + 3.0, ry: Math.PI, name: 'PARADA DOS GALPÕES' }],
+      stops: [st('PARADA ENTRADA', [{ slot: 1, edge: 'N', l: 11 }, { slot: 2, edge: 'N', l: 3 }]),
+        st('PARADA DOS GALPÕES', [{ slot: 52, edge: 'N', l: 5.5 }, { slot: 51, edge: 'N', l: 14.5 }])],
       wait: 5, start: 0 },
     { P: [[rc(1), rc(2) + STEP / 2], [rc(1), rc(5)], [rc(7), rc(5)], [rc(7), rc(6) - 5]],
-      stops: [{ x: rc(1) + 3.0, z: rc(2) + STEP / 2 - 1, ry: W, name: 'PARADA OESTE' }, { x: rc(7) + 3.0, z: rc(6) - 6, ry: W, name: 'PARADA LESTE' }],
+      stops: [st('PARADA OESTE', [{ slot: 17, edge: 'W', l: 6.6 }, { slot: 16, edge: 'E', l: 6.6 }]),
+        st('PARADA LESTE', [{ slot: 47, edge: 'W', l: 6.6 }, { slot: 46, edge: 'E', l: 6.6 }])],
       wait: 6.5, start: 0.45 },
     { P: [[rc(4), rc(7) + STEP / 2], [rc(4), rc(8)], [rc(2), rc(8)], [rc(2), rc(4)], [rc(3), rc(4)], [rc(3), rc(4) + STEP / 2]],
-      stops: [{ x: rc(4) + 3.0, z: rc(7) + STEP / 2 + 1, ry: W, name: 'PARADA SUL' }, { x: rc(3) + 3.0, z: rc(4) + STEP / 2 - 1, ry: W, name: 'PARADA CENTRO' }],
+      stops: [st('PARADA SUL', [{ slot: 60, edge: 'W', l: 6.6 }, { slot: 59, edge: 'E', l: 6.6 }]),
+        st('PARADA CENTRO', [{ slot: 35, edge: 'W', l: 5.2 }, { slot: 34, edge: 'E', l: 5.2 }])],
       wait: 4, start: 0.8 },
   ];
+  for (const d of defs) for (const s of d.stops) railStopPose(s, 0);
   const lines = defs.map(d => Object.assign(makeLine(d.P), { stops: d.stops, wait: d.wait, start: d.start }));
   // cruzamentos entre percursos (pontos onde os trilhos de dois bondes se encontram)
   const crossings = [];
@@ -249,7 +258,34 @@ function setupRail(kind) {
       if (Math.abs(p.x - rc(i)) < hr && k >= 0 && k < GRID) route.add('V,' + i + ',' + k);
     }
   }
-  RAIL = { lines, crossings, reserved: [], stops: lines.flatMap(l => l.stops), route: [...route] };
+  RAIL = { lines, crossings, reserved: [], stops: lines.flatMap(l => l.stops), route: [...route], stopVer: 0 };
+}
+const STOP_IN = 0.62;                      // centro da parada a 0,62 da borda do lote: ocupa 0,05..1,2 (a calçada de 0,4 fica livre)
+function railStopPose(s, k) {
+  const h = s.hosts[k], o = slotOrigin(h.slot);
+  s.host = k;
+  if (h.edge === 'N') Object.assign(s, { x: o.x + h.l, z: o.z + STOP_IN, ry: Math.PI });
+  else if (h.edge === 'W') Object.assign(s, { x: o.x + STOP_IN, z: o.z + h.l, ry: -Math.PI / 2 });
+  else Object.assign(s, { x: o.x + LOT - STOP_IN, z: o.z + h.l, ry: Math.PI / 2 });
+}
+/** Bairro 12 (game.arrange): põe um prédio residencial no lote anfitrião de cada parada (troca com outro lote livre) e posiciona
+ *  a parada na faixa livre desse prédio. Lotes fixos (galpões) e postos nunca são anfitriões: usa o próximo da lista. */
+export function arrangeRailStops(layout, free, isApt) {
+  if (!RAIL) return;
+  const hostSlots = new Set(RAIL.stops.flatMap(s => s.hosts.map(h => h.slot)));
+  const taken = new Set();
+  for (const s of RAIL.stops) {
+    let k = s.hosts.findIndex(h => free.includes(h.slot) && !taken.has(h.slot));
+    if (k < 0) k = 0;
+    const slot = s.hosts[k].slot;
+    taken.add(slot);
+    if (free.includes(slot) && !isApt(layout[slot])) {
+      const from = free.find(f => !hostSlots.has(f) && isApt(layout[f])) ?? free.find(f => !taken.has(f) && isApt(layout[f]));
+      if (from != null) { const t = layout[slot]; layout[slot] = layout[from]; layout[from] = t; }
+    }
+    railStopPose(s, k);
+  }
+  RAIL.stopVer++;
 }
 
 // ---- Nível 12 (Veneza), estrutura fixa (desenho do dono): casas nas bordas e em alguns pontos; uma faixa larga de água
@@ -273,6 +309,19 @@ function setupVenice(kind) {
   // Rialto: diagonal da quina interna do L nordeste até a quina interna do L sudoeste
   const A = { x: X(5), z: Z(2) + L }, B = { x: X(2) + L, z: Z(5) }, len = Math.hypot(B.x - A.x, B.z - A.z);
   const rialto = { cx: (A.x + B.x) / 2, cz: (A.z + B.z) / 2, ux: (B.x - A.x) / len, uz: (B.z - A.z) / len, len: len + 6, w: 9, rise: 6.2 };
+  // frente de cada café = a ponta (oitão) voltada para a praça e a Rialto: porta principal, degrau e mesinhas ali.
+  // `front` = lado (±1) do eixo local x (comprimento); `at(along, out)` = ponto no mundo a `out` da fachada da frente;
+  // `door` = onde se chega a pé; `tables` = mesinhas com cadeiras (frente e laterais), também obstáculos a pé
+  for (const cf of cafes) {
+    const ca = Math.cos(cf.ang), sa = Math.sin(cf.ang), lx = { x: ca, z: -sa }, lz = { x: sa, z: ca };
+    cf.front = Math.sign((rialto.cx - cf.cx) * lx.x + (rialto.cz - cf.cz) * lx.z) || 1;
+    const loc = (x, z) => ({ x: cf.cx + lx.x * x + lz.x * z, z: cf.cz + lx.z * x + lz.z * z });
+    cf.loc = loc;
+    cf.at = (along, out) => loc(cf.front * (cf.w / 2 + out), along);
+    cf.door = cf.at(0, 1.4);
+    cf.tables = [[0, 3.4, 2.9, 'f'], [0, 3.4, -2.9, 'f']].map(([, out, al, k]) => ({ ...cf.at(al, out), k, ax: 'x' }))
+      .concat([-1, 1].flatMap(fz => [-4.0, 0, 4.0].map(x => ({ ...loc(x, fz * (cf.d / 2 + 2.6)), k: 's', ax: 'z', fz }))));
+  }
   // pontes menores (atravessam canais verticais entre duas quadras vizinhas): casa↔casa e praça↔casa
   const bridges = [[0, 2], [0, 6], [7, 3], [7, 5], [1, 4], [6, 4], [6, 3], [1, 5]].map(([i, j]) => ({ x0: rc(j) - hr - 0.4, x1: rc(j) + hr + 0.4, z: Z(i) + 14.6, w: 2.6, rise: 2.5 }));
   const LAND = 0.15;
@@ -293,7 +342,8 @@ function setupVenice(kind) {
     if (piers.some(p => inR(p, x, z))) return true;
     for (const b of bridges) if (Math.abs(z - b.z) < b.w / 2 && x > b.x0 && x < b.x1) return true;
     if (plazaNE.concat(plazaSW).some(r => inR(r, x, z, 0.3))) return !cafes.some(cf => { const dx = x - cf.cx, dz = z - cf.cz, ca = Math.cos(cf.ang), sa = Math.sin(cf.ang);
-      return Math.abs(dx * ca - dz * sa) < cf.w / 2 + 0.3 && Math.abs(dx * sa + dz * ca) < cf.d / 2 + 0.3; });
+      return (Math.abs(dx * ca - dz * sa) < cf.w / 2 + 0.3 && Math.abs(dx * sa + dz * ca) < cf.d / 2 + 0.3)
+        || cf.tables.some(t => Math.hypot(x - t.x, z - t.z) < 1.25); });   // (mesinhas do café com as cadeiras)
     return houses.some(s => inR({ x0: X(s % 8), z0: Z(Math.floor(s / 8)), x1: X(s % 8) + L, z1: Z(Math.floor(s / 8)) + L }, x, z, 0.3));
   };
   // píeres de atracação (nas placas "ATRACAR AQUI"): deck de madeira entrando na água, poste na ponta e a pose da lancha atracada

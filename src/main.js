@@ -11,7 +11,7 @@ import { createWorkTraffic } from './workTraffic.js';
 import { buildMedLot } from './models/medieval.js';
 import { createMedievalLife } from './medievalLife.js';
 import { buildCar, CAR_COLORS } from './barriers.js';
-import { MAP, doorPoint, slotOrigin, DELIVERY_RADIUS, DELIVERY_MAX_SPEED, VAN, VAN_START, LOT_ANCHORS, SOLIDS, ENTRANCE, HEDGE, GRID, PLAZA, HOUSE_SLOTS, configureGrid, roadCenter, setGasStations, GAS_LIST, GAS_CANOPY, GAS_ISLANDS, GAS_PARTS, TERRAIN, CANAL, VENICE, RAIL, FAVELA, FLUX, FARMLAND, SPOTS, SNOWV, MOONV, GARDV, FORESTV, MEDV, slotPlaceTags, roadTopology, WARE_LIST, WALK as L_WALK, LOT as L_LOT, ROAD as L_ROAD, slotY as L_slotY } from './layout.js';
+import { MAP, doorPoint, slotOrigin, DELIVERY_RADIUS, DELIVERY_MAX_SPEED, VAN, VAN_START, LOT_ANCHORS, SOLIDS, ENTRANCE, HEDGE, GRID, PLAZA, HOUSE_SLOTS, configureGrid, roadCenter, setGasStations, GAS_LIST, GAS_CANOPY, GAS_ISLANDS, GAS_PARTS, TERRAIN, CANAL, VENICE, RAIL, FAVELA, FLUX, FARMLAND, SPOTS, SNOWV, MOONV, GARDV, FORESTV, MEDV, slotPlaceTags, roadTopology, WARE_LIST, WALK as L_WALK, LOT as L_LOT, ROAD as L_ROAD, slotY as L_slotY, arrangeRailStops } from './layout.js';
 import { createLaser, disposeFx } from './laser.js';
 import { createUrsa } from './ursa.js';
 import { createSolar } from './solar.js';
@@ -21,7 +21,7 @@ import { createGrillStory, GRILL_TALK_KEY, createCrowd } from './grillStory.js';
 import { createWorkshopStory, INTRO_KEY } from './workshopStory.js';
 import { createChurchCine } from './churchCine.js';
 import { createMassStory, MASS_KEY, BELL3_KEY, NOTICE_KEY, createRainFx, createRainAudio } from './massStory.js';
-import { createTouch } from './touch.js';
+import { createTouch, actionIcon } from './touch.js';
 import { createExtraStory, EXTRA_DONE_KEY, EXTRA1_KEY, EXTRA2_KEY, screenShatter } from './extraStory.js';
 import { createNight } from './night.js';
 import { createFarmOutside } from './farmOutside.js';
@@ -334,6 +334,7 @@ function composeRound() {
     const nApts = Math.min(28, Math.max(24, rest - 32));                 // (com menos postos/galpões sobram mais lotes)
     pool = wares.concat(shuffled(SHOPS).slice(0, nShops), shuffled([...Array(28).keys()].map(k => 38 + k)).slice(0, nApts),
       shuffled(allHouses).slice(0, rest - nApts));
+    game.arrange = (layout, free) => arrangeRailStops(layout, free, h => h >= 0 && HOUSES[h].kind === 'apt');   // paradas do bonde na calçada de um prédio
   } else if (canal) {                           // Bairro 10: galpões (fixos nos pares sorteados), 2–3 pares de gêmeas, comércio, prédios e casas
     const wares = shuffled(WARES).slice(0, wareList.length);
     fixed = {}; wareList.forEach((p, i) => { fixed[p[0]] = wares[i]; });
@@ -468,45 +469,74 @@ function updateBoat(dt) {
   }
   const w = boat.userData.wake; w.material.opacity = Math.min(0.35, Math.abs(van.speed) * 0.025); w.scale.x = 0.6 + Math.min(1.4, Math.abs(van.speed) * 0.08);
 }
-// barcos que circulam devagar (obstáculos móveis; vão e voltam por canais longos, nunca param no caminho)
+// barcos que circulam devagar (obstáculos móveis): vão e voltam por canais longos que não cortam as praças nem passam
+// sob pontes, sempre pela DIREITA do canal (a lancha passa pelo outro lado). Nas pontas: param antes do cruzamento um
+// tempo diferente a cada vez (e esperam a lancha se afastar), entram no meio do cruzamento, giram devagar e voltam.
+// Aceleram e freiam aos poucos; balançam de leve na água. Lancha logo à frente: freiam e esperam.
 const npcBoats = (() => {
   const root = new THREE.Group(); root.name = 'npcBoats';
   const list = [];
-  const ROUTES = () => [                                              // [x0, z0, x1, z1]: canais retos sem vielas no caminho
-    [roadCenter(0) + 4, roadCenter(1), roadCenter(8) - 4, roadCenter(1)],   // (canais que não cortam as praças)
-    [roadCenter(7), roadCenter(1) + 4, roadCenter(7), roadCenter(8) - 4],
+  const ROUTES = () => [                                              // [x0, z0, x1, z1]: de cruzamento a cruzamento
+    [roadCenter(0), roadCenter(1), roadCenter(8), roadCenter(1)],
+    [roadCenter(7), roadCenter(2), roadCenter(7), roadCenter(8)],
     [roadCenter(1), roadCenter(8), roadCenter(6), roadCenter(8)],
-    [roadCenter(5), roadCenter(5), roadCenter(5), roadCenter(8) - 4],
+    [roadCenter(5), roadCenter(5), roadCenter(5), roadCenter(7)],
   ];
+  const SIZE = [[3.8, 0.7], [2.95, 1.02], [3.8, 0.7], [2.85, 0.97]];   // meia-medida (comprimento, largura) de cada barco
+  const V0 = [2.5, 2.0, 2.9, 3.3], SIDES = [2.35, 2.05, 2.35, 2.1], ZONE = 7, TURN = 4.8;   // (rente ao cais da direita: o meio do canal fica livre para a lancha)
+  const ss = (a, b, x) => { const t = Math.max(0, Math.min(1, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
   let clock = 0;
   return {
     object: root,
     reset() {
       const R = ROUTES();
       R.forEach((r, k) => {
-        if (!list[k]) { const m = buildBoatNpc(k); root.add(m); list[k] = { m, solid: { x0: 0, x1: 0, z0: 0, z1: 0 } }; }
-        Object.assign(list[k], { r, t: (k * 0.37) % 1, dir: 1 });
+        if (!list[k]) { const m = buildBoatNpc(k); m.rotation.order = 'YXZ'; root.add(m); list[k] = { m, k, solid: { x0: 0, x1: 0, z0: 0, z1: 0 } }; }
+        Object.assign(list[k], { r, t: 0.2 + (k * 0.29) % 0.6, dir: k % 2 ? -1 : 1, v: 0, mode: 'go', timer: 0, cleared: false, seed: k * 3 + 1, turnK: 0 });
       });
+      clock = 0;
     },
     detach() { for (const b of list) { const i = SOLIDS.indexOf(b.solid); if (i >= 0) SOLIDS.splice(i, 1); } if (root.parent) root.parent.remove(root); },
     update(dt, boat = null) {
       clock += dt;
       for (const b of list) {
-        const [x0, z0, x1, z1] = b.r, L = Math.hypot(x1 - x0, z1 - z0);
-        let stop = false;                                              // lancha logo à frente: espera; parada demais, dá meia-volta
-        if (boat) {
-          const px = x0 + (x1 - x0) * b.t, pz = z0 + (z1 - z0) * b.t, ux = (x1 - x0) / L * b.dir, uz = (z1 - z0) / L * b.dir;
-          const ahead = (boat.x - px) * ux + (boat.z - pz) * uz, side = Math.abs((boat.x - px) * uz - (boat.z - pz) * ux);
-          stop = ahead > 0 && ahead < 7.5 && side < 3.4;
+        const [x0, z0, x1, z1] = b.r, L = Math.hypot(x1 - x0, z1 - z0), ux = (x1 - x0) / L, uz = (z1 - z0) / L;
+        const endX = b.dir > 0 ? x1 : x0, endZ = b.dir > 0 ? z1 : z0;
+        const eAhead = (b.dir > 0 ? 1 - b.t : b.t) * L, eBack = L - eAhead;
+        const farLancha = !boat || Math.hypot(boat.x - endX, boat.z - endZ) > 11;
+        let target = V0[b.k] * (1 + 0.12 * Math.sin(clock * 0.17 + b.k * 2));
+        if (b.mode === 'turn') {
+          b.timer += dt; target = 0;
+          if (b.timer >= TURN) { b.mode = 'go'; b.dir = -b.dir; b.cleared = false; b.timer = 0; }
+        } else if (b.mode === 'hold') {                                 // parado antes do cruzamento (descanso + espera da lancha)
+          b.timer -= dt; target = 0;
+          if (b.timer <= 0 && farLancha) { b.mode = 'go'; b.cleared = true; }
+        } else {
+          if (!b.cleared && eAhead <= ZONE) { b.mode = 'hold'; b.seed = (b.seed * 16807) % 2147483647; b.timer = 1.5 + (b.seed % 1000) / 1000 * 5; target = 0; }
+          else if (eAhead < 0.05) { b.mode = 'turn'; b.timer = 0; b.v = 0; target = 0; }
+          else target *= (0.3 + 0.7 * ss(0, ZONE, eAhead)) * (0.4 + 0.6 * ss(0, ZONE, eBack));
+          if (boat && b.mode === 'go') {                                // lancha logo à frente, do lado do barco: freia e espera
+            const px = x0 + (x1 - x0) * b.t, pz = z0 + (z1 - z0) * b.t, hx = ux * b.dir, hz = uz * b.dir;
+            const ahead = (boat.x - px) * hx + (boat.z - pz) * hz, side = (boat.x - px) * -hz + (boat.z - pz) * hx;
+            if (ahead > 0 && ahead < 9 && Math.abs(side - SIDES[b.k]) < SIZE[b.k][1] + 1.7) target = 0;
+          }
         }
-        b.wait = stop ? (b.wait || 0) + dt : 0;
-        if (b.wait > 4) { b.dir = -b.dir; b.wait = 0; }
-        else if (!stop) b.t += b.dir * dt * 3.2 / L;
-        if (b.t > 1) { b.t = 1; b.dir = -1; } else if (b.t < 0) { b.t = 0; b.dir = 1; }
-        const x = x0 + (x1 - x0) * b.t, z = z0 + (z1 - z0) * b.t, hx = (x1 - x0) / L * b.dir, hz = (z1 - z0) / L * b.dir;
-        b.m.position.set(x, Math.sin(clock * 1.4 + x) * 0.05, z); b.m.rotation.y = -Math.atan2(hz, hx);
-        const ax = Math.abs(hx) > 0.5;
-        Object.assign(b.solid, { x0: x - (ax ? 3 : 1), x1: x + (ax ? 3 : 1), z0: z - (ax ? 1 : 3), z1: z + (ax ? 1 : 3) });
+        b.v += Math.max(-1.6 * dt, Math.min(0.9 * dt, target - b.v));   // acelera e freia aos poucos
+        if (b.mode !== 'turn') b.t = Math.max(0, Math.min(1, b.t + b.dir * b.v * dt / L));
+        if (b.mode === 'hold' && b.v < 0.02) b.v = 0;
+        // posição: pela direita do sentido, voltando ao meio só dentro dos cruzamentos das pontas
+        const eA = (b.dir > 0 ? 1 - b.t : b.t) * L, eB = L - eA;
+        const off = SIDES[b.k] * Math.min(ss(0.5, ZONE - 1, eA), ss(0.5, ZONE - 1, eB));
+        let yaw = Math.atan2(-uz * b.dir, ux * b.dir), sgn = b.dir;
+        if (b.mode === 'turn') yaw += Math.PI * ss(0, TURN, b.timer);   // gira no lugar, devagar
+        const hx = Math.cos(yaw), hz = -Math.sin(yaw);
+        const x = x0 + (x1 - x0) * b.t + -uz * sgn * off, z = z0 + (z1 - z0) * b.t + ux * sgn * off;
+        const ph = b.k * 1.7, turning = b.mode === 'turn' ? Math.sin(Math.PI * b.timer / TURN) : 0;
+        b.m.position.set(x, Math.sin(clock * 1.3 + ph) * 0.035 - 0.02, z);
+        b.m.rotation.set(Math.sin(clock * 1.05 + ph) * 0.022 + turning * 0.035, yaw, Math.sin(clock * 0.8 + ph * 2) * 0.012 - (target - b.v) * 0.01);
+        b.m.userData.speed = b.mode === 'turn' ? 1.2 : b.v; b.m.userData.rowing = b.mode === 'turn' || b.v > 0.15;
+        const [hl, hw] = SIZE[b.k], ex = Math.abs(hx) * hl + Math.abs(hz) * hw, ez = Math.abs(hz) * hl + Math.abs(hx) * hw;
+        Object.assign(b.solid, { x0: x - ex, x1: x + ex, z0: z - ez, z1: z + ez });
         if (SOLIDS.indexOf(b.solid) < 0) SOLIDS.push(b.solid);
       }
     },
@@ -535,6 +565,9 @@ heli.setGround((x, z) => {
     const o = slotOrigin(s), R = APT_ROOF;
     if (x > o.x + R.x0 + 0.5 && x < o.x + R.x1 - 0.5 && z > o.z + R.z0 + 0.5 && z < o.z + R.z1 - 0.5) return (HOUSES[h].kind === 'fut' ? futRoofHeight(HOUSES[h], x - o.x, z - o.z) : aptRoofHeight(HOUSES[h], x - o.x, z - o.z)) + TERRAIN.h(o.x + 8.6, o.z + 8.6);
   }
+  // prédios dos arredores das cidades (top = altura): o helicóptero que desce em cima de um pousa no terraço em vez de
+  // afundar nele (antes atravessava; com a colisão no ar, seria empurrado de lado ao descer)
+  if (heli.flying) for (const b of SOLIDS) if (b.out && b.top && x > b.x0 + 0.3 && x < b.x1 - 0.3 && z > b.z0 + 0.3 && z < b.z1 - 0.3) return b.top + 0.5;
   return 0;
 });
 heli.setTerrain((x, z) => TERRAIN.h(x, z));   // Bairro 9: o chão sobe nas encostas
@@ -545,7 +578,7 @@ let plazaFootCache = null, plazaFootKey = null;
 const plazaSolidsFoot = () => { if (plazaFootKey !== PLAZA) { plazaFootKey = PLAZA; plazaFootCache = plazaFootSolids(); } return plazaFootCache; };
 /** Obstáculos de quem anda a pé: tudo menos os lotes inteiros e a praça (dá para entrar nos quintais); só as paredes das casas. */
 function walkSolids() {
-  const out = SOLIDS.slice(HOUSE_SLOTS.length + (PLAZA ? 1 : 0)).filter(b => !b.vanOnly);   // escadarias e passarelas: só a pé
+  const out = SOLIDS.slice(HOUSE_SLOTS.length + (PLAZA ? 1 : 0)).filter(b => !b.vanOnly && !b.serra);   // escadarias e passarelas: só a pé; a serra da Cachoeira: a pé dá para subir (o chão acompanha)
   if (PLAZA) out.push(...plazaSolidsFoot());
   if (neighborhood === 'night10') out.push(...night.poles);
   if (FLUX) out.push(...fluxParkFoot());
@@ -569,11 +602,18 @@ function walkSolids() {
 }
 let houseFootKey = null, houseFoot = [];
 let wasHigh = false;
+// Cachoeira (23): a serra em volta do vale é só cenário; as colunas de colisão dela (b.serra) existem para a van que vem do
+// vale parar no pé da encosta. Quem já está em cima dela (helicóptero voando baixo, van que pousou lá, personagem a pé) não
+// esbarra nelas — antes o helicóptero baixo empacava no ar ou era jogado para o lado, e a van pousada era empurrada centenas de metros.
+const hasSerra = () => !!(CANAL && CANAL.canyon);
+const onSerra = (x, z) => SOLIDS.some(b => b.serra && x >= b.x0 && x <= b.x1 && z >= b.z0 && z <= b.z1);
+const noSerraList = [];
+function solidsNoSerra() { noSerraList.length = 0; for (const b of SOLIDS) if (!b.serra) noSerraList.push(b); return noSerraList; }
 /** A van (3 círculos R 1,25) está dentro de algum sólido? Se estiver, vai para o ponto livre mais perto (espiral até 30). */
 function unstickVan() {
   const inside = (x, z, hd, R = 1.25) => { const c = Math.cos(hd), sn = Math.sin(hd);
     return [-1.5, 0, 1.5].some(k => { const px = x + c * k, pz = z + sn * k;
-      return SOLIDS.some(b => px > b.x0 - R && px < b.x1 + R && pz > b.z0 - R && pz < b.z1 + R && (b.r ? Math.hypot(px - b.cx, pz - b.cz) < b.r + R : true)); }); };
+      return SOLIDS.some(b => !b.serra && px > b.x0 - R && px < b.x1 + R && pz > b.z0 - R && pz < b.z1 + R && (b.r ? Math.hypot(px - b.cx, pz - b.cz) < b.r + R : true)); }); };   // (a serra da Cachoeira não prende quem voa)
   if (!inside(van.x, van.z, van.heading)) return;
   for (let d = 1; d <= 30; d += 1) for (let k = 0; k < 24; k++) {
     const a = k * Math.PI / 12, x = van.x + Math.cos(a) * d, z = van.z + Math.sin(a) * d;
@@ -601,6 +641,7 @@ function heliTall(alt) {
     for (const sp of V.spots) if (sp.y + (sp.shop ? 9.5 : 9) > y) heliTallOut.push(sp.walkBox);
   }
   if (CANAL && CANAL.rock) for (const b of CANAL.rock) if (b.top > y) heliTallOut.push(b);   // Cachoeira: maciço e degraus de pedra
+  for (const b of SOLIDS) if (b.out && b.top > y) heliTallOut.push(b);   // arredores urbanos: quarteirões e torres de fora (top = altura do prédio; só os que estão perto da van ficam em SOLIDS)
   return heliTallOut;
 }
 // Veneza: cada conjunto de mesa + 4 cadeiras (raio ~1,9) da praça roxa — mesmas posições de terrain.js
@@ -735,7 +776,7 @@ function openGate(s) {
   Object.assign(sp.gateSolid, { x0: -9999, x1: -9998, z0: -9999, z1: -9998 });
   const h = game.layout[s], g = h >= 0 && world.lotGroup(h).userData.gate;
   if (g) gateAnim.set(g, 0);
-  audio.bell && audio.bell();
+  sfx.gate();                                         // trinco e rangido (antes tocava a campainha da entrega)
 }
 function updateGates(dt) {
   for (const [g, t] of gateAnim) { const k = Math.min(1, t + dt / 0.9); g.rotation.y = 1.45 * (1 - Math.pow(1 - k, 3)); if (k >= 1) gateAnim.delete(g); else gateAnim.set(g, k); }
@@ -1214,6 +1255,63 @@ const bumpHold = new Set();
 const bumpLevel = () => { const lv = gameMode === 'career' ? careerLevel : freeLevel; return lv === 1 || lv === 2 || lv === 6; };
 const bumpShown = () => [2, 6].includes(gameMode === 'career' ? careerLevel : freeLevel);   // Bairros 3 e 7
 const bumpTarget = b => { const i = SOLIDS.indexOf(b); return (i >= 0 && i < HOUSE_SLOTS.length) || (world.extraSolids && world.extraSolids.includes(b)) || !!b.post || b.bar != null || !!b.jam; };   // lotes (casas), troncos das árvores, postes, barreiras
+// ---------- Retorno sonoro de ações sem som próprio (porteira, batidas) ----------
+// Sons curtos gerados aqui (WebAudio), pela saída de efeitos (volume dos Efeitos; calam com o MENU e a aba escondida).
+let sfxNoiseBuf = null, bumpCool = 0, wallMsgCool = 0;
+function sfxNoise(ac) {
+  if (sfxNoiseBuf && sfxNoiseBuf.sampleRate === ac.sampleRate) return sfxNoiseBuf;
+  const n = ac.sampleRate, b = ac.createBuffer(1, n, n), d = b.getChannelData(0);
+  for (let i = 0; i < n; i++) d[i] = Math.random() * 2 - 1;
+  return (sfxNoiseBuf = b);
+}
+function sfxBurst(ac, out, t, dur, vol, type, f, q = 1) {           // ruído filtrado com ataque curto e queda exponencial
+  const src = ac.createBufferSource(), fl = ac.createBiquadFilter(), g = ac.createGain();
+  src.buffer = sfxNoise(ac); fl.type = type; fl.frequency.value = f; fl.Q.value = q;
+  g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(vol, t + 0.006); g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+  src.connect(fl); fl.connect(g); g.connect(out); src.start(t, Math.random() * 0.5, dur + 0.05);
+}
+function sfxTone(ac, out, t, dur, vol, type, f0, f1) {
+  const o = ac.createOscillator(), g = ac.createGain();
+  o.type = type; o.frequency.setValueAtTime(f0, t); o.frequency.exponentialRampToValueAtTime(f1, t + dur);
+  g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(vol, t + 0.01); g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+  o.connect(g); g.connect(out); o.start(t); o.stop(t + dur + 0.05);
+}
+const sfx = {
+  /** Porteira (Colheita): o trinco solta, a folha de madeira range ao girar e encosta (a animação dura ~0,9 s). */
+  gate() {
+    const ac = audio.ctx, out = audio.out; if (!ac || !out) return;
+    try {
+      const t = ac.currentTime + 0.01;
+      sfxBurst(ac, out, t, 0.05, 0.16, 'bandpass', 2600, 3);                  // clique do trinco
+      sfxTone(ac, out, t + 0.012, 0.05, 0.05, 'square', 1500, 900);
+      const o = ac.createOscillator(), lfo = ac.createOscillator(), lg = ac.createGain(), fl = ac.createBiquadFilter(), g = ac.createGain();
+      o.type = 'sawtooth'; o.frequency.setValueAtTime(150, t + 0.08); o.frequency.linearRampToValueAtTime(230, t + 0.75);   // rangido
+      lfo.frequency.value = 23; lg.gain.value = 26; lfo.connect(lg); lg.connect(o.frequency);
+      fl.type = 'bandpass'; fl.frequency.value = 950; fl.Q.value = 6;
+      g.gain.setValueAtTime(0.0001, t + 0.08); g.gain.exponentialRampToValueAtTime(0.045, t + 0.2); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.8);
+      o.connect(fl); fl.connect(g); g.connect(out); o.start(t + 0.08); lfo.start(t + 0.08); o.stop(t + 0.85); lfo.stop(t + 0.85);
+      sfxBurst(ac, out, t + 0.86, 0.12, 0.12, 'lowpass', 520);               // a folha encosta no batente
+      sfxTone(ac, out, t + 0.86, 0.12, 0.08, 'triangle', 140, 90);
+    } catch (e) { /* sem áudio */ }
+  },
+  /** Batida da van (k = 0..1, pela velocidade perdida no choque): baque surdo de lataria. */
+  bump(k) {
+    const ac = audio.ctx, out = audio.out; if (!ac || !out) return;
+    try {
+      const t = ac.currentTime + 0.005, v = 0.05 + 0.2 * k;
+      sfxBurst(ac, out, t, 0.12 + 0.18 * k, v, 'lowpass', 380 + 500 * k);
+      sfxTone(ac, out, t, 0.16 + 0.2 * k, v * 0.9, 'sine', 95, 45);
+      if (k > 0.45) sfxBurst(ac, out, t + 0.02, 0.22, v * 0.35, 'bandpass', 1900, 2);   // forte: um chacoalhar de metal
+    } catch (e) { /* sem áudio */ }
+  },
+};
+/** Chamar logo depois de van.update: a van perdeu velocidade porque encostou em algo → som proporcional ao choque. */
+function bumpFeedback(v0, dt) {
+  bumpCool = Math.max(0, bumpCool - dt);
+  if (!van.touched.size || bumpCool > 0) return;
+  const lost = Math.abs(v0) - Math.abs(van.speed);
+  if (lost > 2.5) { sfx.bump(Math.min(1, (lost - 2.5) / 16)); bumpCool = 0.35; }
+}
 function countBumps() {
   for (const b of van.touched) if (!bumpHold.has(b) && bumpTarget(b)) { bumps++; bumpHold.add(b); if (gameMode === 'career') career.bump(b, barriers.list.length, b.jam || (b.bar != null && barriers.list[b.bar] && barriers.list[b.bar].type === 'truck')); }
   for (const b of bumpHold) if (!van.touched.has(b) && van.gapTo(b) > 1) bumpHold.delete(b);
@@ -1290,6 +1388,7 @@ function startFree(mode = 'free') {
   gameMode = mode;
   if (!COMPOSED.includes(neighborhood)) setupGrid4();   // Bairro 1 tem a casa fixa; o 3 (mesma grade) não
   resetGates();
+  hint.clear(); hintUsed = false; hintStep = -1; hintCount = 0;   // partida nova: a DICA disponível de novo (mesmo sem passar pelo Voltar)
   setupChurch(); setupMedStory(); setupVeniceK();
   if (mode === 'career') career.startMatch(careerLevel); else career.stop();
   music.setTrack(LEVEL_TRACKS[neighborhood] || null, true);   // Veneza, Colheita e Nevasca: a faixa do bairro já tocando
@@ -1377,7 +1476,14 @@ const FUEL_LINES = [
   'Frentista: “Pronto! O cafezinho da loja é por conta da casa.”',
   'Frentista: “Abastecida! Quer o chaveiro de brinde? É um pneuzinho.”',
 ];
-let nearPump = false, fuelArmed = true, fuelMsgT = 0, fuelMsg = '';
+let nearPump = false, fuelArmed = true, fuelMsgT = 0, fuelMsg = '', fuelLast = -1;
+/** Fala do frentista: nunca a mesma duas vezes seguidas; fica na barra o tempo de ler com calma (também no celular). */
+function fuelLine() {
+  let i = Math.floor(Math.random() * (FUEL_LINES.length - 1));
+  if (fuelLast >= 0 && i >= fuelLast) i++;
+  fuelLast = i; fuelMsg = FUEL_LINES[i];
+  fuelMsgT = Math.max(4.5, 1.2 + fuelMsg.length / 15);   // (~5–6,5 s; antes 3 s)
+}
 function atPump() {
   const inZone = GAS_LIST.some(g => {
     const o = slotOrigin(g.slots[0]), lx = van.x - o.x, lz = van.z - o.z;
@@ -1389,7 +1495,9 @@ function atPump() {
 
 let footDelivery = false;              // Veneza: entrega feita a pé (depois do diálogo volta a andar)
 /** Medieval: morador conversável perto do personagem a pé; só vale se estiver mais perto que a porta de entrega. */
+const chatLife = npc => (npc && npc.plaza && world.plaza ? world.plaza : medLife);   // Bairro 2: gente da praça; Medieval: moradores do burgo
 function medTalkTarget() {
+  if (PLAZA && neighborhood === 'plaza6' && world.plaza) return walker.visible ? world.plaza.nearTalk(walker.x, walker.z) : null;   // Bairro 2: conversar com quem está na praça (a pé não há entrega ali)
   if (!MEDV || neighborhood !== 'med10' || !walker.visible) return null;
   const npc = medLife.nearTalk(walker.x, walker.z);
   if (!npc) return null;
@@ -1401,9 +1509,9 @@ function medTalkTarget() {
 }
 function startChat(npc) {
   chatNpc = npc; nearHouse = -1;
-  const lines = medLife.talk(npc, walker.x, walker.z);
+  const life = chatLife(npc), lines = life.talk(npc, walker.x, walker.z);
   setState('chat');
-  talkBox.show(lines, () => { if (chatNpc) medLife.endTalk(chatNpc); chatNpc = null; actionLock = 0.4; setState('walk'); });
+  talkBox.show(lines, () => { if (chatNpc) life.endTalk(chatNpc); chatNpc = null; actionLock = 0.4; setState('walk'); });
 }
 function findNearHouseFoot() {
   let best = 3.6, found = -1;
@@ -1429,7 +1537,7 @@ function findNearHouse() {
 }
 
 function requestHint() {
-  if (state !== 'drive' || hintUsed || hintStep === game.step) return;
+  if ((state !== 'drive' && state !== 'walk') || hintUsed || hintStep === game.step) return;   // (a pé também: em Veneza, no Morro e nos bairros sem grade há entregas a pé)
   hintCount++; hintUsed = hintCount >= hintLimit();
   if (gameMode === 'career') career.hint();
   hintStep = game.step;
@@ -1440,6 +1548,25 @@ function requestHint() {
 
 // Van imparável: casas que ela toca explodem; árvores e sebe viram uma chuva de lascas e folhas.
 const smashCool = new Map();
+// o que voa ao atropelar cada coisa: folhas e lascas (árvore/sebe), tijolo, reboco e telha (construções dos arredores),
+// madeira e tinta (cercas e postes), pedaços listrados (bloqueios), lataria (carros e caminhões)
+const SMASH_COLORS = {
+  tree: ['#3f8f3a', '#57a84a', '#6b4526', '#2f7a32'], hedge: ['#3f8f3a', '#2f7a32', '#57a84a'],
+  building: ['#d8ccb6', '#b8a593', '#8a5e4d', '#9e9a92', '#c7bba9'], fence: ['#e9e3d6', '#8a6a48', '#a88d66', '#d8ccb6'],
+  post: ['#7c8288', '#5f656b', '#a7aaa6'], barrier: ['#ff7a1a', '#f4f1ea', '#e8661a', '#5f656b'], car: ['#c8ccd0', '#5f656b', '#2b2d33', '#d23b2b'],
+  wall: ['#c9c2b5', '#9e9a92', '#b8a593', '#e9e3d6'], gas: ['#d23b2b', '#f4f1ea', '#7c8288', '#ffd23a'],
+};
+const SMASH_N = { tree: 30, hedge: 14, building: 26, fence: 16, post: 10, barrier: 18, car: 20, wall: 16, gas: 18 };
+function smashKind(b, i, treesFrom) {
+  if (b.jam || (b.bar != null && barriers.list[b.bar] && barriers.list[b.bar].type === 'truck')) return 'car';
+  if (b.bar != null) return 'barrier';
+  if (b.post) return 'post';
+  const w = b.x1 - b.x0, d = b.z1 - b.z0, gas0 = HOUSE_SLOTS.length + (PLAZA ? 1 : 0);
+  if (b.out) return Math.max(w, d) <= 1.6 ? 'tree' : Math.min(w, d) <= 0.7 ? 'fence' : 'building';   // arredores: tronco, cerca ou construção
+  if (i >= gas0 && i < gas0 + GAS_LIST.length * GAS_PARTS.length) return 'gas';                     // peças do posto
+  if (i < treesFrom) return 'hedge';                                                                   // praça e sebe
+  return Math.max(w, d) <= 2.2 ? 'tree' : Math.min(w, d) <= 0.7 ? 'wall' : 'building';             // troncos; muros; o resto (igreja, enchimento…)
+}
 function wreck(dt) {
   for (const [k, v] of smashCool) { if (v - dt <= 0) smashCool.delete(k); else smashCool.set(k, v - dt); }
   const R = 1.3, c = Math.cos(van.heading), s = Math.sin(van.heading);
@@ -1462,11 +1589,10 @@ function wreck(dt) {
           else if (!allDestroyed()) { restartMsg = 'Poucas casas de pé! A partida vai reiniciar…'; setState('fadeOut'); }   // (sem destinos possíveis: recomeça, como na entrega certa)
         }
       }
-    } else if (!smashCool.has(i)) {                 // sebe ou árvore
+    } else if (!smashCool.has(i) && !b.serra) {     // sebe, árvore, construção dos arredores, bloqueio… (a serra da Cachoeira é morro: nada voa)
       smashCool.set(i, 0.35);
-      const tree = i >= treesFrom;
-      boom.smash(Math.min(Math.max(van.x + c * 2.4, b.x0), b.x1), Math.min(Math.max(van.z + s * 2.4, b.z0), b.z1),
-        tree ? ['#3f8f3a', '#57a84a', '#6b4526', '#2f7a32'] : ['#3f8f3a', '#2f7a32', '#57a84a'], tree ? 30 : 14);
+      const k = smashKind(b, i, treesFrom);
+      boom.smash(Math.min(Math.max(van.x + c * 2.4, b.x0), b.x1), Math.min(Math.max(van.z + s * 2.4, b.z0), b.z1), SMASH_COLORS[k], SMASH_N[k]);
     }
   }
 }
@@ -1494,17 +1620,19 @@ const PARCEL_AT = { x: 15.7, z: 2.3 };                  // coordenadas do lote 0
 const parcel = (() => {
   const g = new THREE.Group(), m = c => new THREE.MeshStandardMaterial({ color: c, roughness: 0.85, flatShading: true });
   const add = (w, h, d, c, x, y, z) => { const o = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), m(c)); o.position.set(x, y, z); o.castShadow = true; g.add(o); };
-  add(0.7, 0.52, 0.7, '#c8925a', 0, 0.26, 0);            // papelão
-  add(0.72, 0.525, 0.14, '#e8d3a0', 0, 0.26, 0);          // fita
-  add(0.14, 0.53, 0.72, '#e8d3a0', 0, 0.26, 0);
-  add(0.26, 0.01, 0.18, '#ffffff', 0.18, 0.531, 0.2);     // etiqueta
+  // medidas casadas com a pose de carregar (walker.js, CARRY): cabe entre as mãos, encostada na barriga, abaixo do queixo
+  add(0.56, 0.42, 0.52, '#c8925a', 0, 0.21, 0);          // papelão
+  add(0.572, 0.425, 0.12, '#e8d3a0', 0, 0.21, 0);        // fita
+  add(0.12, 0.43, 0.532, '#e8d3a0', 0, 0.21, 0);
+  add(0.21, 0.01, 0.15, '#ffffff', 0.15, 0.431, 0.15);   // etiqueta
   g.name = 'k-parcel';
   return g;
 })();
+let parcelFrom = null;                     // de onde a caixa saiu ao ser pega (para subir do chão até os braços)
 let carrying = false, parcelGiven = false;   // parcelGiven: já entregue nesta partida (fica ao lado dele, sem poder pegar de volta)
 const isL1 = () => neighborhood === 'grid4' && (gameMode === 'career' ? careerLevel : freeLevel) === 0;
 function resetParcel() {
-  carrying = false; parcelGiven = false;
+  carrying = false; parcelGiven = false; parcelFrom = null;
   if (parcel.parent) parcel.parent.remove(parcel);
   if (!isL1() || parcelDone) return;
   const o = slotOrigin(0);
@@ -2589,7 +2717,7 @@ function startNewRound(newMatch = true) {
   boom.reset(); clearLaserVoids(); restartMsg = null;
   world.setLayout(game.layout);
   if (neighborhood === 'med10') medLife.layout(world, game, MEDV);   // Medieval: rotinas recomeçam com as casas desta partida
-  if (chatNpc) { medLife.endTalk(chatNpc); chatNpc = null; }
+  if (chatNpc) { chatLife(chatNpc).endTalk(chatNpc); chatNpc = null; }
   resetGates();                                  // Colheita: porteiras fechadas de novo
   if (neighborhood === 'favela8') favPets.reset();   // Morro: bichos sorteados de novo
   if (neighborhood === 'snow8') resetBanks();      // Nevasca: montes de neve de volta nos atalhos
@@ -2641,10 +2769,20 @@ function vanDoorStep(out) {
   if (out) van.jolt(side, 1);
   return true;
 }
-/** A caixa do K nos braços do personagem: junto do peito, acompanhando o passo. */
+/** A caixa do K nos braços do personagem: presa ao tronco (walker.carryAnchor), entre as mãos. Ao pegar, ela sobe do
+ *  chão até os braços enquanto eles se fecham nela (walker.carryK vai de 0 a 1). */
+const _pq = new THREE.Quaternion(), _pp = new THREE.Vector3();
 function carryParcel() {
-  const f = walker.facing, hc = Math.cos(f), hs = Math.sin(f), by = walker.object.children[0] ? walker.object.children[0].position.y : 0;
-  parcel.position.set(walker.x + hc * 0.5, walker.floor + 0.68 + by, walker.z + hs * 0.5); parcel.rotation.set(0, -f, 0);
+  if (!parcelFrom) parcelFrom = { p: parcel.position.clone(), q: parcel.quaternion.clone() };
+  const an = walker.carryAnchor, k = walker.carryK;
+  an.updateWorldMatrix(true, false);
+  an.getWorldPosition(_pp); an.getWorldQuaternion(_pq);
+  if (k < 0.999) {                                        // pegando: sai do chão num arco curto
+    const e = k * k * (3 - 2 * k);
+    _pp.lerpVectors(parcelFrom.p, _pp, e); _pp.y += 0.12 * Math.sin(Math.PI * e);
+    _pq.slerpQuaternions(parcelFrom.q, _pq, e);
+  }
+  parcel.position.copy(_pp); parcel.quaternion.copy(_pq);
 }
 function enterVanNow() {
   if (carrying) resetParcel();
@@ -2716,10 +2854,11 @@ function update(dt, t) {
           setState('walk');
           break;
         }
-        if (heli.flying) { fuelMsg = 'Pouse o helicóptero antes de descer.'; fuelMsgT = 2.5; }
-        else if (Math.abs(van.speed) > 3.5) { fuelMsg = 'Pare a van para descer (L).'; fuelMsgT = 2.5; }
+        if (heli.landed) { fuelMsg = 'Daqui não dá para descer: decole e pouse no chão ou num terraço do bairro.'; fuelMsgT = 3; }   // (terraço de um prédio dos arredores)
+        else if (heli.flying) { fuelMsg = 'Pouse o helicóptero antes de descer.'; fuelMsgT = 2.5; }
+        else if (Math.abs(van.speed) > 3.5) { fuelMsg = VENICE ? 'Pare a lancha para descer.' : 'Pare a van para descer.'; fuelMsgT = 2.5; }
         else {
-          if (!walker.placeBesideVan(van, walkSolids(), !!VENICE)) { fuelMsg = 'Encoste a lancha no cais para descer (L).'; fuelMsgT = 2.5; }   // Veneza: só desce em terra
+          if (!walker.placeBesideVan(van, walkSolids(), !!VENICE)) { fuelMsg = 'Encoste a lancha no cais para descer.'; fuelMsgT = 2.5; }   // Veneza: só desce em terra
           else {
             if (gameMode === 'career') career.exitVan(van.x, van.z, van.heading, van.speed, shopFronts());   // Bairro 4: "Estacione de ré"
             van.stop(); nearHouse = -1; nearPump = false;
@@ -2731,9 +2870,13 @@ function update(dt, t) {
         }
       }
       if (free && input.heli()) heli.toggle();
-      van.setGhost(free && (menu.unstoppable || heli.high), menu.unstoppable ? null : heliTall(van.object.position.y));
+      { const ghost = free && (menu.unstoppable || heli.high), serraFree = !ghost && hasSerra() && (heli.flying || onSerra(van.x, van.z));
+        van.setGhost(ghost || serraFree, ghost && menu.unstoppable ? null : ghost ? heliTall(van.object.position.y) : solidsNoSerra()); }
       if (heli.landed) van.stop();                // pousado no teto: parado até decolar (H)
-      if (!mooringStep(dt)) van.update(dt, heli.landed ? { x: 0, z: 0 } : approachLock() ? approachAxis() : input.axis(), approachLock() ? 'car' : rig.mode === 'chase' ? 'car' : 'screen');
+      { const v0 = van.speed;
+        if (!mooringStep(dt)) { van.update(dt, heli.landed ? { x: 0, z: 0 } : approachLock() ? approachAxis() : input.axis(), approachLock() ? 'car' : rig.mode === 'chase' ? 'car' : 'screen'); bumpFeedback(v0, dt); }   // (atracada, a lancha não bate)
+        if (gameMode === 'career' && van.touched.has(ENTRANCE_WALL) && wallMsgCool <= 0) { fuelMsg = 'Na Carreira, a saída do bairro só abre depois da entrega certa.'; fuelMsgT = 3.5; wallMsgCool = 8; }   // (a parede é invisível: sem o aviso, parecia defeito)
+        wallMsgCool = Math.max(0, wallMsgCool - dt); }
       if (bumpLevel() && !heli.flying) countBumps();  // Bairros 2 e 3: batidas da van (não conta no ar, nem descendo do helicóptero)
       if (heli.on && rig.mode === 'chase') {      // no ar, A/D giram mesmo parado
         const ax = input.axis().x;
@@ -2767,7 +2910,7 @@ function update(dt, t) {
     }
     case 'fuel':                                    // abastecendo: a van espera a bomba
       van.stop();
-      if (stateT > FUEL_TIME) { fuelMsgT = 3; fuelMsg = FUEL_LINES[Math.floor(Math.random() * FUEL_LINES.length)]; actionLock = 0.3; setState('drive'); }
+      if (stateT > FUEL_TIME) { fuelLine(); actionLock = 0.3; setState('drive'); }
       break;
     case 'ring':
       if (stateT > RESIDENT_APPEAR && !HOUSES[pending].narrator) world.showResident(pending, 'door');   // abre a porta e vem até o portão (K não atende: continua lendo)
@@ -2828,7 +2971,7 @@ function update(dt, t) {
       if (missions.isOpen) { if (input.missions()) missions.close(); break; }
       if (gameMode === 'career' && input.missions()) { missions.open(careerLevel); break; }
       van.stop();
-      if (!roofWalk && TERRAIN.kind !== 'flat') walker.setFloor(TERRAIN.h(walker.x, walker.z));   // Bairro 9: ladeiras e escadarias
+      if (!roofWalk && (TERRAIN.kind !== 'flat' || hasSerra())) walker.setFloor(TERRAIN.h(walker.x, walker.z));   // Bairro 9: ladeiras e escadarias; Cachoeira: a serra de fora
       if (VENICE) walker.setFloor(VENICE.walkH(walker.x, walker.z));   // Veneza: cais, vielas e pontes
       if (walker.scripted && doorStep === 'out') { const ax = input.axis(); if (ax.x || ax.z || input.action()) { walker.stopScript(); doorStep = null; } }   // descendo: mexeu ou apertou E, já vale
       if (walker.scripted) {                          // descendo/subindo na van: dois passos curtos (subindo, nada interrompe)
@@ -2839,6 +2982,7 @@ function update(dt, t) {
         break;
       }
       walker.liveFrame();
+      if (input.hint()) requestHint();               // DICA também a pé
       walker.update(dt, input.axis(), rig.mode === 'chase' ? 'car' : 'screen', roofWalk ? roofSolids() : walkSolids(), van);
       if (gameMode === 'career') career.walk(walker.x, walker.z, PLAZA);   // Bairro 2: "Conheça a praça" (fica pendente até a entrega certa)
       walker.setCarry(carrying);
@@ -3041,7 +3185,13 @@ function update(dt, t) {
     else startBoss();
   }
   hint.update(wdt);
-  heli.update(wdt, state === 'drive' && heli.on ? input.lift() : 0);
+  let lift = state === 'drive' && heli.on ? input.lift() : 0;
+  if (lift === 0 && state === 'drive' && heli.on && (van.x < 0 || van.z < 0 || van.x > MAP_W() || van.z > MAP_W())) {   // fora do bairro (serra da Cachoeira, morros das Encostas):
+    const la = Math.max(0, van.speed) * 0.9, gx = van.x + Math.cos(van.heading) * la, gz = van.z + Math.sin(van.heading) * la;   // o helicóptero sobe sozinho para
+    const tg = Math.max(TERRAIN.h(van.x, van.z), TERRAIN.h(gx, gz));                                                              // manter ~7,5 m acima do morro à frente (acima de 6,5
+    if (tg > 0.5 && heli.altitude < tg + 7.5) lift = 1;                                                                           // passa por cima de árvores e casas baixas, como no plano); no plano nada muda
+  }
+  heli.update(wdt, lift);
   { const hi = heli.high; if (wasHigh && !hi && heli.flying && !menu.unstoppable) unstickVan(); wasHigh = hi; }   // descendo do alto no meio do casario: sai do que estiver por baixo
   if (MOONV && !heli.on && !heli.flying) van.object.position.y = van.simY;   // Órbita: a altura da gravidade baixa (saltinhos)
   boom.update(wdt);
@@ -3092,27 +3242,29 @@ const promptPos = new THREE.Vector3();
 function touchFrame() {
   if (!touch) touch = createTouch({ input, canvas: renderer.domElement });
   if (!touch.on) { touch.update(); return; }
-  const acts = [], A = (key, label, k, hold) => acts.push({ key, label, k, hold });
+  // A(controle, tecla, nome acessível, símbolo, segurada?, palavra no botão) — o controle define o lugar na tela (touch.js)
+  const acts = [], A = (id, key, label, icon, hold, word) => acts.push({ id, key, label, icon, hold, word });
   let joystick = false, look = false;
   const blocked = menu.isOpen || missions.isOpen || talkBox.open || lock.isOpen || fade > 0.5;
-  const camLbl = rig.mode === 'chase' ? 'Bairro' : 'Câmera';
+  const cam = () => rig.mode === 'chase' ? A('cam', 'KeyC', 'Ver o bairro inteiro', 'overview') : A('cam', 'KeyC', state === 'walk' ? 'Câmera atrás do personagem' : 'Câmera atrás da van', 'chase');
+  const missile = () => { if (gameMode === 'free' && !MOONV) A('missil', 'KeyF', 'Míssil', 'missile'); };
   if (!blocked) switch (state) {
     case 'drive':
       joystick = true; look = true;
       if (approachLock()) break;                                     // aproximação da igreja: só a direção
-      if (heli.landed) { A('KeyH', 'Decolar', 'H'); if (gameMode === 'free' && !MOONV) A('KeyF', 'Míssil', 'F'); if (roofUnderVan()) A('KeyL', 'Descer', 'L'); }
-      else if (heli.on) { A('Space', 'Subir', '␣', true); A('ShiftLeft', 'Descer', '⇧', true); A('KeyH', 'Pousar', 'H'); if (gameMode === 'free' && !MOONV) A('KeyF', 'Míssil', 'F'); }
-      else { A('KeyL', VENICE ? 'Descer da lancha' : 'Descer da van', 'L'); if (gameMode === 'free') { A('KeyH', 'Helicóptero', 'H'); if (!MOONV) A('KeyF', 'Míssil', 'F'); } }
-      A('KeyC', camLbl, 'C');
+      if (heli.landed) { A('decolar', 'KeyH', 'Decolar', 'takeoff'); missile(); if (roofUnderVan()) A('sair', 'KeyL', 'Descer no terraço', 'walk'); }
+      else if (heli.on) { A('altura', 'Space', 'Subir', 'up', true); A('altura', 'ShiftLeft', 'Descer', 'down', true); A('pousar', 'KeyH', 'Pousar', 'land'); missile(); }   // ▲ em cima, ▼ embaixo (um controle só)
+      else { A('sair', 'KeyL', VENICE ? 'Descer da lancha' : 'Descer da van', 'walk'); if (gameMode === 'free') { A('heli', 'KeyH', 'Helicóptero', 'heli'); missile(); } }
+      cam();
       break;
-    case 'walk': joystick = true; look = true; A('KeyC', camLbl, 'C'); break;
+    case 'walk': joystick = true; look = true; cam(); break;
     case 'inside': joystick = true; break;                            // Grillby's (visão de cima, sem giro)
     case 'gstory': joystick = true; look = true; break;               // 1ª pessoa / resgate (a história decide o que vale)
     case 'extra': joystick = look = !extra.locked; break;
-    case 'battle': joystick = battle.joystick; if (battle.actionLabel) A('Space', battle.actionLabel, '●', true); if (battle.action2Label) A('KeyE', battle.action2Label, '◆', true); break;   // círculo + ação (segurada); no Conduzir também Puxar (os dois juntos)
-    case 'boss': if (monster.phase === 'grace') { joystick = true; if (!monster.robotOn) A('KeyT', 'Robô', 'T'); } break;
-    case 'map': joystick = true; A('KeyE', 'Jogar', 'E'); A('KeyM', 'Missões', 'M'); break;
-    case 'trolley': if (trolley.choosing) A('KeyE', 'Mudar o trajeto', 'E'); break;
+    case 'battle': joystick = battle.joystick; if (battle.actionLabel) A('acao', 'Space', battle.actionLabel, actionIcon(battle.actionLabel), true, battle.actionLabel); if (battle.action2Label) A('puxar', 'KeyE', battle.action2Label, 'pull', true, battle.action2Label); break;   // círculo + ação (segurada); no Conduzir também Puxar (os dois juntos)
+    case 'boss': if (monster.phase === 'grace') { joystick = true; if (!monster.robotOn) A('robo', 'KeyT', 'Virar robô', 'robot', false, 'Robô'); } break;
+    case 'map': joystick = true; A('jogar', 'KeyE', 'Jogar', 'play'); A('missoes', 'KeyM', 'Missões', 'list'); break;
+    // dilema do bonde: sem botão — tocar no "Mudar o trajeto" da cena (touch.js)
   }
   const bar = document.querySelector('.ahud'), r = bar && bar.offsetParent ? bar.getBoundingClientRect() : null;
   touch.update({ joystick, look, actions: acts, dialog: state === 'dialog' && !menu.isOpen, top: (r && r.height ? r.bottom : 10) + 8 });
@@ -3158,42 +3310,48 @@ function updateHUD() {
     hud.setFade(fade);
     return;
   }
-  hintBtn.set(hintUsed || hintStep === game.step ? 'used' : state === 'drive' ? 'ready' : 'busy');
+  hintBtn.set(hintUsed || hintStep === game.step ? 'used' : state === 'drive' || (state === 'walk' && !walker.scripted) ? 'ready' : 'busy');
+  const walkNear = state === 'walk' && walker.nearVan(van) && !nearLounger() && !nearChurchK() && !nearVenK() && !missions.isOpen;
+  // a pé no Bairro 1: pegar a caixa / entregar ao K / conversar (balão em cima do personagem)
+  const wsWalk = state === 'walk' && !missions.isOpen ? massStory.walkPrompt() || wsStory.walkPrompt() : '';
+  const walkAct = wsWalk ? wsWalk : state === 'walk' && medTalkTarget() && !missions.isOpen ? 'Conversar' : nearGrillDoor() && !missions.isOpen ? "Entrar no Grillby's" : state === 'walk' && nearGate >= 0 && !missions.isOpen ? 'Abrir porteira' : state === 'walk' && nearVenK() && !missions.isOpen ? 'Conversar' : state === 'walk' && nearHouse >= 0 && !missions.isOpen ? 'Entregar' : state === 'walk' && !walkNear && !missions.isOpen ? (nearParcel() ? 'Pegar a caixa' : nearK() ? (carrying ? 'Entregar a caixa' : 'Conversar') : nearLounger() || nearChurchK() ? 'Conversar' : '') : '';
 
   if (state === 'dialog') {
     hud.setSub(dialog.success ? '✔ Entrega concluída!  ·  [E] continuar' : '[E] ou Espaço: continuar',
       dialog.success ? 'success' : 'cont');
     hud.setMain(dialog.narrator ? dialog.text : `${dialog.name}: “${dialog.text}”`, dialog.success ? 'success' : 'dialog');   // narrador: só o pensamento, entre parênteses
   } else {
-    const extraKeys0 = '  ·  L: descer da van';
+    const vehicle = VENICE ? 'lancha' : 'van', touchOn = document.body.classList.contains('touch-on');
+    const extraKeys0 = '  ·  L: descer da ' + vehicle;
     const extraKeys = extraKeys0 + (gameMode === 'free' ? (MOONV ? '  ·  H: helicóptero' : '  ·  H: helicóptero  ·  F: míssil') : '  ·  M: missões');
-    hud.setSub(state === 'talk' || state === 'cine' || state === 'trolley' || state === 'trolleyBlack' || state === 'laser' ? '' : state === 'walk'
-      ? (rig.mode === 'chase' ? 'A PÉ  ·  W/S: andar  ·  A/D: virar  ·  E (perto da van): entrar  ·  C: bairro  ·  botão direito: olhar em volta' : 'A PÉ  ·  WASD: andar  ·  E (perto da van): entrar  ·  C: câmera')
+    const fKey = gameMode === 'free' && !MOONV ? '  ·  F: míssil' : '';                          // (Lua: sem míssil)
+    // cenas, conversas e momentos sem controle de direção: nada de teclas de dirigir na barra (cada cena mostra a própria dica)
+    const noKeys = ['talk', 'cine', 'trolley', 'trolleyBlack', 'laser', 'wstory', 'mstory', 'chseq', 'chat', 'boss', 'missile', 'fadeOut'].includes(state);
+    hud.setSub(noKeys ? '' : state === 'walk'
+      ? (rig.mode === 'chase' ? `A PÉ  ·  W/S: andar  ·  A/D: virar  ·  E (perto da ${vehicle}): entrar  ·  C: bairro  ·  botão direito: olhar em volta` : `A PÉ  ·  WASD: andar  ·  E (perto da ${vehicle}): entrar  ·  C: câmera`)
       : heli.landed
-      ? 'POUSADO NO PRÉDIO  ·  H: decolar  ·  F: míssil'
+      ? 'POUSADO NO PRÉDIO  ·  H: decolar' + (roofUnderVan() ? '  ·  L: descer na laje' : '') + fKey
       : heli.on
-      ? 'HELICÓPTERO  ·  W/S: frente e ré  ·  A/D: girar  ·  Espaço: subir  ·  Shift: descer  ·  H: pousar (em cima de um prédio, pousa no teto)  ·  F: míssil'
+      ? 'HELICÓPTERO  ·  W/S: frente e ré  ·  A/D: girar  ·  Espaço: subir  ·  Shift: descer  ·  H: pousar' + fKey
       : rig.mode === 'chase'
       ? 'W / ↑: acelerar  ·  S / ↓: frear e ré  ·  A D / ← →: virar  ·  E: entregar  ·  C: bairro  ·  T: dica' + extraKeys
       : 'WASD / Setas: dirigir  ·  E: entregar  ·  C: câmera  ·  T: dica' + extraKeys, 'muted');
     if ((state === 'drive' || state === 'walk') && wsStory.objective()) hud.setMain(wsStory.objective(), 'clue');   // atividade da oficina no lugar da pista
-    else if (state === 'drive' && hint.active && !hint.landed) hud.setMain('Olha a dica caindo do céu!', 'ring');
+    else if ((state === 'drive' || state === 'walk') && hint.active && !hint.landed) hud.setMain('Olha a dica caindo do céu!', 'ring');
     else if (state === 'ring') hud.setMain('Ding-dong… 🔔', 'ring');
     else if (state === 'boss') hud.setMain(monster.phase === 'driveOut' ? 'Todas as casas foram destruídas… algo despertou!' : 'O DEVORADOR DE BAIRROS acordou!', 'dialog');
     else if (state === 'missile') hud.setMain('Míssil disparado!', 'ring');
     else if (state === 'fuel') hud.setMain('⛽ Abastecendo… glub, glub, glub…', 'ring');
     else if (state === 'talk' || state === 'cine' || state === 'wstory' || state === 'chseq' || state === 'mstory' || state === 'trolley' || state === 'trolleyBlack' || state === 'laser') hud.setMain('', 'clue');
     else if (state === 'walk' && carrying) hud.setMain(walker.nearVan(van) ? 'Entrar na van devolve a caixa ao lugar dela.' : 'Carregando uma caixa… de quem será?', 'clue');
-    else if (state === 'walk') hud.setMain(walker.nearVan(van) && !nearLounger() && !nearVenK() ? 'Perto da van — aperte E para entrar.' : SPOTS ? game.mainText() : 'Passeando a pé… (não dá para entregar andando)', 'clue');   // Morro: a pé continua valendo a pista
+    // a pé: "perto da van" só quando E de fato entra nela (perto de uma porta, porteira ou alguém para conversar, o E faz aquilo);
+    // Veneza e os bairros sem grade aceitam entrega a pé, então a pista continua na barra
+    else if (state === 'walk') hud.setMain(walkNear && !walkAct ? (touchOn ? `Perto da ${vehicle} — toque em “Entrar na ${vehicle}”.` : `Perto da ${vehicle} — aperte E para entrar.`) : VENICE || SPOTS ? game.mainText() : 'Passeando a pé… (neste bairro, as entregas são feitas da van)', 'clue');
     else if (state === 'drive' && fuelMsgT > 0) hud.setMain(fuelMsg, 'dialog');
     else if (state === 'fadeOut') hud.setMain(restartMsg || (endToMap ? 'Partida concluída!' : 'Entrega concluída! Preparando a próxima…'), restartMsg ? 'dialog' : 'success');   // (na Carreira volta ao mapa)
     else hud.setMain(game.mainText(), 'clue');
   }
 
-  const walkNear = state === 'walk' && walker.nearVan(van) && !nearLounger() && !nearChurchK() && !nearVenK() && !missions.isOpen;
-  // a pé no Bairro 1: pegar a caixa / entregar ao K / conversar (balão em cima do personagem)
-  const wsWalk = state === 'walk' && !missions.isOpen ? massStory.walkPrompt() || wsStory.walkPrompt() : '';
-  const walkAct = wsWalk ? wsWalk : state === 'walk' && medTalkTarget() && !missions.isOpen ? 'Conversar' : nearGrillDoor() && !missions.isOpen ? "Entrar no Grillby's" : state === 'walk' && nearGate >= 0 && !missions.isOpen ? 'Abrir porteira' : state === 'walk' && nearVenK() && !missions.isOpen ? 'Conversar' : state === 'walk' && nearHouse >= 0 && !missions.isOpen ? 'Entregar' : state === 'walk' && !walkNear && !missions.isOpen ? (nearParcel() ? 'Pegar a caixa' : nearK() ? (carrying ? 'Entregar a caixa' : 'Conversar') : nearLounger() || nearChurchK() ? 'Conversar' : '') : '';
   if (walkAct) {
     rig.camera.updateMatrixWorld();
     promptPos.set(walker.x, walker.floor + 2.7, walker.z).project(rig.camera);

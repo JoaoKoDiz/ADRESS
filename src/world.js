@@ -12,8 +12,11 @@ import { tickBarriers } from './barriers.js';
 import { buildMoonScene } from './models/moon.js';
 import { FRAME } from './moonFrame.js';
 import { buildGasStation } from './models/gas.js';
+import { buildSnowOutskirts } from './models/snow.js';   // Nevasca: arredores próprios do inverno
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { mat, mesh, box, cyl, cone, sphere, at, bakeStatic, dynamic, textTexture, vcMerge } from './models/kit.js';
+import { buildFigure, figureItem, animatePerson, reach, skinnedFromParts, partMatrix, partGeo } from './models/resident.js';   // gente da praça (Bairro 2)
+import { plazaLine } from './plazaTalk.js';
 
 // ---------- Paleta do cenário ----------
 const SKY = '#bfe3f2';
@@ -107,8 +110,14 @@ function buildGround(venice = false, SP = null) {
   g.add(at(plane(ROAD, OUT + 0.3, MEDV ? '#8f8a7c' : ASPHALT), cx, 0, 0.3 - (OUT + 0.3) / 2));   // Medieval: estrada de terra batida até o portão
   const jz0 = SP ? SP.J - SP.RW / 2 : 0, jz1 = SP ? SP.J + SP.RW / 2 : 0;      // cruzamento com a estrada de fora (sem meio-fio nele)
   for (const x of [ENTRANCE.x0 - 0.3, ENTRANCE.x1]) {
-    if (!SP) g.add(slab(x, -OUT, x + 0.3, 0, CURB, 0.12, 0.14));
-    else g.add(slab(x, -OUT, x + 0.3, jz0, CURB, 0.12, 0.14), slab(x, jz1, x + 0.3, 0, CURB, 0.12, 0.14));
+    if (!SP && SNOWV && SNOWV.outside) {                         // Nevasca: o meio-fio abre no cruzamento com a estrada da serra e na trilha da sebe
+      const O = SNOWV.outside, jw = O.ORW / 2 + 0.6, rw = 3.1;
+      g.add(slab(x, -OUT, x + 0.3, O.OJ - jw, CURB, 0.12, 0.14), slab(x, O.OJ + jw, x + 0.3, -O.RING - rw, CURB, 0.12, 0.14), slab(x, -O.RING + rw, x + 0.3, 0, CURB, 0.12, 0.14));
+    } else if (!SP) g.add(slab(x, -OUT, x + 0.3, 0, CURB, 0.12, 0.14));
+    else {                                                       // (o meio-fio abre nos cruzamentos: a estrada que cruza e a rua de contorno)
+      const cuts = [[jz0, jz1], ...(SP.ringN ? [SP.ringN] : [])].sort((p, q) => p[0] - q[0]);
+      let z0 = -OUT; for (const [a, b] of cuts) { g.add(slab(x, z0, x + 0.3, a, CURB, 0.12, 0.14)); z0 = b; } g.add(slab(x, z0, x + 0.3, 0, CURB, 0.12, 0.14));
+    }
   }
   if (SP) for (const r of SP.roads) {                           // estrada que cruza, ruas laterais e a do sul
     g.add(at(plane(r.x1 - r.x0, r.z1 - r.z0, r.dirt ? SP.laneCol : ASPHALT), (r.x0 + r.x1) / 2, r.dirt ? -0.006 : 0, (r.z0 + r.z1) / 2));
@@ -136,12 +145,14 @@ function buildGround(venice = false, SP = null) {
   if (!MEDV && !SP) dashes(-120, -1.2, m => g.add(at(box(LW, 0.02, DASH, CENTER_LINE), cx, 0.01, m)));
   if (SP) {
     dashes(-120, jz0 - 1.2, m => g.add(at(box(LW, 0.02, DASH, CENTER_LINE), cx, 0.01, m)));
-    dashes(jz1 + 1.2, -1.2, m => g.add(at(box(LW, 0.02, DASH, CENTER_LINE), cx, 0.01, m)));
-    for (const r of SP.roads) if (!r.dirt) {
+    if (SP.ringN) { dashes(jz1 + 1.2, SP.ringN[0] - 1.2, m => g.add(at(box(LW, 0.02, DASH, CENTER_LINE), cx, 0.01, m))); dashes(SP.ringN[1] + 1.2, -1.2, m => g.add(at(box(LW, 0.02, DASH, CENTER_LINE), cx, 0.01, m))); }
+    else dashes(jz1 + 1.2, -1.2, m => g.add(at(box(LW, 0.02, DASH, CENTER_LINE), cx, 0.01, m)));
+    for (const r of SP.roads) if (!r.dirt && !r.lane) {
       if (r.axis === 'x') dashes(r.x0 + 1.5, r.x1 - 1.5, m => g.add(at(box(DASH, 0.02, LW, CENTER_LINE), m, 0.01, (r.z0 + r.z1) / 2)));
       else dashes(r.z0 + 1.5, r.z1 - 1.5, m => g.add(at(box(LW, 0.02, DASH, CENTER_LINE), (r.x0 + r.x1) / 2, 0.01, m)));
     }
     for (const z of [jz0 - 0.5, jz1 + 0.5]) g.add(slab(ENTRANCE.x0 + 0.3, z - 0.2, ENTRANCE.x1 - 0.3, z + 0.2, ZEBRA, 0.012));   // faixas de parada do cruzamento
+    if (SP.ringN) for (const z of [SP.ringN[0] - 0.6, SP.ringN[1] + 0.6]) for (let x = ENTRANCE.x0 + 0.7; x < ENTRANCE.x1 - 0.5; x += 0.95) g.add(slab(x, z - 1.3, x + 0.5, z + 1.3, ZEBRA, 0.012));   // faixa de pedestres onde a rua de contorno cruza
   }
 
   // sombra "falsa" da sebe do lado de fora (oeste e norte): a grama de fora não recebe sombras reais
@@ -236,7 +247,10 @@ function buildHedge() {
 }
 
 // ---------- Árvores e arbustos fora do bairro ----------
-function buildOutskirts(ground) {
+function buildOutskirts(ground, snow = false) {
+  // Nevasca: os arredores são os do inverno (models/snow.js: trilha em volta da sebe, estrada da serra, sítios, lago congelado,
+  // árvores sem folhas e arbustos de neve) — não as árvores verdes e as flores dos outros bairros
+  if (snow && SNOWV) { const o = buildSnowOutskirts(MAP); SOLIDS.push(...o.solids); return o.group; }
   const g = new THREE.Group();
   const rand = rng(23);
   const blob = new THREE.IcosahedronGeometry(1, 0);
@@ -540,14 +554,22 @@ function surroundKind({ venice, moon, farm, snow, dry }) {
   return 'trade';                          // Bairro 5 (Ofício): oficinas e galpões entre as casas
 }
 
-/** Planta dos arredores: estradas, casas/prédios ao longo delas e os terrenos (só dados; nada é desenhado aqui). */
+/** Planta dos arredores: estradas, casas/prédios ao longo delas e os terrenos (só dados; nada é desenhado aqui).
+ *  As vias vêm antes dos edifícios: nos Bairros 1 a 5 uma rua de contorno passa em volta da sebe (cruza a estrada de acesso e
+ *  se liga às ruas laterais por travessas), e as casas de fora ficam de frente para uma rua, com calçada e caminho até a porta;
+ *  nas cidades as vias de fora ficam nas linhas das ruas da cidade de longe, que continuam até elas (sem ruas cortadas). */
 function planSurroundings(kind, dry, flavor = null) {
   const rand = rng(41 + GRID * 7 + (PLAZA ? 3 : 0) + (kind === 'city' ? 11 : 0) + (flavor ? flavor.length * 5 : 0));
   const M = MAP, cx = (ENTRANCE.x0 + ENTRANCE.x1) / 2;
-  const city = kind === 'city', rural = kind === 'rural';
+  const city = kind === 'city', rural = kind === 'rural', town = kind === 'town', trade = kind === 'trade';
+  const gridCity = city && flavor !== 'encostas';                // (Encostas: morros em volta, sem a malha de ruas)
   const RW = city ? 8.4 : 6.8, RL = city ? 7.6 : 5.6;          // largura da estrada que cruza e das laterais
-  const XW = -46, XE = M + 46, ZS = M + 62;                      // ruas laterais e a do sul
-  const XL = -OUT_R + 10, XR = M + OUT_R - 10;
+  // cidade: as ruas laterais e a do sul ficam sobre linhas da malha da cidade de longe (quadras de TILE, origem na estrada de
+  // acesso e na que cruza): assim as ruas de longe chegam até elas e formam cruzamentos, em vez de acabar no calçamento
+  const lineOut = (o, a, s, dmin) => s < 0 ? o + TILE * Math.floor((a - dmin - o) / TILE) : o + TILE * Math.ceil((a + dmin - o) / TILE);
+  const XW = gridCity ? lineOut(cx, 0, -1, 26) : -46, XE = gridCity ? lineOut(cx, M, 1, 26) : M + 46;
+  const ZS = gridCity ? lineOut(J_ROAD, M, 1, 26) : M + 62;
+  const XL = gridCity ? XW - RL / 2 : -OUT_R + 10, XR = gridCity ? XE + RL / 2 : M + OUT_R - 10;
   const southRoad = !rural;                                     // Bairros 1 e 3: o sul fica aberto (na direção do sol)
   const laneEnd = southRoad ? ZS - RW / 2 : M - 16;
   const laneDirt = rural || kind === 'roads';
@@ -558,9 +580,31 @@ function planSurroundings(kind, dry, flavor = null) {
     { x0: XE - RL / 2, x1: XE + RL / 2, z0: J_ROAD + RW / 2, z1: laneEnd, dirt: laneDirt, axis: 'z' },
   ];
   if (southRoad) roads.push({ x0: XL, x1: XR, z0: ZS - RW / 2, z1: ZS + RW / 2, dirt: kind === 'roads', axis: 'x' });
+  // Bairros 1 a 5: rua de contorno em volta da sebe (no sul só onde há a estrada do sul) e travessas até as ruas de fora.
+  // (rua estreita de bairro, sem faixa no meio: `lane`)
+  const RO = 11, RH = 2.8, local = [];
+  let ringN = null;
+  if (!city) {
+    const dirt = kind === 'roads', zEnd = rural ? M - 14 + RH : M + RO + RH;
+    const add = (r, d = dirt) => { const q = { ...r, dirt: d, lane: true }; roads.push(q); local.push(q); return q; };
+    ringN = add({ x0: -RO - RH, x1: M + RO + RH, z0: -RO - RH, z1: -RO + RH, axis: 'x', ring: 'n' });
+    add({ x0: -RO - RH, x1: -RO + RH, z0: -RO + RH, z1: zEnd, axis: 'z', ring: 'w' });
+    add({ x0: M + RO - RH, x1: M + RO + RH, z0: -RO + RH, z1: zEnd, axis: 'z', ring: 'e' });
+    if (!rural) add({ x0: -RO - RH, x1: M + RO + RH, z0: M + RO - RH, z1: M + RO + RH, axis: 'x', ring: 's' });
+    // travessas: ligam o contorno às ruas laterais (na altura das ruas de dentro do bairro) e, ao norte/sul, às estradas
+    for (const z of rural ? [M - 14] : [roadCenter(1), roadCenter(GRID - 1)]) {
+      add({ x0: XW - (rural ? RL / 2 : -RL / 2 + 0.3), x1: -RO - RH + 0.3, z0: z - RH, z1: z + RH, axis: 'x' }, rural || dirt);
+      add({ x0: M + RO + RH - 0.3, x1: XE + (rural ? RL / 2 : -RL / 2 + 0.3), z0: z - RH, z1: z + RH, axis: 'x' }, rural || dirt);
+    }
+    for (const x of [roadCenter(1), roadCenter(GRID - 1)]) {
+      if (Math.abs(x - cx) < 24) continue;                       // (a estrada de acesso fica livre: corredor da cena do monstro)
+      add({ x0: x - RH, x1: x + RH, z0: J_ROAD + RW / 2 - 0.3, z1: -RO - RH + 0.3, axis: 'z' });
+      if (southRoad) add({ x0: x - RH, x1: x + RH, z0: M + RO + RH - 0.3, z1: ZS - RW / 2 + 0.3, axis: 'z' });
+    }
+  }
   // reservas: o bairro com folga, o corredor da estrada de acesso (cena do monstro), as estradas e, nos Bairros 1/3, o sul
   const reserved = [
-    { x0: -26, x1: M + 26, z0: -26, z1: M + 26 },
+    city ? { x0: -26, x1: M + 26, z0: -26, z1: M + 26 } : { x0: -7, x1: M + 7, z0: -7, z1: M + 7 },
     { x0: cx - 20, x1: cx + 20, z0: -500, z1: 0 },
     ...roads.map(r => ({ x0: r.x0 - 3, x1: r.x1 + 3, z0: r.z0 - 3, z1: r.z1 + 3 })),
   ];
@@ -575,24 +619,49 @@ function planSurroundings(kind, dry, flavor = null) {
     const r = { x0: b.x - hw - pad, x1: b.x + hw + pad, z0: b.z - hd - pad, z1: b.z + hd + pad };
     if (!free(r.x0, r.z0, r.x1, r.z1)) return false;
     reserved.push(r); b.box = { x0: b.x - hw, x1: b.x + hw, z0: b.z - hd, z1: b.z + hd }; builds.push(b); return true; };
-  const houseDims = () => ({ w: 7.4 + rand() * 2.2, d: 6.0 + rand() * 1.4, h: rand() < 0.22 ? 5.5 : 2.9 + rand() * 0.3, rise: 1.8 + rand() * 0.5 });
+  const houseDims = () => ({ w: 7.4 + rand() * 2.2, d: 6.0 + rand() * 1.4, h: rand() < (trade ? 0.32 : 0.22) ? 5.5 : 2.9 + rand() * 0.3, rise: 1.8 + rand() * 0.5 });
   const cityDims = () => ({ w: 11 + rand() * 9, d: 10 + rand() * 6, floors: 3 + Math.floor(rand() * (BUILD_H > 20 ? 6 : 4)) });
   // ao longo das estradas: a casa/prédio olha para a estrada (e, portanto, para o bairro)
   const fill = (along, from, to, step, place, chance) => { for (let t = from; t < to; t += step * (0.85 + rand() * 0.4)) if (rand() < chance) place(t); };
   const front = (type, x, z, ry, dims) => take({ type, x, z, ry, ...dims });
-  const pick = () => (city ? (rand() < 0.75 ? 'block' : 'ware') : kind === 'trade' && rand() < 0.3 ? 'shed' : 'house');
+  const pick = () => (city ? (rand() < 0.75 ? 'block' : 'ware') : trade && rand() < 0.3 ? 'shed' : 'house');
   const dimsOf = t => t === 'block' ? cityDims() : t === 'ware' ? { w: 18 + rand() * 8, d: 13 + rand() * 4 } : t === 'shed' ? { w: 11 + rand() * 4, d: 9 + rand() * 2 } : houseDims();
-  const dens = city ? 0.72 : kind === 'town' ? 0.85 : kind === 'trade' ? 0.75 : rural ? 0.45 : 0.55;
-  const stepH = city ? 24 : kind === 'town' ? 19 : 23;
-  for (const side of [-1, 1]) {
+  /** Fileira de casas de um lado de uma rua (side −1: lado de menor coordenada), de frente para ela, a `gap` da beira. */
+  const row = (r, side, dens, step, gap = 5, typeOf = pick) => {
+    if (r.axis === 'x') { const ze = side < 0 ? r.z0 : r.z1; fill('x', r.x0 + 6, r.x1 - 6, step, x => { const ty = typeOf(), dm = dimsOf(ty); front(ty, x, ze + side * (gap + dm.d / 2), side < 0 ? 0 : Math.PI, { ...dm, gap }); }, dens); }
+    else { const xe = side < 0 ? r.x0 : r.x1; fill('z', r.z0 + 6, r.z1 - 6, step, z => { const ty = typeOf(), dm = dimsOf(ty); front(ty, xe + side * (gap + dm.d / 2), z, side < 0 ? Math.PI / 2 : -Math.PI / 2, { ...dm, gap }); }, dens); }
+  };
+  const dens = city ? 0.72 : town ? 0.85 : trade ? 0.75 : rural ? 0.45 : 0.55;
+  const stepH = city ? 24 : town ? 19 : 23;
+  // 1º as casas da rua de contorno (as mais perto do bairro: a vila continua do outro lado da sebe)
+  if (!city) {
+    const out = { n: -1, s: 1, w: -1, e: 1 };
+    const rd = rural ? 0.85 : kind === 'roads' ? 0.45 : 0.95, rs = town ? 16.5 : 18;
+    for (const r of local) if (r.ring && (kind !== 'roads' || r.ring === 'n')) row(r, out[r.ring], r.ring === 'n' || !rural ? rd : rd * 0.7, rs, 5, () => (trade && rand() < 0.22 ? 'shed' : 'house'));
+    if (town || trade) {                                         // o outro lado da quadra: casas de frente para as estradas de fora
+      row(roads[0], 1, 0.8, rs); row(roads[1], 1, 0.8, rs); row(roads[2], 1, 0.8, rs); row(roads[3], -1, 0.8, rs);
+      if (southRoad) row(roads[4], -1, 0.75, rs);
+      for (const r of local) if (!r.ring) { row(r, -1, 0.7, rs); row(r, 1, 0.7, rs); }   // travessas: casas dos dois lados
+    }
+  }
+  // cidade: entre o parque em volta do bairro e as ruas de fora, uma fileira de prédios de frente para a rua (onde couber)
+  if (gridCity) {
+    const side = (r, s) => { const room = r.axis === 'z' ? (s > 0 ? -26 - r.x1 : r.x0 - (M + 26)) : (r.z0 - (M + 26)); if (room < 15) return;
+      const d = Math.min(14, room - 4.5);
+      if (r.axis === 'z') fill('z', J_ROAD + RW / 2 + 12, laneEnd - 10, 19, z => front('block', s > 0 ? r.x1 + 3 + d / 2 : r.x0 - 3 - d / 2, z, 0, { w: d, d: 12 + rand() * 4, floors: 3 + Math.floor(rand() * (BUILD_H > 20 ? 5 : 3)), gap: 3 }), 0.9);
+      else fill('x', XW + 14, XE - 14, 19, x => front('block', x, r.z0 - 3 - d / 2, 0, { w: 12 + rand() * 4, d, floors: 3 + Math.floor(rand() * 3), gap: 3 }), 0.9); };
+    side(roads[2], 1); side(roads[3], -1); if (southRoad) side(roads[4], -1);
+  }
+  const outD = city ? dens : town ? 0.45 : rural ? 0.3 : dens;   // (Bairros 2 e 3: depois da vila, as plantações dominam)
+  if (!gridCity) for (const sd of [-1, 1]) {
     // estrada do norte, lado de fora (olhando para o sul)
-    fill('x', 32, OUT_R - 40, stepH, t => { const x = cx + side * t, ty = pick(), dm = dimsOf(ty); front(ty, x, J_ROAD - RW / 2 - 6 - dm.d / 2, 0, dm); }, dens);
+    fill('x', 32, OUT_R - 40, stepH, t => { const x = cx + sd * t, ty = pick(), dm = dimsOf(ty); front(ty, x, J_ROAD - RW / 2 - 6 - dm.d / 2, 0, dm); }, outD);
     // estrada do sul (se houver), lado de fora (olhando para o norte)
-    if (southRoad) fill('x', 0, OUT_R - 40 + M / 2, stepH, t => { const x = M / 2 + side * t, ty = pick(), dm = dimsOf(ty); front(ty, x, ZS + RW / 2 + 6 + dm.d / 2, Math.PI, dm); }, dens * 0.9);
+    if (southRoad) fill('x', 0, OUT_R - 40 + M / 2, stepH, t => { const x = M / 2 + sd * t, ty = pick(), dm = dimsOf(ty); front(ty, x, ZS + RW / 2 + 6 + dm.d / 2, Math.PI, dm); }, outD * 0.9);
   }
   // ruas laterais: lado de fora, olhando para o bairro
-  for (const [X, s] of [[XW, -1], [XE, 1]]) {
-    fill('z', J_ROAD + RW / 2 + 12, laneEnd - 8, stepH, t => { const ty = pick(), dm = dimsOf(ty); front(ty, X + s * (RL / 2 + 6 + dm.d / 2), t, s < 0 ? Math.PI / 2 : -Math.PI / 2, dm); }, dens);
+  if (!gridCity) for (const [X, s] of [[XW, -1], [XE, 1]]) {
+    fill('z', J_ROAD + RW / 2 + 12, laneEnd - 8, stepH, t => { const ty = pick(), dm = dimsOf(ty); front(ty, X + s * (RL / 2 + 6 + dm.d / 2), t, s < 0 ? Math.PI / 2 : -Math.PI / 2, dm); }, outD);
   }
   // Bairros 1/3: as estradas de terra terminam num sítio (casa, celeiro e silo)
   const farms = [];
@@ -602,29 +671,66 @@ function planSurroundings(kind, dry, flavor = null) {
     front('barn', X + s * 16, z + 4, s < 0 ? Math.PI / 2 : -Math.PI / 2, { w: 12, d: 9 });
     front('silo', X + s * 15, z - 10, 0, { w: 4.4, d: 4.4 });
   }
-  // terrenos: retalhos de ~34 m no anel em volta (o que não cabe vira gramado)
+  // terrenos: retalhos de ~34 m no anel em volta (o que não cabe vira gramado); na cidade, as quadras da malha de longe
   const cells = [], C = 34;
-  for (let x = XL; x < XR - C; x += C) for (let z = -OUT_R + 10; z < M + OUT_R - 10 - C; z += C) {
-    let x0 = x + 1.5, x1 = x + C - 1.5, z0 = z + 1.5, z1 = z + C - 1.5;
-    const ed = Math.hypot(Math.max(-(x0 + x1) / 2, 0, (x0 + x1) / 2 - M), Math.max(-(z0 + z1) / 2, 0, (z0 + z1) / 2 - M));
-    if (ed > OUT_R - (city ? 50 : 20)) continue;                 // (a cidade é mais pesada: anel um pouco mais estreito)
-    for (const r of reserved) if (r.corr && hitRect(r, x0, z0, x1, z1)) {   // corredor (elevado, rio): a quadra encolhe para o lado que sobra
-      if (r.corr === 'z') { if (r.z0 - z0 >= z1 - r.z1) z1 = r.z0 - 1; else z0 = r.z1 + 1; }
-      else { if (r.x0 - x0 >= x1 - r.x1) x1 = r.x0 - 1; else x0 = r.x1 + 1; }
+  const inner = { x0: XW - RL / 2, x1: XE + RL / 2, z0: J_ROAD - RW / 2, z1: ZS + RW / 2 };
+  const inside = (x0, z0, x1, z1) => x0 >= inner.x0 && x1 <= inner.x1 && z0 >= inner.z0 && z1 <= inner.z1;
+  const shrink = (q) => {                                       // corredor (elevado, rio): a quadra encolhe para o lado que sobra
+    for (const r of reserved) if (r.corr && hitRect(r, q.x0, q.z0, q.x1, q.z1)) {
+      if (r.corr === 'z') { if (r.z0 - q.z0 >= q.z1 - r.z1) q.z1 = r.z0 - 1; else q.z0 = r.z1 + 1; }
+      else { if (r.x0 - q.x0 >= q.x1 - r.x1) q.x1 = r.x0 - 1; else q.x0 = r.x1 + 1; }
     }
+    return q;
+  };
+  const near = q => {                                           // rua mais perto de um terreno (lado e distância)
+    let best = null;
+    for (const r of roads) {
+      if (r.axis === 'x' && Math.min(q.x1, r.x1) - Math.max(q.x0, r.x0) > 12) for (const [s, d] of [['n', q.z0 - r.z1], ['s', r.z0 - q.z1]]) { if (d > -1 && (!best || d < best.d)) best = { side: s, d, edge: s === 'n' ? r.z1 : r.z0 }; }
+      if (r.axis === 'z' && Math.min(q.z1, r.z1) - Math.max(q.z0, r.z0) > 12) for (const [s, d] of [['w', q.x0 - r.x1], ['e', r.x0 - q.x1]]) { if (d > -1 && (!best || d < best.d)) best = { side: s, d, edge: s === 'w' ? r.x1 : r.x0 }; }
+    }
+    return best;
+  };
+  for (let x = XL; x < XR - C; x += C) for (let z = -OUT_R + 10; z < M + OUT_R - 10 - C; z += C) {
+    const q = shrink({ x0: x + 1.5, x1: x + C - 1.5, z0: z + 1.5, z1: z + C - 1.5 });
+    const ed = Math.hypot(Math.max(-(q.x0 + q.x1) / 2, 0, (q.x0 + q.x1) / 2 - M), Math.max(-(q.z0 + q.z1) / 2, 0, (q.z0 + q.z1) / 2 - M));
+    if (ed > OUT_R - (city ? 50 : 20)) continue;                 // (a cidade é mais pesada: anel um pouco mais estreito)
+    if (gridCity && !inside(q.x0, q.z0, q.x1, q.z1)) continue;   // (cidade: fora das vias, as quadras da malha — abaixo)
+    const { x0, x1, z0, z1 } = q;
     if (x1 - x0 < 14 || z1 - z0 < 14) continue;
-    const mx = (x0 + x1) / 2, mz = (z0 + z1) / 2, small = x1 - x0 < 26 || z1 - z0 < 26;
+    const small = x1 - x0 < 26 || z1 - z0 < 26;
     if (reserved.some(r => hitRect(r, x0, z0, x1, z1))) continue;
     const south = openSouth && hitRect(openSouth, x0, z0, x1, z1);
-    const r = rand();
+    const r = rand(), villa = ed < 75;                           // (perto da vila: hortas, pomares e pastos; longe: lavouras)
     let type;
     if (city) type = r < 0.42 ? 'block' : r < 0.52 ? 'ware' : r < 0.6 ? 'lot' : r < 0.77 ? 'park' : 'parking';   // (a cidade continua: mais quadras, estacionamentos)
-    else if (kind === 'town') type = r < 0.32 ? 'homes' : r < 0.5 ? 'grove' : r < 0.62 ? 'lot' : r < 0.8 ? 'crop' : 'meadow';
-    else if (kind === 'trade') type = r < 0.22 ? 'homes' : r < 0.42 ? 'ware' : r < 0.58 ? 'grove' : r < 0.7 ? 'lot' : r < 0.85 ? 'crop' : 'meadow';
+    else if (town) type = villa ? (r < 0.4 ? 'homes' : r < 0.6 ? 'garden' : r < 0.75 ? 'grove' : r < 0.88 ? 'orchard' : 'lot')
+      : (r < 0.3 ? 'crop' : r < 0.55 ? 'wheat' : r < 0.68 ? 'plowed' : r < 0.78 ? 'stubble' : r < 0.88 ? 'pasture' : 'grove');
+    else if (trade) type = villa ? (r < 0.34 ? 'homes' : r < 0.56 ? 'ware' : r < 0.68 ? 'garden' : r < 0.8 ? 'grove' : 'lot')
+      : (r < 0.2 ? 'homes' : r < 0.35 ? 'ware' : r < 0.6 ? 'crop' : r < 0.72 ? 'grove' : r < 0.85 ? 'pasture' : 'meadow');
+    else if (rural && villa) type = r < 0.3 ? 'garden' : r < 0.5 ? 'orchard' : r < 0.72 ? 'pasture' : r < 0.86 ? 'crop' : 'grove';
     else type = r < 0.22 ? 'crop' : r < 0.36 ? 'wheat' : r < 0.48 ? 'plowed' : r < 0.62 ? 'pasture' : r < 0.72 ? 'orchard' : r < 0.86 ? 'grove' : 'stubble';
     if (south && !['crop', 'wheat', 'plowed', 'meadow'].includes(type)) type = rand() < 0.5 ? 'wheat' : 'crop';   // caminho da igreja: só plantação rasteira
     if (small && city) type = rand() < 0.5 ? 'park' : 'parking';                                 // (quadra encolhida pelo corredor)
-    cells.push({ x0, x1, z0, z1, type, south, along: rand() < 0.5 ? 'x' : 'z' });
+    const cell = { x0, x1, z0, z1, type, south, along: rand() < 0.5 ? 'x' : 'z' };
+    if (type === 'homes' || type === 'ware') {                  // casas e galpões só com rua na frente (senão, outra coisa)
+      const n = near(cell);
+      if (n && n.d < 9) cell.face = n; else cell.type = type === 'ware' ? 'grove' : villa ? 'garden' : 'crop';
+    }
+    cells.push(cell);
+  }
+  // cidade: fora das vias, as quadras da malha da cidade de longe (mesmo alinhamento), até onde ela começa
+  if (gridCity) {
+    const half = TILE / 2 - STREET / 2 - 1.8, NI = Math.ceil((FAR0 + M / 2) / TILE) + 1;
+    for (let i = -NI; i <= NI; i++) for (let j = -NI; j <= NI; j++) {
+      const tx = cx + TILE / 2 + i * TILE, tz = J_ROAD + TILE / 2 + j * TILE;
+      if (Math.hypot(Math.max(-tx, 0, tx - M), Math.max(-tz, 0, tz - M)) >= FAR0) continue;
+      const q = shrink({ x0: tx - half, x1: tx + half, z0: tz - half, z1: tz + half });
+      if (hitRect(inner, q.x0, q.z0, q.x1, q.z1) || q.x1 - q.x0 < 12 || q.z1 - q.z0 < 12) continue;
+      if (reserved.some(r => !r.corr && hitRect(r, q.x0, q.z0, q.x1, q.z1))) continue;
+      const r = rand(), small = q.x1 - q.x0 < 26 || q.z1 - q.z0 < 26;
+      const type = small ? (r < 0.4 ? 'one' : r < 0.75 ? 'park' : 'parking') : r < 0.5 ? 'block' : r < 0.62 ? 'ware' : r < 0.7 ? 'one' : r < 0.84 ? 'park' : 'parking';
+      cells.push({ ...q, type, south: false, along: 'x', tile: true });
+    }
   }
   // cidade: os vãos que sobraram entre as estradas, as fileiras de prédios e os corredores viram quadrinhas de 14 m (um prédio,
   // uma pracinha ou um estacionamento) — nada de terreno vazio no meio da cidade
@@ -633,12 +739,13 @@ function planSurroundings(kind, dry, flavor = null) {
     for (let x = XL; x < XR - S; x += S) for (let z = -OUT_R + 10; z < M + OUT_R - 10 - S; z += S) {
       const x0 = x + 1.5, x1 = x + S - 1.5, z0 = z + 1.5, z1 = z + S - 1.5, mx = (x0 + x1) / 2, mz = (z0 + z1) / 2;
       if (Math.hypot(Math.max(-mx, 0, mx - M), Math.max(-mz, 0, mz - M)) > OUT_R - 50) continue;
+      if (gridCity && !inside(x0, z0, x1, z1)) continue;
       if (reserved.some(r => hitRect(r, x0, z0, x1, z1)) || cells.some(c => hitRect(c, x0 - 1, z0 - 1, x1 + 1, z1 + 1))) continue;
       const r = rand();
       cells.push({ x0, x1, z0, z1, type: r < 0.45 ? 'one' : r < 0.8 ? 'park' : 'parking', south: false, along: 'x' });
     }
   }
-  return { kind, roads, builds, cells, farms, reserved, openSouth, RW, RL, XW, XE, ZS, J: J_ROAD, southRoad, laneEnd, rand, laneCol: dry ? '#a08562' : '#a88d66', flavor, feat };
+  return { kind, roads, builds, cells, farms, reserved, openSouth, RW, RL, XW, XE, ZS, J: J_ROAD, southRoad, laneEnd, rand, laneCol: dry ? '#a08562' : '#a88d66', flavor, feat, gridCity, ringN: ringN ? [ringN.z0, ringN.z1] : null, RO };
 }
 
 /** O que cada bairro urbano tem nos arredores (além da cidade que continua):
@@ -735,12 +842,17 @@ function buildSurroundings(P, dryPal, L = null) {
     let [x, z] = P2(0, 0);
     I.add('box', U_BOX, x, 0, z, w, h, d, 0, ry, wall);
     I.add('gable', U_GABLE, x, h, z, w, rise, d, 0, ry, wall);
-    const L = (d / 2 + ov) / Math.cos(th), T = 0.2;
-    for (const sg of [1, -1]) {                                 // duas águas, com beiral
+    if (opts.trim !== false) I.add('box', U_BOX, x, 0, z, w + 0.1, 0.3, d + 0.1, 0, ry, '#cdc2aa');   // barrado (como nas casas do bairro)
+    const L = (d / 2 + ov) / Math.cos(th), T = 0.2, dark = lerpHex(roof, '#1a1410', 0.42);
+    for (const sg of [1, -1]) {                                 // duas águas, com beiral (laje escura por baixo, como em house.js)
       const zm = sg * (d / 2 + ov) / 2, ym = h + rise - (d / 2 + ov) / 2 * Math.tan(th);
       [x, z] = P2(0, zm + sg * Math.sin(th) * T / 2);
       I.add('cbox', U_CBOX, x, ym + Math.cos(th) * T / 2, z, w + 2 * ov * 0.8, T, L, sg * th, ry, roof);
+      [x, z] = P2(0, zm - sg * Math.sin(th) * 0.06);
+      I.add('cbox', U_CBOX, x, ym - Math.cos(th) * 0.06, z, w + 2 * ov * 0.8 + 0.14, 0.12, L + 0.1, sg * th, ry, dark);
     }
+    [x, z] = P2(0, 0);
+    I.add('cbox', U_CBOX, x, h + rise + T / Math.cos(th) - 0.06, z, w + 2 * ov * 0.8 + 0.1, 0.3, 0.3, Math.PI / 4, ry, dark);   // cumeeira
     if (opts.chimney) { [x, z] = P2(w * 0.25, -d * 0.15); I.add('box', U_BOX, x, h + rise * 0.3, z, 0.65, rise * 0.75 + 0.5, 0.65, 0, ry, BRICK); }
     return P2;
   };
@@ -757,41 +869,86 @@ function buildSurroundings(P, dryPal, L = null) {
     if (shadeOn) shade(x + sd.x * Math.min(H, 18) * 0.45, z + sd.z * Math.min(H, 18) * 0.45, w * 0.62, d * 0.62);
     return H;
   };
+  /** Casa de fora no jeito das casas do bairro (barrado, porta com moldura, janelas de batente branco, beiral escuro e cumeeira),
+   *  sem as cores nem os objetos que servem de pista. Tem acesso: degrau, caminho até a calçada da rua, caixa de correio; às vezes
+   *  varanda, cerquinha com portão, entrada de carro com o carro parado. `gap`: da fachada até a beira da rua. */
+  const drawHouse = (b) => {
+    const P2 = local(b), ry = b.ry, farm = b.type === 'farmhouse';
+    const at2 = (key, geo, lx, y, lz, sx, sy, sz, col, rx = 0) => { const [x, z] = P2(lx, lz); I.add(key, geo, x, y, z, sx, sy, sz, rx, ry, col); };
+    const wall = WALLS[Math.floor(rand() * WALLS.length)], roof = farm ? '#8a5040' : ROOFS[Math.floor(rand() * ROOFS.length)];
+    gableHouse(b, wall, roof, { chimney: rand() < 0.4 || farm });
+    const fz = b.d / 2, dx = (rand() < 0.5 ? -1 : 1) * b.w * 0.18, dcol = DOORS[Math.floor(rand() * DOORS.length)];
+    at2('cbox', U_CBOX, dx, 1.16, fz + 0.04, 1.3, 2.32, 0.1, '#3b2c1e');                        // moldura da porta
+    at2('cbox', U_CBOX, dx, 1.08, fz + 0.09, 1.0, 2.1, 0.1, dcol);
+    at2('cbox', U_CBOX, dx, 0.08, fz + 0.5, 1.7, 0.16, 0.8, '#cdc2aa');                         // degrau
+    const win = (lx, y, lz, back = false) => {                                                  // janela: batente branco, vidro e peitoril
+      const s = back ? -1 : 1;
+      at2('cbox', U_CBOX, lx, y, lz + s * 0.04, 1.42, 1.2, 0.08, '#f4f0e6');
+      at2('cbox', U_CBOX, lx, y, lz + s * 0.09, 1.16, 0.94, 0.06, GLASS);
+      at2('cbox', U_CBOX, lx, y, lz + s * 0.12, 0.07, 0.94, 0.04, '#f4f0e6');                   // travessa do meio
+      at2('cbox', U_CBOX, lx, y - 0.66, lz + s * 0.12, 1.55, 0.09, 0.22, '#e6dfd0');            // peitoril
+    };
+    for (const wx of [-1, 1]) {
+      const xx = wx * b.w * 0.3; if (Math.abs(xx - dx) < 1.3) continue;
+      win(xx, 1.6, fz);
+      if (b.h > 4) win(xx, 4.2, fz);
+    }
+    if (b.h > 4) win(dx, 4.2, fz);
+    win(0, 1.6, -fz, true);                                                                      // janela dos fundos
+    const gap = b.gap ?? 6;
+    if (farm) {                                                                                  // varanda do sítio
+      for (const px of [-b.w / 2 + 0.4, -1.4, 1.4, b.w / 2 - 0.4]) at2('box', U_BOX, px, 0, fz + 2.0, 0.18, 2.5, 0.18, '#f2ead8');
+      at2('cbox', U_CBOX, 0, 2.6, fz + 1.1, b.w + 0.3, 0.16, 2.4, '#7a4a3a', 0.12);
+      at2('cbox', U_CBOX, 0, 0.12, fz + 1.1, b.w, 0.24, 2.2, '#b99a72');
+    } else {
+      if (b.h < 4 && rand() < 0.35) {                                                            // varandinha coberta sobre a porta
+        for (const px of [dx - 1.25, dx + 1.25]) at2('box', U_BOX, px, 0, fz + 1.5, 0.16, 2.45, 0.16, '#f4f0e6');
+        at2('cbox', U_CBOX, dx, 2.55, fz + 0.8, 3.0, 0.14, 1.75, lerpHex(roof, '#1a1410', 0.3), 0.14);
+        at2('cbox', U_CBOX, dx, 0.1, fz + 0.85, 2.8, 0.2, 1.6, '#cdc2aa');
+      }
+      const sw = Math.max(1.2, Math.min(1.8, gap - 3.2));                                       // calçada na frente do lote, até a rua
+      at2('cbox', U_CBOX, 0, 0.012, fz + gap - sw / 2, b.w + 4, 0.03, sw, '#d2cab8');
+      const pz0 = fz + 0.9, pz1 = fz + gap - sw;                                                 // caminho da porta até a calçada
+      if (pz1 > pz0 + 0.2) at2('cbox', U_CBOX, dx, 0.01, (pz0 + pz1) / 2, 1.1, 0.03, pz1 - pz0, '#e2d9c5');
+      const [mx, mz] = P2(dx + 1.0, pz1 - 0.3);                                                  // caixa de correio
+      I.add('box', U_BOX, mx, 0, mz, 0.08, 1.0, 0.08, 0, ry, '#5a4a3a');
+      I.add('cbox', U_CBOX, mx, 1.05, mz, 0.3, 0.26, 0.42, 0, ry, '#4d5a4a');
+      if (gap >= 4.6 && rand() < 0.55) {                                                         // cerquinha baixa, com o portão no caminho
+        const fz2 = fz + gap - sw - 0.25;
+        for (let k = -4; k <= 4; k++) if (Math.abs(k * b.w / 9 - dx) > 0.9) at2('box', U_BOX, k * b.w / 9, 0, fz2, 0.12, 0.7, 0.08, '#f4efe4');
+        for (const sg of [-1, 1]) { const a = sg > 0 ? dx + 0.9 : -b.w / 2, c = sg > 0 ? b.w / 2 : dx - 0.9; if (c - a > 0.3) at2('cbox', U_CBOX, (a + c) / 2, 0.45, fz2, c - a, 0.08, 0.06, '#f4efe4'); }
+        const [f0x, f0z] = P2(-b.w / 2, fz2), [f1x, f1z] = P2(b.w / 2, fz2);
+        solid(Math.min(f0x, f1x) - 0.15, Math.max(f0x, f1x) + 0.15, Math.min(f0z, f1z) - 0.15, Math.max(f0z, f1z) + 0.15);
+      }
+      for (const sg of [-1, 1]) if (Math.abs(sg * b.w * 0.42 - dx) > 1.3) {                     // arbustos junto da fachada
+        const [bx, bz] = P2(sg * b.w * 0.42, fz + 0.75); I.add('ico', U_ICO, bx, 0.38, bz, 0.7, 0.5, 0.55, rand(), ry, PAL.leaves[Math.floor(rand() * PAL.leaves.length)]);
+      }
+      const side = dx > 0 ? -1 : 1;
+      if (rand() < 0.4) {                                                                        // entrada de carro ao lado da casa
+        const cxl = side * (b.w / 2 + 1.7);
+        at2('cbox', U_CBOX, cxl, 0.011, (fz - 2 + fz + gap) / 2, 2.8, 0.03, gap + 2, '#bdb6a6');
+        if (rand() < 0.6) {
+          const col = ['#8f959c', '#f2f2f2', '#3a5a7a', '#7a3a34', '#2b2d33', '#c9b98f'][Math.floor(rand() * 6)];
+          at2('cbox', U_CBOX, cxl, 0.2, fz + 0.4, 1.6, 0.4, 3.2, '#26282c');
+          at2('cbox', U_CBOX, cxl, 0.7, fz + 0.4, 1.8, 0.66, 3.9, col);
+          at2('cbox', U_CBOX, cxl, 1.25, fz + 0.2, 1.6, 0.5, 2.0, '#c9d6e0');
+          const [c0x, c0z] = P2(cxl, fz + 0.4); solid(c0x - 2, c0x + 2, c0z - 2, c0z + 2);
+        }
+      } else if (rand() < 0.55) { const [tx, tz] = P2(side * (b.w / 2 + 2.3), fz + 1.2); tree(tx, tz, rand() < 0.3 ? 'birch' : 'round', 0.75 + rand() * 0.3); }
+    }
+    solid(b.box.x0 - 0.2, b.box.x1 + 0.2, b.box.z0 - 0.2, b.box.z1 + 0.2);
+    shade(b.x + sd.x * 2.5, b.z + sd.z * 2.5, b.w * 0.62, b.d * 0.62);
+  };
   const quad = city ? (x, z) => { I.suffix = '#q' + farKey(x, z, 0).slice(2); } : () => {};   // (cidade: um pedaço por quadrante, para a câmera recortar)
   for (const b of P.builds) {
     quad(b.x, b.z);
     const P2 = local(b), ry = b.ry;
     const at2 = (key, geo, lx, y, lz, sx, sy, sz, col, rx = 0) => { const [x, z] = P2(lx, lz); I.add(key, geo, x, y, z, sx, sy, sz, rx, ry, col); };
     if (b.type === 'house' || b.type === 'farmhouse') {
-      const wall = WALLS[Math.floor(rand() * WALLS.length)], roof = b.type === 'farmhouse' ? '#8a5040' : ROOFS[Math.floor(rand() * ROOFS.length)];
-      gableHouse(b, wall, roof, { chimney: rand() < 0.4 || b.type === 'farmhouse' });
-      const dx = (rand() < 0.5 ? -1 : 1) * b.w * 0.18;
-      at2('cbox', U_CBOX, dx, 1.05, b.d / 2 + 0.05, 1.0, 2.1, 0.12, DOORS[Math.floor(rand() * DOORS.length)]);
-      at2('cbox', U_CBOX, dx, 0.08, b.d / 2 + 0.5, 1.6, 0.16, 0.8, '#cfc5b0');                     // degrau
-      for (const wx of [-1, 1]) {
-        const xx = wx * b.w * 0.3; if (Math.abs(xx - dx) < 1.2) continue;
-        at2('cbox', U_CBOX, xx, 1.55, b.d / 2 + 0.05, 1.3, 1.05, 0.1, GLASS);
-        if (b.h > 4) at2('cbox', U_CBOX, xx, 4.15, b.d / 2 + 0.05, 1.2, 1.0, 0.1, GLASS);
-      }
-      if (b.h > 4) at2('cbox', U_CBOX, dx, 4.15, b.d / 2 + 0.05, 1.2, 1.0, 0.1, GLASS);
-      at2('cbox', U_CBOX, 0, 1.6, -b.d / 2 - 0.05, 1.3, 1.0, 0.1, GLASS);                          // janela dos fundos
-      if (b.type === 'farmhouse') {                                                              // varanda do sítio
-        for (const px of [-b.w / 2 + 0.4, -1.4, 1.4, b.w / 2 - 0.4]) at2('box', U_BOX, px, 0, b.d / 2 + 2.0, 0.18, 2.5, 0.18, '#f2ead8');
-        at2('cbox', U_CBOX, 0, 2.6, b.d / 2 + 1.1, b.w + 0.3, 0.16, 2.4, '#7a4a3a', 0.12);
-        at2('cbox', U_CBOX, 0, 0.12, b.d / 2 + 1.1, b.w, 0.24, 2.2, '#b99a72');
-      } else if (rand() < 0.5) {                                                                 // cerquinha baixa na frente
-        const fz = b.d / 2 + 3.4;
-        for (let k = -4; k <= 4; k++) if (Math.abs(k * b.w / 9 - dx) > 0.9) at2('box', U_BOX, k * b.w / 9, 0, fz, 0.12, 0.7, 0.08, '#f4efe4');
-        for (const sg of [-1, 1]) { const a = sg > 0 ? dx + 0.9 : -b.w / 2, c = sg > 0 ? b.w / 2 : dx - 0.9; if (c - a > 0.3) at2('cbox', U_CBOX, (a + c) / 2, 0.45, fz, c - a, 0.08, 0.06, '#f4efe4'); }
-        const [f0x, f0z] = P2(-b.w / 2, fz), [f1x, f1z] = P2(b.w / 2, fz);
-        solid(Math.min(f0x, f1x) - 0.15, Math.max(f0x, f1x) + 0.15, Math.min(f0z, f1z) - 0.15, Math.max(f0z, f1z) + 0.15);
-      }
-      if (rand() < 0.55) { const [tx, tz] = P2((rand() < 0.5 ? -1 : 1) * (b.w / 2 + 2.5), b.d / 2 + 1.5); tree(tx, tz, rand() < 0.3 ? 'birch' : 'round', 0.75 + rand() * 0.3); }
-      solid(b.box.x0 - 0.2, b.box.x1 + 0.2, b.box.z0 - 0.2, b.box.z1 + 0.2);
-      shade(b.x + sd.x * 2.5, b.z + sd.z * 2.5, b.w * 0.62, b.d * 0.62);
+      drawHouse(b);
     } else if (b.type === 'barn') {
       const B = { ...b, h: 4.6, rise: 3.0 };
-      gableHouse(B, '#8a4a3a', '#6d6a66', { over: 0.35 });
+      gableHouse(B, '#8a4a3a', '#6d6a66', { over: 0.35, trim: false });
       at2('cbox', U_CBOX, 0, 1.75, b.d / 2 + 0.06, 3.6, 3.5, 0.12, '#f1e8d6');
       at2('cbox', U_CBOX, 0, 1.7, b.d / 2 + 0.12, 3.1, 3.2, 0.12, '#6a3a2e');
       for (const sg of [1, -1]) { const [x, z] = P2(0, b.d / 2 + 0.2); I.add('cbox', U_CBOX, x, 1.7, z, 0.18, 4.1, 0.06, 0, ry, '#f1e8d6', sg * 0.72); }   // travessas em X na porta
@@ -906,29 +1063,57 @@ function buildSurroundings(P, dryPal, L = null) {
         if (city && rand() < 0.5) fence(r.x0 + 2, r.z0 + 2, r.x1 - 2, r.z0 + 2, '#8d9093');
         break;
       }
-      case 'homes': {                                                                                // casinhas no miolo da quadra de fora
-        for (const [ox, oz] of [[0.27, 0.3], [0.73, 0.68]]) {
-          const dm = { w: 7.4 + rand() * 1.6, d: 6.2, h: 2.9, rise: 2 };
-          const b = { type: 'house', x: r.x0 + ox * w, z: r.z0 + oz * d, ry: [0, Math.PI, Math.PI / 2, -Math.PI / 2][Math.floor(rand() * 4)], ...dm };
-          const hw = (Math.abs(Math.sin(b.ry)) > 0.5 ? b.d : b.w) / 2, hd = (Math.abs(Math.sin(b.ry)) > 0.5 ? b.w : b.d) / 2;
+      case 'homes': {                                                                                // casinhas de frente para a rua ao lado do terreno
+        const f = c.face, alongX = f.side === 'n' || f.side === 's', sg = f.side === 'n' || f.side === 'w' ? 1 : -1;
+        const ry = { n: Math.PI, s: 0, w: -Math.PI / 2, e: Math.PI / 2 }[f.side];
+        for (const t of [0.27, 0.73]) {
+          const dm = { w: 7.4 + rand() * 1.8, d: 6.0 + rand() * 1.2, h: rand() < 0.2 ? 5.5 : 2.9, rise: 1.9 + rand() * 0.4 }, gap = Math.max(5, f.d + 2.5);
+          const off = f.edge + sg * (gap + dm.d / 2);
+          const b = { type: 'house', x: alongX ? r.x0 + t * w : off, z: alongX ? off : r.z0 + t * d, ry, gap, ...dm };
+          const hw = (alongX ? b.w : b.d) / 2, hd = (alongX ? b.d : b.w) / 2;
           b.box = { x0: b.x - hw, x1: b.x + hw, z0: b.z - hd, z1: b.z + hd };
-          gableHouse(b, WALLS[Math.floor(rand() * WALLS.length)], ROOFS[Math.floor(rand() * ROOFS.length)], { chimney: rand() < 0.3 });
-          const [dx, dz] = local(b)(0, b.d / 2 + 0.05); I.add('cbox', U_CBOX, dx, 1.05, dz, 1.0, 2.1, 0.12, 0, b.ry, DOORS[0]);
-          solid(b.box.x0 - 0.2, b.box.x1 + 0.2, b.box.z0 - 0.2, b.box.z1 + 0.2);
-          shade(b.x + sd.x * 2.5, b.z + sd.z * 2.5, b.w * 0.6, b.d * 0.6);
+          drawHouse(b);
         }
-        for (let k = 0; k < 3; k++) tree(r.x0 + 3 + rand() * (w - 6), r.z0 + 3 + rand() * (d - 6), treeType(), 0.8 + rand() * 0.4);
+        for (let k = 0; k < 2; k++) {                                                              // quintais dos fundos
+          const u = rand(), v = 0.7 + rand() * 0.22, tx = alongX ? r.x0 + 3 + u * (w - 6) : (sg > 0 ? r.x0 + v * w : r.x1 - v * w), tz = alongX ? (sg > 0 ? r.z0 + v * d : r.z1 - v * d) : r.z0 + 3 + u * (d - 6);
+          tree(tx, tz, treeType(), 0.8 + rand() * 0.4);
+        }
+        break;
+      }
+      case 'garden': {                                                                               // horta: canteiros em fileiras, cerca e um ranchinho
+        const inset = { x0: r.x0 + 3, x1: r.x1 - 3, z0: r.z0 + 3, z1: r.z1 - 3 };
+        plane(inset, fieldMat(rand() < 0.5 ? '#6f9a42' : '#82a54c', dryPal ? '#8a6d4c' : '#7d5f40', 3), 2.4, c.along);
+        fenceBox({ x0: inset.x0 - 0.8, x1: inset.x1 + 0.8, z0: inset.z0 - 0.8, z1: inset.z1 + 0.8 }, nearRoad(r));
+        const hb = { type: 'shed', x: inset.x0 + 3.2, z: inset.z0 + 2.6, ry: 0, w: 4.2, d: 3.4, h: 2.3, rise: 1.1 };
+        hb.box = { x0: hb.x - 2.1, x1: hb.x + 2.1, z0: hb.z - 1.7, z1: hb.z + 1.7 };
+        gableHouse(hb, '#a7835a', '#6d5a4a', { over: 0.25, trim: false });
+        I.add('cbox', U_CBOX, hb.x + 0.6, 0.95, hb.z + 1.75, 0.9, 1.9, 0.08, 0, 0, '#5a4030');
+        solid(hb.box.x0 - 0.2, hb.box.x1 + 0.2, hb.box.z0 - 0.2, hb.box.z1 + 0.2);
+        if (rand() < 0.6) {                                                                          // espantalho
+          const ex = mx + (rand() - 0.5) * 8, ez = mz + (rand() - 0.5) * 8;
+          I.add('box', U_BOX, ex, 0, ez, 0.1, 1.9, 0.1, 0, 0, '#6b4a2e');
+          I.add('cbox', U_CBOX, ex, 1.45, ez, 1.4, 0.1, 0.1, 0, 0, '#6b4a2e');
+          I.add('cbox', U_CBOX, ex, 1.3, ez, 0.5, 0.6, 0.3, 0, 0, '#a14a3a');
+          I.add('ico', U_ICO, ex, 1.85, ez, 0.2, 0.2, 0.2, 0, 0, '#e3cf9a');
+          I.add('cyl', U_CYL, ex, 1.98, ez, 0.36, 0.06, 0.36, 0, 0, '#c9a457');
+        }
         break;
       }
       case 'ware': {
-        const b = { type: 'ware', x: mx, z: mz, ry: 0, w: 22, d: 14 };
-        b.box = { x0: b.x - 11, x1: b.x + 11, z0: b.z - 7, z1: b.z + 7 };
+        const f = c.face;
+        const ry = f ? { n: Math.PI, s: 0, w: -Math.PI / 2, e: Math.PI / 2 }[f.side] : 0, alongX = !f || f.side === 'n' || f.side === 's';
+        const sg = f && (f.side === 'n' || f.side === 'w') ? 1 : -1, gap = f ? Math.max(6, f.d + 3) : 0;
+        const off = f ? f.edge + sg * (gap + 7) : 0;
+        const b = { type: 'ware', x: f && !alongX ? off : mx, z: f && alongX ? off : mz, ry, w: 22, d: 14 };
+        b.box = alongX ? { x0: b.x - 11, x1: b.x + 11, z0: b.z - 7, z1: b.z + 7 } : { x0: b.x - 7, x1: b.x + 7, z0: b.z - 11, z1: b.z + 11 };
         flat(r.x0 + 1, r.z0 + 1, r.x1 - 1, r.z1 - 1, dryPal ? '#a49d8c' : '#a8a497');               // pátio
+        const P2 = local(b);
         gableHouse({ ...b, h: 6.5, rise: 1.6 }, ['#aab1b6', '#b9ad96', '#9fa7a0'][Math.floor(rand() * 3)], '#7d8489', { over: 0.3 });
-        I.add('cbox', U_CBOX, b.x - 4, 2.3, b.z + 7.06, 5, 4.6, 0.12, 0, 0, '#5c636a');
-        for (let k = 0; k < 3; k++) I.add('box', U_BOX, b.x + 4 + k * 1.3, 0, b.z + 9.5, 1.1, 0.9, 1.1, 0, rand(), '#b08a5a');   // caixotes
+        let [px, pz] = P2(-4, 7.06); I.add('cbox', U_CBOX, px, 2.3, pz, 5, 4.6, 0.12, 0, ry, '#5c636a');
+        for (let k = 0; k < 3; k++) { [px, pz] = P2(4 + k * 1.3, 9.5); I.add('box', U_BOX, px, 0, pz, 1.1, 0.9, 1.1, 0, rand(), '#b08a5a'); }   // caixotes
+        if (f) { [px, pz] = P2(-4, 7 + gap / 2); I.add('cbox', U_CBOX, px, 0.01, pz, 6, 0.03, gap, 0, ry, '#9a968b'); }   // acesso do portão até a rua
         solid(b.box.x0 - 0.2, b.box.x1 + 0.2, b.box.z0 - 0.2, b.box.z1 + 0.2);
-        shade(b.x + sd.x * 3, b.z + sd.z * 3, 13, 8.5);
+        shade(b.x + sd.x * 3, b.z + sd.z * 3, alongX ? 13 : 8.5, alongX ? 8.5 : 13);
         break;
       }
       case 'block': {
@@ -1220,10 +1405,11 @@ function buildCityOuter(P, ctx) {
   const cuts = river ? [[river.x0, river.x1]] : [];
   const paveM = cheapMat(L, { color: dryPal ? '#b6af9f' : '#b2afa6' }); lamps.dim.push(paveM);
   const hills = flavor === 'encostas' ? hillField(M, cx, cheapMat(L, { vertexColors: true })) : null;
-  if (!hills) for (const [x0, z0, x1, z1] of frameRects(mid, inner, cuts)) { const m = tilePlane(x0, z0, x1, z1, 0, 0, paveM, -0.026); if (m) fields.add(m); }   // (Encostas: gramado até os morros)
+  // (as vias de fora ficam nas linhas da malha: as ruas da cidade começam logo depois delas, sem a faixa de calçamento liso)
+  if (!hills && !P.gridCity) for (const [x0, z0, x1, z1] of frameRects(mid, inner, cuts)) { const m = tilePlane(x0, z0, x1, z1, 0, 0, paveM, -0.026); if (m) fields.add(m); }   // (Encostas: gramado até os morros)
   if (!hills) {
     const stM = cheapMat(L, { map: streetTexture(dryPal) }); lamps.dim.push(stM);
-    for (const [x0, z0, x1, z1] of frameRects(outer, mid, cuts)) { const m = tilePlane(x0, z0, x1, z1, cx, P.J, stM, -0.026); if (m) fields.add(m); }
+    for (const [x0, z0, x1, z1] of frameRects(outer, P.gridCity ? inner : mid, cuts)) { const m = tilePlane(x0, z0, x1, z1, cx, P.J, stM, -0.026); if (m) fields.add(m); }
   } else fields.add(hills.mesh);
   const hAt = hills ? hills.h : () => 0;
   if (hills) ctx.hillH = hills.h;                                                 // (Encostas: a van sobe os morros — createWorld)
@@ -1353,7 +1539,7 @@ function buildCityOuter(P, ctx) {
   for (let z = P.J - 20; z > -420; z -= 26) lampAt(cx + 4.4, z);
   if (!hills) for (let i = -NI; i <= NI; i += 1) for (let j = -NI; j <= NI; j += 1) {               // esquinas das ruas de longe
     const x = cx + i * TILE, z = P.J + j * TILE, e = edge(x, z);
-    if (e > FAR0 - 10 && e < FAR1 - 40 && !inRiver(x - 2, x + 2) && (i + j) % 2 === 0) { I.suffix = farKey(x, z, e); lampAt(x + 4.6, z + 4.6); I.suffix = ''; }
+    if (e > (P.gridCity ? 20 : FAR0 - 10) && e < FAR1 - 40 && !inRiver(x - 2, x + 2) && (i + j) % 2 === 0 && !(x > inner.x0 - 6 && x < inner.x1 + 6 && z > inner.z0 - 6 && z < inner.z1 + 6)) { I.suffix = farKey(x, z, e); lampAt(x + 4.6, z + 4.6); I.suffix = ''; }
   }
 
   // ---- o que é de cada bairro ----
@@ -1379,7 +1565,8 @@ function buildCityOuter(P, ctx) {
     }
     for (let x = L0 + 20; x < L1; x += 36) {                                                        // pilares (fora das estradas)
       if (Math.abs(x - cx) < 14 || (river && x > river.x0 - 3 && x < river.x1 + 3)) continue;
-      if (F.kind === 'road' && (Math.abs(x - P.XW) < P.RL / 2 + 3 || Math.abs(x - P.XE) < P.RL / 2 + 3)) continue;
+      if (Math.abs(x - P.XW) < P.RL / 2 + 3 || Math.abs(x - P.XE) < P.RL / 2 + 3) continue;
+      if (P.gridCity && Math.abs(((x - cx) % TILE + TILE) % TILE - TILE / 2) > TILE / 2 - STREET / 2 - 2) continue;   // (nem no meio das ruas da malha)
       I.add('deck', U_CBOX, x, (Y - 1.3) / 2, z, 1.8, Y - 1.3, 2.6, 0, 0, '#b3ada1');
       I.add('deck', U_CBOX, x, Y - 1.5, z, 2.6, 0.8, H2 * 2 - 1.2, 0, 0, '#b3ada1');
       solid(x - 1.1, x + 1.1, z - 1.5, z + 1.5).post = true;
@@ -1704,15 +1891,76 @@ function baked(root, cast, receive = true) {
 }
 
 // ---------- Praça (Bairro 2): lotes unidos, a van não entra ----------
+// Medidas relativas ao centro da praça: gramado de −20,6 a 20,6; caminhos em cruz (largura 3,2), anel em volta do coreto
+// (raio 7,5), 4 canteiros redondos (±10,7), 8 árvores, 4 bancos virados para o caminho leste–oeste, a trilha de terra no
+// canto sudeste e o carrinho de pipoca no caminho do sul. O paisagismo novo (relva com variação de tom, tufos, flores
+// e arbustos em grupinhos, meio-fio nos caminhos) fica todo fora dos caminhos: a circulação continua a mesma.
+const PZ = { half: 20.6, path: 1.6, ring: 7.5, bed: 10.7, benchX: 9.5, benchZ: 2.6, cart: [1.0, 10.5, 0.3], seat: 0.42 };
+const PZ_TRAIL = [[18.2, 18.4], [16.4, 16.0], [15.2, 12.4], [14.0, 8.8], [11.4, 6.4], [8.6, 5.4], [7.0, 5.0]];
+const PZ_TREES = [];
+for (const sx of [-1, 1]) for (const sz of [-1, 1]) PZ_TREES.push([sx * 18.2, sz * 14.2], [sx * 14.2, sz * 18.2]);
+const pzRand = (() => { let s = 1234567; return () => { s = (s * 16807) % 2147483647; return s / 2147483647; }; })();
+const segDist = (x, z, a, b) => { const dx = b[0] - a[0], dz = b[1] - a[1], t = Math.max(0, Math.min(1, ((x - a[0]) * dx + (z - a[1]) * dz) / (dx * dx + dz * dz))); return Math.hypot(x - a[0] - dx * t, z - a[1] - dz * t); };
+/** Ponto (relativo ao centro) livre no gramado: fora dos caminhos, do anel, dos canteiros, árvores, bancos, lixeiras, trilha e carrinho. */
+function pzFree(x, z, m = 0.3) {
+  const H = PZ.half;
+  if (Math.abs(x) > H - 0.2 || Math.abs(z) > H - 0.2) return false;
+  if (Math.abs(x) < PZ.path + m || Math.abs(z) < PZ.path + m) return false;
+  if (Math.hypot(x, z) < PZ.ring + m) return false;
+  for (const sx of [-1, 1]) for (const sz of [-1, 1]) {
+    if (Math.hypot(x - sx * PZ.bed, z - sz * PZ.bed) < 2.6 + m) return false;
+    if (Math.abs(x - sx * PZ.benchX) < 1.7 + m && Math.abs(z - sz * PZ.benchZ) < 0.6 + m) return false;
+    if (Math.hypot(x - sx * 11.6, z - sz * 2.6) < 0.4 + m) return false;
+  }
+  for (const [tx, tz] of PZ_TREES) if (Math.hypot(x - tx, z - tz) < 0.55 + m) return false;
+  for (let i = 0; i + 1 < PZ_TRAIL.length; i++) if (segDist(x, z, PZ_TRAIL[i], PZ_TRAIL[i + 1]) < 1.35 + m) return false;
+  return true;
+}
+const PZ_SHRUBS = [];                                     // arbustos baixos em grupinhos: cantos da cerca e dos dois lados das entradas
+for (const sx of [-1, 1]) for (const sz of [-1, 1]) {
+  if (!(sx > 0 && sz > 0)) PZ_SHRUBS.push([sx * 19.2, sz * 19.3, 0.62], [sx * 18.3, sz * 19.6, 0.5], [sx * 19.6, sz * 18.3, 0.48]);   // (o canto sudeste é o da trilha)
+  PZ_SHRUBS.push([sx * 3.7, sz * 19.6, 0.5], [sx * 4.6, sz * 19.7, 0.4], [sz * 19.6, sx * 3.7, 0.5], [sz * 19.7, sx * 4.6, 0.4]);
+}
+
 function buildPlaza() {
   const P = PLAZA, g = new THREE.Group();
   const cx = (P.x0 + P.x1) / 2, cz = (P.z0 + P.z1) / 2, w = P.x1 - P.x0, d = P.z1 - P.z0;
   g.add(at(box(w, 0.17, d, '#d4cdbb'), cx, 0.085, cz));                       // calçada em volta
-  g.add(at(box(w - 1.6, 0.2, d - 1.6, '#86c25c'), cx, 0.1, cz));              // gramado
+  g.add(at(box(w - 1.6, 0.19, d - 1.6, '#80bc57'), cx, 0.095, cz));           // gramado (base)
+  {                                                                            // relva por cima, 1 cm acima: manchas largas e suaves de tom
+    const W = w - 1.6, D = d - 1.6, geo = new THREE.PlaneGeometry(W, D, 48, 48);
+    geo.rotateX(-Math.PI / 2);
+    const pos = geo.attributes.position, col = new Float32Array(pos.count * 3);
+    const A = new THREE.Color('#78b451'), B = new THREE.Color('#93c966'), Y = new THREE.Color('#a2c562'), c = new THREE.Color();
+    for (let i = 0; i < pos.count; i++) {
+      const x = pos.getX(i), z = pos.getZ(i);
+      const n = 0.5 * Math.sin(x * 0.21 + z * 0.13) + 0.35 * Math.sin(x * 0.07 - z * 0.17 + 1.3) + 0.25 * Math.sin((x + z) * 0.33 + 2.1);
+      c.copy(A).lerp(B, Math.min(1, Math.max(0, (n + 1.1) / 2.2)));
+      const y = Math.sin(x * 0.11 + 4.0) * Math.sin(z * 0.09 + 1.0); if (y > 0.55) c.lerp(Y, (y - 0.55) * 1.4);   // pontos mais secos, discretos
+      const edge = Math.max(Math.abs(x), Math.abs(z)); if (edge > W / 2 - 1.2) c.multiplyScalar(0.93);   // grama mais densa junto à cerca
+      col[i * 3] = c.r; col[i * 3 + 1] = c.g; col[i * 3 + 2] = c.b;
+    }
+    geo.setAttribute('color', new THREE.BufferAttribute(col, 3));
+    g.add(at(new THREE.Mesh(geo, mat('#ffffff', { vertexColors: true })), cx, 0.2, cz));
+  }
   // caminhos em cruz e em volta do coreto
   g.add(at(box(w - 1.6, 0.22, 3.2, '#e2d6bb'), cx, 0.11, cz));
   g.add(at(box(3.2, 0.22, d - 1.6, '#e2d6bb'), cx, 0.11, cz));
   g.add(at(cyl(7.5, 7.5, 0.24, '#e2d6bb', 24), cx, 0.12, cz));
+  // meio-fio de pedra nas bordas dos caminhos e do anel (3 cm acima do piso; não atrapalha quem anda)
+  const CURB = '#c4b79a';
+  for (const s of [-1, 1]) for (const e of [-1, 1]) {
+    const a = Math.sqrt(7.56 * 7.56 - 1.67 * 1.67), L = PZ.half - a, m = (PZ.half + a) / 2;
+    g.add(at(box(0.14, 0.07, L, CURB), cx + s * 1.67, 0.215, cz + e * m));    // braços norte–sul
+    g.add(at(box(L, 0.07, 0.14, CURB), cx + e * m, 0.215, cz + s * 1.67));    // braços leste–oeste
+  }
+  for (let q = 0; q < 4; q++) {                                                // anel: 4 arcos entre os braços
+    const a0 = Math.asin(1.67 / 7.56) + q * Math.PI / 2, a1 = (q + 1) * Math.PI / 2 - Math.asin(1.67 / 7.56), n = 12;
+    for (let k = 0; k < n; k++) {
+      const a = a0 + (a1 - a0) * (k + 0.5) / n, len = 7.56 * (a1 - a0) / n + 0.02;
+      g.add(at(box(len, 0.07, 0.14, CURB), cx + Math.cos(a) * 7.56, 0.235, cz + Math.sin(a) * 7.56, 0, -a - Math.PI / 2, 0));
+    }
+  }
   // coreto no centro: base, colunas e telhado vermelho e branco
   g.add(at(cyl(4.6, 4.9, 0.7, '#f3ece0', 16), cx, 0.45, cz));
   for (let k = 0; k < 8; k++) {
@@ -1721,39 +1969,51 @@ function buildPlaza() {
   }
   g.add(at(cone(5.4, 2.4, '#d8473a', 16), cx, 5.1, cz));
   g.add(at(cone(1.2, 1.2, '#ffffff', 12), cx, 6.6, cz));
-  // quatro canteiros floridos, árvores, bancos e postes nos quadrantes
+  // quatro canteiros floridos, árvores (com coroa de terra e folhagem na base), bancos e postes nos quadrantes
   const FLOWERS = ['#ff6fa5', '#ffd12a', '#ffffff', '#9b5de5'];
+  const bedFlowers = [];                                                       // [x, z (relativos ao centro), cor, chão, altura, tamanho]
   for (const [sx, sz] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) {
     const qx = cx + sx * w / 4, qz = cz + sz * d / 4;
     g.add(at(cyl(2.4, 2.6, 0.5, '#8a5a36', 14), qx, 0.35, qz));               // canteiro
     g.add(at(cyl(2.25, 2.25, 0.06, '#5a3c22', 14), qx, 0.6, qz));              // terra
     for (let k = 0; k < 7; k++) {                                              // folhagem baixa em volta
-      const a = k / 7 * Math.PI * 2 + sx; const m = at(mesh(new THREE.IcosahedronGeometry(0.62, 0), '#4f9a45'), qx + Math.cos(a) * 1.55, 0.78, qz + Math.sin(a) * 1.55, a, a * 2, 0);
+      const a = k / 7 * Math.PI * 2 + sx; const m = at(mesh(new THREE.IcosahedronGeometry(0.62, 1), '#4f9a45'), qx + Math.cos(a) * 1.55, 0.78, qz + Math.sin(a) * 1.55, a, a * 2, 0);
       m.scale.set(1.1, 0.6, 1.0); g.add(m);
     }
-    for (let k = 0; k < 22; k++) {                                             // flores pequenas por cima, em manchas de cor
-      const a = k * 2.399 + sz, r = 0.4 + (k % 5) * 0.38;
-      g.add(at(sphere(0.17, FLOWERS[Math.floor(k / 6 + (sx > 0 ? 1 : 0)) % 4], 6, 4), qx + Math.cos(a) * r, 0.98 + (k % 3) * 0.06, qz + Math.sin(a) * r));
+    for (let k = 0; k < 34; k++) {                                             // flores por cima, em manchas de cor (instanciadas lá embaixo)
+      const a = k * 2.399 + sz, r = 0.52 + (k % 6) * 0.15;                    // (entre o arbustinho do meio e a folhagem da borda)
+      bedFlowers.push([qx - cx + Math.cos(a) * r, qz - cz + Math.sin(a) * r, FLOWERS[Math.floor(k / 9 + (sx > 0 ? 1 : 0)) % 4], 0.63, 1.02 + (k % 4) * 0.08, 2.0 + (k % 3) * 0.3]);
     }
-    g.add(at(cone(0.35, 1.3, '#3f8f3a', 7), qx, 1.25, qz));                    // arbustinho no meio
+    { const m = at(mesh(new THREE.IcosahedronGeometry(0.42, 1), '#3f8f3a'), qx, 1.12, qz); m.scale.set(1, 1.45, 1); g.add(m); }   // arbustinho podado no meio
+    g.add(at(cyl(0.07, 0.09, 0.3, '#6b4526', 6), qx, 0.72, qz));
     for (const [tx, tz] of [[sx * 7.5, sz * 3.5], [sx * 3.5, sz * 7.5]]) {     // árvores
       g.add(at(cyl(0.35, 0.45, 2.4, '#6b4526', 6), qx + tx, 1.3, qz + tz));
       g.add(at(sphere(2.1, '#3f8f3a', 8, 6), qx + tx, 3.6, qz + tz));
+      g.add(at(cyl(0.95, 1.0, 0.03, '#5e4128', 12), qx + tx, 0.215, qz + tz));   // coroa de terra em volta do tronco
     }
-    // banco virado para o coreto
-    const bx = cx + sx * 9.5, bz = cz + sz * 2.6, ang = sz > 0 ? Math.PI : 0;
-    g.add(at(box(3.2, 0.25, 0.9, '#8a5a36'), bx, 0.85, bz, 0, ang, 0));
-    g.add(at(box(3.2, 0.8, 0.2, '#8a5a36'), bx, 1.3, bz + (sz > 0 ? 0.45 : -0.45), 0, ang, 0));
-    for (const lx of [-1.3, 1.3]) g.add(at(box(0.2, 0.7, 0.8, '#3a3d44'), bx + lx, 0.45, bz));
+    // banco de ripas de madeira com laterais de ferro, virado para o caminho (assento a 0,42 do gramado)
+    const bx = cx + sx * PZ.benchX, bz = cz + sz * PZ.benchZ, ang = sz > 0 ? Math.PI : 0;
+    const bench = new THREE.Group(); bench.position.set(bx, 0.2, bz); bench.rotation.y = ang;
+    const WOOD = '#b07a46', IRON = '#2f3436';
+    for (const z of [-0.17, 0, 0.17]) bench.add(at(box(2.9, 0.05, 0.13, WOOD), 0, 0.395, z));
+    for (const y of [0.6, 0.79]) bench.add(at(box(2.9, 0.12, 0.04, WOOD), 0, y, -0.29, -0.12, 0, 0));
+    for (const x of [-1.3, 1.3]) {
+      bench.add(at(box(0.07, 0.37, 0.07, IRON), x, 0.185, 0.19));
+      bench.add(at(box(0.07, 0.92, 0.07, IRON), x, 0.45, -0.27, -0.12, 0, 0));
+      bench.add(at(box(0.07, 0.06, 0.52, IRON), x, 0.34, -0.03));
+      bench.add(at(box(0.08, 0.05, 0.46, IRON), x, 0.62, -0.03));
+      bench.add(at(box(0.06, 0.22, 0.06, IRON), x, 0.51, 0.17));
+    }
+    g.add(bench);
     // poste de luz no canto do caminho
     const px = cx + sx * 2.4, pz = cz + sz * (d / 2 - 2.2);
     g.add(at(cyl(0.12, 0.15, 3.6, '#3a3d44', 6), px, 1.9, pz));
     g.add(at(sphere(0.4, '#fff3b0', 8, 6, { emissive: '#fff0a0', emissiveIntensity: 0.6 }), px, 3.9, pz));
   }
   // trilha de terra que o pessoal abriu cortando o gramado (praça usada: atalho da esquina até o coreto). Passa entre as
-  // duas árvores do canto e contorna o canteiro pelo lado de fora (antes cortava o canteiro ao meio, em linha reta).
+  // duas árvores do canto e contorna o canteiro pelo lado de fora.
   {
-    const pts = [[3.2, 3.0], [5.0, 5.4], [6.2, 9.0], [7.4, 12.6], [10.0, 15.0], [12.8, 16.0], [14.4, 16.4]].map(([a, b]) => [cx + w / 2 - a, cz + d / 2 - b]);
+    const pts = PZ_TRAIL.map(([a, b]) => [cx + a, cz + b]);
     for (let i = 0, k = 0; i + 1 < pts.length; i++) {
       const [x0, z0] = pts[i], [x1, z1] = pts[i + 1], dx = x1 - x0, dz = z1 - z0, L = Math.hypot(dx, dz), n = Math.max(1, Math.round(L / 1.3));
       for (let j = 0; j < n; j++, k++) {
@@ -1768,9 +2028,9 @@ function buildPlaza() {
     const x = cx + sx * 11.6, z = cz + sz * 2.6;
     g.add(at(cyl(0.3, 0.26, 0.8, '#3c7d4a', 10), x, 0.62, z)); g.add(at(cyl(0.33, 0.33, 0.08, '#2c5c38', 10), x, 1.04, z));
   }
-  // carrinho de pipoca no caminho do sul
+  // carrinho de pipoca no caminho do sul (o pipoqueiro fica atrás dele, do lado do coreto; a placa olha para quem vem da rua)
   {
-    const px = cx + 1.0, pz = cz + 10.5, k = new THREE.Group(); k.position.set(px, 0.22, pz); k.rotation.y = 0.3;
+    const [ox, oz, ry] = PZ.cart, k = new THREE.Group(); k.position.set(cx + ox, 0.22, cz + oz); k.rotation.y = ry;
     k.add(at(box(1.3, 0.75, 0.8, '#d8312a'), 0, 0.75, 0)); k.add(at(box(1.34, 0.12, 0.84, '#f4f1ea'), 0, 1.16, 0));
     k.add(at(box(1.1, 0.7, 0.62, '#fff6d8', { emissive: '#5a4a20', emissiveIntensity: 0.4 }), 0, 1.57, 0));   // vitrine de pipoca
     for (let q = 0; q < 12; q++) k.add(at(sphere(0.09, '#fffbe8', 5, 3), -0.4 + (q % 4) * 0.27, 1.32 + Math.floor(q / 4) * 0.1, -0.15 + (q % 3) * 0.15));
@@ -1778,159 +2038,454 @@ function buildPlaza() {
     k.add(at(cyl(0.03, 0.03, 1.0, '#5a5f66', 6), 0, 2.45, 0)); k.add(at(cone(1.0, 0.45, '#f4f1ea', 8), 0, 3.05, 0)); k.add(at(cone(1.02, 0.12, '#d8312a', 8), 0, 2.86, 0));
     for (const s of [-1, 1]) k.add(at(cyl(0.3, 0.3, 0.08, '#2a2a2a', 12), s * 0.5, 0.3, 0.42, Math.PI / 2, 0, 0));
     k.add(at(box(0.06, 0.06, 0.9, '#5a5f66'), -0.75, 0.95, -0.2, 0, 0, 0.2));
+    k.add(at(cyl(0.035, 0.035, 0.12, '#5a5f66', 6), 0.6, 1.27, -0.36, 0, 0, Math.PI / 2));   // eixo da manivela (a manivela gira com o pipoqueiro)
+    k.add(at(cyl(0.2, 0.17, 0.2, '#b58a4e', 10), 0.42, 1.32, 0.18)); k.add(at(cyl(0.16, 0.16, 0.06, '#f4f1ea', 10), 0.42, 1.43, 0.18));   // cestinho com saquinhos prontos
+    for (let q = 0; q < 3; q++) k.add(at(cyl(0.05, 0.04, 0.18, '#f4f1ea', 6), 0.36 + q * 0.06, 1.5, 0.15 + (q % 2) * 0.06));
     const pt = textTexture('PIPOCA', { width: 256, height: 80, bg: '#f4f1ea', fg: '#d8312a', font: 'bold 56px "Trebuchet MS", sans-serif' });
-    const pl = new THREE.Mesh(new THREE.PlaneGeometry(1.0, 0.3), new THREE.MeshStandardMaterial({ map: pt, roughness: 0.8 })); pl.position.set(0, 0.8, 0.41); k.add(pl);
+    const pl = new THREE.Mesh(new THREE.PlaneGeometry(1.0, 0.3), new THREE.MeshStandardMaterial({ map: pt, roughness: 0.8 })); pl.position.set(0, 0.8, 0.43); k.add(pl);
     g.add(k);
   }
   // cerquinha baixa em volta do gramado (com aberturas nos caminhos)
-  const fenceCol = '#ffffff';
+  // (moirões com capinha e dois corrimãos, no lugar da faixa branca maciça; mesma linha e mesma colisão de antes)
+  const fenceCol = '#ffffff', FCAP = '#e4e0d6';
+  const fenceRun = (x0, z0, x1, z1) => {
+    const L = Math.hypot(x1 - x0, z1 - z0), n = Math.max(2, Math.round(L / 1.15)), ry = Math.atan2(-(z1 - z0), x1 - x0);
+    for (let k = 0; k <= n; k++) {
+      const x = x0 + (x1 - x0) * k / n, z = z0 + (z1 - z0) * k / n;
+      g.add(at(box(0.1, 0.52, 0.1, fenceCol), x, 0.46, z, 0, ry, 0));
+      g.add(at(box(0.14, 0.04, 0.14, FCAP), x, 0.74, z, 0, ry, 0));
+    }
+    for (const y of [0.42, 0.63]) g.add(at(box(L, 0.06, 0.05, fenceCol), (x0 + x1) / 2, y, (z0 + z1) / 2, 0, ry, 0));
+  };
   for (const sz of [-1, 1]) for (const sx of [-1, 1]) {
-    const len = w / 2 - 3.2;
-    g.add(at(box(len, 0.5, 0.15, fenceCol), cx + sx * (1.6 + len / 2 + 0.2), 0.45, cz + sz * (d / 2 - 1.0)));
-    g.add(at(box(0.15, 0.5, len, fenceCol), cx + sx * (w / 2 - 1.0), 0.45, cz + sz * (1.6 + len / 2 + 0.2)));
+    const len = w / 2 - 3.2, a = 1.8, b = 1.8 + len;
+    fenceRun(cx + sx * a, cz + sz * (d / 2 - 1.0), cx + sx * b, cz + sz * (d / 2 - 1.0));
+    fenceRun(cx + sx * (w / 2 - 1.0), cz + sz * a, cx + sx * (w / 2 - 1.0), cz + sz * b);
+  }
+  // tufos de grama mais alta (junto à cerca e em pequenos grupos), flores em grupinhos e arbustos baixos: instanciados
+  {
+    const tuft = new THREE.Group();
+    for (const [x, z, r, h, ry] of [[0, 0, 0.07, 0.3, 0], [0.08, 0.03, 0.06, 0.24, 0.6], [-0.06, 0.05, 0.06, 0.22, 1.2], [0.02, -0.08, 0.05, 0.2, 2]]) tuft.add(at(cone(r, h, '#5f9a3f', 4), x, h / 2, z, 0.12 * Math.sin(ry * 3), ry, 0.15 * Math.cos(ry * 2)));
+    const spots = [];
+    const tryAdd = (x, z) => { if (pzFree(x, z, 0.15)) spots.push([x, z]); };
+    for (let i = -19.6; i <= 19.6; i += 0.9 + pzRand() * 0.6) for (const e of [-1, 1]) { tryAdd(i, e * (19.75 + pzRand() * 0.4)); tryAdd(e * (19.75 + pzRand() * 0.4), i); }   // ao pé da cerca
+    for (let k = 0; k < 46; k++) {                                              // grupinhos espalhados (3 a 6 tufos)
+      const x0 = (pzRand() * 2 - 1) * 19, z0 = (pzRand() * 2 - 1) * 19; if (!pzFree(x0, z0, 0.4)) continue;
+      const n = 3 + Math.floor(pzRand() * 4); for (let q = 0; q < n; q++) tryAdd(x0 + (pzRand() - 0.5) * 1.1, z0 + (pzRand() - 0.5) * 1.1);
+    }
+    for (const [tx, tz] of PZ_TREES) for (let q = 0; q < 5; q++) { const a = q * 1.26 + tx; tryAdd(tx + Math.cos(a) * 1.15, tz + Math.sin(a) * 1.15); }   // em volta da coroa das árvores
+    const tg = vcMerge(tuft).geometry;
+    const tm = new THREE.InstancedMesh(tg, mat('#ffffff', { vertexColors: true }), spots.length);
+    const o = new THREE.Object3D(), cc = new THREE.Color();
+    spots.forEach(([x, z], i) => { o.position.set(cx + x, 0.2, cz + z); o.rotation.set(0, pzRand() * 6.28, 0); o.scale.setScalar(0.8 + pzRand() * 0.6); o.updateMatrix(); tm.setMatrixAt(i, o.matrix); tm.setColorAt(i, cc.setHSL(0.27 + pzRand() * 0.05, 0.45, 0.5 + pzRand() * 0.12)); });
+    tm.castShadow = false; tm.receiveShadow = true; tm.userData.dynamic = true; g.add(tm);
+    // flores em grupinhos (junto às entradas do anel e ao pé das árvores, nos cantos da cerca)
+    const fl = [];
+    const cluster = (x0, z0, n, cols) => { for (let q = 0; q < n; q++) { const a = q * 2.4 + x0, r = 0.18 + (q % 3) * 0.17, x = x0 + Math.cos(a) * r, z = z0 + Math.sin(a) * r; if (pzFree(x, z, 0.05)) fl.push([x, z, cols[q % cols.length]]); } };
+    for (let q = 0; q < 4; q++) { const a = Math.PI / 4 + q * Math.PI / 2; cluster(Math.cos(a) * 8.6, Math.sin(a) * 8.6, 9, [FLOWERS[q % 4], FLOWERS[(q + 1) % 4], '#ffffff']); }
+    for (const [tx, tz] of PZ_TREES) cluster(tx + (tx > 0 ? -1.3 : 1.3), tz, 5, ['#ffd12a', '#ff8a3a']);
+    for (const sx of [-1, 1]) for (const sz of [-1, 1]) cluster(sx * 17.6, sz * 19.2, 6, ['#ff6fa5', '#ffffff', '#9b5de5']);
+    // flor = corola de 5 pétalas (disco recortado, virado para cima, levemente côncavo) com o miolo amarelo saltado; a cor da
+    // instância tinge as pétalas (o miolo fica amarelo/laranja). Antes eram bolinhas facetadas que, de perto, pareciam pedras.
+    const flowerGeo = (() => {
+      const N = 30, pos = [], col = [], P = new THREE.Color('#ffffff'), C = new THREE.Color('#f6c13a');
+      const rr = a => 0.034 + 0.05 * Math.pow(Math.abs(Math.cos(2.5 * a)), 0.7);   // contorno das pétalas
+      for (let k = 0; k < N; k++) {
+        const a0 = k / N * Math.PI * 2, a1 = (k + 1) / N * Math.PI * 2, r0 = rr(a0), r1 = rr(a1);
+        pos.push(0, 0.006, 0, Math.cos(a1) * r1, 0.012 + r1 * 0.12, -Math.sin(a1) * r1, Math.cos(a0) * r0, 0.012 + r0 * 0.12, -Math.sin(a0) * r0);
+        for (let q = 0; q < 3; q++) col.push(P.r, P.g, P.b);
+      }
+      for (let k = 0; k < 8; k++) {                                            // miolo: cone baixo de 8 faces, 1 cm acima das pétalas
+        const a0 = k / 8 * Math.PI * 2, a1 = (k + 1) / 8 * Math.PI * 2, r = 0.024;
+        pos.push(0, 0.03, 0, Math.cos(a1) * r, 0.018, -Math.sin(a1) * r, Math.cos(a0) * r, 0.018, -Math.sin(a0) * r);
+        for (let q = 0; q < 3; q++) col.push(C.r, C.g, C.b);
+      }
+      const ge = new THREE.BufferGeometry();
+      ge.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); ge.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
+      ge.computeVertexNormals(); return ge;
+    })();
+    // as do gramado (chão 0,2) e as dos canteiros (terra a 0,63): uma malha instanciada para todas, mais os cabinhos
+    const all = fl.map(([x, z, c]) => [x, z, c, 0.2, 0.33 + pzRand() * 0.1, 1.35 + pzRand() * 0.55]).concat(bedFlowers);
+    const fm = new THREE.InstancedMesh(flowerGeo, mat('#ffffff', { vertexColors: true, flatShading: false, side: THREE.DoubleSide }), all.length);
+    all.forEach(([x, z, c, , y, s], i) => { o.position.set(cx + x, y, cz + z); o.rotation.set((pzRand() - 0.5) * 0.5, pzRand() * 6.28, (pzRand() - 0.5) * 0.5); o.scale.setScalar(s); o.updateMatrix(); fm.setMatrixAt(i, o.matrix); fm.setColorAt(i, cc.set(c)); });
+    const stem = new THREE.InstancedMesh(new THREE.CylinderGeometry(0.01, 0.014, 1, 4), mat('#4f8a35'), all.length);
+    all.forEach(([x, z, , g0], i) => { fm.getMatrixAt(i, o.matrix); o.matrix.decompose(o.position, o.quaternion, o.scale); const h = o.position.y - g0; o.position.y = g0 + h / 2; o.rotation.set(0, 0, 0); o.scale.set(1.3, h, 1.3); o.updateMatrix(); stem.setMatrixAt(i, o.matrix); });
+    for (const m of [fm, stem]) { m.castShadow = false; m.receiveShadow = true; m.userData.dynamic = true; g.add(m); }
+    // arbustos baixos (folhagem redonda, dois tons)
+    const sm = new THREE.InstancedMesh(new THREE.IcosahedronGeometry(1, 1), mat('#ffffff', { flatShading: true }), PZ_SHRUBS.length);
+    PZ_SHRUBS.forEach(([x, z, r], i) => { o.position.set(cx + x, 0.2 + r * 0.55, cz + z); o.rotation.set(0, i * 1.3, 0); o.scale.set(r * 1.1, r * 0.85, r); o.updateMatrix(); sm.setMatrixAt(i, o.matrix); sm.setColorAt(i, cc.set(i % 3 ? '#4f8f3e' : '#5d9e48')); });
+    sm.castShadow = true; sm.receiveShadow = true; sm.userData.dynamic = true; g.add(sm);
   }
   return g;
 }
 
 // ---------- Vida na praça (Bairro 2) ----------
-// Gente de verdade usando a praça: um casal de idosos num banco (ele lê o jornal, ela olha o movimento), uma senhora
-// dando milho aos pombos (que bicam, dão pulinhos e se assustam de vez em quando), o pipoqueiro ao lado do carrinho e
-// alguém passeando com o cachorro em volta do coreto. Cada pessoa: 1 malha fundida + cabeça (e pernas, se anda);
-// pombos instanciados. Ciclos e fases diferentes para ninguém se mexer em sincronia.
-const SKINS = ['#e8b98f', '#c98a62', '#8a5a3c', '#f1c9a5'];
-const scaled = (m, x, y, z) => { m.scale.set(x, y, z); return m; };
-function personParts(o) {
-  const b = new THREE.Group(), seat = o.seated;
-  const SH = o.shirt, PA = o.pants, SK = o.skin, SHOE = o.shoes || '#3a2a20';
-  if (seat) {
-    for (const sx of [-1, 1]) {
-      b.add(at(box(0.2, 0.18, 0.5, PA), sx * 0.12, 0.06, 0.2));             // coxas
-      b.add(at(box(0.18, 0.7, 0.19, PA), sx * 0.12, -0.31, 0.44));           // canelas (até o gramado: o assento do banco fica 0,78 acima)
-      b.add(at(box(0.2, 0.12, 0.3, SHOE), sx * 0.12, -0.72, 0.52));
-    }
-  } else {
-    for (const sx of [-1, 1]) b.add(at(box(0.24, 0.12, 0.32, SHOE), sx * 0.13, 0.06, 0.05));
-  }
-  const ty = seat ? 0.38 : 1.18;
-  b.add(at(box(0.5, 0.64, 0.3, SH), 0, ty, -0.02));
-  if (o.skirt) b.add(at(box(0.54, 0.22, seat ? 0.56 : 0.34, o.skirt), 0, seat ? 0.08 : 0.82, seat ? 0.16 : 0));
-  b.add(at(box(0.16, 0.1, 0.16, SK), 0, ty + 0.37, 0));
-  const arms = o.arms || 'down';
-  for (const sx of [-1, 1]) {
-    if (arms === 'lap') { b.add(at(box(0.13, 0.42, 0.15, SH), sx * 0.31, ty + 0.06, 0.02)); b.add(at(box(0.12, 0.12, 0.36, SH), sx * 0.27, ty - 0.18, 0.18)); b.add(at(sphere(0.07, SK, 6, 4), sx * 0.24, ty - 0.18, 0.38)); }
-    else if (arms === 'paper') { b.add(at(box(0.13, 0.4, 0.15, SH), sx * 0.31, ty + 0.06, 0.04)); b.add(at(box(0.12, 0.12, 0.34, SH), sx * 0.28, ty - 0.12, 0.2, -0.5, 0, 0)); }
-    else b.add(at(box(0.13, 0.6, 0.15, SH), sx * 0.33, ty - 0.02, 0, 0, 0, sx * 0.07));
-  }
-  if (arms === 'paper') { b.add(at(box(0.66, 0.46, 0.03, '#f2efe6'), 0, ty + 0.02, 0.42, -0.35, 0, 0)); for (let k = 0; k < 3; k++) b.add(at(box(0.5, 0.03, 0.035, '#9a9a9a'), 0, ty + 0.12 - k * 0.09, 0.43 - k * 0.03, -0.35, 0, 0)); }
-  if (o.bag) b.add(at(box(0.22, 0.26, 0.16, '#d9c09a'), 0.12, ty - 0.12, 0.34));
-  if (o.apron) b.add(at(box(0.44, 0.6, 0.04, o.apron), 0, ty - 0.08, 0.15));
-  const h = new THREE.Group();
-  h.add(at(sphere(0.19, SK, 10, 8), 0, 0, 0));
-  h.add(scaled(at(sphere(0.2, o.hair, 10, 6), 0, 0.06, -0.03), 1, 0.85, 1));
-  if (o.bun) h.add(at(sphere(0.09, o.hair, 6, 4), 0, 0.12, -0.18));
-  if (o.cap) { h.add(at(cyl(0.2, 0.21, 0.1, o.cap, 12), 0, 0.14, 0)); h.add(at(box(0.24, 0.03, 0.2, o.cap), 0, 0.1, 0.17)); }
-  if (o.glasses) h.add(at(box(0.3, 0.05, 0.03, '#2a2522'), 0, 0.02, 0.18));
-  for (const sx of [-1, 1]) h.add(at(sphere(0.028, '#2a2522', 5, 3), sx * 0.07, 0.02, 0.18));
-  const root = new THREE.Group(), head = vcMerge(h);
-  root.add(vcMerge(b)); head.position.set(0, ty + 0.57, 0); root.add(head);
-  root.userData.head = head;
-  if (!seat) {                                                     // pernas separadas (para andar)
-    const legs = [];
-    for (const sx of [-1, 1]) {
-      const lg = new THREE.Group(); lg.add(at(box(0.2, 0.78, 0.22, PA), 0, -0.39, 0));
-      const m = vcMerge(lg), pv = new THREE.Group(); pv.position.set(sx * 0.13, 0.86, 0); pv.add(m); root.add(pv); legs.push(pv);
-    }
-    root.userData.legs = legs;
-  }
-  root.traverse(q => { if (q.isMesh) { q.castShadow = true; q.receiveShadow = false; } });
-  return root;
-}
-function buildDog() {
-  const g = new THREE.Group(), C = '#c8925a', D = '#8a5a36';
-  g.add(at(box(0.3, 0.3, 0.66, C), 0, 0.42, 0));
-  g.add(at(box(0.26, 0.26, 0.3, C), 0, 0.62, 0.42)); g.add(at(box(0.16, 0.14, 0.16, '#e6c9a0'), 0, 0.56, 0.62)); g.add(at(box(0.06, 0.06, 0.04, '#1c1c1c'), 0, 0.6, 0.71));
-  for (const sx of [-1, 1]) g.add(at(box(0.08, 0.16, 0.1, D), sx * 0.13, 0.74, 0.36));
-  for (const [x, z] of [[-0.1, 0.24], [0.1, 0.24], [-0.1, -0.24], [0.1, -0.24]]) g.add(at(box(0.08, 0.3, 0.08, C), x, 0.15, z));
-  g.add(at(box(0.06, 0.06, 0.26, D), 0, 0.56, -0.42, 0.7, 0, 0));
-  const m = vcMerge(g); m.castShadow = true; m.receiveShadow = false; return m;
+// Gente usando a praça, no estilo dos moradores (buildFigure): o casal no banco (Seu Nestor lê o jornal, Dona Zilá faz
+// tricô), Dona Ermínia joga milho para os pombos (que correm para o milho e se assustam com o cachorro), Seu Toninho no
+// carrinho de pipoca (gira a manivela, enche saquinhos, chama a freguesia, limpa o balcão) e o Davi passeando com o
+// Paçoca por caminhos variados (para, olha, espera o cachorro farejar; a guia vai da mão dele à coleira). Dá para
+// conversar com todos a pé (E perto: nearTalk/talk/endTalk, o mesmo fluxo do Medieval); as conversas não são dicas e não
+// mexem nas entregas. Ritmos e pausas diferentes para cada um (nada sincronizado).
+function pzDog() {                                                   // Paçoca: vira-lata caramelo, uma malha com esqueleto
+  const C = '#d29a58', L = '#f1dcb4', D = '#9a6a3a', G2 = partGeo, M = partMatrix;
+  const root = new THREE.Bone(); root.name = 'dog';
+  const body = new THREE.Bone(); body.position.set(0, 0.42, 0); root.add(body);
+  const head = new THREE.Bone(); head.position.set(0, 0.16, 0.36); body.add(head);
+  const tail = new THREE.Bone(); tail.position.set(0, 0.1, -0.34); body.add(tail);
+  const legs = [[-0.11, 0.24], [0.11, 0.24], [-0.11, -0.24], [0.11, -0.24]].map(([x, z]) => { const b = new THREE.Bone(); b.position.set(x, -0.08, z); body.add(b); return b; });
+  const parts = [], P = (bone, geo, color, x, y, z, rx, ry, rz, sx, sy, sz) => parts.push({ bone, geo, color, m: M(x, y, z, rx, ry, rz, sx, sy, sz) });
+  P(body, G2.box(0.32, 0.3, 0.66), C, 0, 0, 0); P(body, G2.box(0.24, 0.2, 0.06), L, 0, -0.02, 0.33);
+  P(body, G2.box(0.26, 0.26, 0.26), C, 0, 0.1, 0.3, -0.5, 0, 0);
+  P(head, G2.box(0.28, 0.25, 0.28), C, 0, 0.04, 0.06); P(head, G2.box(0.18, 0.13, 0.18), L, 0, -0.03, 0.24); P(head, G2.box(0.07, 0.06, 0.05), '#1d1d1d', 0, 0.02, 0.33);
+  for (const s of [-1, 1]) { P(head, G2.box(0.045, 0.05, 0.03), '#1d1d1d', s * 0.08, 0.1, 0.2); P(head, G2.box(0.06, 0.16, 0.11), D, s * 0.15, 0.08, 0.0, 0, 0, s * 0.35); }
+  P(head, G2.cyl(0.155, 0.155, 0.05, 10), '#c8312a', 0, -0.08, -0.06, 0.4, 0, 0);   // coleira vermelha
+  P(tail, G2.box(0.07, 0.07, 0.3), C, 0, 0.08, -0.12, -0.7, 0, 0); P(tail, G2.box(0.075, 0.075, 0.08), L, 0, 0.19, -0.24, -0.7, 0, 0);
+  for (const b of legs) { P(b, G2.box(0.09, 0.32, 0.1), C, 0, -0.14, 0); P(b, G2.box(0.11, 0.05, 0.13), L, 0, -0.31, 0.02); }
+  const mesh = skinnedFromParts(root, parts);
+  const collar = new THREE.Object3D(); collar.position.set(0, -0.06, -0.02); head.add(collar);
+  return { mesh, body, head, tail, legs, collar };
 }
 function buildPlazaLife() {
-  const P = PLAZA, cx = (P.x0 + P.x1) / 2, cz = (P.z0 + P.z1) / 2, d = P.z1 - P.z0;
+  const P0 = PLAZA, cx = (P0.x0 + P0.x1) / 2, cz = (P0.z0 + P0.z1) / 2;
   const group = dynamic(new THREE.Group()); group.name = 'plaza-life';
-  const ups = [];
-  const SEAT_Y = 0.98;
-  // casal de idosos no banco do nordeste (de frente para o sul): ele lê o jornal, ela olha em volta
-  const bx = cx + 9.5, bz = cz - 2.6;
-  const old1 = personParts({ seated: true, shirt: '#7a8a9a', pants: '#4a4a52', skin: SKINS[0], hair: '#d8d8d8', arms: 'paper', glasses: true });
-  const old2 = personParts({ seated: true, shirt: '#b5657a', pants: '#5a4a5a', skin: SKINS[3], hair: '#e2e2e2', arms: 'lap', skirt: '#5a4a5a', bun: true, bag: true });
-  old1.position.set(bx - 0.7, SEAT_Y, bz + 0.05); old2.position.set(bx + 0.75, SEAT_Y, bz + 0.05);
-  group.add(old1, old2);
-  ups.push(t => { old1.userData.head.rotation.x = 0.35 + Math.sin(t * 0.4) * 0.04; old1.userData.head.rotation.y = Math.sin(t * 0.13) * 0.12;
-    const look = Math.sin(t * 0.21 + 1.3); old2.userData.head.rotation.y = look > 0.6 ? -0.9 : look < -0.7 ? 0.7 : look * 0.3; old2.userData.head.rotation.x = 0.05; });
-  // senhora dando milho aos pombos no banco do sudoeste (de frente para o norte)
-  const fx = cx - 9.5, fz = cz + 2.6;
-  const feeder = personParts({ seated: true, shirt: '#5a8a6a', pants: '#3a3d44', skin: SKINS[1], hair: '#3a2a20', arms: 'lap', bag: true, skirt: '#8a6a4a' });
-  feeder.position.set(fx + 0.2, SEAT_Y, fz - 0.05); feeder.rotation.y = Math.PI;
-  group.add(feeder);
-  // pombos (instanciados): bicam, andam um pouquinho e, às vezes, se assustam e voltam
-  const pg = new THREE.Group();
-  pg.add(scaled(at(sphere(0.13, '#8d939c', 7, 5), 0, 0.14, 0), 1, 0.8, 1.45));
-  pg.add(at(sphere(0.075, '#5f6673', 6, 4), 0, 0.27, 0.15)); pg.add(at(cone(0.025, 0.06, '#d9a06a', 5), 0, 0.26, 0.23, Math.PI / 2, 0, 0));
-  pg.add(at(box(0.12, 0.03, 0.14, '#5f6673'), 0, 0.15, -0.2, 0.3, 0, 0));
-  const pgGeo = vcMerge(pg).geometry, NP = 9;
-  const pigeons = dynamic(new THREE.InstancedMesh(pgGeo, mat('#ffffff', { vertexColors: true }), NP));
+  const GY = 0.2, TALK_R = 2.3;
+  const ups = [], npcs = [];
+  let player = null, playerT = 9;                                    // posição do jogador a pé (vem de nearTalk), há quanto tempo
+  const _v = new THREE.Vector3(), _w = new THREE.Vector3();
+  const wrapA = a => Math.atan2(Math.sin(a), Math.cos(a));
+  const ss = (a, b, x) => { const u = Math.min(1, Math.max(0, (x - a) / (b - a))); return u * u * (3 - 2 * u); };
+  const W = (x, z) => [cx + x, cz + z];
+  /** Pessoa conversável: P (figura), id (falas), pos (mundo). look(px, pz): para onde olhar quando o jogador está perto. */
+  const addNpc = (id, P, x, z) => { const n = { id, P, x, z, plaza: true, talking: false, talkT: 0, mem: {}, now: () => null, near: 0, root: P.root }; npcs.push(n); group.add(P.root); return n; };
+  const sideYaw = (n, ry) => { const p = player; return p ? wrapA(Math.atan2(p.x - n.x, p.z - n.z) - ry) : 0; };
+  const playerNear = (n, r) => player && playerT < 0.5 && Math.hypot(player.x - n.x, player.z - n.z) < r;
+  // o banco: [x, z, de frente para +z (0) ou −z (PI)]; uma pessoa sentada a dx do meio
+  const seatAt = (sx, sz, dx) => { const ry = sz > 0 ? Math.PI : 0, f = sz > 0 ? -1 : 1; return { x: cx + sx * PZ.benchX + dx * (sz > 0 ? -1 : 1), z: cz + sz * PZ.benchZ + 0.1 * f, ry }; };
+
+  // ---- o casal no banco do nordeste (de frente para o sul) ----
+  const sN = seatAt(1, -1, -0.72), sZ = seatAt(1, -1, 0.74);
+  const nestor = addNpc('nestor', buildFigure({ k: 21, skin: '#e8b98f', hair: '#d6d6d6', hairStyle: 'bald', top: '#f1ece0', cardigan: '#6f7f8f', pants: '#4a4a52', shoes: '#4a3022', glasses: true, mustache: '#d0d0d0', brows: '#cfcfcf', old: true }), sN.x, sN.z);
+  const zila = addNpc('zila', buildFigure({ k: 22, skin: '#f1c9a5', hair: '#e4e4e4', hairStyle: 'bun', top: '#b5657a', dress: '#5a4a6a', stockings: '#d9c3ad', shoes: '#5a3b2a', glasses: '#8a6a4a', old: true }), sZ.x, sZ.z);
+  for (const [n, s] of [[nestor, sN], [zila, sZ]]) { n.P.root.position.set(s.x, GY, s.z); n.P.root.rotation.y = s.ry; n.ry = s.ry; n.st = { mode: 'sit', seat: PZ.seat, t: 0 }; n.look = 0; }
+  const paper = nestor.P.give(figureItem('paper'), 'body'), knit = zila.P.give(figureItem('knit', { color: '#c8507a' }), 'body');
+  const ball = figureItem('ball', { color: '#c8507a' }); { const b = seatAt(1, -1, 1.25); ball.position.set(b.x, GY + PZ.seat, b.z); group.add(ball); }
+  let pageT = 6, lowerT = 14, lowered = 0, chatK = 0;
+  ups.push((t, dt) => {
+    // Seu Nestor: lê (cabeça baixa), vira a página de vez em quando; às vezes abaixa o jornal e comenta com a Zilá
+    const n = nestor, P = n.P; n.st.t = t;
+    pageT -= dt; lowerT -= dt;
+    if (lowerT < 0) { lowered = 1; if (lowerT < -5) { lowerT = 14 + Math.random() * 12; } } else lowered = 0;
+    chatK += ((lowered || n.talking ? 1 : 0) - chatK) * Math.min(1, dt * 2.5);
+    const flip = pageT < 0 ? Math.min(1, -pageT / 0.9) : 0; if (pageT < -0.9) pageT = 9 + Math.random() * 8;
+    const lookP = n.talking || playerNear(n, 4) ? sideYaw(n, n.ry) : chatK > 0.5 ? 1.1 : 0;
+    n.look += (THREE.MathUtils.clamp(lookP, -1.2, 1.2) - n.look) * Math.min(1, dt * 3);
+    animatePerson(P, { mode: 'sit', seat: PZ.seat, t, lookYaw: n.look, lookPitch: 0.32 * (1 - chatK) * (n.talking ? 0 : 1), talk: (n.talking && n.talkT < 2.6) || (lowered && lowerT > -3.5 && lowerT < -1) ? 1 : 0 });
+    const py = 0.92 - 0.2 * chatK, pz = 0.38 - 0.04 * chatK;
+    paper.position.set(0, py, pz); paper.rotation.set(-0.3 + 0.4 * chatK, 0, 0);
+    const gx = 0.3 - 0.55 * Math.sin(flip * Math.PI) * 0.5;
+    reach(P, -1, -0.3, py - 0.05, pz + 0.05, -0.6, -0.6, -0.2);
+    reach(P, 1, flip > 0 ? 0.3 - 0.5 * Math.sin(flip * Math.PI / 2) : gx, py - 0.05 + 0.08 * Math.sin(flip * Math.PI), pz + 0.05 + 0.06 * Math.sin(flip * Math.PI), 0.6, -0.6, -0.2);
+    n.talkT += dt;
+    // Dona Zilá: tricô (as agulhas se mexem), olha o movimento da praça; responde ao marido quando ele comenta
+    const z = zila, Q = z.P; z.st.t = t;
+    const people = Math.sin(t * 0.17 + 2) > 0.55, lookZ = z.talking || playerNear(z, 4) ? sideYaw(z, z.ry) : chatK > 0.5 ? -1.1 : people ? 0.6 * Math.sin(t * 0.4) : 0;
+    z.look += (THREE.MathUtils.clamp(lookZ, -1.2, 1.2) - z.look) * Math.min(1, dt * 2.5);
+    const busy = !(z.talking || chatK > 0.5 || people);
+    animatePerson(Q, { mode: 'sit', seat: PZ.seat, t: t + 3, lookYaw: z.look, lookPitch: busy ? 0.38 : 0.05, talk: (z.talking && z.talkT < 2.6) || (lowered && lowerT > -1.6 && lowerT < 0) ? 1 : 0 });
+    Q.b.waist.rotation.x += 0.12;
+    const kk = Math.sin(t * 7.5) * (busy ? 1 : 0.15);
+    knit.position.set(0, 0.84, 0.36); knit.rotation.set(-0.5, 0, 0.05 * kk);
+    reach(Q, -1, -0.14 + 0.02 * kk, 0.86 + 0.02 * kk, 0.44, -0.6, -0.6, -0.2);
+    reach(Q, 1, 0.14 - 0.02 * kk, 0.86 - 0.02 * kk, 0.44, 0.6, -0.6, -0.2);
+    z.talkT += dt;
+  });
+
+  // ---- Dona Ermínia e os pombos (banco do sudoeste, de frente para o norte) ----
+  const sE = seatAt(-1, 1, 0.2);
+  const erm = addNpc('erminia', buildFigure({ k: 23, skin: '#c98a62', hair: '#8a8a8a', hairStyle: 'bun', top: '#5a8a6a', cardigan: '#d9c09a', dress: '#8a6a4a', stockings: '#b98c6a', shoes: '#3a2a20', old: true, brows: '#8a8a8a' }), sE.x, sE.z);
+  erm.P.root.position.set(sE.x, GY, sE.z); erm.P.root.rotation.y = sE.ry; erm.ry = sE.ry; erm.st = { mode: 'sit', seat: PZ.seat, t: 0 }; erm.look = 0;
+  const corn = erm.P.give(figureItem('corn'), 'L');
+  const pg = new THREE.Group();                                        // pombo (instanciado)
+  // corpo arredondado, peito mais claro, pescoço furta-cor, asas com as duas faixas escuras, cauda de ponta escura,
+  // bico, olhinhos laranja e pés rosados (liso, como as pessoas; antes eram 4 peças facetadas)
+  const pgS = (r, c, x, y, z, sx = 1, sy = 1, sz = 1, ws = 10, hs = 7) => { const m = at(sphere(r, c, ws, hs), x, y, z); m.scale.set(sx, sy, sz); pg.add(m); };
+  pgS(0.13, '#9aa0a9', 0, 0.15, -0.01, 1, 0.82, 1.42);                                    // corpo
+  pgS(0.1, '#b9bdc4', 0, 0.14, 0.08, 1, 0.85, 1.0);                                       // peito
+  pgS(0.07, '#6e8a80', 0, 0.225, 0.11, 1.05, 1.1, 0.95);                                  // pescoço (verde-arroxeado)
+  pgS(0.07, '#5f6673', 0, 0.285, 0.15);                                                   // cabeça
+  for (const sd of [-1, 1]) {
+    pgS(0.085, '#8a909a', sd * 0.085, 0.165, -0.05, 0.42, 0.7, 1.55);                     // asa dobrada
+    for (const zz of [-0.04, -0.1]) pg.add(at(box(0.012, 0.025, 0.055, '#3f444c'), sd * 0.122, 0.16, zz));   // faixas escuras da asa
+    pgS(0.012, '#e07a2a', sd * 0.045, 0.3, 0.2, 1, 1, 1, 6, 4);                          // olho
+    pg.add(at(cyl(0.008, 0.008, 0.07, '#d47b7b', 4), sd * 0.04, 0.035, 0.0));             // perna
+  }
+  pg.add(at(cone(0.022, 0.055, '#d9a06a', 6), 0, 0.27, 0.235, Math.PI / 2, 0, 0));        // bico
+  pg.add(at(box(0.11, 0.025, 0.15, '#7c828c'), 0, 0.16, -0.21, 0.32, 0, 0));             // cauda
+  pg.add(at(box(0.112, 0.027, 0.04, '#3f444c'), 0, 0.142, -0.27, 0.32, 0, 0));           // ponta escura da cauda
+  const NP = 9, pigeons = dynamic(new THREE.InstancedMesh(vcMerge(pg).geometry, mat('#ffffff', { vertexColors: true, flatShading: false }), NP));
   pigeons.castShadow = true; pigeons.frustumCulled = false; group.add(pigeons);
-  const birds = []; for (let i = 0; i < NP; i++) birds.push({ x: fx - 1.4 + (i % 5) * 0.7 + Math.sin(i * 3.1) * 0.2, z: fz - 1.1 - Math.floor(i / 5) * 0.55 + Math.cos(i * 2.3) * 0.15, a: i * 1.9, ph: i * 0.77, sp: 0.8 + (i % 3) * 0.25 });
+  { const tint = ['#ffffff', '#d2d5db', '#f4ece4', '#ffffff', '#c3c7cf', '#ffffff', '#efe7e0', '#dadde2', '#ffffff'], c = new THREE.Color();
+    for (let i = 0; i < NP; i++) pigeons.setColorAt(i, c.set(tint[i])); }             // cada pombo com um tom
+  const home = { x: sE.x, z: sE.z - 1.9 };                             // na frente dela, no caminho
+  const birds = [...Array(NP)].map((_, i) => ({ x: home.x - 1.4 + (i % 5) * 0.7, z: home.z + 0.3 - Math.floor(i / 5) * 0.5, a: i * 1.9, ph: i * 0.77, sp: 0.8 + (i % 3) * 0.25, fly: 0, fx: 0, fz: 0, tx: 0, tz: 0, y: 0, peck: 0 }));
+  const grains = [], NG = 10;                                          // milho jogado (voando ou no chão)
+  const gm = dynamic(new THREE.InstancedMesh(new THREE.IcosahedronGeometry(0.035, 0), mat('#f2c23a'), NG)); gm.count = 0; gm.frustumCulled = false; group.add(gm);
   const po = new THREE.Object3D();
-  ups.push(t => {
-    const scare = Math.max(0, Math.sin(t * 0.09) - 0.93) * 14;     // de vez em quando todos levantam voo baixo e voltam
-    feeder.userData.head.rotation.x = 0.3 + Math.sin(t * 0.7) * 0.05; feeder.userData.head.rotation.y = Math.sin(t * 0.33) * 0.35;
-    birds.forEach((b2, i) => {
-      const peck = Math.max(0, Math.sin(t * (3.1 + b2.sp) + b2.ph)) ** 6;
-      const wander = Math.sin(t * 0.3 * b2.sp + b2.ph) * 0.25;
-      po.position.set(b2.x + wander, 0.22 + scare * (0.6 + (i % 3) * 0.3), b2.z + Math.cos(t * 0.25 * b2.sp + b2.ph) * 0.18);
-      po.rotation.set(peck * 0.7, b2.a + Math.sin(t * 0.5 + b2.ph) * 0.8, 0);
-      po.updateMatrix(); pigeons.setMatrixAt(i, po.matrix);
+  let tossT = 3, scareT = 0;
+  erm.now = () => (scareT > 0 ? 'scare' : null);
+  ups.push((t, dt) => {
+    const n = erm, P = n.P; n.st.t = t; n.talkT += dt;
+    // jogar milho: mão direita no saquinho, braço para a frente e solta; o milho voa e cai no caminho
+    if (!n.talking) tossT -= dt;
+    const u = tossT < 0 ? -tossT : 0;
+    if (tossT < -1.6) tossT = 6 + Math.random() * 6;
+    const lookE = n.talking || playerNear(n, 4) ? sideYaw(n, n.ry) : u > 0 ? 0 : 0.4 * Math.sin(t * 0.33);
+    n.look += (THREE.MathUtils.clamp(lookE, -1.2, 1.2) - n.look) * Math.min(1, dt * 3);
+    animatePerson(P, { mode: 'sit', seat: PZ.seat, t: t + 7, lookYaw: n.look, lookPitch: n.talking ? 0 : 0.28, talk: n.talking && n.talkT < 2.6 ? 1 : 0 });
+    reach(P, -1, -0.12, 0.74, 0.36, -0.6, -0.6, -0.2);                // o saquinho no colo
+    const into = ss(0, 0.5, u) * (1 - ss(0.5, 0.75, u)), out = ss(0.6, 0.95, u) * (1 - ss(1.1, 1.6, u));
+    reach(P, 1, 0.12 - 0.2 * into + 0.1 * out, 0.82 + 0.12 * into + 0.36 * out, 0.36 + 0.24 * out, 0.6, -0.6, -0.2);
+    if (u > 0.9 && u - dt <= 0.9) {                                    // solta o milho
+      P.root.updateMatrixWorld(true); P.hand.R.getWorldPosition(_v);
+      for (let i = 0; i < NG; i++) { const a = (Math.random() - 0.5) * 1.6, r = 1.4 + Math.random() * 1.8; grains[i] = { x0: _v.x, y0: _v.y, z0: _v.z, x1: n.x + Math.sin(n.ry + a) * r, z1: n.z + Math.cos(n.ry + a) * r, t: 0, on: true }; }
+    }
+    // milho voando / no chão
+    let k = 0;
+    for (const g2 of grains) {
+      if (!g2 || !g2.on) continue;
+      g2.t += dt; const e = Math.min(1, g2.t / 0.55);
+      po.position.set(g2.x0 + (g2.x1 - g2.x0) * e, (g2.y0 + (0.25 - g2.y0) * e) + Math.sin(e * Math.PI) * 0.6, g2.z0 + (g2.z1 - g2.z0) * e);
+      po.rotation.set(0, 0, 0); po.scale.setScalar(1); po.updateMatrix(); gm.setMatrixAt(k++, po.matrix);
+    }
+    gm.count = k; gm.instanceMatrix.needsUpdate = true;
+    // pombos: bicam e andam um pouco; correm para o milho; o cachorro (ou alguém) chegando perto: voam baixo e voltam
+    scareT = Math.max(0, scareT - dt);
+    birds.forEach((b, i) => {
+      let threat = dogPos && Math.hypot(dogPos.x - b.x, dogPos.z - b.z) < 1.7;
+      if (!threat && player && playerT < 0.5 && Math.hypot(player.x - b.x, player.z - b.z) < 1.1) threat = true;
+      if (threat && b.fly <= 0) { b.fly = 1.6 + Math.random() * 0.8; const a = Math.random() * 6.28; b.fx = b.x + Math.cos(a) * 2.2; b.fz = home.z - 0.8 + Math.sin(a) * 1.2; b.sx = b.x; b.sz = b.z; scareT = 4; }
+      if (b.fly > 0) {                                                 // voo baixo em arco até outro ponto do caminho
+        b.fly -= dt; const e = 1 - Math.max(0, b.fly) / 2.0;
+        b.x = b.sx + (b.fx - b.sx) * Math.min(1, e); b.z = b.sz + (b.fz - b.sz) * Math.min(1, e); b.y = Math.sin(Math.min(1, e) * Math.PI) * 1.2;
+        b.a = Math.atan2(b.fx - b.sx, b.fz - b.sz); b.peck = 0;
+      } else {
+        b.y = 0;
+        let best = null, bd = 3.5;                                     // o grão mais perto
+        for (const g2 of grains) if (g2 && g2.on && g2.t > 0.55) { const d2 = Math.hypot(g2.x1 - b.x, g2.z1 - b.z); if (d2 < bd) { bd = d2; best = g2; } }
+        if (best && bd > 0.12) { const sp = 0.9 * b.sp; b.x += (best.x1 - b.x) / bd * Math.min(bd, sp * dt); b.z += (best.z1 - b.z) / bd * Math.min(bd, sp * dt); b.a = Math.atan2(best.x1 - b.x, best.z1 - b.z); b.peck = 0; }
+        else {
+          if (best) best.on = false;                                   // comeu
+          b.peck = Math.max(0, Math.sin(t * (3.1 + b.sp) + b.ph)) ** 6;
+          const hx = home.x - 1.4 + (i % 5) * 0.7, hz = home.z + 0.3 - Math.floor(i / 5) * 0.5, dh = Math.hypot(hx - b.x, hz - b.z);
+          if (dh > 1.8) { b.x += (hx - b.x) / dh * 0.5 * dt; b.z += (hz - b.z) / dh * 0.5 * dt; b.a = Math.atan2(hx - b.x, hz - b.z); }
+          else b.a += Math.sin(t * 0.5 + b.ph) * dt * 0.8;
+        }
+      }
+      po.position.set(b.x, GY + 0.02 + b.y, b.z);
+      po.rotation.set(b.peck * 0.7 + (b.y > 0 ? -0.2 : 0), b.a, 0); po.scale.setScalar(1); po.updateMatrix(); pigeons.setMatrixAt(i, po.matrix);
     });
     pigeons.instanceMatrix.needsUpdate = true;
   });
-  // pipoqueiro ao lado do carrinho (de avental, olhando o movimento)
-  const vendor = personParts({ seated: false, shirt: '#f4f1ea', pants: '#3a3d44', skin: SKINS[2], hair: '#1e1a18', apron: '#d8312a', cap: '#d8312a' });
-  vendor.position.set(cx - 0.2, 0.22, cz + 11.6); vendor.rotation.y = 0.5;
-  group.add(vendor);
-  ups.push(t => { vendor.userData.head.rotation.y = Math.sin(t * 0.27 + 2) * 0.6; vendor.rotation.y = 0.5 + Math.sin(t * 0.05) * 0.4; });
-  // alguém passeando com o cachorro em volta do coreto (anda, para para o cachorro cheirar, segue)
-  const walker = personParts({ seated: false, shirt: '#e0a33a', pants: '#2f4a6e', skin: SKINS[3], hair: '#6a4a2a', cap: '#2f4a6e' });
-  const dog = buildDog();
-  group.add(walker, dog);
-  const R = 6.2; let s = 0, pause = 0;
-  const lerpA = (a, b, k) => { let dd = b - a; while (dd > Math.PI) dd -= 2 * Math.PI; while (dd < -Math.PI) dd += 2 * Math.PI; return a + dd * k; };
-  let face = 0, dogFace = 0, last = 0;
-  ups.push(t => {
-    const dt = Math.min(0.1, Math.max(0, t - last)); last = t;
-    const cyc = (t % 26);
-    pause = cyc > 18 && cyc < 21.5 ? 1 : 0;                         // o cachorro parou para cheirar o canteiro
-    const v = pause ? 0 : 0.85;
-    s += v * dt / R;
-    const a = s, x = cx + Math.cos(a) * R, z = cz + Math.sin(a) * R;
-    walker.position.set(x, 0.22, z);
-    face = lerpA(face, Math.atan2(-Math.sin(a), Math.cos(a)), Math.min(1, dt * 4));
-    walker.rotation.y = face;
-    const ph = t * 5.2, sw = v ? Math.sin(ph) * 0.45 : 0;
-    walker.userData.legs[0].rotation.x = sw; walker.userData.legs[1].rotation.x = -sw;
-    walker.position.y = 0.22 + (v ? Math.abs(Math.cos(ph)) * 0.03 : 0);
-    walker.userData.head.rotation.y = pause ? -0.5 : Math.sin(t * 0.4) * 0.2;
-    const da = a + 0.42 + (pause ? 0.05 : 0), dr = R + (pause ? 1.1 : 0.4);
-    dog.position.set(cx + Math.cos(da) * dr, 0.22 + (v ? Math.abs(Math.sin(t * 9)) * 0.05 : 0), cz + Math.sin(da) * dr);
-    dogFace = lerpA(dogFace, pause ? Math.atan2(-Math.sin(da), Math.cos(da)) + 1.2 : Math.atan2(-Math.sin(da), Math.cos(da)), Math.min(1, dt * 5));
-    dog.rotation.y = dogFace;
-    dog.rotation.x = pause ? 0.25 : 0;
+
+  // ---- Seu Toninho, o pipoqueiro (atrás do carrinho, do lado do coreto) ----
+  const [ox, oz, cry] = PZ.cart, cartX = cx + ox, cartZ = cz + oz;
+  const tLoc = (lx, lz) => [cartX + lx * Math.cos(cry) + lz * Math.sin(cry), cartZ - lx * Math.sin(cry) + lz * Math.cos(cry)];
+  const [tx0, tz0] = tLoc(0.05, -0.8);
+  const ton = addNpc('toninho', buildFigure({ k: 24, skin: '#8a5a3c', hair: '#1e1a18', top: '#f4f1ea', short: true, apron: '#d8312a', apronHem: '#f4f1ea', pants: '#3a3d44', shoes: '#2b2522', hat: 'cap', hatColor: '#d8312a', capLogo: '#f4f1ea', mustache: '#1e1a18', brows: '#1e1a18' }), tx0, tz0);
+  ton.P.root.position.set(tx0, 0.22, tz0); ton.P.root.rotation.y = cry; ton.ry = cry; ton.yaw = cry; ton.look = 0;
+  const crank = new THREE.Group(); { const [kx, kz] = tLoc(0.68, -0.36); crank.position.set(kx, 0.22 + 1.27, kz); crank.rotation.y = cry; }
+  crank.add(at(box(0.03, 0.12, 0.03, '#5a5f66'), 0, -0.05, 0), at(cyl(0.025, 0.025, 0.1, '#2a2a2a', 6), 0.05, -0.1, 0, 0, 0, Math.PI / 2));
+  group.add(crank);
+  const bag = figureItem('popcorn'), rag2 = figureItem('rag', { color: '#f4f1ea' });
+  let task = 'crank', taskT = 7, tAt = 0;
+  ton.now = () => (task === 'fill' ? 'bag' : null);
+  ups.push((t, dt) => {
+    const n = ton, P = n.P; tAt += dt; n.talkT += dt;
+    if (!n.talking) taskT -= dt;
+    if (taskT <= 0) { const r = Math.random(); task = task !== 'crank' && r < 0.5 ? 'crank' : r < 0.7 ? 'fill' : r < 0.85 ? 'call' : 'wipe'; taskT = task === 'crank' ? 6 + Math.random() * 5 : task === 'fill' ? 3.6 : task === 'call' ? 3 : 4; tAt = 0; }
+    const tk = n.talking ? 'talk' : task;
+    // vira para o jogador quando ele chega perto ou conversa; senão, de frente para o carrinho
+    const near = n.talking || playerNear(n, 4.5);
+    const want = near && player ? Math.atan2(player.x - n.x, player.z - n.z) : cry;
+    n.yaw += THREE.MathUtils.clamp(wrapA(want - n.yaw), -1.6, 1.6) * Math.min(1, dt * 3);
+    P.root.rotation.y = n.yaw;
+    const ly = tk === 'call' ? 0.7 * Math.sin(tAt * 1.2) : tk === 'crank' ? 0.3 * Math.sin(t * 0.3) : 0;
+    n.look += (ly - n.look) * Math.min(1, dt * 3);
+    animatePerson(P, { mode: 'idle', t: t + 11, act: tk === 'talk' && n.talkT < 2.6 ? 'talk' : tk === 'call' ? 'talk' : null, lookYaw: n.look, lookPitch: tk === 'fill' || tk === 'wipe' ? 0.3 : 0, talk: (n.talking && n.talkT < 2.6) || tk === 'call' ? 1 : 0 });
+    // mãos: manivela (a direita gira a manivela de verdade), saquinho, pano
+    const facing = Math.abs(wrapA(n.yaw - cry)) < 0.35;
+    if (tk === 'crank' && facing) {
+      const a = t * 3.2; crank.rotation.set(a, cry, 0, 'YXZ');
+      crank.updateMatrixWorld(true); _v.set(0.08, -0.1, 0); crank.localToWorld(_v); P.root.updateMatrixWorld(true); P.b.body.updateMatrixWorld(true); P.b.body.worldToLocal(_v);
+      reach(P, 1, _v.x, _v.y, _v.z, 0.8, -0.5, -0.4);
+    }
+    if (tk === 'fill' && facing) {                                     // pega o saquinho, enche (duas conchadas) e guarda no cestinho
+      if (!P.has(bag)) P.give(bag, 'L');
+      const e = tAt; reach(P, -1, -0.12, 1.02, 0.38, -0.6, -0.6, -0.2);
+      const sc = Math.max(0, Math.sin(e * 3.4)); reach(P, 1, 0.1, 1.12 + 0.12 * sc, 0.44 - 0.04 * sc, 0.6, -0.6, -0.2);
+      if (e > 3.3 && P.has(bag)) P.drop(bag);
+    } else if (P.has(bag)) P.drop(bag);
+    if (tk === 'wipe' && facing) {
+      if (!P.has(rag2)) P.give(rag2, 'R');
+      const a = tAt * 4; reach(P, 1, 0.08 + 0.18 * Math.cos(a), 1.02, 0.46 + 0.06 * Math.sin(a), 0.6, -0.6, -0.2); P.b.waist.rotation.x += 0.12;
+    } else if (P.has(rag2)) P.drop(rag2);
   });
-  void d;
-  return { group, update: t => { for (const u of ups) u(t); } };
+
+  // ---- Davi e o Paçoca: passeio pela praça (caminhos variados, pausas, o cachorro fareja e ele espera) ----
+  const R6 = 6.2, ND = {};                                             // nós do passeio (relativos ao centro) e ligações
+  for (let k = 0; k < 8; k++) ND['R' + k] = [R6 * Math.cos(k * Math.PI / 4), R6 * Math.sin(k * Math.PI / 4)];
+  Object.assign(ND, { E1: [10.6, 0.3], E2: [15.0, -0.2], E3: [19.4, 0.1], W1: [-10.6, -0.7], W2: [-15.0, -0.3], W3: [-19.4, -0.1],
+    N1: [0.3, -10.4], N2: [-0.2, -15.0], N3: [0.1, -19.3], S1: [-0.65, 9.2], S2: [-0.5, 14.6], S3: [-0.1, 19.3],
+    T0: [7.0, 5.0], T1: [8.6, 5.4], T2: [11.4, 6.4], T3: [14.0, 8.8], T4: [15.2, 12.4], T5: [16.4, 16.0] });
+  const LINK = [['R0', 'E1'], ['E1', 'E2'], ['E2', 'E3'], ['R4', 'W1'], ['W1', 'W2'], ['W2', 'W3'], ['R6', 'N1'], ['N1', 'N2'], ['N2', 'N3'], ['R2', 'S1'], ['S1', 'S2'], ['S2', 'S3'],
+    ['R1', 'T0'], ['T0', 'T1'], ['T1', 'T2'], ['T2', 'T3'], ['T3', 'T4'], ['T4', 'T5']];
+  for (let k = 0; k < 8; k++) LINK.push(['R' + k, 'R' + ((k + 1) % 8)]);
+  const NB = {}; for (const [a, b] of LINK) { (NB[a] = NB[a] || []).push(b); (NB[b] = NB[b] || []).push(a); }
+  // onde o cachorro fareja (o corpo dele fica ali, a ~0,6 do que cheira: pé da cerca, poste, lixeira, canteiro, base do coreto)
+  const SNIFF = { E3: [19.7, 2.4], W3: [-19.7, -2.4], N3: [1.9, -18.6], S3: [-1.8, 18.7], E1: [11.3, 2.0], W1: [-11.3, -2.0], T5: [17.3, 17.2], T2: [11.6, 7.6], R0: [5.6, 1.0], R3: [-4.0, 4.0], R5: [-4.0, -4.0], R7: [4.0, -4.0] };
+  const OBST = [[...PZ.cart.slice(0, 2), 1.0], [tx0 - cx, tz0 - cz, 0.6], [sE.x - cx, sE.z - cz, 1.6], [home.x - cx, home.z - cz, 1.8], [sN.x - cx, sN.z - cz, 1.2], [sZ.x - cx, sZ.z - cz, 1.2]];
+  const davi = addNpc('davi', buildFigure({ k: 25, skin: '#f1c9a5', hair: '#6a4a2a', top: '#e0a33a', short: true, pants: '#2f4a6e', shoes: '#3a5f8f', sneakers: true, hat: 'cap', hatColor: '#2f4a6e', capLogo: '#e0a33a' }), 0, 0);
+  const dog = pzDog(); group.add(dog.mesh);
+  const leash = dynamic(new THREE.InstancedMesh(new THREE.CylinderGeometry(0.016, 0.016, 1, 5), mat('#c8312a'), 14)); leash.frustumCulled = false; leash.castShadow = false; group.add(leash);
+  const D = { node: 'R2', to: 'R3', from: [0, 0], x: 0, z: 0, s: 0, len: 1, lat: 0, sp: 0.8, yaw: 0, ph: 0, v: 0, pause: 0, pauseKind: null, wait: 0, side: 1, look: 0, hand: 0 };
+  const G = { x: 0, z: 0, yaw: 0, v: 0, ph: 0, sniff: 0, sx: 0, sz: 0, sit: 0, wag: 0, mode: 'follow', solo: 3 + Math.random() * 5 };
+  let dogPos = null;
+  const nodeXY = n => ND[n];
+  const setSeg = (a, b) => {                                           // novo trecho: velocidade e desvio lateral próprios; o lado do cachorro é o mais livre
+    D.node = a; D.to = b; const A = nodeXY(a), Bp = nodeXY(b); D.s = 0;
+    D.len = Math.hypot(Bp[0] - A[0], Bp[1] - A[1]); D.lat = (Math.random() - 0.5) * 0.5; D.sp = 0.72 + Math.random() * 0.2;
+    const dx = (Bp[0] - A[0]) / D.len, dz = (Bp[1] - A[1]) / D.len, mx = (A[0] + Bp[0]) / 2, mz = (A[1] + Bp[1]) / 2;
+    const score = s => OBST.reduce((m, [ox2, oz2, r]) => Math.min(m, Math.hypot(mx + dz * s * 0.9 - ox2, mz - dx * s * 0.9 - oz2) - r), 99);
+    D.side = score(1) >= score(-1) ? 1 : -1;
+  };
+  const pickNext = () => {
+    const opts = NB[D.to].filter(n => n !== D.node); const list = opts.length ? opts : NB[D.to];
+    const pref = list.filter(n => !n.startsWith('R') || Math.random() < 0.6);   // (às vezes segue pelo anel, às vezes sai por um braço)
+    return (pref.length ? pref : list)[Math.floor(Math.random() * (pref.length ? pref.length : list.length))];
+  };
+  { const A = nodeXY('R2'); D.x = A[0]; D.z = A[1]; setSeg('R2', 'R3'); G.x = D.x - 0.8; G.z = D.z; }
+  davi.now = () => (G.mode === 'sniff' ? 'sniff' : null);
+  ups.push((t, dt) => {
+    const n = davi, P = n.P; n.talkT += dt;
+    // ---- quem conduz ----
+    const tA = nodeXY(D.node), tB = nodeXY(D.to), dx = (tB[0] - tA[0]) / D.len, dz = (tB[1] - tA[1]) / D.len;
+    const gdx = G.x - D.x, gdz = G.z - D.z, gd = Math.hypot(gdx, gdz);
+    let go = !n.talking && D.pause <= 0;
+    if (go && (G.mode === 'sniff' && gd > 1.75)) { go = false; D.wait += dt; } else D.wait = 0;   // a guia esticou: espera o cachorro
+    if (D.pause > 0) D.pause -= dt;
+    const tv = go ? D.sp : 0;
+    D.v += (tv - D.v) * Math.min(1, dt * (tv > D.v ? 2.2 : 4));
+    if (D.v > 0.01) {
+      D.s += D.v * dt;
+      if (D.s >= D.len) {                                              // chegou ao nó: às vezes para (olhar, o cachorro fareja); escolhe o próximo
+        const at0 = D.to, nx = pickNext();
+        if (SNIFF[at0] && Math.random() < 0.65) { D.pause = 2.5 + Math.random() * 3; D.pauseKind = 'sniff'; G.mode = 'sniff'; G.sniff = D.pause + 0.5; const s = SNIFF[at0]; G.sx = s[0]; G.sz = s[1]; }
+        else if (Math.random() < 0.25) { D.pause = 1.5 + Math.random() * 2.5; D.pauseKind = 'look'; }
+        setSeg(at0, nx);
+      }
+    }
+    const ease = Math.sin(Math.min(1, D.s / D.len) * Math.PI);        // o desvio lateral some nas pontas (sem saltos nos nós)
+    const fA = nodeXY(D.node), fdx = (nodeXY(D.to)[0] - fA[0]) / D.len, fdz = (nodeXY(D.to)[1] - fA[1]) / D.len;
+    const px = fA[0] + fdx * Math.min(D.s, D.len) + fdz * D.lat * ease, pz = fA[1] + fdz * Math.min(D.s, D.len) - fdx * D.lat * ease;
+    D.x = px; D.z = pz;
+    let want = Math.atan2(fdx, fdz);
+    if (n.talking && player) want = Math.atan2(player.x - (cx + D.x), player.z - (cz + D.z));
+    else if (D.v < 0.05 && (G.mode === 'sniff' || D.wait > 0)) want = Math.atan2(G.x - D.x, G.z - D.z);   // parado: olha o cachorro
+    D.yaw += THREE.MathUtils.clamp(wrapA(want - D.yaw), -2.5, 2.5) * Math.min(1, dt * (D.v > 0.05 ? 5 : 3));
+    D.ph += D.v * dt * Math.PI / 0.42;
+    n.x = cx + D.x; n.z = cz + D.z;
+    P.root.position.set(n.x, 0.22, n.z); P.root.rotation.y = D.yaw;
+    let ly = 0;
+    if (D.pauseKind === 'look' && D.pause > 0) ly = 0.9 * Math.sin(t * 0.9);
+    else if (!n.talking && playerNear(n, 5)) ly = THREE.MathUtils.clamp(sideYaw(n, D.yaw), -1.0, 1.0);
+    D.look += (ly - D.look) * Math.min(1, dt * 3);
+    animatePerson(P, { mode: D.v > 0.05 ? 'walk' : 'idle', ph: D.ph, amp: Math.min(1, D.v / 0.8), t: t + 17, act: n.talking && n.talkT < 2.6 ? 'talk' : null, lookYaw: D.look, talk: n.talking && n.talkT < 2.6 ? 1 : 0 });
+    // ---- o cachorro: acompanha do lado mais livre; fareja nas paradas e, às vezes, no meio do caminho; senta quando a conversa demora ----
+    const latX = Math.cos(D.yaw), latZ = -Math.sin(D.yaw), fwX = Math.sin(D.yaw), fwZ = Math.cos(D.yaw);
+    if (G.mode === 'follow' && D.v > 0.3 && !n.talking) { G.solo -= dt; if (G.solo < 0) { G.mode = 'sniff'; G.sniff = 1.2 + Math.random() * 1.6; G.sx = G.x + latX * D.side * 0.5; G.sz = G.z + latZ * D.side * 0.5; G.solo = 5 + Math.random() * 8; } }
+    if (G.mode === 'sniff') { G.sniff -= dt; if (G.sniff < 0 && D.pause <= 0) G.mode = 'follow'; }
+    if (n.talking) G.sit = Math.min(1, G.sit + dt * 0.8); else G.sit = Math.max(0, G.sit - dt * 3);
+    let tx = G.mode === 'sniff' ? G.sx : D.x + latX * D.side * 0.85 + fwX * 0.35, tz = G.mode === 'sniff' ? G.sz : D.z + latZ * D.side * 0.85 + fwZ * 0.35;
+    if (G.sit > 0.5) { tx = D.x + latX * D.side * 1.0 + fwX * 0.3; tz = D.z + latZ * D.side * 1.0 + fwZ * 0.3; }
+    const ddx = tx - G.x, ddz = tz - G.z, dd = Math.hypot(ddx, ddz);
+    const vmax = dd > 1.2 ? 1.9 : 1.1, vt = dd > 0.08 ? Math.min(vmax, dd * 2.2) : 0;
+    G.v += (vt - G.v) * Math.min(1, dt * 4);
+    if (dd > 0.01) { G.x += ddx / dd * G.v * dt; G.z += ddz / dd * G.v * dt; }
+    { const rx = G.x - D.x, rz = G.z - D.z, r = Math.hypot(rx, rz);    // nunca dentro dele (virado para ele, o focinho também fica fora das pernas); a guia segura
+      const toward = r > 1e-4 ? -(Math.sin(G.yaw) * rx + Math.cos(G.yaw) * rz) / r : 0, rMin = 0.62 + 0.38 * Math.max(0, toward);
+      if (r < rMin && r > 1e-4) { G.x = D.x + rx / r * rMin; G.z = D.z + rz / r * rMin; } if (r > 2.2) { G.x = D.x + rx / r * 2.2; G.z = D.z + rz / r * 2.2; } }
+    const dyaw = G.v > 0.15 ? Math.atan2(ddx, ddz) : G.mode === 'sniff' ? Math.atan2(G.sx - G.x, G.sz - G.z) : Math.atan2(D.x - G.x, D.z - G.z);
+    G.yaw += THREE.MathUtils.clamp(wrapA(dyaw - G.yaw), -3, 3) * Math.min(1, dt * 5);
+    G.ph += G.v * dt * Math.PI / 0.28;
+    G.wag += dt * (n.talking || playerNear(n, 3) ? 16 : 9);
+    dog.mesh.position.set(cx + G.x, 0.22, cz + G.z); dog.mesh.rotation.y = G.yaw;
+    const amp = Math.min(1, G.v / 1.2), sn = G.mode === 'sniff' && G.v < 0.3 ? 1 : 0;
+    dog.legs.forEach((l, i) => { l.rotation.x = (i === 0 || i === 3 ? 1 : -1) * Math.sin(G.ph) * 0.55 * amp; });
+    dog.body.position.y = 0.42 + Math.abs(Math.sin(G.ph)) * 0.03 * amp - 0.1 * G.sit;
+    dog.body.rotation.x = -0.45 * G.sit;
+    if (G.sit > 0) { dog.legs[2].rotation.x = dog.legs[3].rotation.x = -1.25 * G.sit; dog.legs[0].rotation.x = dog.legs[1].rotation.x = 0.45 * G.sit; }
+    dog.head.rotation.set(0.75 * sn + 0.35 * G.sit + 0.05 * Math.sin(t * 1.3), sn ? 0.35 * Math.sin(t * 4.5) : 0, 0);
+    dog.tail.rotation.set(0, Math.sin(G.wag) * (0.5 + 0.3 * sn), 0);
+    dogPos = { x: cx + G.x, z: cz + G.z };
+    // ---- a guia: da mão do lado do cachorro até a coleira, uma curva que cede quando está frouxa ----
+    // segura com a mão do lado em que o cachorro está DE FATO (com folga, para não ficar trocando de mão a cada passo)
+    const taut = Math.min(1, Math.max(0, (gd - 1.3) / 0.8));
+    group.updateMatrixWorld(true);
+    dog.collar.getWorldPosition(_w);
+    P.b.body.updateMatrixWorld(true);
+    _v.copy(_w); P.b.body.worldToLocal(_v);                            // a mão vai um pouco na direção do cachorro quando a guia estica
+    if (_v.x > 0.18) D.hand = 1; else if (_v.x < -0.18) D.hand = -1; else if (!D.hand) D.hand = D.side;
+    const sd = D.hand, hand = sd > 0 ? 'R' : 'L';
+    const hl = Math.hypot(_v.x, _v.z) || 1;
+    reach(P, sd, sd * 0.42 + _v.x / hl * 0.1 * taut, 0.74 + 0.06 * taut, 0.16 + _v.z / hl * 0.12 * taut, sd * 0.6, -0.6, -0.3);
+    P.root.updateMatrixWorld(true); P.hand[hand].getWorldPosition(_v);
+    const L = 2.4, sag = Math.min(0.7, Math.sqrt(Math.max(0, L * L - _v.distanceToSquared(_w))) * 0.32);
+    let mx = (_v.x + _w.x) / 2, my = Math.max(GY + 0.08, (_v.y + _w.y) / 2 - sag), mz = (_v.z + _w.z) / 2;
+    {                                                                  // a curva contorna o corpo dele (nunca passa por dentro das pernas/quadril)
+      const ax = n.x, az = n.z, ex = _w.x - _v.x, ez = _w.z - _v.z, e2 = ex * ex + ez * ez || 1;
+      const tt = Math.min(1, Math.max(0, ((ax - _v.x) * ex + (az - _v.z) * ez) / e2));
+      const px = _v.x + ex * tt - ax, pz = _v.z + ez * tt - az, dd = Math.hypot(px, pz), R = 0.58;
+      if (dd < R && tt > 0.02) {
+        let ux = px / (dd || 1), uz = pz / (dd || 1);
+        if (dd < 1e-3) { ux = Math.cos(D.yaw) * sd; uz = -Math.sin(D.yaw) * sd; }
+        const k = (R - dd) * 2.2; mx += ux * k; mz += uz * k;
+      }
+    }
+    const q = (tt, out) => { const a = (1 - tt) * (1 - tt), b2 = 2 * (1 - tt) * tt, c = tt * tt; return out.set(a * _v.x + b2 * mx + c * _w.x, Math.max(GY + 0.03, a * _v.y + b2 * my + c * _w.y), a * _v.z + b2 * mz + c * _w.z); };
+    const p0 = new THREE.Vector3(), p1 = new THREE.Vector3();
+    for (let it = 0; it < 3; it++) {                                   // confere a curva de verdade: se um ponto ainda encosta no quadril/tronco, abre mais
+      let worst = 9, wx = 0, wz = 0;
+      for (let i = 2; i <= 12; i++) { q(i / 14, p0); if (p0.y < GY + 1.5) { const dx = p0.x - n.x, dz = p0.z - n.z, d = Math.hypot(dx, dz); if (d < worst) { worst = d; wx = dx; wz = dz; } } }
+      if (worst >= 0.47) break;
+      const k = (0.5 - worst) * 2.6 / (worst || 1); mx += wx * k; mz += wz * k;
+    }
+    for (let i = 0; i < 14; i++) {
+      q(i / 14, p0); q((i + 1) / 14, p1);
+      po.position.copy(p0).add(p1).multiplyScalar(0.5); const len = p0.distanceTo(p1);
+      po.quaternion.setFromUnitVectors(_up, p1.sub(p0).normalize()); po.scale.set(1, len + 0.01, 1); po.updateMatrix(); leash.setMatrixAt(i, po.matrix);
+    }
+    leash.instanceMatrix.needsUpdate = true;
+  });
+  const _up = new THREE.Vector3(0, 1, 0);
+
+  return {
+    group,
+    update(t, dt) { playerT += dt || 0; for (const u of ups) u(t, Math.min(0.1, dt || 0)); },
+    /** Pessoa da praça a até 2,3 de (x, z), livre para conversar (ou null). */
+    nearTalk(x, z) {
+      player = { x, z }; playerT = 0;
+      let best = null, bd = TALK_R;
+      for (const n of npcs) { const d = Math.hypot(n.x - x, n.z - z); if (d < bd) { bd = d; best = n; } }
+      return best;
+    },
+    /** Falas para talkBox.show; quem fala para (ou vira a cabeça) e olha para o jogador. */
+    talk(n, px, pz) { if (!n) return []; player = { x: px, z: pz }; playerT = 0; n.talking = true; n.talkT = 0; return plazaLine(n.id, n.mem, n.now()); },
+    endTalk(n) { if (n) n.talking = false; },
+    npcs,
+  };
 }
 
-/** Obstáculos de quem anda a pé dentro da praça (a van já é barrada pela praça inteira): coreto, árvores, canteiros, bancos, postes, cerquinha. */
+/** Obstáculos de quem anda a pé dentro da praça (a van já é barrada pela praça inteira): coreto, árvores, canteiros, bancos, postes, cerquinha, arbustos. */
 export function plazaFootSolids() {
   const P = PLAZA; if (!P) return [];
   const cx = (P.x0 + P.x1) / 2, cz = (P.z0 + P.z1) / 2, w = P.x1 - P.x0, d = P.z1 - P.z0, out = [];
@@ -1941,8 +2496,8 @@ export function plazaFootSolids() {
     const qx = cx + sx * w / 4, qz = cz + sz * d / 4;
     circ(qx, qz, 2.6);                                                         // canteiro
     for (const [tx, tz] of [[sx * 7.5, sz * 3.5], [sx * 3.5, sz * 7.5]]) circ(qx + tx, qz + tz, 0.45);   // troncos
-    const bx = cx + sx * 9.5, bz = cz + sz * 2.6;
-    rect(bx - 1.6, bx + 1.6, bz - 0.55, bz + 0.55);                            // banco (assento + encosto)
+    const bx = cx + sx * PZ.benchX, bz = cz + sz * PZ.benchZ;
+    rect(bx - 1.5, bx + 1.5, bz - 0.4, bz + 0.4);                              // banco (assento + encosto)
     circ(cx + sx * 2.4, cz + sz * (d / 2 - 2.2), 0.15);                        // poste
     const len = w / 2 - 3.2, fx = cx + sx * (1.6 + len / 2 + 0.2), fz = cz + sz * (d / 2 - 1.0);
     rect(fx - len / 2, fx + len / 2, fz - 0.08, fz + 0.08);                    // cerquinha (aberta nos caminhos)
@@ -1950,8 +2505,10 @@ export function plazaFootSolids() {
     rect(gx - 0.08, gx + 0.08, gz - len / 2, gz + len / 2);
     circ(cx + sx * 11.6, cz + sz * 2.6, 0.32);                                 // lixeira
   }
-  circ(cx + 1.0, cz + 10.5, 1.0);                                              // carrinho de pipoca
-  circ(cx - 0.2, cz + 11.6, 0.3);                                              // pipoqueiro
+  for (const [x, z, r] of PZ_SHRUBS) circ(cx + x, cz + z, r * 0.9);            // arbustos baixos
+  circ(cx + PZ.cart[0], cz + PZ.cart[1], 1.0);                                 // carrinho de pipoca
+  const c = Math.cos(PZ.cart[2]), s = Math.sin(PZ.cart[2]);
+  circ(cx + PZ.cart[0] + 0.05 * c - 0.8 * s, cz + PZ.cart[1] - 0.05 * s - 0.8 * c, 0.3);   // pipoqueiro (atrás do carrinho)
   return out;
 }
 
@@ -1986,7 +2543,7 @@ export function createWorld({ renderer, buildLot, buildResident, yardBuilders, p
   const ground = moon ? new THREE.Group() : buildGround(venice, SP);
   const sur = SP ? buildSurroundings(SP, dry, sk === 'city' ? cityLight(lights) : null) : null;
   if (sur) SOLIDS.push(...sur.solids);
-  const outskirts = moon || farm || sur ? new THREE.Group() : buildOutskirts(ground);   // Colheita: em volta são plantações (farmOutside.js)
+  const outskirts = moon || farm || sur ? new THREE.Group() : buildOutskirts(ground, snow);   // Colheita: em volta são plantações (farmOutside.js)
   const serra = CANAL && CANAL.canyon ? buildCanyonHills() : null;       // Cachoeira: serra de mata em volta do vale
   if (serra) scene.add(serra);
   if (venice || moon || farm) SOLIDS.length = solidsStart;              // Veneza: sem árvores de fora (laguna)
@@ -2186,7 +2743,7 @@ export function createWorld({ renderer, buildLot, buildResident, yardBuilders, p
     for (const m of flows) if (m.map) m.map.offset.y = (m.map.offset.y - (dt || 0) * m.userData.flow) % 1;
     for (const b of bobs) { const u = b.userData.bob; b.position.y = u.y0 + Math.sin(ambT * 1.3 + u.ph) * 0.05; b.rotation.z = Math.sin(ambT * 0.9 + u.ph * 2) * 0.035; b.rotation.x = Math.sin(ambT * 0.7 + u.ph) * 0.02; }
     if (sur) sur.update(ambT, dt || 0);
-    if (plife) plife.update(ambT);
+    if (plife) plife.update(ambT, dt || 0);
     for (const i of pool) {
       const u = lots[i].userData.update;
       if (u) u(t, dt);
@@ -2203,6 +2760,8 @@ export function createWorld({ renderer, buildLot, buildResident, yardBuilders, p
     hideResident,
     update,
     lotGroup: h => lots[h],
+    /** Bairro 2: a gente da praça (conversas: nearTalk/talk/endTalk), ou null. */
+    plaza: plife,
     /** Cobertura do posto: some com a van embaixo (x, z do mundo). Também traz para SOLIDS só as colisões dos
      *  arredores que estão perto da van (as de longe ficam fora da conta de colisão de cada quadro). */
     updateGas(x, z, dt) {

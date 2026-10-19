@@ -2,7 +2,8 @@
 // A van entra nele (os obstáculos estão em GAS_PARTS, layout.js) e abastece embaixo da cobertura.
 // Coordenadas locais: origem no canto noroeste do lote da esquerda; frente para o sul (+Z), como as casas.
 import * as THREE from 'three';
-import { mat, box, cyl, sphere, cone, at, dynamic, bakeStatic, textTexture, vcMerge, mergePlain } from './kit.js';
+import { mat, box, cyl, sphere, cone, at, dynamic, bakeStatic, textTexture, mergePlain } from './kit.js';
+import { buildFigure, figureItem, animatePerson, reach } from './resident.js';
 import { LOT, WALK, GAS_W, GAS_CANOPY, GAS_ISLANDS } from '../layout.js';
 
 const G = 0.12, WALK_TOP = 0.17;
@@ -17,33 +18,14 @@ function textMesh(text, w, h, bg, fg, px) {
   return dynamic(m);                       // fora do merge (precisa das coordenadas de textura)
 }
 
-/** Frentista de macacão e boné, com os braços separados (acena para a van que chega). */
+/** Frentista no estilo dos moradores (buildFigure): macacão vermelho com faixas refletivas, crachá, boné do posto e a
+ *  flanela no bolso de trás. Animado em updateCanopy: limpa as bombas sem pressa, olha o movimento; com a van perto, vira
+ *  para ela; quando ela para junto às bombas, acena. */
 function buildAttendant() {
-  const UNI = '#d8312a', UNI2 = '#a8221d', PANTS = '#2f3e5c', SKIN = '#d9a07a', CAP = '#d8312a';
-  const body = new THREE.Group();
-  for (const s of [-1, 1]) {
-    body.add(at(box(0.2, 0.82, 0.22, PANTS), s * 0.13, 0.41, 0));
-    body.add(at(box(0.24, 0.12, 0.34, '#2a2522'), s * 0.13, 0.06, 0.05));
-  }
-  body.add(at(box(0.56, 0.68, 0.32, UNI), 0, 1.16, 0));
-  body.add(at(box(0.58, 0.08, 0.34, '#f4f1ea'), 0, 1.08, 0));                 // faixa refletiva
-  body.add(at(box(0.18, 0.12, 0.02, '#f4f1ea'), 0.12, 1.36, 0.17));          // crachá
-  body.add(at(box(0.16, 0.1, 0.16, SKIN), 0, 1.54, 0));
-  const head = new THREE.Group();                                             // (na origem: o mesh fundido é posto no pescoço)
-  head.add(at(sphere(0.2, SKIN, 10, 8), 0, 0, 0));
-  head.add(at(cyl(0.21, 0.21, 0.12, CAP, 12), 0, 0.12, 0));
-  head.add(at(box(0.26, 0.04, 0.22, UNI2), 0, 0.08, 0.18));                 // aba do boné
-  for (const s of [-1, 1]) head.add(at(sphere(0.03, '#2a2522', 5, 3), s * 0.07, 0.02, 0.18));
-  const torso = vcMerge(body), headM = vcMerge(head);
-  headM.position.set(0, 1.74, 0);
-  const arm = side => {
-    const a = new THREE.Group(); a.add(at(box(0.14, 0.58, 0.16, UNI), 0, -0.27, 0)); a.add(at(sphere(0.08, SKIN, 6, 4), 0, -0.6, 0));
-    const m = vcMerge(a); const pivot = new THREE.Group(); pivot.position.set(side * 0.35, 1.44, 0); pivot.add(m); return pivot;
-  };
-  const g = dynamic(new THREE.Group()), armL = arm(-1), armR = arm(1);
-  g.add(torso, headM, armL, armR);
-  g.userData = { dynamic: true, head: headM, armL, armR };
-  return g;
+  const P = buildFigure({ k: 3, skin: '#d9a07a', hair: '#2a1f18', top: '#d8312a', suit: true, stripes: true, tag: '#f4f1ea', shoes: '#2a2522', boots: true,
+    hat: 'cap', hatColor: '#d8312a', capLogo: '#ffffff', mustache: '#2a1f18', brows: '#2a1f18' });
+  const rag = figureItem('rag', { color: '#3d6fb5' });
+  return { P, rag };
 }
 
 export function buildGasStation() {
@@ -71,7 +53,7 @@ export function buildGasStation() {
   for (let i = 0; i < 6; i++) canopy.add(at(box(0.9, 0.05, 0.9, '#fff7c2', { emissive: '#fff0a0', emissiveIntensity: 0.5 }),
     cx - 7.5 + i * 3, G + 4.33, cz));                                                     // luzes embaixo
   const posto = textMesh('POSTO', 7, 0.55, RED, '#ffffff', 70);
-  posto.position.set(cx, G + 4.6, cz + cd / 2 + 0.07);
+  posto.position.set(cx, G + 4.6, cz + cd / 2 + 0.1);                                   // (4 cm à frente da faixa vermelha)
   canopy.add(posto);
   const canopyMats = [];
   canopy.traverse(o => { if (o.isMesh) { o.material = o.material.clone(); o.material.transparent = true; canopyMats.push(o.material); } });
@@ -90,12 +72,12 @@ export function buildGasStation() {
   const lcd = mat('#9fe8b8', { emissive: '#3a9a5a', emissiveIntensity: 0.8 });
   for (const ix of GAS_ISLANDS) {
     root.add(at(box(1.4, 0.3, 5.6, '#e0dbd0'), ix, G + 0.15, cz));
-    for (const ez of [-1, 1]) for (let k = 0; k < 2; k++) root.add(at(box(1.42, 0.31, 0.35, k ? '#2a2a2a' : '#f2c23a'), ix, G + 0.15, cz + ez * (2.8 - 0.175 - k * 0.35)));   // pontas listradas
+    for (const ez of [-1, 1]) for (let k = 0; k < 2; k++) root.add(at(box(1.46, 0.34, k ? 0.34 : 0.36, k ? '#2a2a2a' : '#f2c23a'), ix, G + 0.15, cz + ez * (2.65 - k * 0.35)));   // pontas listradas (2 cm acima, dos lados e na ponta da ilha)
     for (const pz of [cz - 1.6, cz + 1.6]) {
       root.add(at(box(0.9, 1.7, 0.7, RED), ix, G + 1.15, pz));
-      root.add(at(box(0.7, 0.45, 0.72, WHITE), ix, G + 1.6, pz));
-      root.add(at(box(0.45, 0.25, 0.74, '#2b4a6e'), ix, G + 1.6, pz));                    // visor
-      for (const sx of [-1, 1]) root.add(at(box(0.02, 0.16, 0.36, lcd), ix + sx * 0.37, G + 1.62, pz));   // números acesos nos dois lados
+      root.add(at(box(0.74, 0.45, 0.76, WHITE), ix, G + 1.6, pz));                         // faixa branca (saltada da caixa vermelha)
+      root.add(at(box(0.45, 0.25, 0.8, '#2b4a6e'), ix, G + 1.6, pz));                     // visor (saltado da faixa)
+      for (const sx of [-1, 1]) root.add(at(box(0.04, 0.16, 0.36, lcd), ix + sx * 0.465, G + 1.62, pz));   // números acesos nos dois lados (antes ficavam dentro da caixa)
       root.add(at(box(0.92, 0.12, 0.72, '#f4f1ea'), ix, G + 2.06, pz));                    // tampa com a faixa branca
       for (const sx of [-1, 1]) {                                                          // bico no suporte + mangueira caída
         root.add(at(box(0.08, 0.3, 0.14, '#2a2a2a'), ix + sx * 0.5, G + 1.2, pz + 0.15));
@@ -110,37 +92,47 @@ export function buildGasStation() {
   }
   // marcas no piso: setas de entrada e manchas de óleo junto às bombas (as setas ficam acima das juntas do piso)
   for (const x of [13.4, cx, 28.6]) {                                                      // da rua para as bombas
-    root.add(at(box(0.35, 0.02, 1.8, '#f4f1ea'), x, G + 0.056, 16.0));
-    root.add(at(cyl(0.62, 0.62, 0.02, '#f4f1ea', 3), x, G + 0.056, 14.75, 0, Math.PI, 0));   // ponta (triângulo) para o norte
+    root.add(at(box(0.35, 0.02, 1.8, '#f4f1ea'), x, G + 0.066, 16.0));
+    root.add(at(cyl(0.62, 0.62, 0.02, '#f4f1ea', 3), x, G + 0.066, 14.75, 0, Math.PI, 0));   // ponta (triângulo) para o norte
   }
   for (const [x, z, s] of [[GAS_ISLANDS[0] + 1.6, cz - 1.0, 1.1], [GAS_ISLANDS[1] - 1.7, cz + 1.4, 0.9], [GAS_ISLANDS[1] + 1.5, cz - 0.4, 1.0]]) {
     const m = at(cyl(0.45, 0.45, 0.02, '#b3ada1', 10), x, G + 0.04, z); m.scale.set(s * 1.3, 1, s); root.add(m);
   }
 
-  // lojinha de conveniência nos fundos (à esquerda): vitrine acesa com prateleiras, geladeira de bebidas e porta de vidro
-  root.add(at(box(11, 3.0, 5.4, WHITE), 7.5, G + 1.5, 3.6));             // paredes até 3,0
+  // lojinha de conveniência nos fundos (à esquerda). Fachada em camadas com profundidade de verdade (nada encostado na
+  // mesma superfície): parede (z 6,30) → fundo aceso da vitrine (6,30–6,33) → prateleiras e mercadoria, geladeira e
+  // garrafas (até 6,46) → vidro (6,485) → moldura (6,30–6,50). Porta de vidro recuada no batente; placas sempre 4 cm à
+  // frente do que as segura. A colisão (GAS_PARTS) continua a mesma.
+  root.add(at(box(11, 3.0, 5.4, WHITE), 7.5, G + 1.5, 3.6));             // paredes até 3,0 (frente em z 6,30)
   root.add(at(box(11.2, 0.5, 5.6, '#3c9d55'), 7.5, G + 3.25, 3.6));        // teto por cima (3,0–3,5): não atravessa a parede
-  root.add(at(box(11.04, 0.3, 5.44, '#d9d4c8'), 7.5, G + 0.15, 3.6));      // rodapé
+  root.add(at(box(11.12, 0.3, 5.52, '#d9d4c8'), 7.5, G + 0.15, 3.6));      // rodapé (6 cm para fora da parede)
+  const FZ = 6.3, FRAME = '#e9e4da';
   const LIT = mat('#f3e7cc', { emissive: '#5a4628', emissiveIntensity: 0.55 });
-  root.add(at(box(8, 1.9, 0.06, LIT), 7.5, G + 1.2, 6.32));
-  for (const y of [G + 0.75, G + 1.35]) {                                  // prateleiras com salgadinhos e bebidas
-    root.add(at(box(5.2, 0.05, 0.12, '#cbb894'), 5.6, y, 6.38));
-    for (let k = 0; k < 12; k++) root.add(at(box(0.3, 0.3, 0.08, ['#e8402a', '#f2c23a', '#3a8ad8', '#5ab86a', '#ff8a1a', '#a86ad8'][(k + Math.round(y * 4)) % 6]), 3.25 + k * 0.42, y + 0.18, 6.38));
+  root.add(at(box(6.3, 1.9, 0.03, LIT), 6.4, G + 1.27, FZ + 0.015));       // fundo aceso da vitrine (x 3,25–9,55)
+  for (const y of [G + 0.78, G + 1.38]) {                                  // prateleiras com salgadinhos e bebidas (lado esquerdo)
+    root.add(at(box(3.6, 0.05, 0.1, '#cbb894'), 5.15, y, FZ + 0.08));
+    for (let k = 0; k < 8; k++) root.add(at(box(0.3, 0.3, 0.08, ['#e8402a', '#f2c23a', '#3a8ad8', '#5ab86a', '#ff8a1a', '#a86ad8'][(k + Math.round(y * 4)) % 6]), 3.6 + k * 0.44, y + 0.18, FZ + 0.08));
   }
-  root.add(at(box(2.2, 1.8, 0.1, '#dfe9ef'), 9.85 - 0.1 - 1.6, G + 1.15, 6.37));   // geladeira de bebidas
-  for (let r = 0; r < 3; r++) for (let k = 0; k < 6; k++) root.add(at(cyl(0.06, 0.06, 0.32, ['#3a8a3a', '#d8312a', '#f2c23a'][r], 6), 7.25 + k * 0.32, G + 0.55 + r * 0.5, 6.42));
-  root.add(at(box(8.16, 0.1, 0.18, '#e9e4da'), 7.5, G + 2.2, 6.4));         // moldura da vitrine
-  root.add(at(box(8.16, 0.1, 0.18, '#e9e4da'), 7.5, G + 0.25, 6.4));
-  for (const x of [3.46, 7.5, 11.54]) root.add(at(box(0.1, 2.0, 0.16, '#e9e4da'), x, G + 1.22, 6.4));
-  root.add(at(box(1.6, 2.3, 0.12, '#5a7fa3'), 10.5, G + 1.15, 6.35));
-  root.add(at(box(0.07, 0.6, 0.06, '#c9ced6'), 11.05, G + 1.15, 6.43));                   // puxador
-  const aberto = textMesh('ABERTO 24H', 1.3, 0.3, '#fbf7ee', '#c8312a', 46);
-  aberto.position.set(10.5, G + 1.85, 6.42); root.add(aberto);
-  const promo = textMesh('CAFÉ R$ 3', 1.5, 0.75, '#ffd23a', '#3a2a1a', 64);
-  promo.position.set(4.5, G + 1.85, 6.44); root.add(promo);
-  root.add(at(box(0.5, 0.18, 0.3, '#fff1bf', { emissive: '#ffe9a0', emissiveIntensity: 0.6 }), 12.5, G + 2.5, 6.42));   // luminária da porta
+  root.add(at(box(2.2, 1.75, 0.06, '#dfe9ef'), 8.3, G + 1.24, FZ + 0.06));  // geladeira de bebidas (lado direito)
+  for (let r = 0; r < 3; r++) for (let k = 0; k < 6; k++) root.add(at(cyl(0.045, 0.045, 0.3, ['#3a8a3a', '#d8312a', '#f2c23a'][r], 6), 7.5 + k * 0.32, G + 0.62 + r * 0.5, FZ + 0.13));
+  for (const y of [G + 0.27, G + 2.27]) root.add(at(box(6.5, 0.14, 0.2, FRAME), 6.4, y, FZ + 0.1));   // moldura: base e topo
+  for (const x of [3.19, 7.0, 9.61]) root.add(at(box(0.12, 2.14, 0.2, FRAME), x, G + 1.27, FZ + 0.1));   // laterais e o montante entre prateleira e geladeira
+  const glass = new THREE.Mesh(new THREE.PlaneGeometry(6.3, 1.86), new THREE.MeshStandardMaterial({ color: '#cfe6f2', roughness: 0.08, metalness: 0.1, transparent: true, opacity: 0.18, depthWrite: false }));
+  glass.position.set(6.4, G + 1.27, FZ + 0.185); glass.renderOrder = 2; root.add(dynamic(glass));   // vidro da vitrine (na frente de tudo, dentro da moldura)
+  // porta de vidro recuada no batente, com barra de empurrar e chapa embaixo
+  for (const x of [10.14, 11.66]) root.add(at(box(0.1, 2.46, 0.16, FRAME), x, G + 1.23, FZ + 0.08));
+  root.add(at(box(1.62, 0.12, 0.16, FRAME), 10.9, G + 2.4, FZ + 0.08));
+  root.add(at(box(1.42, 2.04, 0.06, '#5a7fa3'), 10.9, G + 1.32, FZ + 0.04));
+  root.add(at(box(1.42, 0.34, 0.08, '#c9ced6'), 10.9, G + 0.17, FZ + 0.07));   // chapa embaixo (à frente e acima do rodapé)
+  root.add(at(box(0.06, 0.62, 0.05, '#c9ced6'), 11.42, G + 1.2, FZ + 0.115));  // puxador
+  root.add(at(box(1.5, 0.36, 0.06, '#2e3036'), 10.9, G + 2.68, FZ + 0.03));    // placa "ABERTO 24H" sobre a porta
+  const aberto = textMesh('ABERTO 24H', 1.36, 0.28, '#fbf7ee', '#c8312a', 46);
+  aberto.position.set(10.9, G + 2.68, FZ + 0.1); root.add(aberto);
+  const promo = textMesh('CAFÉ R$ 3', 0.95, 0.62, '#ffd23a', '#3a2a1a', 64);   // cartaz na parede, à esquerda da vitrine
+  promo.position.set(2.6, G + 1.5, FZ + 0.04); root.add(promo);
+  root.add(at(box(0.5, 0.18, 0.3, '#fff1bf', { emissive: '#ffe9a0', emissiveIntensity: 0.6 }), 12.35, G + 2.5, 6.42));   // luminária ao lado da porta
   const loja = textMesh('CONVENIÊNCIA', 6, 0.55, '#3c9d55', '#ffffff', 56);
-  loja.position.set(7.5, G + 3.25, 6.42);
+  loja.position.set(7.5, G + 3.25, 6.45);                                 // (4 cm à frente da faixa do teto, que acaba em 6,40)
   root.add(loja);
 
   // totem de preços na frente (à direita)
@@ -148,13 +140,13 @@ export function buildGasStation() {
   root.add(at(box(0.6, 6.4, 0.5, DARK), tx, G + 3.2, tz - 0.3));                          // suporte ATRÁS da placa (não cobre o texto da frente)
   root.add(at(box(3.0, 3.6, 0.4, RED), tx, G + 5.4, tz));
   const precos = textMesh('GASOLINA  5,99', 2.6, 0.6, '#1d1d1f', '#ffd23a', 60);
-  precos.position.set(tx, G + 5.0, tz + 0.21);
+  precos.position.set(tx, G + 5.0, tz + 0.24);
   root.add(precos);
   const precos2 = textMesh('ETANOL  3,99', 2.6, 0.6, '#1d1d1f', '#7ee08a', 60);
-  precos2.position.set(tx, G + 4.2, tz + 0.21);
+  precos2.position.set(tx, G + 4.2, tz + 0.24);
   root.add(precos2);
   const marca = textMesh('ADRESS', 2.6, 0.8, RED, '#ffffff', 90);
-  marca.position.set(tx, G + 6.6, tz + 0.21);
+  marca.position.set(tx, G + 6.6, tz + 0.24);                                            // (placas 4 cm à frente do totem)
   root.add(marca);
 
   // calibrador e lixeira
@@ -162,36 +154,56 @@ export function buildGasStation() {
   root.add(at(cyl(0.35, 0.3, 0.9, '#3c9d55', 10), 14.5, G + 0.45, 7));
   root.add(at(sphere(0.12, '#ffd23a', 6, 4), W - 6, G + 1.3, 4));
 
-  // frentista em pé na ilha da esquerda, entre as bombas: olha para quem chega e acena quando a van encosta
-  const man = buildAttendant();
-  const MX = GAS_ISLANDS[0], MZ = cz;
-  man.position.set(MX, G + 0.3, MZ); man.rotation.y = Math.PI / 2;
-  root.add(man);
-  const ud = man.userData;
-  let face = Math.PI / 2, look = 0, wave = 0, tt = 0, still = 0;
+  // frentista em pé na ilha da esquerda, entre as bombas: limpa as bombas sem pressa e olha o movimento; com a van perto,
+  // vira para ela e olha; quando ela para junto às bombas, acena; depois espera, atento
+  const { P: man, rag } = buildAttendant();
+  const MX = GAS_ISLANDS[0], MZ = cz, MY = G + 0.3;
+  man.root.position.set(MX, MY, MZ); dynamic(man.root);
+  root.add(man.root);
+  const S = { mode: 'idle', t: 0, ph: 0, amp: 0 };
+  let face = Math.PI / 2, look = 0, tt = Math.random() * 9, still = 0, z = 0, task = 'stand', taskT = 4 + Math.random() * 4, goZ = 0, side = 1;
+  man.give(rag, 'body'); rag.position.set(0.22, 0.6, -0.36); rag.rotation.set(0.2, 0, 0.1);   // flanela no bolso de trás
+  const wrapA = a => Math.atan2(Math.sin(a), Math.cos(a));
   const prevUpd = root.userData.updateCanopy;
   root.userData.updateCanopy = (lx, lz, dt) => {
     prevUpd(lx, lz, dt);
-    tt += dt;
-    const dx = lx - MX, dz = lz - MZ, d = Math.hypot(dx, dz);
+    dt = Math.min(0.1, dt || 0); tt += dt; S.t = tt;
+    const px = MX, pz = MZ + z, dx = lx - px, dz = lz - pz, d = Math.hypot(dx, dz);
     const near = d < 16, close = Math.abs(lz - cz) < 4 && Math.abs(lx - MX) < 7;
     still = close ? still + dt : 0;
-    // de frente para a van quando ela está perto; senão olha a rua e as bombas, devagar
-    const want = near ? Math.atan2(dx, dz) : Math.PI / 2 + Math.sin(tt * 0.23) * 0.9;
-    let dd = want - face; while (dd > Math.PI) dd -= 2 * Math.PI; while (dd < -Math.PI) dd += 2 * Math.PI;
-    face += dd * Math.min(1, dt * (near ? 3 : 0.8));
-    man.rotation.y = face;
-    look += ((near ? 0 : Math.sin(tt * 0.6) * 0.35) - look) * Math.min(1, dt * 3);
-    ud.head.rotation.y = look; ud.head.rotation.x = Math.sin(tt * 0.9) * 0.04;
-    wave += ((still > 0.4 && still < 3.4 ? 1 : 0) - wave) * Math.min(1, dt * 5);          // a van parou junto às bombas: um aceno
-    ud.armR.rotation.z = wave * 2.5 + (1 - wave) * 0.07; ud.armR.rotation.x = wave * Math.sin(tt * 9) * 0.35;
-    ud.armL.rotation.z = -0.07 - Math.sin(tt * 1.1) * 0.03;
-    man.position.y = G + 0.3 + Math.abs(Math.sin(tt * 0.8)) * 0.01;
+    // tarefa: em pé, olhando a rua / limpando a bomba de um dos lados; a van perto interrompe e ele volta ao meio da ilha
+    taskT -= dt;
+    if (near) { if (task === 'wipe') { task = 'stand'; taskT = 6; } goZ = 0; }
+    else if (taskT <= 0) {
+      if (task === 'stand') { task = 'wipe'; side = Math.random() < 0.5 ? -1 : 1; goZ = side * 0.78; taskT = 5 + Math.random() * 3; }
+      else { task = 'stand'; goZ = 0; taskT = 5 + Math.random() * 6; }
+    }
+    let mode = 'idle', want;
+    const dzz = goZ - z;
+    if (Math.abs(dzz) > 0.02) { const v = Math.min(Math.abs(dzz), 0.9 * dt) * Math.sign(dzz); z += v; mode = 'walk'; S.ph += Math.abs(v) * Math.PI / 0.42; want = dzz > 0 ? 0 : Math.PI; }
+    else if (near) want = Math.atan2(dx, dz);
+    else if (task === 'wipe') want = side > 0 ? 0 : Math.PI;
+    else want = Math.PI / 2 + Math.sin(tt * 0.23) * 0.9;
+    face += wrapA(want - face) * Math.min(1, dt * (near ? 3 : 2));
+    man.root.position.set(MX, MY, MZ + z); man.root.rotation.y = face;
+    const wiping = task === 'wipe' && mode === 'idle' && Math.abs(wrapA(want - face)) < 0.3;
+    const wave = still > 0.4 && still < 3.4;                                         // a van parou junto às bombas: um aceno
+    look += ((near ? THREE.MathUtils.clamp(wrapA(Math.atan2(dx, dz) - face), -1.2, 1.2) : wiping ? 0 : Math.sin(tt * 0.6) * 0.35) - look) * Math.min(1, dt * 3);
+    S.mode = mode; S.amp = mode === 'walk' ? 0.6 : 0;
+    animatePerson(man, { mode, ph: S.ph, amp: S.amp, t: tt, act: wave ? 'wave' : null, lookYaw: look, lookPitch: wiping ? 0.15 : 0, talk: wave && still < 2 ? 1 : 0 });
+    // flanela: no bolso; limpando, na mão direita, esfregando a frente da bomba em círculos
+    if (wiping) {
+      if (rag.userData.where !== 'R') man.give(rag, 'R');
+      const a = tt * 4.2;
+      reach(man, 1, 0.12 + 0.13 * Math.cos(a), 1.06 + 0.1 * Math.sin(a), 0.44, 0.9, -0.5, -0.3);
+      man.b.waist.rotation.x += 0.08; rag.rotation.set(Math.PI / 2, 0, 0);
+    } else if (rag.userData.where !== 'body') { man.give(rag, 'body'); rag.position.set(0.22, 0.6, -0.36); rag.rotation.set(0.2, 0, 0.1); }
   };
 
   const plain = mergePlain(root);                                  // detalhes de muitas cores (mercadoria, bombas, marcas): 1 desenho
   if (plain) root.add(plain);
   root.traverse(o => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
+  glass.castShadow = false;
   bakeStatic(root);
   return root;
 }
