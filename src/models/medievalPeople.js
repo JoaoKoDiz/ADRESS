@@ -305,6 +305,9 @@ export function buildItem(name, o = {}) {
       P(G.cyl(0.032, 0.036, 2.4, 6), '#7a5a3a', 0, 0.33, 0); P(G.cone(0.065, 0.3, 6), '#b8bcc4', 0, 1.68, 0); P(G.cyl(0.042, 0.042, 0.12, 6), DARK, 0, 1.5, 0);
       P(G.box(0.02, 0.2, 0.34), MED_PAL.tabard, 0, 1.3, 0.18); P(G.box(0.022, 0.06, 0.34), MED_PAL.trim, 0, 1.3, 0.18); break;
     }
+    case 'staff': {                                            // cajado do pastor (madeira, gancho em cima; pé quase no chão)
+      P(G.cyl(0.03, 0.036, 2.1, 6), '#8a6038', 0, 0.2, 0); P(G.torus(0.13, 0.03, 4, 10, Math.PI), '#8a6038', 0.13, 1.25, 0); break;
+    }
     case 'mug': {                                              // caneca de madeira com espuma
       P(G.cyl(0.075, 0.068, 0.16, 8), WOOD, 0, 0, 0); P(G.cyl(0.078, 0.078, 0.025, 8), DARK, 0, 0.05, 0); P(G.torus(0.05, 0.016, 4, 8), WOOD, 0.085, 0, 0);
       P(G.cyl(0.072, 0.072, 0.03, 8), '#f2ead8', 0, 0.085, 0); break;
@@ -640,4 +643,157 @@ export function buildCart(v = 0) {
     steps: s => Math.floor(s * 4 / 1.7),
   };
   return g;
+}
+
+// ---------- Gente leve para a vida dos outros bairros especiais (Jardins, Modernista, Lua, Operário, Bosque) ----------
+// Todas as pessoas de um bairro em 6 InstancedMesh (coxas, canelas com sapato, tronco, braços com a mão, cabeça e sombra no
+// chão), no estilo dos moradores das entregas (cabeção redondo, olhos de ponto, bochechas, tronco cilíndrico, braços
+// inteiriços). Cada peça escolhe por vértice (atributo `tone`) entre TRÊS cores da pessoa (roupa/pele/cabelo, calça/sapato,
+// pele/cabelo/boné…) no shader; o cabelo comprido e o boné/capacete fazem parte da cabeça e só aparecem em quem os tem
+// (atributo `opt`): 1 desenho por tipo de peça, qualquer que seja o número de pessoas. Sem sombra projetada (pessoas
+// pequenas): um disco escuro no chão.
+let CROWD_MAT = null;
+function crowdMat() {
+  if (CROWD_MAT) return CROWD_MAT;
+  const m = CROWD_MAT = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.85, metalness: 0 });
+  m.onBeforeCompile = s => {
+    s.vertexShader = s.vertexShader
+      .replace('#include <color_pars_vertex>', '#include <color_pars_vertex>\nattribute float tone;\nattribute float lf;\nattribute vec3 ca;\nattribute vec3 cb;\nattribute vec3 cc;\nattribute vec2 opt;')
+      .replace('#include <begin_vertex>', '#include <begin_vertex>\ntransformed *= lf < 0.5 ? 1.0 : (lf < 1.5 ? opt.x : opt.y);')
+      .replace('#include <color_vertex>', '#include <color_vertex>\nvColor.xyz *= tone < 0.5 ? ca : (tone < 1.5 ? cb : cc);');
+  };
+  m.customProgramCacheKey = () => 'crowd-three-tone';
+  return m;
+}
+/** parts: [geometria, matriz, sombra (número ou [r,g,b]), tom (0, 1 ou 2: qual das 3 cores), peça opcional (0, 1 cabelo
+ *  comprido, 2 boné)] → uma geometria não indexada. */
+function crowdGeo(parts) {
+  const geos = parts.map(([geo, m, shade, tone, flag = 0]) => {
+    const g = (geo.index ? geo.toNonIndexed() : geo.clone()); g.deleteAttribute('uv'); g.applyMatrix4(m);
+    const n = g.attributes.position.count, col = new Float32Array(n * 3), tn = new Float32Array(n).fill(tone), lf = new Float32Array(n).fill(flag), sh = Array.isArray(shade) ? shade : [shade, shade, shade];
+    for (let i = 0; i < n; i++) { col[i * 3] = sh[0]; col[i * 3 + 1] = sh[1]; col[i * 3 + 2] = sh[2]; }
+    g.setAttribute('color', new THREE.BufferAttribute(col, 3)); g.setAttribute('tone', new THREE.BufferAttribute(tn, 1)); g.setAttribute('lf', new THREE.BufferAttribute(lf, 1));
+    return g;
+  });
+  const out = mergeGeometries(geos, false); geos.forEach(g => g.dispose());
+  return out;
+}
+let CROWD_GEO = null;
+function crowdGeos() {
+  if (CROWD_GEO) return CROWD_GEO;
+  const S = (r, w = 16, h = 12) => new THREE.SphereGeometry(r, w, h), C = (a, b, h, s = 16) => new THREE.CylinderGeometry(a, b, h, s), B = (w, h, d) => new THREE.BoxGeometry(w, h, d);
+  const dome = new THREE.SphereGeometry(0.465, 18, 8, 0, Math.PI * 2, 0, Math.PI / 2);
+  CROWD_GEO = {
+    thigh: crowdGeo([[B(0.22, 0.3, 0.24), tm(0, -0.14, 0), 1, 0]]),
+    shin: crowdGeo([[B(0.21, 0.23, 0.23), tm(0, -0.11, 0), 1, 0], [B(0.26, 0.11, 0.34), tm(0, -0.255, 0.045), 1, 1]]),
+    torso: crowdGeo([[C(0.34, 0.37, 0.62), tm(0, 0.29, 0), 1, 0], [C(0.375, 0.375, 0.09), tm(0, 0.0, 0), 1, 1], [C(0.16, 0.2, 0.12), tm(0, 0.62, 0), 0.92, 0]]),
+    arm: crowdGeo([[S(0.13, 10, 8), tm(0, 0, 0), 1, 0], [C(0.1, 0.09, 0.44, 10), tm(0, -0.24, 0), 1, 0], [S(0.1, 10, 8), tm(0, -0.51, 0), 1, 1]]),
+    head: crowdGeo([
+      [S(0.4, 18, 14), tm(0, 0.34, 0), 1, 0],
+      ...[-1, 1].flatMap(s => [[S(0.065, 8, 6), tm(s * 0.15, 0.39, 0.36), 0.12, 0], [S(0.065, 8, 6), tm(s * 0.25, 0.26, 0.31), [1, 0.7, 0.64], 0]]),
+      [S(0.06, 8, 6), tm(0, 0.3, 0.4), 0.95, 0], [B(0.14, 0.045, 0.05), tm(0, 0.16, 0.36), 0.28, 0],
+      [S(0.43, 18, 10), tm(0, 0.46, -0.06, 0, 0, 0, 1, 0.72, 1), 1, 1], [B(0.72, 0.4, 0.22), tm(0, 0.32, -0.26), 1, 1],
+      [B(0.62, 0.62, 0.17), tm(0, -0.02, -0.3, 0.12, 0, 0), 1, 1, 1], [S(0.2, 10, 8), tm(0, 0.3, -0.42), 1, 1, 1],                               // cabelo comprido (preso atrás)
+      [dome, tm(0, 0.47, -0.02, 0, 0, 0, 1.0, 0.72, 1.0), 1, 2, 2], [C(0.468, 0.468, 0.07, 18), tm(0, 0.49, -0.02), 0.8, 2, 2], [B(0.5, 0.05, 0.34), tm(0, 0.51, 0.43, -0.14, 0, 0), 0.86, 2, 2],   // boné/capacete
+    ]),
+    alien: crowdGeo([                                                                                              // ET (Lua): cabeção, olhos grandes, antenas
+      [S(0.47, 18, 14), tm(0, 0.4, 0, 0, 0, 0, 1, 1.08, 0.96), 1, 0],
+      ...[-1, 1].flatMap(s => [[S(0.1, 10, 8), tm(s * 0.17, 0.42, 0.38, 0, 0, s * 0.35, 1.0, 1.45, 0.6), 1, 1], [S(0.035, 6, 4), tm(s * 0.15, 0.48, 0.44), 2.2, 0]]),
+      [B(0.16, 0.04, 0.05), tm(0, 0.2, 0.43), 0.35, 0],
+      ...[-1, 1].flatMap(s => [[C(0.025, 0.03, 0.42, 6), tm(s * 0.16, 0.95, -0.02, 0, 0, -s * 0.3), 0.85, 0, 2], [S(0.08, 8, 6), tm(s * 0.22, 1.15, -0.02), 1, 2, 2]]),
+    ]),
+  };
+  return CROWD_GEO;
+}
+export const CROWD_SKINS = ['#f0c49a', '#e8b48a', '#d9a074', '#c08560', '#f5d2b0', '#a8714c', '#8a5a3c'];
+export const CROWD_HAIR = ['#3b2a1a', '#6b3e26', '#a0522d', '#d9b46a', '#222222', '#8a5a36', '#c98a4a', '#d8d4cc', '#5a3a22'];
+/** createCrowd(n) → { object, people, look(i, o), update() }. people[i]: { on, x, y, z, ry, walk (fase do passo), amp (0..1,
+ *  >1 corre), lean, yaw, pitch, arms: [frenteE, aberturaE, frenteD, aberturaD], kneel (0..1), scale, bob }.
+ *  look(i, { shirt, pants, shoes, skin, hair, long, hat }) — hat: cor do boné/capacete (ou null). p.hold = [objE, objD]: objetos
+ *  (filhos de `object`, matrixAutoUpdate = false) presos às mãos; userData.grip = matriz da pega a partir do ombro. */
+export function createCrowd(n, opts = {}) {
+  const GEO = { ...crowdGeos() }, M = crowdMat(), root = new THREE.Group(); root.name = opts.name || 'crowd';
+  const parts = {}, mk = (key, count) => {
+    const g = GEO[key].clone();
+    for (const a of ['ca', 'cb', 'cc']) g.setAttribute(a, new THREE.InstancedBufferAttribute(new Float32Array(count * 3).fill(1), 3));
+    g.setAttribute('opt', new THREE.InstancedBufferAttribute(new Float32Array(count * 2), 2));
+    const im = new THREE.InstancedMesh(g, M, count); im.frustumCulled = false; im.castShadow = false; im.receiveShadow = !!opts.receive; im.userData.dynamic = true;
+    root.add(im); parts[key] = im; return im;
+  };
+  if (opts.alien) GEO.head = GEO.alien;                         // (GEO é cópia rasa: as outras multidões continuam com a cabeça humana)
+  mk('thigh', 2 * n); mk('shin', 2 * n); mk('torso', n); mk('arm', 2 * n); mk('head', n);
+  const shadow = new THREE.InstancedMesh(new THREE.CircleGeometry(0.62, 16).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ color: '#000000', transparent: true, opacity: 0.2, depthWrite: false }), n);
+  shadow.frustumCulled = false; shadow.renderOrder = 1; root.add(shadow);
+  const people = [], looks = [];
+  for (let i = 0; i < n; i++) { people.push({ on: false, x: 0, y: 0, z: 0, ry: 0, walk: 0, amp: 0, lean: 0, yaw: 0, pitch: 0, arms: [0, 0.16, 0, 0.16], kneel: 0, scale: 1, bob: 0, legs: null }); looks.push(null); }
+  const _c3 = new THREE.Color();
+  const setCols = (im, idx, a, b, c = b) => { for (const [k, col] of [['ca', a], ['cb', b], ['cc', c]]) { _c3.set(col); const A = im.geometry.attributes[k]; A.setXYZ(idx, _c3.r, _c3.g, _c3.b); A.needsUpdate = true; } };
+  function look(i, o) {
+    const L = looks[i] = { shirt: '#5a8ac0', pants: '#3d4a66', shoes: '#2b2522', skin: CROWD_SKINS[i % CROWD_SKINS.length], hair: CROWD_HAIR[i % CROWD_HAIR.length], long: false, hat: null, ...o };
+    for (const s of [0, 1]) { setCols(parts.thigh, i * 2 + s, L.pants, L.pants); setCols(parts.shin, i * 2 + s, L.pants, L.shoes); setCols(parts.arm, i * 2 + s, L.shirt, L.skin); }
+    setCols(parts.torso, i, L.shirt, L.belt || L.pants);
+    setCols(parts.head, i, L.skin, L.hair, L.hat || '#ffffff');
+    const op = parts.head.geometry.attributes.opt; op.setXY(i, L.long ? 1 : 0, L.hat ? 1 : 0); op.needsUpdate = true;
+  }
+  const ZERO = new THREE.Matrix4().makeScale(0, 0, 0);
+  const R = new THREE.Matrix4(), Hp = new THREE.Matrix4(), T = new THREE.Matrix4(), L = new THREE.Matrix4(), W = new THREE.Matrix4(), K = new THREE.Matrix4();
+  const q = new THREE.Quaternion(), e = new THREE.Euler(), v = new THREE.Vector3(), sc = new THREE.Vector3();
+  const loc = (out, x, y, z, rx = 0, ry = 0, rz = 0) => out.compose(v.set(x, y, z), q.setFromEuler(e.set(rx, ry, rz)), sc.set(1, 1, 1));
+  function update() {
+    for (let i = 0; i < n; i++) {
+      const p = people[i], L0 = looks[i];
+      if (!p.on || !L0) {
+        for (const s of [0, 1]) { parts.thigh.setMatrixAt(i * 2 + s, ZERO); parts.shin.setMatrixAt(i * 2 + s, ZERO); parts.arm.setMatrixAt(i * 2 + s, ZERO); }
+        for (const k of ['torso', 'head']) parts[k].setMatrixAt(i, ZERO);
+        shadow.setMatrixAt(i, ZERO); continue;
+      }
+      const amp = p.amp, ph = p.walk, run = Math.max(0, amp - 1), kn = p.kneel || 0;
+      const bob = amp > 0.01 ? (Math.abs(Math.cos(ph)) - 0.5) * (0.05 + run * 0.08) * Math.min(1, amp) : 0;
+      R.compose(v.set(p.x, p.y + bob + (p.bob || 0) - kn * 0.24, p.z), q.setFromEuler(e.set(0, p.ry, 0)), sc.setScalar(p.scale || 1));
+      if (p.base) R.premultiply(p.base);                            // (Lua: coordenadas no referencial do módulo)
+      // pernas: coxa (quadril) e canela (joelho)
+      const sw = Math.min(amp, 1.4);
+      for (const s of [0, 1]) {
+        const sg = s ? 1 : -1, legPh = s ? -Math.sin(ph) : Math.sin(ph);
+        let th = p.legs ? p.legs[s * 2] : -legPh * 0.55 * sw, kb = p.legs ? p.legs[s * 2 + 1] : Math.max(0, s ? -Math.cos(ph) : Math.cos(ph)) * (0.8 + run * 0.6) * Math.min(1, sw);
+        if (kn > 0) { const tk = s ? -1.3 : -0.15, kk = s ? 1.3 : 1.57; th = th * (1 - kn) + tk * kn; kb = kb * (1 - kn) + kk * kn; }   // ajoelhado: joelho esquerdo no chão, pé direito à frente
+        W.multiplyMatrices(R, loc(L, sg * 0.14, 0.58, 0, th, 0, 0)); parts.thigh.setMatrixAt(i * 2 + s, W);
+        K.multiplyMatrices(W, loc(L, 0, -0.28, 0, kb, 0, 0)); parts.shin.setMatrixAt(i * 2 + s, K);
+      }
+      Hp.multiplyMatrices(R, loc(L, 0, 0.6, 0, p.lean + run * 0.25 + kn * 0.15, 0, 0)); parts.torso.setMatrixAt(i, Hp);
+      for (const s of [0, 1]) {
+        const sg = s ? 1 : -1, fw = p.arms[s * 2] + (amp > 0.01 ? (s ? -1 : 1) * Math.sin(ph) * 0.42 * sw : 0), sp = p.arms[s * 2 + 1];
+        W.multiplyMatrices(Hp, loc(L, sg * 0.4, 0.52, 0, fw, 0, sg * sp)); parts.arm.setMatrixAt(i * 2 + s, W);
+        const held = p.hold && p.hold[s];                           // objeto na mão (filho do grupo da multidão): matriz = mão × pega
+        if (held) { held.matrix.multiplyMatrices(W, held.userData.grip || loc(L, 0, -0.55, 0)); held.matrixWorldNeedsUpdate = true; }
+      }
+      T.multiplyMatrices(Hp, loc(L, 0, 0.58, 0, p.pitch || 0, p.yaw || 0, 0));
+      parts.head.setMatrixAt(i, T);
+      W.compose(v.set(p.x, (p.ground ?? p.y) + 0.03, p.z), q.identity(), sc.set((p.scale || 1), 1, (p.scale || 1))); if (p.base) W.premultiply(p.base); shadow.setMatrixAt(i, W);
+    }
+    for (const k in parts) parts[k].instanceMatrix.needsUpdate = true;
+    shadow.instanceMatrix.needsUpdate = true;
+  }
+  return { object: root, people, look, update, parts, shadow };
+}
+/** Passo: avança a fase do passo de p pela distância andada (d) — pés sem escorregar. */
+export function crowdStep(p, d, run = false) { p.walk += d / (run ? 0.85 : 0.6) * Math.PI; }
+/** Ajudantes de rotina para a multidão (mesmo jeito em todos os bairros): virar aos poucos, parar (o passo some em ~0,25 s,
+ *  a cabeça vai para `look`), andar até um ponto (true ao chegar; pés acompanham a distância andada). */
+const wrapAng = a => Math.atan2(Math.sin(a), Math.cos(a));
+export function crowdTurn(p, ry, dt, rate = 5) { p.ry = wrapAng(p.ry + Math.max(-rate * dt, Math.min(rate * dt, wrapAng(ry - p.ry)))); }
+export function crowdStand(p, dt, look) { p.amp = Math.max(0, p.amp - dt * 4); if (look !== undefined) p.yaw += (look - p.yaw) * Math.min(1, dt * 2); }
+export function crowdWalkTo(p, x, z, v, dt, run = false) {
+  const dx = x - p.x, dz = z - p.z, d = Math.hypot(dx, dz);
+  if (d < 0.05) { crowdStand(p, dt); return true; }
+  crowdTurn(p, Math.atan2(dx, dz), dt, 6);
+  const step = Math.min(d, v * dt); p.x += Math.sin(p.ry) * step; p.z += Math.cos(p.ry) * step;
+  p.amp += ((run ? 1.35 : 1) - p.amp) * Math.min(1, dt * 6); crowdStep(p, step, run);
+  return false;
+}
+/** Segue uma polilinha (fechada ou não) com velocidade v; devolve true ao chegar ao fim (não fechada). s.i = índice do alvo. */
+export function crowdFollow(p, s, pts, v, dt, closed = true, run = false) {
+  const q = pts[s.i % pts.length];
+  if (crowdWalkTo(p, q[0], q[1], v, dt, run) || Math.hypot(q[0] - p.x, q[1] - p.z) < 0.35) { s.i++; if (!closed && s.i >= pts.length) { s.i = pts.length - 1; return true; } }
+  return false;
 }

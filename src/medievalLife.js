@@ -64,6 +64,8 @@ const LINES = {
     'Se eu comprar mais um cesto, não cabe em casa.'],
   local: ['Vou ali na vizinha devolver uma panela.', 'Bom dia! A rua está movimentada hoje.', 'Esqueci o xale na casa da minha tia. De novo!',
     'Levo este pão para a vizinha. Ela me deve um favor, e eu devo dois.'],
+  washer: ['Água fria lava melhor. Minha mãe dizia isso; minhas mãos discordam.', 'Se chover antes de secar, lavo tudo de novo amanhã.',
+    'Essa mancha é de amora. A amora ganhou de novo.', 'Lavo aqui porque a fonte tem a melhor conversa do burgo.', 'Cuidado com o lençol! Acabou de ficar branco.'],
   child2: ['Mamãe disse que hoje tem pão doce!', 'Eu ajudo a escolher as maçãs.', 'Olha a fonte! Ela nunca para de jorrar.',
     'Eu sei contar até cem. Quer ver? Um, dois…'],
 };
@@ -211,7 +213,7 @@ export function createMedievalLife(audio) {
   let carts = null; const cartObjs = []; let cartIdx = 0;
   const doors = new Map();                         // spot → { obj, ang, target, closeAt }
   const scanCache = new Map();
-  let sceneMarks = { flag: [], cloth: [], water: [], forge: [], smoke: [] };
+  let sceneMarks = { flag: [], cloth: [], water: [], forge: [], smoke: [], tick: [] };
   let lotMarks = { flag: [], cloth: [], water: [], forge: [], smoke: [] };
   let emitters = [];
   const fount = { lock: null };
@@ -297,6 +299,18 @@ export function createMedievalLife(audio) {
         { t: 'until', fn: () => M.arrived[1 - me] || other.dead, max: 60, look: oth }, { t: 'converse', M, me, other }, { t: 'act', act: 'wave', dur: 1.5 }];
       if (me === 0 && pr.visit >= 0 && !isDead(pr.visit)) st.push(...visit(pr.visit), ...enterH(n.home), { t: 'inside', dur: rnd(10, 20) });
       else st.push(...enterH(n.home), { t: 'inside', dur: rnd(18, 35) });
+      return st;
+    },
+    washer(n) {                                                                   // lavadeira: lava a roupa na borda da fonte (do lado oposto à bica), sacode, dobra e volta
+      const s = n.home, F = V.F, w = n.washAt, work = { x: F.x - 2.9, y: H(F.x, F.z) + 0.62, z: F.z + w.dz * 0.4 };
+      const putDown = { t: 'call', fn: q => {                                     // o cesto fica no chão, ao lado dela
+        const it = q.P.items.basket; if (!it) return; q.P.drop('basket'); it.rotation.set(0, q.ry + 0.4, 0); it.position.set(0, 0, 0); it.updateMatrixWorld(true);
+        const bb = new THREE.Box3().setFromObject(it), gx = w.x - 0.55, gz = w.z - w.dz * 0.7; it.position.set(gx, H(gx, gz) - bb.min.y + 0.01, gz); it.visible = true; root.add(it); q.groundItem = it; } };
+      const st = [...exitH(s, [{ t: 'give', name: 'basket', where: 'L', full: true }]), { t: 'go', x: w.x, z: w.z }, { t: 'face', x: F.x, z: F.z + w.dz * 0.4 }, putDown,
+        { t: 'act', act: 'arrange', dur: rnd(7, 11), work, look: { x: F.x, z: F.z } }, { t: 'idle', dur: rnd(1.5, 3), look: 'around' }, { t: 'act', act: 'arrange', dur: rnd(5, 8), work }];
+      st.push({ t: 'act', act: 'fold', dur: 8, work: { x: w.x - 0.1, y: H(w.x, w.z) + 0.85, z: w.z + 0.75 }, body: 'sheet', drop: true });
+      if (Math.random() < 0.5) st.push({ t: 'act', act: 'talk', dur: 2.4, talk: true });
+      st.push({ t: 'call', fn: q => { q.groundItem = null; } }, { t: 'give', name: 'basket', where: 'L', full: true }, ...enterH(s), { t: 'drop' }, { t: 'inside', dur: rnd(25, 45) });
       return st;
     },
     elder(n) { return [{ t: 'sit', dur: rnd(25, 50) }, { t: 'act', act: 'stretch', dur: 3, sit: true }]; },
@@ -419,6 +433,7 @@ export function createMedievalLife(audio) {
     { role: 'water', plan: 'water', k: 51, qSide: 1 }, { role: 'water', plan: 'water', k: 54, qSide: -1 },
     { role: 'walker', plan: 'chat', k: 61, lines: 'chat', pair: 0 }, { role: 'buyer', plan: 'chat', k: 64, lines: 'chat', pair: 1 },
     { role: 'elder', plan: 'elder', k: 71, bench: 0 }, { role: 'elder', plan: 'elder', k: 72, bench: 2 },
+    { role: 'water', plan: 'washer', k: 57, lines: 'washer' },
     { role: 'porter', plan: 'porter', k: 81 },
     { role: 'gardener', plan: 'gardener', k: 91, homeKind: 'low' }, { role: 'gardener', plan: 'gardener', k: 94, homeKind: 'mid' },
     { role: 'baker', plan: 'baker', k: 2, shop: 'bakery' }, { role: 'smith', plan: 'smith', k: 3, shop: 'smithy' },
@@ -429,7 +444,7 @@ export function createMedievalLife(audio) {
     // vizinhos de passagem: saem de uma casa perto de onde o jogador está, vão a outra casa ali perto e voltam (a rua nunca fica vazia)
     ...['walker', 'buyer', 'walker', 'buyer', 'walker', 'buyer', 'walker', 'buyer'].map((role, i) => ({ role, plan: 'local', k: 141 + i * 3, lines: 'local' })),
   ];
-  const ITEMS = { guardGate: ['spear'], guardCastle: ['spear'], buyer: ['basket'], sweeper: ['broom', 'pan'], water: ['bucket'], porter: ['crate', 'sack'], gardener: ['can'], baker: ['basket'], smith: ['hammer', 'tongs'], weaver: ['sheet'], keeper: ['mug', 'rag'], local: ['basket'] };
+  const ITEMS = { guardGate: ['spear'], guardCastle: ['spear'], buyer: ['basket'], washer: ['basket', 'sheet'], sweeper: ['broom', 'pan'], water: ['bucket'], porter: ['crate', 'sack'], gardener: ['can'], baker: ['basket'], smith: ['hammer', 'tongs'], weaver: ['sheet'], keeper: ['mug', 'rag'], local: ['basket'] };
   function makeNpc(def, i) {
     const P = buildMedPerson({ role: def.role, k: def.k });
     for (const nm of ITEMS[def.plan] || []) P.items[nm] = buildItem(nm, { k: def.k });          // objetos prontos (nada é montado durante o jogo)
@@ -443,7 +458,7 @@ export function createMedievalLife(audio) {
   function addSolid(n) { if (!n.inSolid) { SOLIDS.push(n.solid); n.inSolid = true; } }
   function delSolid(n) { if (n.inSolid) { const k = SOLIDS.indexOf(n.solid); if (k >= 0) SOLIDS.splice(k, 1); n.inSolid = false; } }
   function kill(n) {
-    n.dead = true; n.inside = true; n.talking = false; n.P.root.visible = false; n.vis = false; delSolid(n); n.P.drop(); hideDirt(n);
+    n.dead = true; n.inside = true; n.talking = false; n.P.root.visible = false; n.vis = false; delSolid(n); n.P.drop(); hideDirt(n); pickUp(n);
     if (fount.lock === n) fount.lock = null;
     if (n.stall) n.stall.merchant = null;
   }
@@ -828,6 +843,46 @@ export function createMedievalLife(audio) {
     sparks.im.count = k; sparks.im.instanceMatrix.needsUpdate = true;
   }
 
+  // ---------- galinhas na frente do depósito (ciscam os grãos que caem dos sacos; espantam de quem passa perto) ----------
+  function buildHens() {
+    const g = new THREE.Group(), add = (geo, c, x, y, z, sx = 1, sy = 1, sz = 1) => { const m = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({ color: c })); m.position.set(x, y, z); m.scale.set(sx, sy, sz); g.add(m); };
+    add(new THREE.SphereGeometry(0.16, 10, 8), '#f2ece0', 0, 0.26, 0, 1, 0.9, 1.35); add(new THREE.SphereGeometry(0.09, 8, 6), '#f2ece0', 0, 0.42, 0.17);
+    add(new THREE.BoxGeometry(0.035, 0.07, 0.1), '#d8312a', 0, 0.52, 0.17); add(new THREE.ConeGeometry(0.03, 0.08, 5).rotateX(Math.PI / 2), '#e8a23a', 0, 0.41, 0.28);
+    add(new THREE.BoxGeometry(0.1, 0.14, 0.08), '#e6dccb', 0, 0.36, -0.22); for (const sx of [-0.06, 0.06]) add(new THREE.BoxGeometry(0.025, 0.14, 0.025), '#e8a23a', sx, 0.08, 0);
+    const geos = []; g.updateMatrixWorld(true);
+    g.children.forEach(m => { const q = m.geometry.clone().toNonIndexed(); q.deleteAttribute('uv'); q.applyMatrix4(m.matrixWorld); const c = m.material.color, n = q.attributes.position.count, a = new Float32Array(n * 3); for (let i = 0; i < n; i++) { a[i * 3] = c.r; a[i * 3 + 1] = c.g; a[i * 3 + 2] = c.b; } q.setAttribute('color', new THREE.BufferAttribute(a, 3)); geos.push(q); });
+    const geo = new THREE.BufferGeometry(); let cnt = 0; for (const q of geos) cnt += q.attributes.position.count;
+    const P = new Float32Array(cnt * 3), N = new Float32Array(cnt * 3), C = new Float32Array(cnt * 3); let o = 0;
+    for (const q of geos) { if (!q.attributes.normal) q.computeVertexNormals(); P.set(q.attributes.position.array, o * 3); N.set(q.attributes.normal.array, o * 3); C.set(q.attributes.color.array, o * 3); o += q.attributes.position.count; }
+    geo.setAttribute('position', new THREE.BufferAttribute(P, 3)); geo.setAttribute('normal', new THREE.BufferAttribute(N, 3)); geo.setAttribute('color', new THREE.BufferAttribute(C, 3));
+    const NH = 6, im = new THREE.InstancedMesh(geo, new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.9 }), NH); im.frustumCulled = false; im.castShadow = true;
+    const D = V.depot, list = [];
+    for (let i = 0; i < NH; i++) list.push({ x: D.door.x - 1.5 - Math.random() * 3, z: D.z0 + 0.8 + Math.random() * (D.z1 - D.z0 - 1.6), ry: Math.random() * 6.3, peck: 0, t: Math.random() * 3, tx: 0, tz: 0, hop: 0, k: i });
+    return { im, list, area: { x0: D.door.x - 5.2, x1: D.door.x - 0.6, z0: D.z0 + 0.4, z1: D.z1 - 0.4 } };
+  }
+  function updateHens(dt, L) {
+    const H0 = hens; if (!H0) return;
+    const A = H0.area, cx = (A.x0 + A.x1) / 2, cz = (A.z0 + A.z1) / 2;
+    if (Math.hypot(cx - L.x, cz - L.z) > 100) return;
+    const threats = OBS.slice(); for (const n of npcs) if (n.vis && !n.dead && Math.abs(n.x - cx) < 8 && Math.abs(n.z - cz) < 8) threats.push([n.x, n.z, 0.6]);
+    for (const h of H0.list) {
+      h.t -= dt;
+      let fx = 0, fz = 0; for (const o of threats) { const dx = h.x - o[0], dz = h.z - o[1], d = Math.hypot(dx, dz); if (d < 2.2 + (o[2] || 0)) { fx += dx / (d || 1); fz += dz / (d || 1); } }
+      const scared = fx || fz;
+      if (scared) { h.ry = Math.atan2(fx, fz); h.x += Math.sin(h.ry) * 2.2 * dt; h.z += Math.cos(h.ry) * 2.2 * dt; h.peck = 0; if (h.hop <= 0 && Math.random() < dt * 3) h.hop = 0.35; }
+      else if (h.t <= 0) { h.t = 1 + Math.random() * 3; if (Math.random() < 0.55) { h.peck = 1.2 + Math.random() * 1.5; } else { h.tx = A.x0 + Math.random() * (A.x1 - A.x0); h.tz = A.z0 + Math.random() * (A.z1 - A.z0); h.peck = 0; } }
+      if (!scared && h.peck <= 0 && h.tx) { const dx = h.tx - h.x, dz = h.tz - h.z, d = Math.hypot(dx, dz); if (d > 0.08) { h.ry += Math.atan2(Math.sin(Math.atan2(dx, dz) - h.ry), Math.cos(Math.atan2(dx, dz) - h.ry)) * Math.min(1, dt * 8); h.x += Math.sin(h.ry) * Math.min(d, 0.7 * dt); h.z += Math.cos(h.ry) * Math.min(d, 0.7 * dt); } }
+      h.peck -= dt; h.hop -= dt;
+      h.x = clamp(h.x, A.x0 - 2.5, A.x1 + 0.3); h.z = clamp(h.z, A.z0 - 2.5, A.z1 + 2.5);   // (a parede do depósito fica logo depois da porta: nenhuma galinha entra nela)
+      const pk = h.peck > 0 ? Math.max(0, Math.sin(t * 13 + h.k)) * 0.75 : 0, hop = h.hop > 0 ? Math.sin(h.hop / 0.35 * Math.PI) * 0.35 : 0;
+      _hm.compose(_hv.set(h.x, H(h.x, h.z) + hop, h.z), _hq.setFromEuler(_he.set(pk, h.ry, 0)), _hs);
+      H0.im.setMatrixAt(h.k, _hm);
+    }
+    H0.im.instanceMatrix.needsUpdate = true;
+  }
+  const _hm = new THREE.Matrix4(), _hv = new THREE.Vector3(), _hq = new THREE.Quaternion(), _he = new THREE.Euler(), _hs = new THREE.Vector3(1, 1, 1);
+  let hens = null;
+
   // ---------- marcadores dos lotes e da cena (portas, fumaça, bandeiras, tecidos, água, forja, âncoras) ----------
   function scan(obj, skipLots) {
     const m = { door: null, smoke: [], flag: [], cloth: [], forge: [], water: [], worker: null, work: null };
@@ -841,11 +896,11 @@ export function createMedievalLife(audio) {
   }
   /** Percorre a cena sem descer nos lotes (eles são lidos um por um no layout). */
   function scanScene(sc) {
-    const m = { smoke: [], flag: [], cloth: [], forge: [], water: [] };
+    const m = { smoke: [], flag: [], cloth: [], forge: [], water: [], tick: [] };   // tick: coisas do cenário que mexem sozinhas (velas do moinho, ovelhas e pastor)
     const walk = o => {
       if (o !== sc && typeof o.name === 'string' && o.name.startsWith('lot:')) return;
       if (o === root) return;
-      const u = o.userData; if (u) { if (u.smoke) m.smoke.push(o); if (u.flag) m.flag.push(o); if (u.cloth) m.cloth.push(o); if (u.forge) m.forge.push(o); if (u.water) m.water.push(o); }
+      const u = o.userData; if (u) { if (u.smoke) m.smoke.push(o); if (u.flag) m.flag.push(o); if (u.cloth) m.cloth.push(o); if (u.forge) m.forge.push(o); if (u.water) m.water.push(o); if (u.tick) m.tick.push(o); }
       for (const c of o.children) walk(c);
     };
     walk(sc);
@@ -914,6 +969,7 @@ export function createMedievalLife(audio) {
     const out = {};
     out.buyer = [pick(s => Math.abs(dF(s) - 42) + (lvl(s) === 1 ? 0 : 30)), pick(s => Math.abs(dF(s) - 55) + (lvl(s) === 1 ? 0 : 30))];
     out.water = [pick(s => Math.abs(dF(s) - 38) + (lvl(s) === 1 ? 0 : 40)), pick(s => Math.abs(dF(s) - 60) + (lvl(s) === 1 ? 0 : 40))];
+    out.washer = pick(s => Math.abs(dF(s) - 34) + (lvl(s) === 1 ? 0 : 40));
     out.sweeper = [pick(s => mainRoad(s) * 0.6 + (lvl(s) === 0 ? 0 : 60)), pick(s => Math.abs(dF(s) - 48) + (lvl(s) === 1 ? 0 : 60))];
     const flower = s => (HOUSES[game.layout[s]] && HOUSES[game.layout[s]].flower ? 0 : 25);
     out.gardener = [pick(s => flower(s) + (lvl(s) === 0 ? 0 : 60) + mainRoad(s) * 0.2), pick(s => flower(s) + (lvl(s) === 1 ? 0 : 60) + Math.abs(dF(s) - 65) * 0.3)];
@@ -938,8 +994,10 @@ export function createMedievalLife(audio) {
   function resetNpc(n) {
     n.steps = []; n.si = 0; n.cur = null; n.path = null; n.pi = 0; n.v = 0; n.lat = 0; n.talking = false; n.dead = false; n.inside = true; n.yielding = false;
     n.curSpot = -1; n.stepLot = -1; n.lift = 0; n.P.drop(); hideDirt(n); n.st.act = null; n.st.talk = 0; n.st.mode = 'idle'; n.look = 0;
-    delSolid(n); n.vis = false; n.P.root.visible = false;
+    delSolid(n); n.vis = false; n.P.root.visible = false; pickUp(n);
   }
+  /** Objeto que a pessoa deixou no chão (o cesto da lavadeira): sai de cena junto com ela. */
+  function pickUp(n) { const it = n.groundItem; if (it && it.parent === root) root.remove(it); n.groundItem = null; }
   function place(n, x, z, ry, visible = true) { n.x = n.cx = x; n.z = n.cz = z; n.ry = ry; n.inside = !visible; }
   function layoutNpcs(game) {
     const A = assignHomes(game), F = V.F, present = s => s >= 0 && game.layout[s] >= 0;
@@ -965,6 +1023,7 @@ export function createMedievalLife(audio) {
           break;
         }
         case 'gardener': { n.home = A.gardener[gi++]; if (n.home < 0) { kill(n); break; } n.deps = [n.home]; startInside(rnd(0, 25)); break; }
+        case 'washer': { n.home = A.washer; if (n.home < 0) { kill(n); break; } n.deps = [n.home]; const dz = Math.random() < 0.5 ? -1 : 1; n.washAt = { x: F.x - 3.65, z: F.z + dz * 0.6, dz }; startInside(rnd(2, 15)); break; }
         case 'chat': {
           if (!pr) { kill(n); break; }
           n.pair = pr; n.pairIdx = d.pair; pr.npcs[d.pair] = n; n.home = A.pair.homes[d.pair]; n.deps = [n.home]; n.cycle = 0;
@@ -1009,7 +1068,7 @@ export function createMedievalLife(audio) {
     /** Uma vez, na criação do mundo medieval: nuvens, pássaros, fumaça, faíscas, carroças e pessoas (construídos uma vez). */
     setup(world, plan) {
       V = plan; W = world; router = makeRouter(V);
-      clouds = buildClouds(); birds = buildBirds(); smoke = buildSmoke(); sparks = buildSparks();
+      clouds = buildClouds(); birds = buildBirds(); smoke = buildSmoke(); sparks = buildSparks(); hens = buildHens(); root.add(hens.im);
       root.add(clouds.im, birds.body, birds.wing, smoke.im, sparks.im);
       carts = createTractors(audio); root.add(carts.object);
       cartObjs.length = 0; cartObjs.push(buildCart(0), buildCart(1));
@@ -1130,7 +1189,7 @@ export function createMedievalLife(audio) {
       }
       // ambiente
       clouds.im.visible = !camera || camera.position.y < 125;                     // visão do bairro inteiro (C): as nuvens não tapam nada
-      updateClouds(dt); updateBirds(dt);
+      updateClouds(dt); updateBirds(dt); updateHens(dt, L);
       for (const e of emitters) {
         if (Math.hypot(e.p.x - L.x, e.p.z - L.z) > 85) continue;
         e.next -= dt; if (e.next <= 0) { e.next = rnd(0.45, 0.75); emitSmoke(e); }
@@ -1138,6 +1197,7 @@ export function createMedievalLife(audio) {
       updateSmoke(dt, camera); updateSparks(dt);
       const near = o => { o.getWorldPosition(_v); return Math.hypot(_v.x - L.x, _v.z - L.z) < 110; };
       animMarks(sceneMarks, dt, o => (o.userData._near == null || (t * 4 | 0) % 8 === 0 ? (o.userData._near = near(o)) : o.userData._near));
+      for (const o of sceneMarks.tick || []) o.userData.tick(t, dt);                // arredores: velas do moinho, ovelhas, pastor
       animMarks(lotMarks, dt, o => (o.userData._near == null || (t * 4 | 0) % 8 === 0 ? (o.userData._near = near(o)) : o.userData._near));
       // sons de ambiente
       chirpT -= dt;

@@ -5,10 +5,16 @@ import * as THREE from 'three';
 import { box, cyl, at, mat } from './models/kit.js';
 import { buildTram } from './train.js';
 import { buildResident } from './models/resident.js';
-import { buildPewReader, buildStandingReader } from './models/reader.js';
+import { buildPewReader, buildStandingReader, kTalk as kTalkGestures, kGestureReset } from './models/reader.js';
 import { buildBody } from './models/driver.js';
 
 const FORK = 0, START = -38, END = 70, SPLIT = 16, SPREAD = 6, HIT_X = 25, SPEED = 3.3;   // ~10 s até a bifurcação
+// olhares do K na conversa depois do dilema ('p' = o jogador; 'tracks' = a bifurcação, para onde o bonde foi)
+const T_GEST = [
+  { at: 'tracks', w: 0.85, rate: 2, then: { from: 0.3, at: 'p', w: 1 } },                     // "Rapaz… Depois dessa,": ainda olhando os trilhos
+  { at: 'p', w: 0.2, yaw: -0.3, pitch: 0.2, then: { from: 0.5, w: 1, yaw: 0, pitch: 0 } },  // Veneza: os olhos longe, depois de volta
+  { at: 'tracks', w: 0.7, then: { from: 0.45, at: 'p', w: 1, roll: 0.08 } },                  // "os barcos…": uma olhada desconfiada para os trilhos
+];
 const zAt = (x, side) => x <= FORK ? 0 : side * SPREAD * (t => t * t * (3 - 2 * t))(Math.min(1, (x - FORK) / SPLIT));
 
 const CSS = `
@@ -71,6 +77,8 @@ export function createTrolley(stageEl) {
   const talk = new THREE.Group(); talk.visible = false; scene.add(talk);
   const kTalk = buildStandingReader(); kTalk.position.set(-14, 0, -4.6); kTalk.rotation.y = Math.PI / 2; talk.add(kTalk);   // em pé, de frente para o jogador (-z), longe dos trilhos
   const camSave = { p: camera.position.clone(), q: camera.quaternion.clone() };
+  const _tp = new THREE.Vector3(), _tt = new THREE.Vector3(FORK + 4, 0.6, 1.5);
+  let breath = 0;
   let x = START, side = -1, locked = false, t = 0, active = false, doneT = -1;
   const place = () => {
     const z = zAt(x, side), z2 = zAt(x + 1, side);
@@ -91,13 +99,20 @@ export function createTrolley(stageEl) {
       for (const v of victims) if (v.obj !== k) v.obj.rotation.set(-Math.PI / 2, 0, 0);
       keyHint.classList.remove('off'); ui.classList.add('on'); document.body.classList.add('title-on'); place();   // (a barra e os botões da partida somem)
     },
+    /** Gestos do K durante a conversa (tb = a caixa de fala) e a respiração. */
+    talkUpdate(dt, tb) {
+      if (!talk.visible) return;
+      breath += dt; kTalk.userData.torso.scale.y = 1 + 0.012 * Math.sin(breath * 1.7);   // respirando (ainda se recuperando do susto)
+      kTalkGestures(kTalk, dt, T_GEST, tb, { p: _tp.set(player.position.x, 1.6, player.position.z), tracks: _tt });
+    },
     /** Corta para a conversa com o K salvo: jogador de costas, K de frente, vistos um pouco de lado. */
     talkScene() {
+      kGestureReset(kTalk);
       tram.visible = false; k.visible = false; for (const v of victims) v.obj.visible = false;
       talk.visible = true; ui.classList.remove('on');
       player.position.set(-14.4, 0, -7.0); player.rotation.y = -Math.PI / 2 + 0.1;     // olhando para o K (+z)
       if (ag) ag.rotation.z = 0;
-      camera.position.set(-9.4, 2.6, -12.2); camera.lookAt(-13.9, 1.1, -4.6);
+      camera.position.set(-12.75, 2.05, -9.6); camera.lookAt(-14.05, 1.2, -4.9);   // por cima do ombro do jogador: ele de costas, o K de frente (os trilhos atrás)
     },
     stop() {
       tram.visible = true; k.visible = true; talk.visible = false;

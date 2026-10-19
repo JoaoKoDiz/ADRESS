@@ -100,7 +100,7 @@ import snowyUrl from '../assets/snowy.mp3';
 import waterfallUrl from '../assets/waterfall.mp3';
 import { buildChurch, setChurchOpacity, CHURCH_SOLIDS, CHURCH_CAM } from './models/church.js';
 import { buildBell, BELL_SPOT, BELL2_X } from './models/bell.js';
-import { buildPewReader } from './models/reader.js';
+import { buildPewReader, kTalk, kGesture, kGestureReset } from './models/reader.js';
 import { createBackButton } from './backButton.js';
 import { createMissions, createMissionsButton, MISSIONS, RESERVED } from './missions.js';
 import { createCareer } from './career.js';
@@ -803,6 +803,7 @@ function updateTrolleySeq(dt) {
     });
   } else if (q.phase === 'talk') {
     talkBox.update(dt); if (input.action()) talkBox.press();
+    trolley.talkUpdate(dt, talkBox);                                  // olhares do K (para os trilhos, para o jogador)
   } else if (q.phase === 'out' && q.t > 0.5) {                        // volta à partida normal
     trolley.stop(); sTrainProblem.stop(); train.clearCharge();
     if (!talkMusic.playing) music.suspend(false);
@@ -1529,6 +1530,13 @@ const K_LINES = [
   ['Mas me diga: foi tão difícil assim encontrar esta casa?'],
   K_LAST,
 ];
+// olhares do K nesta conversa (somados à pose "jornal de lado", que já olha para quem chegou): kTalk em models/reader.js
+const K_GEST = [
+  { at: 'box', rate: 2.6, then: { from: 0.45, at: 'p' } },                                   // "Ah! Finalmente…": a caixa ao lado da cadeira; depois, quem trouxe
+  { at: 'p', w: 0.3, yaw: 0.3, shake: 0.05, then: { from: 0.6, w: 1, yaw: 0, shake: 0 } },     // tanta coisa que não pedi: olha para longe, balança a cabeça
+  { at: 'p', roll: 0.14 },                                                                   // "foi tão difícil assim…?": a cabeça de lado
+  { at: 'p', then: [{ from: 0.2, w: 0.45, pitch: 0.34 }, { from: 0.52, w: 1, pitch: 0 }] },  // o topo de um prédio alto: os olhos sobem; o resto, seco
+];
 const talkCam = { pos: new THREE.Vector3(), look: new THREE.Vector3() };
 let talkPhase = '', talkLines = null;
 function startTalk() {
@@ -1545,13 +1553,13 @@ function startTalk() {
     parcel.position.set(_rp.x + f.x * 0.55 - rt.x * 0.95, 0, _rp.z + f.z * 0.55 - rt.z * 0.95); parcel.rotation.set(0, -r + 0.3, 0);
     talkLines = K_LINES;
   } else talkLines = [K_LAST];
-  sp.userData.setAside(true);
+  sp.userData.setAside(true); kGestureReset(sp);
   talkPhase = 'aside';
   setState('talk');
 }
 function endTalk() {
   if (!parcelDone && talkLines === K_LINES) { parcelDone = true; try { localStorage.setItem(PARCEL_KEY, '1'); } catch (e) { /* */ } }
-  const sp = readerSpot(); sp && sp.userData.setAside(false);   // volta a ler
+  const sp = readerSpot(); sp && sp.userData.setAside(false);   // volta a ler (os gestos somem junto com a pose de conversa)
   talkPhase = ''; actionLock = 0.4;
   rig.snap({ x: walker.x, z: walker.z, heading: walker.heading, speed: 0 });   // câmera de sempre, atrás do personagem
   setState('walk');
@@ -1598,8 +1606,18 @@ const ROOF_LINES = [
   ['Lá no primeiro bairro, as casas escondem o caminho. ', { b: 'Mas o sol ainda aponta a direção.' }],
   ['Deixe o bairro para trás e ', { b: 'dirija na direção do sol.' }, ' Depois de algum tempo, verá o lugar no horizonte. ', { b: 'Estarei lá.' }],
 ];
+// olhares do K reclinado (ele estava olhando a vista, para o lado do sol)
+const ROOF_GEST = [
+  { at: 'p', rate: 1.8 },                                                    // vira a cabeça devagar para quem chegou
+  { at: 'p' },
+  { at: 'p', roll: -0.12 },                                                  // provocando, de leve
+  { at: 'p', w: 0.35 },                                                      // volta a olhar a vista
+  { at: 'p' },
+  { at: 'p', then: { from: 0.56, at: 'sun', w: 0.55, rate: 1.6 } },          // "Mas o sol ainda aponta a direção." (de perfil, sem dar as costas)
+  { at: 'sun', w: 0.5, then: { from: 0.86, at: 'p', w: 1, rate: 2.4 } },     // … e de volta para quem vai procurar: "Estarei lá."
+];
 function startRoofTalk() {
-  const lr = loungerSpot(); lr.getWorldPosition(_rp);
+  const lr = loungerSpot(); lr.getWorldPosition(_rp); kGestureReset(lr);
   van.object.visible = false;                           // o helicóptero some só durante esta cena (não tampa nada)
   const px = _rp.x + 1.45, pz = _rp.z - 0.3;            // em pé ao lado da espreguiçadeira (lado leste), olhando para ele
   walker.pose(px, pz, Math.atan2(_rp.z - pz, _rp.x - px));
@@ -1979,6 +1997,7 @@ function updateMenuMusic() {
   if (menus && !menuPaused) { if (!menuMusic.playing && menuMusic.play(menuFadeIn)) menuFadeIn = 0.6; }
   else if (menuMusic.playing) menuMusic.stop(0.8);
 }
+let cabCap = null;                                      // boné do motorista na cabine (some dentro das igrejas)
 function updateRain(dt) {
   const on = rainOn() && !extra.active && !massStory.active && !battle.active;
   const menuS = MENU_STATES.includes(state) || inMap();
@@ -1991,6 +2010,9 @@ function updateRain(dt) {
   // dentro de qualquer igreja: o jogador a pé sem boné (só esconde o acessório; volta ao sair; a customização salva não muda)
   const capSlot = walker.object.getObjectByName('cap');
   if (capSlot) { const wp = walker.object.position; capSlot.visible = !chs.some(c => { _rl.set(wp.x, wp.y + 1, wp.z).applyMatrix4(_rinv.copy(c.matrixWorld).invert()); return _rl.x > -24 && _rl.x < 24 && _rl.z > -58 && _rl.z < 2.4; }); }
+  // a mesma regra para o motorista na cabine (o mesmo personagem, visto pela janela) quando a van entra numa igreja
+  if (!cabCap || !cabCap.parent) { const cab = van.object.getObjectByName('cab-driver'); cabCap = cab ? cab.getObjectByName('cap') : null; }
+  if (cabCap) cabCap.visible = !chs.some(c => { _rl.set(van.x, van.object.position.y + 1.8, van.z).applyMatrix4(_rinv.copy(c.matrixWorld).invert()); return _rl.x > -24 && _rl.x < 24 && _rl.z > -58 && _rl.z < 2.4; });
   rainAudio.update(dt, document.hidden);
   if (rainFx.object.parent !== world.scene) world.scene.add(rainFx.object);
   rainFx.update(dt, cam, on && !inMap() && (!MENU_STATES.includes(state) || menuRain) ? 0.55 : 0, chs);
@@ -2171,6 +2193,33 @@ const CHURCH_LINES = [
   ['Vá. ', P, 'Só não deixe que a pressa escolha por você.'],
   ['E, ', P, 'quando voltar, ', P, 'não precisa trazer nenhuma encomenda. ', P, 'Sua presença já basta.'],
 ];
+// olhares do K no banco (a pose de antes olha para o altar; 'p' = o jogador no corredor; 'door' = a saída). Nas pausas [...]
+// (think) ele pensa: os olhos descem ou voltam para a frente. kTalk em models/reader.js.
+const CHURCH_GEST = [
+  { at: 'p', w: 0.85, rate: 1.8 },                                                          // "Você encontrou o caminho."
+  { at: 'p', w: 0.7, think: { w: 0.35, pitch: -0.12 } },
+  { at: 'p', w: 0.15, pitch: 0.06, think: { w: 0.05, pitch: 0.12 } },                      // "É curioso…": de novo para a frente
+  { at: 'p', w: 0.25, think: { w: 0.1, pitch: -0.16 }, then: { from: 0.72, w: 0.6 } },
+  { at: 'p', w: 0.55, then: { from: 0.37, w: 0.12, pitch: -0.22 } },                        // "O difícil é…": os olhos nas mãos
+  { at: 'p', w: 0.9, think: { pitch: -0.05 } },
+  { at: 'p', w: 0.85, then: { from: 0.55, at: 'door', w: 0.7 } },                           // "lá fora"
+  { at: 'p', w: 1, lean: 0.04 },                                                            // "Vá."
+  { at: 'p', w: 0.6, think: { w: 0.3, pitch: -0.1 }, then: { from: 0.74, w: 1, pitch: 0 } },   // "Sua presença já basta."
+];
+const CHURCH2_GEST = [
+  { at: 'p', w: 0.9, rate: 1.8, think: { w: 0.6, pitch: -0.1 } },                         // "Você veio. … Que bom."
+  { at: 'p', w: 0.3, pitch: -0.1 },
+  { at: 'p', w: 0.2, then: { from: 0.6, w: 0.9 } },                                        // "… Agora que você veio."
+  { at: 'p', w: 0.1, pitch: 0.08, think: { w: 0.05, pitch: -0.15 } },
+  { at: 'p', w: 0.8, then: { from: 0.4, w: 0.15, yaw: 0.1, pitch: -0.25 } },               // "… sou eu quem precisa ir.": não sustenta o olhar
+  { at: 'p', w: 0, yaw: -0.2, pitch: 0.15 },                                               // "longe daqui"
+  { at: 'p', w: 0.2, think: { w: 0.05, pitch: -0.18 }, then: { from: 0.78, w: 0.1, pitch: -0.22 } },
+  { at: 'p', w: 1, rate: 3.5, then: { from: 0.6, w: 0.7, pitch: -0.08 } },                 // "Não é por algo que você fez."
+  { at: 'p', w: 0.1, pitch: 0.1 },
+  { at: 'p', w: 0.85, pitch: -0.04 },
+  { at: 'p', w: 0.9, think: { w: 0.4, pitch: -0.15 } },
+  { at: 'p', w: 1, roll: 0.07 },
+];
 const K_PEW = { x: 2.3, z: -23 };                       // onde ele está sentado (coordenadas locais da igreja)
 const CL = (lx, ly, lz) => new THREE.Vector3(MAP_W() / 2 - lx, ly, MAP_W() + CHURCH_Z - lz);   // local da igreja → mundo (girada 180°)
 const CINE = {
@@ -2189,6 +2238,13 @@ const nearChurchK = () => churchShown && state === 'walk' && !cine && !approachL
   Math.hypot(walker.x - CL(K_PEW.x, 0, K_PEW.z).x, walker.z - CL(K_PEW.x, 0, K_PEW.z).z) < 3.4;
 const ease = x => x * x * (3 - 2 * x);
 function setCam(posL, lookL) { cine.camPos.copy(CL(...posL)); cine.camLook.copy(CL(...lookL)); }
+const _fcam = new THREE.PerspectiveCamera();
+/** Olhares do K no banco durante a conversa (plan = roteiro por fala) ou, sem roteiro, para o jogador (peso w). */
+function churchKLook(dt, plan, w = 1) {
+  if (!church) return;
+  const tg = { p: _tgP.set(walker.x, walker.floor + 1.45, walker.z), door: _tgA.copy(CL(0, 1.6, 3)) };
+  if (plan) kTalk(church.userData.pewK, dt, plan, talkBox, tg); else kGesture(church.userData.pewK, dt, { at: tg.p, w, rate: 2.2 });
+}
 function startChurchTalk() {
   const p = CL(CINE.player.x, 0, CINE.player.z), k = CL(K_PEW.x, 0, K_PEW.z);
   walker.pose(p.x, p.z, Math.atan2(k.z - p.z, k.x - p.x));
@@ -2197,6 +2253,7 @@ function startChurchTalk() {
   const total = lines.reduce((t, l) => t + lineDuration(l), 0);
   cine = { phase: 'talk', t: 0, total, count: -1, wp: 0, stage, bell: stage === 2 ? greenBell : churchBell, camPos: new THREE.Vector3(), camLook: new THREE.Vector3() };
   setCam(...CINE.camA);
+  if (church) kGestureReset(church.userData.pewK);       // (conversa repetida: começa da pose de sempre)
   setState('cine');
   talkBox.show(lines, churchTalkEnd, { auto: true, onAdvance: i => {
     if (i !== 6 || cine.stage === 2) return;           // terminou a 6ª fala: começa a contagem para voltar ao bairro (na 2ª visita, não há contagem)
@@ -2229,14 +2286,19 @@ function updateWhiteVan() {
   const t = churchMusic.time;
   if (t < WHITE_AT) return;
   if (!vanFade && !unwhite) {
+    // o jogador (a pé, escondido) e o motorista na cabine (o mesmo personagem, visto pela janela) ficam brancos de uma vez;
+    // a van em volta deles, aos poucos. (Primeiro o motorista: a transição da van já o encontra branco.)
+    const cab = van.object.getObjectByName('cab-driver');
+    const undoWalker = cab ? whiten(walker.object, cab) : whiten(walker.object);
     vanFade = whitenFade(van.object);
-    const undoWalker = whiten(walker.object), f = vanFade;
+    const f = vanFade;
     unwhite = () => { f.restore(); undoWalker(); };
   }
   if (vanFade) vanFade.step((t - WHITE_AT) / WHITE_FADE);
 }
 function churchCineEnd() {                              // de volta ao bairro: cores, câmera e controles normais
   if (cine && cine.stage === 2 && church) church.userData.pewK.visible = false;   // despedida: ele já foi embora
+  if (church) kGestureReset(church.userData.pewK);
   restoreLook(); talkBox.warn(null); talkBox.hide();
   cine = null; walker.show(false);
   const z = MAP_W() - HEDGE - 3.9, x = roadCenter(Math.floor(GRID / 2));
@@ -2262,12 +2324,14 @@ function updateChurchCine(dt) {
     if (!c.music && c.stage !== 2 && c.t >= TALK_MUSIC_AT) { c.music = true; startTalkMusic(); }   // 10 s depois da 1ª fala (pausas incluídas); só na 1ª conversa
     talkBox.update(dt);
     walker.update(dt, { x: 0, z: 0 }, 'car', [], van);
+    churchKLook(dt, c.stage === 2 ? CHURCH2_GEST : CHURCH_GEST);
     const k = ease(Math.min(1, c.t / (c.total * 0.92)));   // aproxima devagar durante toda a conversa
     c.camPos.copy(CL(...CINE.camA[0])).lerp(CL(...CINE.camB[0]), k);
     c.camLook.copy(CL(...CINE.camA[1])).lerp(CL(...CINE.camB[1]), k);
     // assim que o jogador sai totalmente do quadro, ele (e a van, lá fora) já fica branco: nada muda de cor na frente da câmera
     if (!unwhite && k > 0.3) {
-      _frus.setFromProjectionMatrix(_m4.multiplyMatrices(rig.camera.projectionMatrix, rig.camera.matrixWorldInverse));
+      _fcam.copy(rig.camera, false); _fcam.position.copy(c.camPos); _fcam.lookAt(c.camLook); _fcam.updateMatrixWorld();   // (o quadro desta cena, mesmo sem desenho entre os quadros)
+      _frus.setFromProjectionMatrix(_m4.multiplyMatrices(_fcam.projectionMatrix, _fcam.matrixWorldInverse));
       if (!_frus.intersectsBox(_bb.setFromObject(walker.object)) && !_frus.intersectsBox(_bb.setFromObject(van.object))) unwhite = whiten(walker.object, van.object);
     }
   } else if (c.phase === 'back') {                      // parada no lugar, a câmera gira até o jogador (já branco) e segura um pouco
@@ -2275,6 +2339,7 @@ function updateChurchCine(dt) {
     const d1 = CL(CINE.player.x, 1.35, CINE.player.z).sub(c.camPos).normalize();
     c.camLook.copy(c.camPos).add(c.dir0.clone().lerp(d1, k).normalize());
     walker.update(dt, { x: 0, z: 0 }, 'car', [], van);
+    churchKLook(dt, null, 0.9);                         // ele continua olhando para o jogador (já branco)
     if (c.t > 2.2 + 1.4) { c.phase = 'walk'; c.t = 0; c.wp = 0; }
   } else if (c.phase === 'walk' || c.phase === 'outside') {
     const [tx, tz] = CINE.walk[c.wp], tgt = CL(tx, 0, tz);
@@ -2282,10 +2347,14 @@ function updateChurchCine(dt) {
     if (d < 0.5) {
       if (++c.wp >= CINE.walk.length) { walker.show(false); c.phase = 'drive'; c.t = 0; return; }   // entra na van
     } else {
-      walker.pose(walker.x, walker.z, Math.atan2(dz, dx));
-      walker.update(dt, { x: 0, z: -1 }, 'car', walkSolids(), { x: 1e6, z: 1e6 });
+      // vira para o próximo ponto sem zerar o passo: walker.pose zera a velocidade, e chamado a cada quadro deixava a saída
+      // lentíssima (a contagem acabava antes do sino). pose só nas curvas do trajeto; no resto, corrige o rumo pelo eixo (TURN 3,2).
+      let dh = Math.atan2(dz, dx) - walker.heading; while (dh > Math.PI) dh -= 2 * Math.PI; while (dh < -Math.PI) dh += 2 * Math.PI;
+      if (Math.abs(dh) > 0.35) { walker.pose(walker.x, walker.z, Math.atan2(dz, dx)); dh = 0; }
+      walker.update(dt, { x: Math.max(-1, Math.min(1, dh / (3.2 * dt))), z: -1 }, 'car', walkSolids(), { x: 1e6, z: 1e6 });
     }
     const lz = MAP_W() + CHURCH_Z - walker.z;           // z local do jogador
+    if (c.phase === 'walk') churchKLook(dt, null, 0.75);   // acompanha com os olhos o jogador indo embora
     if (c.phase === 'walk' && lz > -3.5) { c.phase = 'outside'; setCam(...CINE.outCam); }   // corte para fora
     if (c.phase === 'walk') {                           // dentro: a câmera acompanha por trás, olhando para a porta
       const cp = CL(0.9, 3.4, lz - 6.5), cl = CL(0, 1.6, lz + 4), a = 1 - Math.exp(-3 * dt);
@@ -2336,6 +2405,37 @@ const VENICE_LINES = [
   ['Lembra de onde nos encontramos antes? ', P, 'Vou passar por lá antes de viajar.'],
   ['Se quiser me encontrar mais uma vez, ', P, 'siga o sol. ', P, { b: 'Estarei lá' }, '.'],
 ];
+// olhares do K no banco (w = 0: os olhos no canal, à frente dele; 'p' = quem está conversando com ele)
+const VENICE_GEST = [
+  { at: 'p', rate: 2.2, then: { from: 0.42, w: 0.55, yaw: 0.28, roll: 0.06 } },    // "Olha só quem apareceu." … de lado, ao lembrar do bondinho
+  { at: 'p', w: 0, then: { from: 0.45, w: 1 } },                                   // o sossego: o canal; depois, quem veio
+  { at: 'p', w: 0.3, pitch: -0.22, then: { from: 0.6, w: 1, pitch: 0 } },          // pensou no que aconteceu … "Você escolheu me ajudar."
+  { at: 'p', then: { from: 0.18, w: 0.08, pitch: -0.08 }, think: { w: 0, pitch: -0.2 } },   // as cinco pessoas: os olhos voltam para o canal
+  { at: 'p', w: 0.15 },
+  { at: 'p', w: 0.7 },
+  { at: 'p', w: 0.8, think: { w: 0.45, pitch: 0.06 } },
+  { at: 'p', roll: 0.07 },
+  { at: 'p', then: { from: 0.56, w: 0.12, yaw: 0.35, pitch: -0.12, rate: 2 } },   // "Mas prefiro um lugar mais tranquilo.": desvia o olhar
+  { at: 'p', yaw: 0, pitch: 0 },
+  { at: 'p', then: [{ from: 0.6, w: 0.3, pitch: 0.38 }, { from: 0.8, w: 1, pitch: 0 }] },   // "siga o sol": os olhos sobem; "Estarei lá."
+];
+const _tgP = new THREE.Vector3(), _tgA = new THREE.Vector3();
+/** Olhares do K nas conversas de câmera fixa (caixa do Bairro 1, terraço do Bairro 6, Veneza). */
+function talkGestures(dt) {
+  if (talkPhase !== 'talk') return;
+  const tg = { p: _tgP.set(walker.x, walker.floor + 1.45, walker.z) };
+  if (talkLines === ROOF_LINES) {
+    const lr = loungerSpot(), sun = world.scene.getObjectByName('sun'); if (!lr) return;
+    if (sun) tg.sun = sun.getWorldPosition(_tgA);
+    kTalk(lr, dt, ROOF_GEST, talkBox, tg);
+  } else if (talkLines === VENICE_LINES) {
+    const k = venK && venK.getObjectByName('pew-reader'); if (k) kTalk(k, dt, VENICE_GEST, talkBox, tg);
+  } else {
+    const sp = readerSpot(); if (!sp) return;
+    tg.box = _tgA.set(parcel.position.x, 0.3, parcel.position.z);
+    kTalk(sp, dt, talkLines === K_LINES ? K_GEST : K_GEST.slice(3), talkBox, tg);
+  }
+}
 let venK = null;
 const venKSolid = { x0: 0, x1: 0, z0: 0, z1: 0 };
 function buildVeniceK() {
@@ -2369,15 +2469,18 @@ function startVeniceTalk() {
   walker.pose(px, pz, Math.atan2(k.z - pz, k.x - px));
   van.stop();
   const y = VENICE.LAND;
-  talkCam.pos.set(k.x - 4.4, y + 2.2, k.z - 0.4);       // por cima do canal: ele de frente, o jogador de lado
-  talkCam.look.set((k.x + px) / 2 + 0.2, y + 0.95, (k.z + pz) / 2 + 0.2);
+  // enquadramento habitual das conversas: por cima do ombro do jogador (de costas), o K de frente, um pouco de lado
+  const ux = (px - k.x) / Math.hypot(px - k.x, pz - k.z), uz = (pz - k.z) / Math.hypot(px - k.x, pz - k.z);
+  talkCam.pos.set(px + ux * 2.3 + uz * 2.3, y + 1.95, pz + uz * 2.3 - ux * 2.3);   // (de lado o bastante para a cabeça do jogador não tapar o rosto dele)
+  talkCam.look.set(k.x * 0.7 + px * 0.3, y + 1.0, k.z * 0.7 + pz * 0.3);
   talkLines = VENICE_LINES; talkPhase = 'talk';
+  const vk = venK.getObjectByName('pew-reader'); if (vk) kGestureReset(vk);
   setState('talk');
   talkBox.show(VENICE_LINES, () => {
     try { localStorage.setItem(VENICE_TALK_KEY, '1'); } catch (e) { /* */ }   // libera a 2ª visita à igreja
     talkPhase = 'note';
     talkBox.note('ORIENTAÇÃO DO JOGO', ['Use o ', { b: 'Modo Livre' }, ' no ', { b: 'Bairro 1' }, ', a qualquer momento, caso tenha interesse.'], () => {
-      talkBox.hide(); talkPhase = ''; actionLock = 0.5;
+      talkBox.hide(); talkPhase = ''; actionLock = 0.5; if (vk) kGestureReset(vk);   // (a câmera volta ao jogo: corte)
       setState('walk');                                 // controles de volta, na mesma partida
     });
   }, { auto: true });
@@ -2816,6 +2919,7 @@ function update(dt, t) {
       if (talkPhase === 'aside' && (!sp || sp.userData.asideDone())) { talkPhase = 'talk'; talkBox.show(talkLines, endTalk); }
       else if (talkPhase === 'talk') { talkBox.update(dt); if (input.action()) talkBox.press(); }
       else if (talkPhase === 'note') { if (input.action()) talkBox.pressNote(); }
+      talkGestures(dt);                             // olhares do K durante as falas
       break;
     }
     case 'chat': {                                  // Medieval: conversa com um morador (não é entrega nem dica)

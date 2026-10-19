@@ -492,3 +492,26 @@ continua jogável em `/versao-anterior/` (cópia do `index.html` de antes, com a
   (`buildLagoonHorizon`, ligado em `terrain.js`). Morro: casas de enchimento com acabamento, vida nas lajes (pipa, varal, radinho,
   churrasquinho), cidade e morros no entorno. Colheita: trator com tratorista, trabalho no campo, vacas, sítios nas lavouras.
   Nevasca: neve na sebe, bosque e cordilheira, crianças na neve, limpa-neve com motorista e giroflex, chaminé do Grillby's.
+
+**História secundária — entrega das conversas (rodada D; nenhuma fala do dono teve o texto alterado)**
+- `models/reader.js`: `kGesture(root, dt, { at, w, yaw, pitch, roll, lean, shake, rate })` (olhar para um ponto, inclinar cabeça/tronco,
+  suavizado), `kGestureReset` (nos cortes) e `kTalk(root, dt, plano, talkBox, alvos)` (roteiro de gestos por fala, com `then` por fração
+  do texto escrito e `think` nas pausas [...]). Roteiros por conversa (K_GEST, ROOF_GEST, VENICE_GEST etc.).
+- `talkBox.js`: cadência de pontuação (vírgula 0,1 s, ponto 0,28, "?" 0,32, "…" 0,4; pulada onde já há [...]), incluída em
+  `lineDuration`; `show(..., { cps, beat })` (a figura escreve a 27 letras/s, pausas 1,4×); getters `thinking`/`progress`; no celular a
+  caixa sobe acima dos botões do rodapé.
+- Oficina (`workshopStory.js`): nas conversas o jogador fica de frente para o K (P_DOOR/P_BENCH), o K vira o corpo e a câmera passa por
+  cima do ombro do jogador (antes o K falava de costas). Veneza e conversa do bonde: enquadramento habitual (jogador de costas, K de
+  frente, um pouco de lado). Falas reescritas só onde o dono não escreveu texto (fornecedores, pedidos do K).
+- 2ª visita à igreja: jogador e motorista da cabine brancos de uma vez; dentro das igrejas o boné do motorista também some.
+- ATENÇÃO: `walker.pose()` zera a velocidade do passo (rodada C). Não chame a cada quadro numa cena em que o personagem anda
+  (era a causa de a saída da igreja e o resgate do Grillby's ficarem lentos; corrigido nos dois).
+
+**Bairros 17, 18, 20, 21, 22, 24 (rodada D)**
+- `createCrowd(n, opts)` (`models/medievalPeople.js`): multidão instanciada (6 InstancedMesh; `opts.alien` para ETs) com passos, giros e
+  caminhadas; usada nos Jardins (porteiro, jardineiro, corredora, pescador, crianças, mãe com carrinho, piscineiro), Modernista
+  (jardineiro cortando grama, passeador, criança, vizinhas), Lua (ETs pulando, regando, consertando, telescópio), Operário (mecânicos,
+  soldadores com faíscas, carregadores, lojistas) e Bosque (pai com ancinho, criança pulando nas folhas, soprador, esquilos).
+- Entornos: `condoOutskirts` (`models/modern.js`, condomínios vizinhos e quebra-ventos nos Jardins/Modernista), `workOutskirts`
+  (`models/work.js`, zona industrial, trem, casas operárias), `medCountryside` (`models/medieval.js`, estrada de terra, moinho, sítios,
+  pasto com ovelhas e pastor, lavouras). Medieval: lavadeira na fonte (rotina `washer`) e galinhas no depósito. Corredor do monstro livre.

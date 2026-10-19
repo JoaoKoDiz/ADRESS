@@ -13,7 +13,12 @@ export const UNIT = { ZB: -4.2, ZF: 2.8, DX: -1.9 };
 export const SHOPW = { ZB: -6.6, ZF: 2.0, DX: 3.6 };
 const MAX_UNITS = 120, MAX_WIDE = 20;          // casas (ROWS) e oficinas/comércios (WSHS) disponíveis em data.js
 
+let CACHE = null;                                   // (o plano é fixo: calculado uma vez — os arredores somam colisões a `cuts`)
 export function planWork(MAP, HEDGE) {
+  if (CACHE && CACHE.MAP === MAP && CACHE.HEDGE === HEDGE) return CACHE;
+  return (CACHE = makePlan(MAP, HEDGE));
+}
+function makePlan(MAP, HEDGE) {
   const { RW, SIDE, UW, UD, WW, WD } = WORK, hw = RW / 2;
   const C = MAP / 2, E = MAP - 22, L = [22, (22 + C) / 2, C, (C + E) / 2, E].map(v => Math.round(v * 10) / 10);
   const P = {}, Ed = [];
@@ -113,5 +118,5 @@ export function planWork(MAP, HEDGE) {
     }
   }
   for (const p of plazas) for (const a of [0, Math.PI]) benches.push({ x: p.x + Math.cos(a) * 3.2, z: p.z + Math.sin(a) * 3.2, y: 0, ry: a + Math.PI / 2 });
-  return { work: true, N, segs, ramps: [], MID: null, h, level, spots, trees, lamps, benches, plazas, yards, roadDist, free, nodeR: () => hw };
+  return { work: true, MAP, HEDGE, cuts: [], N, segs, ramps: [], MID: null, h, level, spots, trees, lamps, benches, plazas, yards, roadDist, free, nodeR: () => hw };
 }
