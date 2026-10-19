@@ -5,7 +5,7 @@
 // com contêineres, caixa-d'água no alto, pracinha, postes e árvores verdes. Silhuetas diferentes para cada uso.
 
 export const signY = 11;
-export const thumb = { dir: [-7, 24, 26], k: 0.84, dy: -0.8 };
+export const thumb = { dir: [-7, 24, 26], k: 0.84, dy: -2.0 };
 
 export function build(ctx) {
   const { THREE, g, G, box, cyl, cone, sphere, at, mat } = ctx;
@@ -192,7 +192,7 @@ export function build(ctx) {
     for (let k = 0; k < 4; k++) a(cyl(0.11, 0.11, 0.07, C('#1f2023'), 10), 1.05, 0.04 + k * 0.075, -0.75);   // pilha de pneus
     for (let k = 0; k < 2; k++) a(cyl(0.11, 0.11, 0.07, C('#1f2023'), 10), 0.8, 0.04 + k * 0.075, -0.78);
   }
-  fvan(4.2, -3.85, Math.PI / 2 + 0.15, '#f4f1ea');                                                        // van entrando na oficina
+  fvan(4.2, -3.62, Math.PI / 2, '#f4f1ea');                                                        // van entrando na oficina
   // caixa-d'água no alto (fundos da oficina)
   {
     const x = 6.25, z = -6.0, LEG = C('#5a5d63');
@@ -258,7 +258,7 @@ export function build(ctx) {
   }
 
   // ---------- trânsito, postes e árvores das calçadas ----------
-  car(-0.22, -5.2, Math.PI / 2, '#c8402f'); fvan(-4.6, ZB + 0.24, 0, '#2f6fb0'); car(3.6, ZA - 0.22, Math.PI, '#e8e2d4');
+  car(-0.22, -5.2, Math.PI / 2, '#c8402f'); fvan(-4.6, ZB + 0.24, 0, '#2f6fb0'); car(2.3, ZA - 0.22, Math.PI, '#e8e2d4');
   const POLE = C('#3a3d44'), BULB = C('#fff1c8');
   for (const [x, z] of [[-0.68, -5.6], [0.68, -1.0], [-3.0, ZA + 0.68], [3.4, ZB - 0.68], [-3.0, ZB + 0.68]]) {
     add(cyl(0.025, 0.03, 0.85, POLE, 5), x, Y + 0.43, z); add(box(0.22, 0.04, 0.07, POLE), x, Y + 0.85, z); add(box(0.14, 0.02, 0.05, BULB), x, Y + 0.83, z);

@@ -7,8 +7,8 @@
 // largos, depósito, castelo com pátio e poço, jardim junto à muralha sul, hortas, árvores e uma carroça.
 // Nada da história secundária (sem igreja, oficina ou personagens).
 
-export const signY = 11;
-export const thumb = { dir: [-6, 24, 27], k: 0.8, dy: -0.8 };
+export const signY = 12.5;
+export const thumb = { dir: [-6, 24, 27], k: 0.8, dy: -2.2 };
 
 export function build(ctx) {
   const { THREE, g, G, box, cyl, cone, sphere, torus, at, mat } = ctx;
@@ -135,7 +135,12 @@ export function build(ctx) {
     if (s.type === 'ramp') continue;                                                     // (a ladeira já tem o piso de pedra)
     roadPiece(s.a, s.b, s.type === 'spoke' ? 0.34 : RW);
   }
-  for (const k of Object.keys(N)) if (!['g0', 'rn', 'rs', 'rw', 're'].includes(k)) add(cyl(RW / 2, RW / 2, 0.04, COBM, 7), N[k][0], hAt(...N[k]) + 0.023, N[k][1]);
+  for (const k of Object.keys(N)) {                                                     // juntas arredondadas (só onde a rua dobra ou se cruza)
+    if (['g0', 'rn', 'rs', 'rw', 're'].includes(k)) continue;
+    const dirs = EDGES.filter(e => e[2] !== 'ramp' && (e[0] === k || e[1] === k)).map(e => { const o = N[e[0] === k ? e[1] : e[0]]; return Math.atan2(o[0] - N[k][0], o[1] - N[k][1]); });
+    if (dirs.length === 2 && Math.abs(Math.abs(((dirs[0] - dirs[1]) % (2 * Math.PI) + 3 * Math.PI) % (2 * Math.PI) - Math.PI)) < 0.3) continue;
+    if (dirs.length) add(cyl(RW / 2, RW / 2, 0.04, COBM, 8), N[k][0], hAt(...N[k]) + 0.023, N[k][1]);
+  }
 
   // ---------- praça do mercado (patamar do meio): lajes, anel em volta da fonte, fonte, barracas, bancos e árvores ----------
   const PX = 1.26;
@@ -273,7 +278,7 @@ export function build(ctx) {
       add(box(alongX ? l + 0.004 : WT, top - 0.3, alongX ? WT : l + 0.004, STONE), (xa + xb) / 2, 0.3 + (top - 0.3) / 2, (za + zb) / 2);
       k0 = k;
     }
-    const nm = Math.max(1, Math.round(len / 0.32));
+    const nm = Math.max(1, Math.round(len / 0.38));
     for (let k = 0; k < nm; k++) {                                                       // ameias do lado de fora
       const t = (k + 0.5) / nm, [x, z] = pt(t), top = topAt(t);
       add(box(alongX ? 0.15 : 0.08, 0.11, alongX ? 0.08 : 0.15, STONE), x + (alongX ? 0 : o * 0.14), top + 0.055, z + (alongX ? o * 0.14 : 0));
