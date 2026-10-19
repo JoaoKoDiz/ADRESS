@@ -418,6 +418,7 @@ export function createCareer() {
         if (!backOff) for (const b of trucks) { const n = near(b); if (n && n.u <= 10 && n.facing >= 0.8) { backOff = { b, dx: n.dx, dz: n.dz, anchor: n.anchor, bwd: 0, fwd: 0 }; break; } }
       }
       prevPos = { x, z, h: heading };
+      if (level === 0 && (ctx.time || 0) >= 600) pending.add('noRush');  // Sem pressa: chegou aos 10:00 (o cronômetro só aumenta; a entrega certa salva)
       if (level === 0 && !pending.has('lap')) {                          // Volta no bairro: as 4 ruas externas
         const a = roadCenter(0), b = roadCenter(GRID), near = c => (v => Math.abs(v - c) < ROAD / 2 + 1.5);
         const bin = v => Math.floor((v - a) / (b - a) * LAP_BINS);

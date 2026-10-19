@@ -58,12 +58,14 @@ const glowPulse = age => age < GLOW.up ? age / GLOW.up : Math.max(0, 1 - (age - 
 // saem a 0°/45°/90° e devolvem exatas.
 const REFL = { step: 0.3, maxLen: 7.0, eps: 0.15, minSeg: 0.45, h: 1.6, minLen: 0.6, assist: 0.09 };   // paredes não expiram
 const STRUCT = { hitR: 0.95 };
-// Conduzir: turn = giro máximo dos projéteis (rad/s; perseguem como mísseis, sem fila de posições); grabR = distância do
+// Conduzir: turn = giro máximo dos projéteis (rad/s; perseguem como mísseis, sem fila de posições; 3,3 = raio de curva ~1,7:
+// ainda fazem a curva com inércia, mas dá para enfileirá-los e passá-los pela fenda na arena adaptada — com 2,6 quase nunca); grabR = distância do
 // círculo ao pé do objeto para agarrar; pull = quanto puxar até romper; objY = altura do objeto; formT = abertura do portal;
-// closeDelay/closeT = espera depois do último e fechamento; portalW/H = tamanho; passW = meia-largura estável da passagem;
+// closeDelay/closeT = espera depois do último e fechamento; portalW/H = tamanho; passW = meia-largura estável da passagem
+// (1,0: a abertura visível, 1,15 × 0,9 do contorno que ondula — o que se vê entrar, entra);
 // kLevel/kDelay/kOpenT = o K abre o portal sozinho nos trechos finais (nível de autonomia, espera e duração do gesto).
-const GUIDE = { turn: 2.6, grabR: 0.8, pull: 3.0, objY: 2.2, formT: 0.7, closeDelay: 2.5, closeT: 0.5, portalW: 2.3, portalH: 1.5,
-  passW: 0.85, kLevel: 3, kDelay: 1.5, kOpenT: 2.4, spikes: 16, far: 45, ring: 48 };
+const GUIDE = { turn: 3.3, grabR: 0.8, pull: 3.0, objY: 2.2, formT: 0.7, closeDelay: 2.5, closeT: 0.5, portalW: 2.3, portalH: 1.5,
+  passW: 1.0, kLevel: 3, kDelay: 1.5, kOpenT: 2.4, spikes: 16, far: 45, ring: 48 };
 // CONDUZIR aprimorado (só depois do 2º fragmento azul, trechos com `held`): a figura supera a defesa anterior — segura o
 // objeto por um fio preso à mão dela e, se o jogador tenta puxar a ponta, dá um tranco e a ponta escapa. A condução dá outra
 // resposta: os projéteis atraídos são levados CONTRA o objeto; cada um que bate o racha (`held` = batidas para romper) e,
@@ -849,17 +851,18 @@ export function createBattle(ctx) {
   /** Ponto válido para o objeto: na grade, longe dos personagens, visível e com espaço para puxar (vale para qualquer lado de dentro). */
   function pickObjSpot(objY = GUIDE.objY) {
     for (let k = 0; k < 300; k++) {
-      const x = -5.2 + Math.random() * 10.4, z = LIM.z0 + 0.9 + Math.random() * (6.2 - LIM.z0 - 0.9);
+      // na metade de trás da grade: a fenda abre virada para a câmera, e os projéteis precisam de espaço À FRENTE dela (lado da
+      // câmera) para serem trazidos e de um pouco ATRÁS (para onde o círculo passa e os leva)
+      const x = -5.2 + Math.random() * 10.4, z = 0.2 + Math.random() * 3.0;
       if (Math.hypot(x - P_POS.x, z - P_POS.z) < 3.4 || Math.hypot(x - K_POS.x, z - K_POS.z) < 2.6) continue;
       if (Math.hypot(x - CIRCLE_HOME.x, z - CIRCLE_HOME.z) < 1.2) continue;
       if (!onScreen(x, z) || !screenFree(x, objY, z) || !screenFree(x, 0.05, z)) continue;   // visível e fora das silhuetas
-      let room = 0;                                                    // espaço para puxar (dentro da grade e do quadro) em algum lado
-      for (let a = 0; a < 8; a++) { const ax = Math.cos(a * Math.PI / 4), az = Math.sin(a * Math.PI / 4), px = x + ax * (GUIDE.pull + 0.3), pz = z + az * (GUIDE.pull + 0.3);
-        if (px > LIM.x0 + CIRCLE_R && px < LIM.x1 - CIRCLE_R && pz > LIM.z0 + CIRCLE_R && pz < LIM.z1 - CIRCLE_R && onScreen(px, pz)) room++; }
-      if (room < 3) continue;
+      const cx = CAMS.game.pos.x - x, cz = CAMS.game.pos.z - z, cl = Math.hypot(cx, cz), ux = cx / cl, uz = cz / cl;
+      const fits = (px, pz) => px > LIM.x0 + CIRCLE_R && px < LIM.x1 - CIRCLE_R && pz > LIM.z0 + CIRCLE_R && pz < LIM.z1 - CIRCLE_R && onScreen(px, pz);
+      if (!fits(x + ux * 4.4, z + uz * 4.4) || !fits(x - ux * 2.2, z - uz * 2.2)) continue;
       return { x, z };
     }
-    return { x: -3.2, z: 0.4 };
+    return { x: -3.2, z: 1.4 };
   }
   /** O ponto não cai atrás do jogador nem do K na imagem da câmera de jogo. */
   function screenFree(x, y, z) {

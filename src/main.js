@@ -2826,8 +2826,7 @@ function update(dt, t) {
         van.setGhost(ghost || serraFree, ghost && menu.unstoppable ? null : ghost ? heliTall(van.object.position.y) : solidsNoSerra()); }
       if (heli.landed) van.stop();                // pousado no teto: parado até decolar (H)
       { const v0 = van.speed;
-        if (!mooringStep(dt)) van.update(dt, heli.landed ? { x: 0, z: 0 } : approachLock() ? approachAxis() : input.axis(), approachLock() ? 'car' : rig.mode === 'chase' ? 'car' : 'screen');
-        bumpFeedback(v0, dt);
+        if (!mooringStep(dt)) { van.update(dt, heli.landed ? { x: 0, z: 0 } : approachLock() ? approachAxis() : input.axis(), approachLock() ? 'car' : rig.mode === 'chase' ? 'car' : 'screen'); bumpFeedback(v0, dt); }   // (atracada, a lancha não bate)
         if (gameMode === 'career' && van.touched.has(ENTRANCE_WALL) && wallMsgCool <= 0) { fuelMsg = 'Na Carreira, a saída do bairro só abre depois da entrega certa.'; fuelMsgT = 3.5; wallMsgCool = 8; }   // (a parede é invisível: sem o aviso, parecia defeito)
         wallMsgCool = Math.max(0, wallMsgCool - dt); }
       if (bumpLevel() && !heli.flying) countBumps();  // Bairros 2 e 3: batidas da van (não conta no ar, nem descendo do helicóptero)
@@ -3141,8 +3140,8 @@ function update(dt, t) {
   let lift = state === 'drive' && heli.on ? input.lift() : 0;
   if (lift === 0 && state === 'drive' && heli.on && (van.x < 0 || van.z < 0 || van.x > MAP_W() || van.z > MAP_W())) {   // fora do bairro (serra da Cachoeira, morros das Encostas):
     const la = Math.max(0, van.speed) * 0.9, gx = van.x + Math.cos(van.heading) * la, gz = van.z + Math.sin(van.heading) * la;   // o helicóptero sobe sozinho para
-    const tg = Math.max(TERRAIN.h(van.x, van.z), TERRAIN.h(gx, gz));                                                              // manter ~6 m acima do morro à frente
-    if (tg > 0.5 && heli.altitude < tg + 6) lift = 1;                                                                             // (no plano nada muda)
+    const tg = Math.max(TERRAIN.h(van.x, van.z), TERRAIN.h(gx, gz));                                                              // manter ~7,5 m acima do morro à frente (acima de 6,5
+    if (tg > 0.5 && heli.altitude < tg + 7.5) lift = 1;                                                                           // passa por cima de árvores e casas baixas, como no plano); no plano nada muda
   }
   heli.update(wdt, lift);
   { const hi = heli.high; if (wasHigh && !hi && heli.flying && !menu.unstoppable) unstickVan(); wasHigh = hi; }   // descendo do alto no meio do casario: sai do que estiver por baixo
