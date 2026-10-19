@@ -11,7 +11,7 @@ const F = 14 / MAP;                                          // metros do bairro
 const Y = 0.4;                                               // topo do gramado da base
 const HS = 1.22 * F, VS = 2.1 * F;                           // casas: um pouco maiores e mais altas que a escala (leitura em miniatura)
 
-export const signY = 9;
+export const signY = 10.5;
 export const thumb = { dir: [-6, 24, 27], k: 0.82, dy: 0 };
 
 let prismGeo = null;
@@ -37,7 +37,7 @@ export function build(ctx) {
   const HEDGEC = G('#3f7d3a', '#7f7f7f'), LAWN = G('#9ed46e', '#b0b0b0');
   const flat = (pts, y, h, c) => {                           // polígono plano (contorno em metros do bairro) com espessura h
     const sh = new THREE.Shape(pts.map(([x, z]) => new THREE.Vector2(mx(x), -mz(z))));
-    const geo = new THREE.ExtrudeGeometry(sh, { depth: h, bevelEnabled: false, curveSegments: 1 });
+    const geo = h > 0 ? new THREE.ExtrudeGeometry(sh, { depth: h, bevelEnabled: false, curveSegments: 1 }) : new THREE.ShapeGeometry(sh, 1);
     geo.rotateX(-Math.PI / 2);                               // (x, y) do contorno → (x, −z) no chão; extrusão para cima
     g.add(ctx.at(M(geo, c), 0, y, 0));
   };
@@ -73,7 +73,7 @@ export function build(ctx) {
     if (len < 0.05) return;
     add(box(alongX ? len : WT, WH, alongX ? WT : len, WALLC), cx, Y + WH / 2, cz);
     add(box(alongX ? len : WT + 0.06, 0.05, alongX ? WT + 0.06 : len, CAP), cx, Y + WH + 0.025, cz);
-    const n = Math.max(1, Math.round(len / 1.4));
+    const n = Math.max(1, Math.round(len / 1.75));
     for (let k = 0; k <= n; k++) { const u = (alongX ? x0 : z0) + len * k / n; add(box(0.3, WH + 0.1, 0.3, CAP), alongX ? u : cx, Y + (WH + 0.1) / 2, alongX ? cz : u); }
   };
   const E = 7.05, gx0 = -(RW / 2 + 0.15), gx1 = RW / 2 + 0.15, px0 = mx(V.PED.x0), px1 = mx(V.PED.x1);
@@ -102,10 +102,10 @@ export function build(ctx) {
 
   // ---- lago: passeio, borda de pedra, água, juncos, vitórias-régias, deque e patinhos ----
   const L = V.lake;
-  flat(L.promenade, Y, 0.025, PAVE);
-  flat(L.shore.map(([x, z]) => [L.x + (x - L.x) * 1.06, L.z + (z - L.z) * 1.04]), Y + 0.025, 0.04, G('#b8b0a2', '#b8b8b8'));
-  flat(L.shore, Y + 0.065, 0.02, G('#4aa3d8', '#a0a0a0'));
-  flat(L.inner.map(([x, z]) => [L.x + (x - L.x) * 0.8, L.z + (z - L.z) * 0.8]), Y + 0.085, 0.005, G('#62b4e2', '#a8a8a8'));
+  flat(L.promenade, Y + 0.008, 0, PAVE);
+  flat(L.shore.map(([x, z]) => [L.x + (x - L.x) * 1.06, L.z + (z - L.z) * 1.04]), Y + 0.008, 0.06, G('#b8b0a2', '#b8b8b8'));
+  flat(L.shore, Y + 0.074, 0, G('#4aa3d8', '#a0a0a0'));
+  flat(L.inner.map(([x, z]) => [L.x + (x - L.x) * 0.8, L.z + (z - L.z) * 0.8]), Y + 0.079, 0, G('#62b4e2', '#a8a8a8'));
   for (const r of L.reeds.slice(0, 10)) add(cone(0.035, 0.16, G('#5f8f3a', '#8a8a8a'), 4), mx(r.x), Y + 0.15, mz(r.z));
   for (const p of L.pads.slice(0, 7)) { add(cyl(0.05, 0.05, 0.01, G('#4f9a45', '#8f8f8f'), 6), mx(p.x), Y + 0.095, mz(p.z)); if (p.flower) add(sphere(0.02, G('#ff9ac0', '#d0d0d0'), 4, 3), mx(p.x), Y + 0.11, mz(p.z)); }
   { const D = L.deck; add(box(D.w * F + 0.04, 0.03, D.d * F + 0.04, G('#a8743e', '#8f8f8f')), mx(D.x), Y + 0.1, mz(D.z)); }
@@ -188,8 +188,8 @@ export function build(ctx) {
     if (model === 'ell') { body(-4.6, 4.6, -7.2, -2.0); body(-4.6, -0.4, -2.0, 1.4); roof(0, -4.6, 9.8, 2.9, 2.0, H); roof(-2.5, -1.0, 5.2, 2.4, 2.0, H, Math.PI / 2); doorX = 1.3; doorZ = -2.0; }
     else if (model === 'garage') { body(-1.4, 4.6, -7.2, 0.2); roof(1.6, -3.5, 6.6, 4.0, 2.2, H); body(-4.8, -1.4, -6.6, 0.2, 2.7 * VS);
       a(box(3.6 * HS, 0.03, 7.2 * HS, G('#ece6d8', '#cfcfcf')), -3.1, 2.7 * VS + 0.035, -3.2);
-      a(box(2.6 * HS, 2.1 * VS, 0.02, G('#9aa0a8', '#9a9a9a')), -3.1, 1.05 * VS + 0.02, 0.22);
-      a(box(2.6 * HS, 0.012, 7.6 * HS, G('#cfc8b8', '#bfbfbf')), -3.1, 0.026, 4.4); doorX = 1.2; }
+      a(vp(2.6 * HS, 2.1 * VS, G('#9aa0a8', '#9a9a9a')), -3.1, 1.05 * VS + 0.02, 0.32);
+      a(fl(2.6 * HS, 7.6 * HS, G('#cfc8b8', '#bfbfbf')), -3.1, 0.016, 4.4); doorX = 1.2; }
     else { body(-4.6, 4.6, -7.2, 0.2); if (model === 'chalet') roof(0, -3.5, 8.2, 5.0, 3.6, H, Math.PI / 2); else roof(0, -3.5, 10, 4.1, 2.4, H); }
     a(vp(1.5 * HS, 2.2 * VS, G(DOORS[(i * 2) % 5], '#777777')), doorX, 1.1 * VS + 0.02, doorZ + 0.12);
     for (const wx of model === 'ell' ? [-2.5] : model === 'garage' ? [3.0] : [-2.85, 2.85]) a(vp(1.6 * HS, 1.1 * VS, G('#8fc6e8', '#a8a8a8')), wx, 1.5 * VS + 0.02, (model === 'ell' ? 1.4 : 0.2) + 0.12);
@@ -201,12 +201,13 @@ export function build(ctx) {
   });
 
   // ---- árvores do plano (sem as que cairiam sobre casas ou no meio do parque e das ruas) ----
+  const TRK = new THREE.CylinderGeometry(0.022, 0.03, 1, 3, 1, true);
   const crowns = { round: ['#3f8f3a', '#4f9a45', '#5aa64a'], tall: ['#2f7a3a', '#3a8440', '#2f7a3a'] };
   const tr = [];
   for (const t of V.trees) {
     const x = mx(t.x), z = mz(t.z);
     if (V.spots.some(sp => Math.abs(mx(sp.px) - x) < 0.55 && Math.abs(mz(sp.pz) - z) < 0.55)) continue;
-    if (tr.some(o => Math.hypot(o[0] - x, o[1] - z) < (t.park ? 0.55 : 0.5))) continue;
+    if (tr.some(o => Math.hypot(o[0] - x, o[1] - z) < (t.park ? 0.66 : 0.6))) continue;
     tr.push([x, z]);
     const s = t.s || 1, c = t.c || 0;
     if (t.type === 'palm') {
@@ -215,7 +216,7 @@ export function build(ctx) {
       continue;
     }
     const h = 0.16 * s, r = (t.type === 'tall' ? 0.13 : t.type === 'willow' ? 0.19 : 0.17) * s;
-    add(cyl(0.022, 0.03, h + 0.04, G('#6b4526', '#6a6a6a'), 3), x, Y + (h + 0.04) / 2, z);
+    { const tk = M(TRK, G('#6b4526', '#6a6a6a')); tk.scale.y = h + 0.04; add(tk, x, Y + (h + 0.04) / 2, z); }
     const col = t.type === 'ipe' ? ['#f2c23a', '#ff8fb8', '#f2c23a'][c] : t.type === 'willow' ? '#7fb54a' : (crowns[t.type] || crowns.round)[c];
     const cr = sphere(r, G(col, '#8a8a8a'), 5, 3);
     if (t.type === 'tall') cr.scale.set(0.85, 1.6, 0.85); else if (t.type === 'willow') cr.scale.set(1, 0.8, 1);
