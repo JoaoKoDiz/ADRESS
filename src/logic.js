@@ -90,7 +90,7 @@ const MDS_ROLE = { cafe: 'Barista do café', bakery: 'Padeira', flowers: 'Floris
 export function speaker(h) {
   const H = HOUSES[h];
   if (H.kind === 'mod') return (h % 2 ? 'Porteira do ' : 'Porteiro do ') + H.name;
-  if (H.kind === 'wsh') { const t = titleCase(H.sign || H.name), w = `${WSH_ROLE[H.wtype] || 'Atendente'} (${t})`; return w.length <= 28 ? w : t; }   // (nome longo: só o da loja)
+  if (H.kind === 'wsh') { const t = titleCase(H.sign || H.name), w = `${WSH_ROLE[H.wtype] || 'Atendente'} (${t})`, who = t.match(/\b(Dona|Seu) \S+/); return w.length <= 28 ? w : who ? who[0] : WSH_ROLE[H.wtype] || 'Atendente'; }   // (nome longo: a pessoa da placa, senão a função)
   if (H.kind === 'mds') return MDS_ROLE[H.shopKey] || H.name;
   return H.name;
 }
@@ -309,7 +309,7 @@ export class Game {
   visit(h, lv = 0) {
     if (HOUSES[h].narrator) return this.narratorVisit(h);
     const P = this.persona(h, lv), V = TALK.VOICE[P.voice] || TALK.VOICE.base, T = V[P.t] || TALK.VOICE.base[P.t];
-    const B = TALK.VOICE.base[P.t], get = k => (T[k] && T[k].length ? T[k] : B[k]);
+    const B = TALK.VOICE.base[P.t], get = k => { const t = T[k] && T[k].length ? T[k] : B[k]; return t.length < 2 && T !== B && /^(rep|nohint)/.test(k) ? t.concat(B[k] || []) : t; };   // (voz temática com uma só opção: soma as da base para a insistência não repetir igual)
     const n = (this.visits.get(h) || 0) + 1; this.visits.set(h, n);
     const [actFirst, actBack, actOk] = P.act;
     const facts = [];
