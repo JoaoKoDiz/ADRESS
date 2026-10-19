@@ -10,6 +10,7 @@ import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js
 import { FAVELA, SOLIDS, MAP, HEDGE, VAN_START } from './layout.js';
 import { FAV } from './favelaPlan.js';
 import { FAV_FLOOR } from './models/favela.js';
+import { createFavelaLife } from './favelaLife.js';
 
 const N_DOGS = 8, N_CATS = 4, N_CLIMB = 4;
 const DOG_COATS = ['#d9a05a', '#e0ac6a', '#cf9450', '#e3b070', '#d49a55', '#c98b48'];
@@ -161,6 +162,7 @@ function planPets(F, rnd) {
 export function createFavelaPets() {
   const root = new THREE.Group(); root.name = 'favela-pets';
   const meshes = { dog: speciesMeshes(SPECIES.dog, N_DOGS, root), cat: speciesMeshes(SPECIES.cat, N_CATS + N_CLIMB, root) };
+  const life = createFavelaLife(); root.add(life.object);           // gente: pelada no campinho, dominó na pracinha, mercadinho (favelaLife.js)
   let pets = [], plan = null, t = 0;
   const C = new THREE.Color(), ZERO = new THREE.Matrix4().makeScale(0, 0, 0);
   const groundY = (x, z) => FAVELA.h(x, z) + (inBox(x, z, FAVELA.square) ? 0.16 : FAVELA.pads.some(p => inBox(x, z, p)) ? 0.07 : 0.01);
@@ -301,10 +303,13 @@ export function createFavelaPets() {
   const api = {
     object: root,
     get pets() { return pets; },
+    life,
     /** Sorteia os bichos da partida (o plano do Morro precisa estar ativo). */
     reset() {
       pets = [];
       if (!FAVELA) { write(); return; }
+      const hard = SOLIDS.filter(b => !b.vanOnly && b.x1 > 0 && b.x0 < MAP && b.z1 > 0 && b.z0 < MAP);
+      life.reset(FAVELA, (x, z) => hard.some(b => x > b.x0 - 0.45 && x < b.x1 + 0.45 && z > b.z0 - 0.45 && z < b.z1 + 0.45));
       plan = planPets(FAVELA, Math.random);
       const k = { dog: 0, cat: 0 };
       for (const d of plan.pets) {
@@ -325,6 +330,7 @@ export function createFavelaPets() {
     detach() { if (root.parent) root.parent.remove(root); },
     /** van: { x, z, hd, speed } (ou null: helicóptero/escondida); walker: { x, z } (ou null). */
     update(dt, van, walker) {
+      life.update(dt, walker || van, walker, van);
       if (!pets.length) return;
       t += dt;
       for (const p of pets) { p.forceSt = null; if (p.nodes) stepClimb(p, dt); else stepGround(p, dt, van, walker); }
