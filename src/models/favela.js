@@ -4,7 +4,7 @@
 // Estilo do jogo: caixas simples, cores chapadas. A colisão fica em layout.js; a altura do chão em favelaPlan.js.
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
-import { box, cyl, sphere, at, mat, bakeStatic, textTexture, dynamic, vcMerge } from './kit.js';
+import { box, cyl, sphere, at, mat, bakeStatic, textTexture, dynamic, vcMerge, mergePlain } from './kit.js';
 import { buildFigure } from '../grillbyInside.js';
 import { horizonRing } from './snow.js';
 import { FAV_FACADE, FAV_AWNING } from '../data.js';
@@ -420,7 +420,7 @@ export function buildFavelaOutside(F) {
   const slabTo = (x0, z0, x1, z1, y0, y1, c) => put('box', (x0 + x1) / 2, y0, (z0 + z1) / 2, x1 - x0, Math.max(0.04, y1 - y0), z1 - z0, c);
   for (const f of O.fills) slabTo(f.x0, f.z0, f.x1, f.z1, -0.1, f.y, CONC);
   // patamares: muro de arrimo (do chão até o topo) e o piso de cima; escadarias pintadas entre um patamar e o outro
-  const stairOf = new Map(O.stairs.map(st => [st.x0 + ',' + st.z0, st]));
+  const stairOf = new Map(O.stairs.map(st => [st.x0 + ',' + st.z0, st])), rails = [];
   for (const c of O.cells) {
     if (c.kind === 'forest' || c.kind === 'rock' || c.kind === 'plaza') continue;
     const st = c.kind === 'stair' ? stairOf.get(c.x0 + ',' + c.z0) : null, wc = WALL_TONES[(c.i + c.j) % 3], gc = GROUND_TONES[c.tone || 0];
@@ -445,9 +445,14 @@ export function buildFavelaOutside(F) {
     for (const sd of [-1, 1]) {                                             // corrimão de cano
       const hm = (st.y0 + st.y1) / 2 + 0.95, xm = along ? (a0 + a1) / 2 : m + sd * (W2 - 0.1), zm = along ? m + sd * (W2 - 0.1) : (a0 + a1) / 2;
       const L2 = Math.hypot(len, rise), ang = Math.atan2(rise, len) * (st.dir > 0 ? 1 : -1);
-      const rail = new THREE.Mesh(new THREE.BoxGeometry(along ? L2 : 0.06, 0.06, along ? 0.06 : L2), new THREE.MeshStandardMaterial({ color: '#8a8f94', roughness: 0.6 }));
-      rail.position.set(xm, hm, zm); if (along) rail.rotation.z = ang; else rail.rotation.x = -ang; rail.castShadow = false; g.add(rail);
+      const rg = new THREE.BoxGeometry(along ? L2 : 0.06, 0.06, along ? 0.06 : L2);
+      if (along) rg.rotateZ(ang); else rg.rotateX(-ang);
+      rails.push(rg.translate(xm, hm, zm));
     }
+  }
+  if (rails.length) {                                                       // todos os corrimãos numa malha só (um desenho)
+    const rm = new THREE.Mesh(mergeGeometries(rails, false), new THREE.MeshStandardMaterial({ color: '#8a8f94', roughness: 0.6 }));
+    rails.forEach(r => r.dispose()); rm.castShadow = false; rm.name = 'favela-outside-rails'; g.add(rm);
   }
   // casas
   for (const h of O.houses) {
@@ -641,6 +646,7 @@ function plazaProps(props) {
       add(s, p.x, 0.16, p.z, p.ry);
     }
   }
+  const plain = mergePlain(g); if (plain) g.add(plain);                    // peças de cor lisa: uma malha com cor por vértice
   bakeStatic(g); g.traverse(o => { if (o.isMesh) o.castShadow = false; });
   return g;
 }

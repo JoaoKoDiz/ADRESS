@@ -29,7 +29,7 @@ const LINES = {
   ],
   erminia: [
     'Milho de manhã e de tarde. Eles sabem o horário melhor do que eu.',
-    'Aquele cinzento que manca é o Barão. Chega por último e come primeiro.',
+    'Aquele mais escuro é o Barão. Chega por último e come primeiro.',
     'Não chega muito perto, que eles se assustam. Depois voltam, mas meio ofendidos.',
     'Meu filho diz que pombo dá trabalho. Os pombos nunca disseram nada dele.',
     'Trago o milho num saquinho de pão. Eles reconhecem o barulho do papel.',

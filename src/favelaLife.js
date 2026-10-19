@@ -312,14 +312,16 @@ function createPelada(F) {
       }
     }
     // passe: companheiro (o goleiro só se apertado) com a linha livre (a bola não pode passar no pé de ninguém)
-    let best = null, bs = -1e9;
+    let best = null, bs = -1e9, alt = null, as = -1e9;
+    if (pressure > 2.6) k.shield = 0;                                                       // saiu da marcação: pode voltar a proteger depois
     for (const m of mates(k)) {
       if (m.gk && (pressure > 1.4 || (k.x - ownX(k.team)) * dirOf(k.team) > 9)) continue;   // recuar para o goleiro só apertado e perto do próprio gol
       const tg = m.spot && m.act === 'move' ? { x: m.tx, z: m.tz } : { x: m.x, z: m.z }, d = hyp(tg.x - k.x, tg.z - k.z);
       if (d < 2.6 || d > 14) continue;
       const lane = Math.min(...op.map(o => segDist(o.x, o.z, k.x, k.z, tg.x, tg.z))), open = Math.min(...op.map(o => hyp(o.x - tg.x, o.z - tg.z)));
-      if (lane < 0.85) continue;
       const sc = Math.min(lane, 3) * 1.3 + Math.min(open, 4) * 0.6 + (tg.x - k.x) * dirOf(k.team) * 0.22 - d * 0.08 - (m.gk ? 3.5 : 0) + rnd(0, 0.8);
+      if (lane >= 0.5 && sc > as) { as = sc; alt = { m, tg, d }; }                         // (arriscado: a linha passa perto de alguém)
+      if (lane < 0.85) continue;
       if (sc > bs) { bs = sc; best = { m, tg, d }; }
     }
     const wantPass = best && (bs > 1.6 || pressure < 1.6) && (k.hold > 0.35 * k.patience || pressure < 1.3);
@@ -331,25 +333,36 @@ function createPelada(F) {
     }
     // apertado e sem passe: protege a bola saindo de lado (de costas para quem marca) ou, no próprio campo, dá um chutão
     if (pressure < 1.7) {
-      const own = (k.x - cx) * dirOf(k.team) < -2;
-      if (own && Math.random() < 0.3) {
-        startKick(k, cx + dirOf(k.team) * rnd(4, 8), clamp(k.z + rnd(-4, 4), PZ0 + 1, PZ1 - 1), rnd(7, 9), rnd(2.0, 3.2), 'clear', null);
+      const own = (k.x - cx) * dirOf(k.team) < -2, wall = Math.min(k.z - FZ0, FZ1 - k.z) < 2.4 || Math.min(k.x - GL[0], GL[1] - k.x) < 1.6;
+      const done = (k.shield || 0) >= (k.patience > 1 && !wall ? 2 : 1);
+      if (done || (own && Math.random() < 0.3) || (wall && (k.shield || 0) >= 1)) {
+        k.shield = 0;
+        if (alt && Math.random() < 0.75) {                                                   // toca assim mesmo, por onde der
+          const { m, tg } = alt, err = (1.1 - k.skill) * 0.7, tx = tg.x + rnd(-err, err), tz = tg.z + rnd(-err, err);
+          startKick(k, tx, tz, passSpeed(hyp(tx - k.x, tz - k.z), rnd(2.0, 3.0)), 0, 'pass', m);
+          return;
+        }
+        if (dg < 11 && ang < 1.2) { startKick(k, g, GZ + rnd(-1.3, 1.3), rnd(7, 9.5), Math.random() < 0.4 ? rnd(1, 2) : 0, 'shot', null); return; }
+        const tz = clamp(lerp(k.z, GZ, 0.6) + rnd(-3, 3), PZ0 + 1.5, PZ1 - 1.5);             // chutão: para a frente e para longe da parede
+        startKick(k, clamp(k.x + dirOf(k.team) * rnd(5, 9), GL[0] + 2, GL[1] - 2), tz, rnd(7, 9), rnd(1.6, 2.8), 'clear', null);
         return;
       }
       let ax = k.x - near.x, az = k.z - near.z; const L0 = hyp(ax, az) || 1; ax /= L0; az /= L0;
-      const sd = Math.abs(az) > 0.3 ? Math.sign(az) : pick([-1, 1]), run = rnd(1.6, 2.6);
-      let dx = ax * 0.6 + dirOf(k.team) * 0.25, dz = az * 0.6 + sd * 0.6; const L = hyp(dx, dz) || 1;
-      const p = inField(k.x + dx / L * run, k.z + dz / L * run, 0.9);
+      const toMid = clamp((GZ - k.z) * 0.3, -1, 1);                                         // protege girando para o lado aberto (o meio), não para o canto
+      const sd = Math.abs(toMid) > 0.4 ? Math.sign(toMid) : Math.abs(az) > 0.3 ? Math.sign(az) : pick([-1, 1]), run = rnd(1.6, 2.6);
+      let dx = ax * 0.6 + dirOf(k.team) * 0.25 + clamp((cx - k.x) * 0.15, -0.5, 0.5), dz = az * 0.5 + sd * 0.55 + toMid * 0.4; const L = hyp(dx, dz) || 1;
+      const p = inField(k.x + dx / L * run, k.z + dz / L * run, 2.2);
+      k.shield = (k.shield || 0) + 1;
       k.act = 'dribble'; k.at = 0; k.dur = rnd(0.7, 1.3); k.tx = p.x; k.tz = p.z; k.spd = rnd(1.7, 2.3) * k.pace; ev('protege', k);
       return;
     }
     // conduzir para frente, fugindo do adversário mais perto (ou segurar e olhar)
     if (Math.random() < 0.55 + 0.3 * (1 - k.patience)) {
-      let dx = dirOf(k.team), dz = clamp((GZ - k.z) * 0.12 + rnd(-0.6, 0.6), -0.9, 0.9);
+      let dx = dirOf(k.team), dz = clamp((GZ - k.z) * (Math.min(k.z - FZ0, FZ1 - k.z) < 3 ? 0.3 : 0.12) + rnd(-0.6, 0.6), -0.9, 0.9);
       if (near && pressure < 3.5) dz += (k.z - near.z > 0 ? 1 : -1) * 0.8;
       const L = hyp(dx, dz), run = rnd(2.2, 4.5);
       k.act = 'dribble'; k.at = 0; k.dur = rnd(1.0, 2.6); k.tx = k.x + dx / L * run; k.tz = k.z + dz / L * run;
-      const p = inField(k.tx, k.tz, 0.9); k.tx = p.x; k.tz = p.z; k.spd = rnd(1.6, 2.4) * k.pace;
+      const p = inField(k.tx, k.tz, 1.8); k.tx = p.x; k.tz = p.z; k.spd = rnd(1.6, 2.4) * k.pace;
       return;
     }
     k.act = 'hold'; k.at = 0; k.dur = rnd(0.35, 0.9) * (0.6 + k.patience);
@@ -442,7 +455,7 @@ function createPelada(F) {
   function trap(k) {
     ball.owner = k; ball.kind = 'own'; ball.to = null; ball.last = k; ball.vy = 0;
     if (phase === 'foul') { phase = 'play'; phT = 0; }                                      // cobrou a falta: o jogo volta
-    k.act = 'trap'; k.at = 0; k.hold = 0; k.spot = null;
+    k.act = 'trap'; k.at = 0; k.hold = 0; k.spot = null; k.shield = 0;
     for (const o of players) if (o.act === 'receive' || o.act === 'chase') { if (o !== k) { o.act = 'free'; o.dec = rnd(0.1, 0.35); } }
     ev('domina', k);
   }
@@ -622,10 +635,10 @@ function createPelada(F) {
       case 'fetch': {                                                                     // goleiro busca a bola (no fundo da rede ou atrás do gol)
         const gx = ownX(k.team), d = dirOf(k.team);
         if (ball.held === k) {
-          setMove(k, gx + d * 1.4, GZ, 1.8, 'fetch'); k.act = 'fetch';
-          if (hyp(k.tx - k.x, k.tz - k.z) < 0.35) { k.act = 'gkhold'; k.at = 0; k.hold = rnd(0.8, 1.6); }
+          setMove(k, gx + d * 1.4, GZ, 2.3, 'fetch'); k.act = 'fetch';
+          if (hyp(k.tx - k.x, k.tz - k.z) < 0.35) { k.act = 'gkhold'; k.at = 0; k.hold = rnd(0.6, 1.2); }
         } else {
-          k.tx = ball.x + d * 0.3; k.tz = ball.z; k.spd = 1.4;
+          k.tx = ball.x + d * 0.3; k.tz = ball.z; k.spd = hyp(ball.x - k.x, ball.z - k.z) > 2.5 ? 2.6 : 1.5;
           if (hyp(ball.x - k.x, ball.z - k.z) < 0.55 && k.at > 0.4) { giveHands(k); ball.inNet = -1; k.pick = 0.35; }
         }
         break;
@@ -757,6 +770,11 @@ function createPelada(F) {
       if (ball.from === k && ball.kind !== 'loose' && hyp(ball.x - k.x, ball.z - k.z) < 1.5) continue;
       const f = footPt(k, 0.25), d = hyp(ball.x - f.x, ball.z - f.z);
       if (d < 0.42) {
+        if (ball.kind === 'shot' && ball.from && ball.from.team !== k.team && sp > 4.5) {      // bloqueio: a bola bate na perna e espirra
+          const a = Math.atan2(ball.vx, ball.vz) + Math.PI + rnd(-1.2, 1.2), v = sp * rnd(0.3, 0.5);
+          ball.vx = sin(a) * v; ball.vz = cos(a) * v; ball.vy = rnd(0, 1.5); ball.kind = 'loose'; ball.to = null; ball.last = k; ball.from = null;
+          k.act = 'stumble'; k.at = 0.25; ev('bloqueio', k); return;
+        }
         if ((ball.kind === 'pass' && ball.to === k) || (['receive', 'chase', 'move', 'press', 'free', 'fetchball'].includes(k.act) && sp < 8.5)) { trap(k); return; }
         if (sp > 1) { const dx = ball.x - k.x, dz = ball.z - k.z, L = hyp(dx, dz) || 1; ball.vx = dx / L * sp * 0.4; ball.vz = dz / L * sp * 0.4; ball.kind = 'loose'; ball.last = k; ball.to = null; }
       }

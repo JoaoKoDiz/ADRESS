@@ -2,9 +2,10 @@
 // (sobra espaço para a van ultrapassar). Como os carros do Nível 14: mantêm distância de outro trator à frente, param
 // diante da van ou do motorista a pé e retomam quando há passagem. São sólidos para a van.
 // O mesmo sistema move as carroças (Medieval), os carros do Bosque e o limpa-neve (Nevasca). Um modelo pode pedir um
-// trajeto suave em `userData.ride` (o limpa-neve pede): { turnR, tilt, lift } — curvas em arco contínuas (posição e
-// rotação sem saltos nas esquinas, mais devagar nas curvas fechadas), carroceria inclinada com o terreno e apoiada na
-// superfície desenhada da rua (`lift`). Sem `ride`, o trajeto é o de sempre (linhas com a curva suavizada pela rotação).
+// trajeto suave em `userData.ride` (o limpa-neve pede): { turnR, side, tilt, lift, axle, track } — curvas em arco contínuas
+// (posição e rotação sem saltos nas esquinas, mais devagar nas curvas fechadas), `side` = quanto anda à direita do meio
+// da rua (padrão SIDE), carroceria inclinada com o terreno (pelos eixos `axle` e a bitola `track`) e apoiada na superfície
+// desenhada da rua (`lift`). Sem `ride`, o trajeto é o de sempre (linhas com a curva suavizada pela rotação).
 import * as THREE from 'three';
 import { SOLIDS, FARMLAND, TERRAIN, ensureSolid } from './layout.js';
 import { buildTractor } from './models/farm.js';
@@ -28,11 +29,11 @@ function makePath(loop) {
 
 /**
  * Caminho suave: a linha do meio da rua ganha arcos de raio `R` nas esquinas (menor se o trecho for curto), e o veículo
- * anda deslocado SIDE para a direita dessa linha (o deslocamento de uma curva contínua também é contínuo: nada de saltos).
+ * anda deslocado `side` (SIDE, ou o do modelo) para a direita dessa linha (o deslocamento de uma curva contínua também é contínuo: nada de saltos).
  * Amostrado a cada ~0,5 de comprimento; a direção é interpolada entre as amostras (rotação contínua) e cada amostra guarda a
  * velocidade máxima da curva que vem pela frente (freia antes de uma esquina fechada).
  */
-function makeSmoothPath(loop, R, vmax) {
+function makeSmoothPath(loop, R, vmax, side = SIDE) {
   const P = loop.filter((p, i) => { const q = loop[(i + 1) % loop.length]; return Math.hypot(p[0] - q[0], p[1] - q[1]) > 0.5; });
   const n = P.length, dir = [], len = [];
   for (let i = 0; i < n; i++) { const a = P[i], b = P[(i + 1) % n], L = Math.hypot(b[0] - a[0], b[1] - a[1]); dir.push([(b[0] - a[0]) / L, (b[1] - a[1]) / L]); len.push(L); }
@@ -61,7 +62,7 @@ function makeSmoothPath(loop, R, vmax) {
   }
   // deslocado para a direita; comprimento acumulado e curvatura (pelo giro da direção por distância)
   const m = cx.length, X = new Float32Array(m + 1), Z = new Float32Array(m + 1), H = new Float32Array(m + 1), S = new Float32Array(m + 1), K = new Float32Array(m + 1);
-  for (let k = 0; k <= m; k++) { const j = k % m; X[k] = cx[j] - Math.sin(ch[j]) * SIDE; Z[k] = cz[j] + Math.cos(ch[j]) * SIDE; H[k] = k ? H[k - 1] + wrapA(ch[j] - H[k - 1]) : ch[0]; }
+  for (let k = 0; k <= m; k++) { const j = k % m; X[k] = cx[j] - Math.sin(ch[j]) * side; Z[k] = cz[j] + Math.cos(ch[j]) * side; H[k] = k ? H[k - 1] + wrapA(ch[j] - H[k - 1]) : ch[0]; }
   for (let k = 1; k <= m; k++) { S[k] = S[k - 1] + Math.hypot(X[k] - X[k - 1], Z[k] - Z[k - 1]); K[k - 1] = (H[k] - H[k - 1]) / Math.max(0.05, S[k] - S[k - 1]); }   // (com sinal: + = curva à direita)
   K[m] = K[0];
   const total = S[m];
@@ -91,7 +92,7 @@ export function createTractors(audio) {
       SPEED = opts.speed || 3.4;
       list = (opts.loops || (FARMLAND ? FARMLAND.tractorLoops : [])).map((loop, i) => {
         const mesh = (opts.build || buildTractor)(COLORS[i % COLORS.length]), ride = mesh.userData.ride || null;
-        const path = ride && ride.turnR ? makeSmoothPath(loop, ride.turnR, SPEED) : makePath(loop); root.add(mesh);
+        const path = ride && ride.turnR ? makeSmoothPath(loop, ride.turnR, SPEED, ride.side) : makePath(loop); root.add(mesh);
         if (ride && ride.tilt) mesh.rotation.order = 'YZX';           // guinada, depois arfagem (nariz) e rolagem (lados)
         return { i, path, ride, s: path.S * ((0.15 + 0.37 * i) % 1), v: 0, mesh, solid: { x0: 0, x1: 0, z0: 0, z1: 0 }, x: 0, z: 0, ux: 1, uz: 0, k: 0, cap: SPEED, roll: 0 };
       });

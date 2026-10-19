@@ -284,13 +284,11 @@ function planOutside(MAP, HEDGE, EX) {
     const x0 = xl[a].c + xl[a].h, x1 = xl[a + 1].c - xl[a + 1].h, z0 = zl[b].c + zl[b].h, z1 = zl[b + 1].c - zl[b + 1].h, mx = (x0 + x1) / 2, mz = (z0 + z1) / 2;
     if (!(mx < AXW || mx > AXE || mz < AZN || mz > AZS)) continue;          // dentro do anel: o morro
     const dn = dOut(mx, mz); if (dn > CR) continue;
-    const aveX = (xl[a].h === AW && x0 > AXW - 1) ? 'W' : (xl[a + 1].h === AW && x1 < AXE + 1) ? 'E' : null;
     const blk = { x0, z0, x1, z1, top: 0, park: false, faces: [] };
-    if (xl[a].c === AXE || (xl[a].h === AW && xl[a].c === AXE)) blk.faces.push([-1, 0]);
+    if (xl[a].c === AXE) blk.faces.push([-1, 0]);                          // (faces = lados virados para a avenida)
     if (xl[a + 1].c === AXW) blk.faces.push([1, 0]);
     if (zl[b].c === AZS && mx > AXW && mx < AXE) blk.faces.push([0, -1]);
     if (zl[b + 1].c === AZN && mx > AXW && mx < AXE) blk.faces.push([0, 1]);
-    void aveX;
     const nearEntry = zl[b + 1].c === AZN && x1 > EX - 40 && x0 < EX + 40;   // primeira fileira junto da estrada de acesso
     blk.park = (nearEntry && mx < EX) || (!nearEntry && rnd() < 0.07);
     city.blocks.push(blk);

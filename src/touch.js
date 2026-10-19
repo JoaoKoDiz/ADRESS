@@ -432,6 +432,12 @@ export function createTouch({ input, canvas }) {
     } else {
       const b = g.H - Math.max(62, g.H * 0.1); zb = { l: 0, r: g.W * 0.42 + g.ins.l, t: Math.max(g.top, b - g.H * 0.5), b };
     }
+    // a área fica POR CIMA de DICA, MENU, ♪ e MISSÕES (camadas diferentes): nunca se estende sobre eles (o joystick movido
+    // para perto da DICA deixava a DICA sem resposta ao toque)
+    for (const R of res) {
+      if (R.r <= zb.l || R.l >= zb.r || R.b <= zb.t || R.t >= zb.b) continue;
+      if ((R.t + R.b) / 2 >= hp[1]) zb.b = Math.min(zb.b, R.t - 4); else zb.t = Math.max(zb.t, R.b + 4);
+    }
     zoneBox = zb; homePos = hp;
     Object.assign(zone.style, { left: zb.l + 'px', top: zb.t + 'px', width: (zb.r - zb.l) + 'px', height: (zb.b - zb.t) + 'px' });
     if (!joy) placeBase(hp[0], hp[1]);
@@ -519,7 +525,7 @@ export function openTouchEditor({ onClose } = {}) {
     return [{ key: '', label: CTRL[id].name }];
   };
   function render() {
-    for (const it of items) { it.el.remove(); it.tag.remove(); }
+    for (const it of items) { it.wrap.remove(); it.tag.remove(); }   // (o invólucro inteiro: não deixa .tl-item vazios a cada troca de aba)
     items = [];
     const g = geo(), res = reservedRects(root), o = g.o;
     bar.style.minHeight = (g.top - 8) + 'px';

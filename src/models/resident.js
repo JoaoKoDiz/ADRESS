@@ -691,6 +691,7 @@ export function buildFigure(o = {}) {
       this.items[it.name.replace('item:', '')] = it;
       (where === 'body' ? body : where === 'L' ? handL : handR).add(it);
       it.userData.where = where; it.userData.tilt = it.userData.tilt || 0; it.visible = true;
+      it.traverse(q => { if (q.isMesh) q.castShadow = mesh.castShadow; });   // (a sombra do objeto acompanha a da figura)
       if (!this.held.includes(it)) this.held.push(it);
       return it;
     },
@@ -699,6 +700,16 @@ export function buildFigure(o = {}) {
     setShadow(on) { mesh.castShadow = on; for (const it of this.held) it.traverse(q => { if (q.isMesh) q.castShadow = on; }); },
   };
   animatePerson(person, { mode: 'idle', t: 0 });
+  // sombra só perto de quem olha (a câmera): longe, a figura é pequena demais para a sombra aparecer e cada uma custa mais
+  // um desenho com esqueleto no mapa de sombras. Decidido no desenho (vale no quadro seguinte), com folga para não piscar.
+  if (o.shadowDist !== 0) {
+    const R = o.shadowDist || 55, IN = R * R, OUT = (R + 8) * (R + 8);
+    let on = true;
+    mesh.onBeforeRender = (r, s, cam) => {
+      const e = mesh.matrixWorld.elements, c = cam.matrixWorld.elements, dx = e[12] - c[12], dy = e[13] - c[13], dz = e[14] - c[14], d2 = dx * dx + dy * dy + dz * dz;
+      if (on ? d2 > OUT : d2 < IN) { on = !on; person.setShadow(on); }
+    };
+  }
   return person;
 }
 
@@ -757,7 +768,7 @@ export function figureItem(name, o = {}) {
       A(FG.box(0.66, 0.5, 0.03), '#2e3036', 0, 1.72, 0);
       const pm = signTex('obrasMat', () => new THREE.MeshStandardMaterial({ map: obrasTexture(), roughness: 0.7 }));
       plate = new THREE.Group();
-      for (const r of [0, Math.PI]) { const m = new THREE.Mesh(fget('signPlane', () => new THREE.PlaneGeometry(0.62, 0.46)), pm); m.position.set(0, 1.72, r ? -0.017 : 0.017); m.rotation.y = r; m.castShadow = true; plate.add(m); }
+      for (const r of [0, Math.PI]) { const m = new THREE.Mesh(fget('signPlane', () => new THREE.PlaneGeometry(0.62, 0.46)), pm); m.position.set(0, 1.72, r ? -0.022 : 0.022); m.rotation.y = r; m.castShadow = true; plate.add(m); }   // (placa 7 mm à frente da chapa)
       g.userData.grip.set(0, 1.0, 0); break;
     }
     case 'rag': A(FG.box(0.2, 0.03, 0.16), o.color || '#3d6fb5', 0, -0.02, 0.06, 0.25, 0.3, 0.1); A(FG.box(0.14, 0.12, 0.025), o.color || '#3d6fb5', 0.02, -0.08, 0.1, 0.1, 0.3, 0); break;

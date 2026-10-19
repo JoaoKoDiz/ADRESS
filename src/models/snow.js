@@ -558,17 +558,43 @@ export function buildSnowOutskirts(MAP) {
   // estrada que cruza (asfalto com a beirada de neve suja), faixa amarela, montes das máquinas, balizas
   const X0 = -470, X1 = MAP + 470;
   g.add(ribbon([[X0, OJ], [X1, OJ]], RWo + 1.2, -0.004, [[-1, '#cfd6dd'], [-0.84, '#8e959e'], [-0.78, ASPH], [0.78, ASPH], [0.84, '#8e959e'], [1, '#cfd6dd']], false, 6));
-  for (let x = X0 + 2; x < X1 - 2; x += 2.6) if (Math.abs(x - C0) > RWo) g.add(at(box(1.4, 0.02, 0.22, '#e8c84a'), x, 0.004, OJ));
+  { const dp = []; for (let x = X0 + 2; x < X1 - 2; x += 2.6) if (Math.abs(x - C0) > RWo) dp.push(x - 0.7, 0.003, OJ - 0.11, x - 0.7, 0.003, OJ + 0.11, x + 0.7, 0.003, OJ + 0.11, x - 0.7, 0.003, OJ - 0.11, x + 0.7, 0.003, OJ + 0.11, x + 0.7, 0.003, OJ - 0.11);   // faixa amarela (só a face de cima)
+    const dg = new THREE.BufferGeometry(); dg.setAttribute('position', new THREE.Float32BufferAttribute(dp, 3)); dg.computeVertexNormals(); g.add(new THREE.Mesh(dg, mat('#e8c84a'))); }
+  // montes de neve deixados pelas máquinas na beira das estradas: um aterro contínuo de cada lado (altura e largura irregulares,
+  // pontas baixando; aberto nos cruzamentos, na trilha em volta da sebe e nas entradas das casas) e um bloco solto aqui e ali
   const bankM = [], poleM = [];
   const laneX = O.lanes.filter(l => Math.abs(l.pts[0][1] - (OJ - 3.5)) < 0.1).map(l => l.pts[0][0]);
-  for (let x = X0; x < X1; x += 2.3) for (const s2 of [-1, 1]) {        // montes de neve das máquinas (os dois lados)
-    if (Math.abs(x - C0) < RWo / 2 + 3.5 || (s2 < 0 && laneX.some(lx => Math.abs(x - lx) < 3.5))) continue;
-    const k = r(); bankM.push(trs(x + r() * 0.8, 0, OJ + s2 * (RWo / 2 + 1.35 + r() * 0.4), r() * 3, 1.15 + k * 0.5, 0.35 + k * 0.25, 0.8 + r() * 0.3));
+  const bPos = [], bCol = [], cEdge = new THREE.Color('#cdd6de'), cTop = new THREE.Color(SNOWC), cMid = new THREE.Color(SNOW2), cc = new THREE.Color();
+  const PROF = [[0, 0], [0.16, 0.5], [0.42, 1], [0.74, 0.62], [1, 0]];
+  const wob = (u, k) => 0.5 + 0.28 * Math.sin(u * 0.61 + k) + 0.22 * Math.sin(u * 1.73 + k * 2.3);   // 0..1, suave
+  const berm = (ax, az, bx, bz, off, sd, w, hmax, k0) => {                // de a para b, do lado sd (+1 = à direita de quem vai)
+    const L = Math.hypot(bx - ax, bz - az); if (L < 2) return;
+    const ux = (bx - ax) / L, uz = (bz - az) / L, nx = -uz * sd, nz = ux * sd, n = Math.ceil(L / 1.4);
+    const V3 = (i, j) => {
+      const u = L * i / n, e = Math.sqrt(Math.max(0, Math.min(1, u / 2, (L - u) / 2))), q = wob(u + ax + az, k0), [o, hh] = PROF[j];
+      const l = off + o * w * (0.75 + 0.45 * q) * (0.6 + 0.4 * e), y = -0.01 + hh * hmax * (0.4 + 0.6 * q) * e;
+      return [ax + ux * u + nx * l, y, az + uz * u + nz * l, j === 0 ? 0 : hh * (0.5 + 0.5 * q)];
+    };
+    for (let i = 0; i < n; i++) for (let j = 0; j < PROF.length - 1; j++) {
+      const A2 = V3(i, j), B2 = V3(i + 1, j), C2 = V3(i + 1, j + 1), D2 = V3(i, j + 1);
+      for (const v of [A2, B2, C2, A2, C2, D2]) { bPos.push(v[0], v[1], v[2]); if (v[3] === 0) cc.copy(cEdge); else cc.copy(cMid).lerp(cTop, Math.min(1, v[3] * 1.3)); bCol.push(cc.r, cc.g, cc.b); }
+    }
+    for (let u = 5 + Math.abs(k0 * 7) % 8; u < L - 3; u += 17 + (u * 7.3 % 9)) {   // blocos soltos em cima (de vez em quando)
+      const q = wob(u, k0 + 1), l = off + w * (0.3 + 0.25 * q);
+      bankM.push(trs(ax + ux * u + nx * l, 0.12 + 0.2 * q, az + uz * u + nz * l, u * 1.7, 0.45 + 0.35 * q, 0.25 + 0.15 * q, 0.4 + 0.3 * q));
+    }
+  };
+  const spans = (a0, a1, gaps) => { const out = []; let a = a0; for (const [g0, g1] of gaps.filter(q => q[1] > a0 && q[0] < a1).sort((p, q) => p[0] - q[0])) { if (g0 > a) out.push([a, g0]); a = Math.max(a, g1); } if (a < a1) out.push([a, a1]); return out; };
+  const AH = (ENTRANCE.x1 - ENTRANCE.x0) / 2;
+  for (const sd of [-1, 1]) {                                          // estrada da serra (sd −1 = lado norte, com as entradas das casas)
+    const gaps = [[C0 - AH - 3, C0 + AH + 3], ...(sd < 0 ? laneX.map(lx => [lx - 3.2, lx + 3.2]) : [])];
+    for (const [x0, x1] of spans(X0, X1, gaps)) berm(x0, OJ, x1, OJ, RWo / 2 + 0.55, sd, 2.4, 0.62, x0 * 0.13 + sd);
   }
-  for (const zz of [[OJ + RWo / 2 + 2.5, -2.5], [-420, OJ - RWo / 2 - 2.5]]) for (let z = zz[0]; z < zz[1]; z += 2.3) for (const s2 of [-1, 1]) {   // e na de acesso
-    const k = r(); bankM.push(trs(C0 + s2 * (ENTRANCE.x1 - ENTRANCE.x0) / 2 + s2 * 1.25, 0, z + r() * 0.8, r() * 3, 0.8 + r() * 0.3, 0.32 + k * 0.22, 1.1 + k * 0.4));
-  }
-  const bankPiece = new THREE.Group(); { const m = sphere(1, SNOW2, 8, 5); m.scale.set(1, 1, 1); bankPiece.add(m); const t2 = sphere(0.7, SNOWC, 7, 4); t2.position.set(0.2, 0.35, 0); bankPiece.add(t2); }
+  for (const sd of [-1, 1]) for (const [z0, z1] of spans(-420, -2.5, [[OJ - RWo / 2 - 2, OJ + RWo / 2 + 2], [-R - 3.6, -R + 3.6]]))   // e a de acesso (abre na trilha)
+    berm(C0, z0, C0, z1, AH + 0.5, sd, 2.0, 0.5, z0 * 0.11 + sd * 3);
+  const bg = new THREE.BufferGeometry(); bg.setAttribute('position', new THREE.Float32BufferAttribute(bPos, 3)); bg.setAttribute('color', new THREE.Float32BufferAttribute(bCol, 3)); upFace(bg);
+  g.add(new THREE.Mesh(bg, mat('#ffffff', { vertexColors: true })));
+  const bankPiece = new THREE.Group(); { const m = sphere(1, SNOW2, 7, 4); bankPiece.add(m); const t2 = sphere(0.7, SNOWC, 6, 3); t2.position.set(0.2, 0.35, 0); bankPiece.add(t2); }
   g.add(instanced(bankPiece, bankM, 'snow-banks'));
   for (let x = X0 + 40, k = 0; x < X1 - 40; x += 17, k++) { if (Math.abs(x - C0) < 9) continue; poleM.push(trs(x, 0, OJ + (k % 2 ? 1 : -1) * (RWo / 2 + 0.55))); }
   for (let z = -6, k = 0; z > -300; z -= 15, k++) { if (Math.abs(z - OJ) < 7) continue; poleM.push(trs(C0 + (k % 2 ? 1 : -1) * ((ENTRANCE.x1 - ENTRANCE.x0) / 2 + 0.55), 0, z)); }
@@ -630,9 +656,23 @@ export function buildSnowOutskirts(MAP) {
   for (let i = 0; i < pv.count; i++) { const x = pv.getX(i), z = pv.getZ(i), d = Math.hypot(x, z); const c2 = cD.clone().lerp(cI, Math.min(1, d * 1.2)); pc.push(c2.r, c2.g, c2.b); pv.setXYZ(i, P.x + x * P.rx, -0.01, P.z + z * P.rz); }
   pg.setAttribute('color', new THREE.Float32BufferAttribute(pc, 3)); pg.deleteAttribute('uv');
   g.add(new THREE.Mesh(pg, mat('#ffffff', { vertexColors: true, roughness: 0.16, metalness: 0.05, emissive: '#22394a', emissiveIntensity: 0.3 })));
-  const rimM = [];
-  for (let k = 0; k < 36; k++) { const a = k / 36 * Math.PI * 2; rimM.push(trs(P.x + Math.cos(a) * (P.rx + 0.4), 0, P.z + Math.sin(a) * (P.rz + 0.4), -a, 1.4 + r() * 0.6, 0.3 + r() * 0.15, 0.9)); }
-  g.add(instanced(bankPiece, rimM, 'snow-pond-rim'));
+  // margem: um aterro de neve contínuo (sobe da beira do gelo e desce para o campo, altura irregular) com alguns blocos soltos
+  {
+    const NA = 96, rows = [[0, 0.015], [0.35, 0.2], [0.9, 0.34], [1.6, 0.22], [2.6, 0.0]], pos = [], col = [], cA = new THREE.Color(SNOWC), cB = new THREE.Color(SNOW2), c2 = new THREE.Color();
+    const pt = (k, j) => {
+      const a = k / NA * Math.PI * 2, n = 0.65 + 0.35 * Math.sin(a * 5 + 1.3) * Math.cos(a * 3 - 0.4), [o, hh] = rows[j];
+      return [P.x + Math.cos(a) * (P.rx + 0.05 + o * (0.8 + 0.4 * n)), -0.012 + hh * (0.6 + 0.8 * n), P.z + Math.sin(a) * (P.rz + 0.05 + o * (0.8 + 0.4 * n)), n];
+    };
+    for (let k = 0; k < NA; k++) for (let j = 0; j < rows.length - 1; j++) {
+      const A2 = pt(k, j), B2 = pt(k + 1, j), C2 = pt(k + 1, j + 1), D2 = pt(k, j + 1);
+      for (const v of [A2, C2, B2, A2, D2, C2]) { pos.push(v[0], v[1], v[2]); c2.copy(cB).lerp(cA, Math.min(1, 0.3 + v[3] * 0.8)); col.push(c2.r, c2.g, c2.b); }
+    }
+    const bg = new THREE.BufferGeometry(); bg.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); bg.setAttribute('color', new THREE.Float32BufferAttribute(col, 3)); upFace(bg);
+    g.add(new THREE.Mesh(bg, mat('#ffffff', { vertexColors: true })));
+    const rimM = [];
+    for (let k = 0; k < 9; k++) { const a = k / 9 * Math.PI * 2 + r() * 0.5; rimM.push(trs(P.x + Math.cos(a) * (P.rx + 1.1), 0.05, P.z + Math.sin(a) * (P.rz + 1.1), -a, 0.55 + r() * 0.35, 0.28 + r() * 0.12, 0.45 + r() * 0.2)); }
+    g.add(instanced(bankPiece, rimM, 'snow-pond-rim'));
+  }
   const reed = new THREE.Group(); for (let k = 0; k < 6; k++) reed.add(at(cyl(0.025, 0.035, 1.1 + (k % 3) * 0.25, '#a58a55', 4), (k % 3 - 1) * 0.18, 0.55, (k > 2 ? 1 : -1) * 0.12, (k - 2.5) * 0.08, 0, (k % 2 - 0.5) * 0.2));
   const reedM = []; for (let k = 0; k < 9; k++) { const a = 2.2 + k * 0.42 + r() * 0.2; reedM.push(trs(P.x + Math.cos(a) * (P.rx + 0.2), 0, P.z + Math.sin(a) * (P.rz + 0.2), r() * 3, 0.9 + r() * 0.3)); }
   g.add(instanced(reed, reedM, 'snow-reeds'));
@@ -711,8 +751,8 @@ export function buildPlow() {
   for (const [x, z] of [[0.2, 0.92], [0.2, -0.92], [1.6, 0.92], [1.6, -0.92]]) a(box(0.1, 0.66, 0.1, OR), x, 2.05, z);   // colunas
   a(box(0.1, 0.66, 1.82, OR), 0.21, 2.05, 0);                           // parede de trás da cabine
   a(box(1.6, 0.12, 2.04, OR), 0.9, 2.44, 0);                            // teto (um pouco maior que a caixa)
-  a(box(1.52, 0.04, 1.8, '#e8a24a'), 0.9, 2.52, 0);                     // tampa do teto
-  a(box(0.08, 0.38, 1.1, '#24262a'), 1.67, 1.3, 0);                     // grade
+  a(box(1.52, 0.06, 1.8, '#e8a24a'), 0.9, 2.52, 0);                     // tampa do teto (a base entra no teto: nenhuma face no mesmo plano)
+  a(box(0.08, 0.38, 1.1, '#24262a'), 1.67, 1.32, 0);                    // grade
   for (const sd of [-1, 1]) { a(box(0.06, 0.14, 0.26, '#fff6c8'), 1.67, 1.56, sd * 0.7); a(box(0.06, 0.08, 0.14, '#ffb020'), 1.67, 1.38, sd * 0.86); }   // faróis e piscas
   a(box(0.22, 0.2, 2.0, DK), 1.78, 0.98, 0);                            // para-choque da frente
   for (const sd of [-1, 1]) {
@@ -721,7 +761,7 @@ export function buildPlow() {
     a(box(0.12, 0.03, 0.04, DK), 0.42, 1.52, sd * 0.995);                // maçaneta
   }
   a(cyl(0.06, 0.06, 1.1, STEEL, 8), 0.08, 2.15, 0.84); a(cyl(0.08, 0.08, 0.06, DK, 8), 0.08, 2.73, 0.84);   // escapamento
-  a(box(0.3, 0.08, 1.0, DK), 1.0, 2.54, 0);                             // base do giroflex
+  a(box(0.3, 0.1, 1.0, DK), 1.0, 2.58, 0);                              // base do giroflex
   // para-lamas (arcos sobre as rodas)
   const arch = new THREE.CylinderGeometry(0.64, 0.64, 0.44, 12, 1, true, Math.PI / 2, Math.PI); arch.rotateX(Math.PI / 2);
   for (const x of [FA, RA]) for (const sd of [-1, 1]) a(mesh(arch, DK), x, WR, sd * TR);
@@ -756,7 +796,7 @@ export function buildPlow() {
   d.root.position.set(0.72, 0.92, -0.45); d.root.rotation.y = Math.PI / 2; d.root.scale.setScalar(0.8); g.add(d.root);
   if (d.armL && d.armR) { d.armL.rotation.x = -1.0; d.armR.rotation.x = -1.0; }   // mãos no volante
   g.add(at(torus(0.17, 0.03, DK, 5, 12), 1.22, 1.72, -0.45, 0, Math.PI / 2, 0.5));   // volante
-  const lamps = [0, 1].map(k => { const m = new THREE.Mesh(new THREE.SphereGeometry(0.15, 10, 6, 0, Math.PI * 2, 0, Math.PI / 2), new THREE.MeshStandardMaterial({ color: '#ffb020', emissive: '#ff8a00', emissiveIntensity: 0.2 })); m.position.set(1.0, 2.58, k ? 0.32 : -0.32); g.add(m); return m; });
+  const lamps = [0, 1].map(k => { const m = new THREE.Mesh(new THREE.SphereGeometry(0.15, 10, 6, 0, Math.PI * 2, 0, Math.PI / 2), new THREE.MeshStandardMaterial({ color: '#ffb020', emissive: '#ff8a00', emissiveIntensity: 0.2 })); m.position.set(1.0, 2.625, k ? 0.32 : -0.32); g.add(m); return m; });
   const spinner = new THREE.Group(); spinner.position.set(-2.52, 0.78, 0); g.add(spinner);
   spinner.add(at(cyl(0.3, 0.3, 0.04, STEEL, 10), 0, 0, 0)); for (let k = 0; k < 4; k++) spinner.add(at(box(0.5, 0.06, 0.04, DK), 0, 0.04, 0, 0, k * Math.PI / 4, 0));
   const wheels = [];
@@ -769,10 +809,11 @@ export function buildPlow() {
   }
   // borrifo: a neve que sai da ponta direita da lâmina (só andando)
   const sprayMat = new THREE.MeshLambertMaterial({ color: '#ffffff', transparent: true, opacity: 0.8, depthWrite: false });
-  const spray = [...Array(7)].map((_, i) => { const m = new THREE.Mesh(new THREE.IcosahedronGeometry(0.16, 0), sprayMat); m.castShadow = false; g.add(m); return { m, k: i / 7 }; });
+  const sprayGeo = new THREE.IcosahedronGeometry(0.11, 0);
+  const spray = [...Array(14)].map((_, i) => { const m = new THREE.Mesh(sprayGeo, sprayMat); m.castShadow = false; g.add(m); return { m, k: i / 14, j: [Math.sin(i * 7.1), Math.cos(i * 3.7), Math.sin(i * 2.3)] }; });
   const roll = sphere(1, '#f4f8fb', 9, 5); roll.scale.set(0.42, 0.3, 1.1); g.add(at(roll, 2.46, 0.2, 1.2, 0, -0.3, 0));   // neve rolando na frente da ponta direita
   let T = Math.random() * 3, look = 0, lookT = 3, sp = 0;
-  g.userData.ride = { turnR: 7, tilt: true, lift: 0.065, axle: [FA, RA], track: TR };
+  g.userData.ride = { turnR: 7, side: 2.0, tilt: true, lift: 0.065, axle: [FA, RA], track: TR };   // (side: no meio da faixa da direita; a lâmina não raspa os muros das ladeiras)
   g.userData.drive = (dt, v) => {
     T += dt; sp += (Math.min(1, v / 3) - sp) * Math.min(1, dt * 3);
     for (const w of wheels) w.rotation.z -= v * dt / WR;
@@ -782,10 +823,11 @@ export function buildPlow() {
     if ((lookT -= dt) <= 0) { look = (Math.random() - 0.5) * 1.2; lookT = 2 + Math.random() * 4; }
     d.head.rotation.y += (look - d.head.rotation.y) * Math.min(1, dt * 2);
     roll.scale.set(0.42, 0.3 * (0.35 + 0.65 * sp), 1.1); roll.visible = sp > 0.05;
-    for (const p of spray) {                                            // arco curto para a direita e para cima, sumindo
-      p.k = (p.k + dt * 1.6) % 1; const u = p.k;
+    for (const p of spray) {                                            // neve solta saindo da ponta direita da lâmina: sobe num arco
+      p.k = (p.k + dt * 1.5) % 1; const u = p.k, [ja, jb, jc] = p.j;    // curto para a direita, se espalha e se desfaz ao cair
       p.m.visible = sp > 0.15;
-      p.m.position.set(2.3 + 0.4 * u, 0.5 + 1.2 * u - 1.3 * u * u, 1.5 + 1.6 * u); p.m.scale.setScalar((0.6 + 1.4 * u) * sp);
+      p.m.position.set(2.35 + (0.35 + 0.25 * ja) * u, 0.35 + (1.0 + 0.35 * jb) * u - 1.25 * u * u, 1.62 + (1.3 + 0.5 * jc) * u);
+      p.m.rotation.set(u * 4 + ja, u * 3 + jb, 0); p.m.scale.setScalar((0.3 + Math.sin(Math.PI * u)) * (1 - 0.65 * u) * sp);
     }
   };
   g.traverse(o => { if (o.isMesh && !o.material.transparent) { o.castShadow = true; } });

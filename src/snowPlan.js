@@ -43,14 +43,6 @@ export function planSnow(MAP, HEDGE) {
     ['n3', 'n14', 'cut'], ['n9', 'n20', 'cut'],
   ];
   const segs = E.map(([a, b, type]) => ({ a: N[a], b: N[b], na: a, nb: b, type }));
-  // nós nas pontas de cada ladeira (o de baixo e o de cima) e o lado de cada ponta que fica fora da ladeira (a·x + b·z ≤ c):
-  // o desenho corta ali o disco do cruzamento e a rua que chega (models/snow.js)
-  const rampsInfo = ramps.map(r => {
-    const s = segs.find(q => q.type === 'ramp' && (q.a[0] + q.b[0]) / 2 > r.x0 && (q.a[0] + q.b[0]) / 2 < r.x1 && (q.a[1] + q.b[1]) / 2 > r.z0 && (q.a[1] + q.b[1]) / 2 < r.z1);
-    const lowA = r.axis === 'z' ? s.a[1] < s.b[1] : s.a[0] < s.b[0];
-    return { r, bottom: lowA ? s.na : s.nb, top: lowA ? s.nb : s.na,
-      keepBottom: r.axis === 'z' ? [0, 1, r.z0] : [1, 0, r.x0], keepTop: r.axis === 'z' ? [0, -1, -r.z1] : [-1, 0, -r.x1] };
-  });
   const segDist = (x, z, s) => {
     const [ax, az] = s.a, [bx, bz] = s.b, dx = bx - ax, dz = bz - az, L2 = dx * dx + dz * dz;
     const t = Math.max(0, Math.min(1, ((x - ax) * dx + (z - az) * dz) / L2));
@@ -130,7 +122,11 @@ export function planSnow(MAP, HEDGE) {
     return { seg: s, x: mx, z: mz, y: h(mx, mz), ry: Math.atan2(s.b[0] - s.a[0], s.b[1] - s.a[1]), box: { x0: mx - 5.2, x1: mx + 5.2, z0: mz - 5.2, z1: mz + 5.2 } };
   });
   const P = k => N[k];
-  const plowLoop = ['n1', 'n2', 'n3', 'n14', 'n13', 'n12', 'n11', 'n10', 'n9', 'n20', 'n19', 'n11', 'n12', 'n13', 'n14'].map(P);
+  // (um circuito sem meia-volta nem trecho repetido: atalho n14→n3, a volta pelo oeste, sobe a ladeira B, atalho n9→n20, desce a
+  //  ladeira A; o de antes voltava pela mesma rua e dava meia-volta no n3, onde o atalho e a secundária saem quase juntos)
+  //  No alto da ladeira A a curva de quem vem do n11 (rua em diagonal) é feita 3,5 antes da boca, já alinhada com a ladeira:
+  //  fazendo-a no próprio n12, a traseira passava por cima do pilar do muro leste.)
+  const plowLoop = ['n14', 'n3', 'n4', 'n5', 'n6', 'n7', 'n8', 'n9', 'n20', 'n19', 'n11', 'n12', 'n13'].map(k => k === 'n12' ? [N.n12[0], N.n12[1] + 3.5] : P(k));
   // portas e caminhos de entrega (da frente do lote até o ponto da porta na rua) + o caminho do Grillby's (ponto 5) ficam livres
   const accessLines = spots.map(sp => [toW(sp, 0, 7.5), sp.door]);
   if (spots[5]) accessLines.push([toW(spots[5], 3.3, 3.6), toW(spots[5], 3.3, 15.5)]);
@@ -249,5 +245,5 @@ export function planSnow(MAP, HEDGE) {
     shrubs.push({ x, z, s: 0.7 + r3() * 0.6, rot: r3() * 6.28 }); k++;
   }
   const outside = { RING, OJ, ORW: 7, lanes, cabins, pond, fields, bales, bare, shrubs, laneDist };
-  return { N, segs, ramps, MID, HIGH, h, level, spots, ice, iceAt, ICE_HALF, ICE_TR, cuts, plowLoop, pines, lamps, mounds, roadDist, outside, rampsInfo };
+  return { N, segs, ramps, MID, HIGH, h, level, spots, ice, iceAt, ICE_HALF, ICE_TR, cuts, plowLoop, pines, lamps, mounds, roadDist, outside };
 }

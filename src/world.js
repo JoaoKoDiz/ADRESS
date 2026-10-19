@@ -12,6 +12,7 @@ import { tickBarriers } from './barriers.js';
 import { buildMoonScene } from './models/moon.js';
 import { FRAME } from './moonFrame.js';
 import { buildGasStation } from './models/gas.js';
+import { buildSnowOutskirts } from './models/snow.js';   // Nevasca: arredores próprios do inverno
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { mat, mesh, box, cyl, cone, sphere, at, bakeStatic, dynamic, textTexture, vcMerge } from './models/kit.js';
 import { buildFigure, figureItem, animatePerson, reach, skinnedFromParts, partMatrix, partGeo } from './models/resident.js';   // gente da praça (Bairro 2)
@@ -109,7 +110,10 @@ function buildGround(venice = false, SP = null) {
   g.add(at(plane(ROAD, OUT + 0.3, MEDV ? '#8f8a7c' : ASPHALT), cx, 0, 0.3 - (OUT + 0.3) / 2));   // Medieval: estrada de terra batida até o portão
   const jz0 = SP ? SP.J - SP.RW / 2 : 0, jz1 = SP ? SP.J + SP.RW / 2 : 0;      // cruzamento com a estrada de fora (sem meio-fio nele)
   for (const x of [ENTRANCE.x0 - 0.3, ENTRANCE.x1]) {
-    if (!SP) g.add(slab(x, -OUT, x + 0.3, 0, CURB, 0.12, 0.14));
+    if (!SP && SNOWV && SNOWV.outside) {                         // Nevasca: o meio-fio abre no cruzamento com a estrada da serra e na trilha da sebe
+      const O = SNOWV.outside, jw = O.ORW / 2 + 0.6, rw = 3.1;
+      g.add(slab(x, -OUT, x + 0.3, O.OJ - jw, CURB, 0.12, 0.14), slab(x, O.OJ + jw, x + 0.3, -O.RING - rw, CURB, 0.12, 0.14), slab(x, -O.RING + rw, x + 0.3, 0, CURB, 0.12, 0.14));
+    } else if (!SP) g.add(slab(x, -OUT, x + 0.3, 0, CURB, 0.12, 0.14));
     else g.add(slab(x, -OUT, x + 0.3, jz0, CURB, 0.12, 0.14), slab(x, jz1, x + 0.3, 0, CURB, 0.12, 0.14));
   }
   if (SP) for (const r of SP.roads) {                           // estrada que cruza, ruas laterais e a do sul
@@ -238,7 +242,10 @@ function buildHedge() {
 }
 
 // ---------- Árvores e arbustos fora do bairro ----------
-function buildOutskirts(ground) {
+function buildOutskirts(ground, snow = false) {
+  // Nevasca: os arredores são os do inverno (models/snow.js: trilha em volta da sebe, estrada da serra, sítios, lago congelado,
+  // árvores sem folhas e arbustos de neve) — não as árvores verdes e as flores dos outros bairros
+  if (snow && SNOWV) { const o = buildSnowOutskirts(MAP); SOLIDS.push(...o.solids); return o.group; }
   const g = new THREE.Group();
   const rand = rng(23);
   const blob = new THREE.IcosahedronGeometry(1, 0);
@@ -1786,19 +1793,21 @@ function buildPlaza() {
   g.add(at(cone(1.2, 1.2, '#ffffff', 12), cx, 6.6, cz));
   // quatro canteiros floridos, árvores (com coroa de terra e folhagem na base), bancos e postes nos quadrantes
   const FLOWERS = ['#ff6fa5', '#ffd12a', '#ffffff', '#9b5de5'];
+  const bedFlowers = [];                                                       // [x, z (relativos ao centro), cor, chão, altura, tamanho]
   for (const [sx, sz] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) {
     const qx = cx + sx * w / 4, qz = cz + sz * d / 4;
     g.add(at(cyl(2.4, 2.6, 0.5, '#8a5a36', 14), qx, 0.35, qz));               // canteiro
     g.add(at(cyl(2.25, 2.25, 0.06, '#5a3c22', 14), qx, 0.6, qz));              // terra
     for (let k = 0; k < 7; k++) {                                              // folhagem baixa em volta
-      const a = k / 7 * Math.PI * 2 + sx; const m = at(mesh(new THREE.IcosahedronGeometry(0.62, 0), '#4f9a45'), qx + Math.cos(a) * 1.55, 0.78, qz + Math.sin(a) * 1.55, a, a * 2, 0);
+      const a = k / 7 * Math.PI * 2 + sx; const m = at(mesh(new THREE.IcosahedronGeometry(0.62, 1), '#4f9a45'), qx + Math.cos(a) * 1.55, 0.78, qz + Math.sin(a) * 1.55, a, a * 2, 0);
       m.scale.set(1.1, 0.6, 1.0); g.add(m);
     }
-    for (let k = 0; k < 22; k++) {                                             // flores pequenas por cima, em manchas de cor
-      const a = k * 2.399 + sz, r = 0.4 + (k % 5) * 0.38;
-      g.add(at(sphere(0.17, FLOWERS[Math.floor(k / 6 + (sx > 0 ? 1 : 0)) % 4], 6, 4), qx + Math.cos(a) * r, 0.98 + (k % 3) * 0.06, qz + Math.sin(a) * r));
+    for (let k = 0; k < 34; k++) {                                             // flores por cima, em manchas de cor (instanciadas lá embaixo)
+      const a = k * 2.399 + sz, r = 0.52 + (k % 6) * 0.15;                    // (entre o arbustinho do meio e a folhagem da borda)
+      bedFlowers.push([qx - cx + Math.cos(a) * r, qz - cz + Math.sin(a) * r, FLOWERS[Math.floor(k / 9 + (sx > 0 ? 1 : 0)) % 4], 0.63, 1.02 + (k % 4) * 0.08, 2.0 + (k % 3) * 0.3]);
     }
-    g.add(at(cone(0.35, 1.3, '#3f8f3a', 7), qx, 1.25, qz));                    // arbustinho no meio
+    { const m = at(mesh(new THREE.IcosahedronGeometry(0.42, 1), '#3f8f3a'), qx, 1.12, qz); m.scale.set(1, 1.45, 1); g.add(m); }   // arbustinho podado no meio
+    g.add(at(cyl(0.07, 0.09, 0.3, '#6b4526', 6), qx, 0.72, qz));
     for (const [tx, tz] of [[sx * 7.5, sz * 3.5], [sx * 3.5, sz * 7.5]]) {     // árvores
       g.add(at(cyl(0.35, 0.45, 2.4, '#6b4526', 6), qx + tx, 1.3, qz + tz));
       g.add(at(sphere(2.1, '#3f8f3a', 8, 6), qx + tx, 3.6, qz + tz));
@@ -1859,11 +1868,21 @@ function buildPlaza() {
     g.add(k);
   }
   // cerquinha baixa em volta do gramado (com aberturas nos caminhos)
-  const fenceCol = '#ffffff';
+  // (moirões com capinha e dois corrimãos, no lugar da faixa branca maciça; mesma linha e mesma colisão de antes)
+  const fenceCol = '#ffffff', FCAP = '#e4e0d6';
+  const fenceRun = (x0, z0, x1, z1) => {
+    const L = Math.hypot(x1 - x0, z1 - z0), n = Math.max(2, Math.round(L / 1.15)), ry = Math.atan2(-(z1 - z0), x1 - x0);
+    for (let k = 0; k <= n; k++) {
+      const x = x0 + (x1 - x0) * k / n, z = z0 + (z1 - z0) * k / n;
+      g.add(at(box(0.1, 0.52, 0.1, fenceCol), x, 0.46, z, 0, ry, 0));
+      g.add(at(box(0.14, 0.04, 0.14, FCAP), x, 0.74, z, 0, ry, 0));
+    }
+    for (const y of [0.42, 0.63]) g.add(at(box(L, 0.06, 0.05, fenceCol), (x0 + x1) / 2, y, (z0 + z1) / 2, 0, ry, 0));
+  };
   for (const sz of [-1, 1]) for (const sx of [-1, 1]) {
-    const len = w / 2 - 3.2;
-    g.add(at(box(len, 0.5, 0.15, fenceCol), cx + sx * (1.6 + len / 2 + 0.2), 0.45, cz + sz * (d / 2 - 1.0)));
-    g.add(at(box(0.15, 0.5, len, fenceCol), cx + sx * (w / 2 - 1.0), 0.45, cz + sz * (1.6 + len / 2 + 0.2)));
+    const len = w / 2 - 3.2, a = 1.8, b = 1.8 + len;
+    fenceRun(cx + sx * a, cz + sz * (d / 2 - 1.0), cx + sx * b, cz + sz * (d / 2 - 1.0));
+    fenceRun(cx + sx * (w / 2 - 1.0), cz + sz * a, cx + sx * (w / 2 - 1.0), cz + sz * b);
   }
   // tufos de grama mais alta (junto à cerca e em pequenos grupos), flores em grupinhos e arbustos baixos: instanciados
   {
@@ -1888,10 +1907,31 @@ function buildPlaza() {
     for (let q = 0; q < 4; q++) { const a = Math.PI / 4 + q * Math.PI / 2; cluster(Math.cos(a) * 8.6, Math.sin(a) * 8.6, 9, [FLOWERS[q % 4], FLOWERS[(q + 1) % 4], '#ffffff']); }
     for (const [tx, tz] of PZ_TREES) cluster(tx + (tx > 0 ? -1.3 : 1.3), tz, 5, ['#ffd12a', '#ff8a3a']);
     for (const sx of [-1, 1]) for (const sz of [-1, 1]) cluster(sx * 17.6, sz * 19.2, 6, ['#ff6fa5', '#ffffff', '#9b5de5']);
-    const fm = new THREE.InstancedMesh(new THREE.IcosahedronGeometry(0.1, 0), mat('#ffffff'), fl.length);
-    fl.forEach(([x, z, c], i) => { o.position.set(cx + x, 0.36 + pzRand() * 0.08, cz + z); o.rotation.set(pzRand(), pzRand(), 0); o.scale.setScalar(0.9 + pzRand() * 0.5); o.updateMatrix(); fm.setMatrixAt(i, o.matrix); fm.setColorAt(i, cc.set(c)); });
-    const stem = new THREE.InstancedMesh(new THREE.CylinderGeometry(0.012, 0.016, 0.18, 4), mat('#4f8a35'), fl.length);
-    fl.forEach(([x, z], i) => { fm.getMatrixAt(i, o.matrix); o.matrix.decompose(o.position, o.quaternion, o.scale); o.position.y -= 0.09; o.rotation.set(0, 0, 0); o.scale.setScalar(1); o.updateMatrix(); stem.setMatrixAt(i, o.matrix); });
+    // flor = corola de 5 pétalas (disco recortado, virado para cima, levemente côncavo) com o miolo amarelo saltado; a cor da
+    // instância tinge as pétalas (o miolo fica amarelo/laranja). Antes eram bolinhas facetadas que, de perto, pareciam pedras.
+    const flowerGeo = (() => {
+      const N = 30, pos = [], col = [], P = new THREE.Color('#ffffff'), C = new THREE.Color('#f6c13a');
+      const rr = a => 0.034 + 0.05 * Math.pow(Math.abs(Math.cos(2.5 * a)), 0.7);   // contorno das pétalas
+      for (let k = 0; k < N; k++) {
+        const a0 = k / N * Math.PI * 2, a1 = (k + 1) / N * Math.PI * 2, r0 = rr(a0), r1 = rr(a1);
+        pos.push(0, 0.006, 0, Math.cos(a1) * r1, 0.012 + r1 * 0.12, -Math.sin(a1) * r1, Math.cos(a0) * r0, 0.012 + r0 * 0.12, -Math.sin(a0) * r0);
+        for (let q = 0; q < 3; q++) col.push(P.r, P.g, P.b);
+      }
+      for (let k = 0; k < 8; k++) {                                            // miolo: cone baixo de 8 faces, 1 cm acima das pétalas
+        const a0 = k / 8 * Math.PI * 2, a1 = (k + 1) / 8 * Math.PI * 2, r = 0.024;
+        pos.push(0, 0.03, 0, Math.cos(a1) * r, 0.018, -Math.sin(a1) * r, Math.cos(a0) * r, 0.018, -Math.sin(a0) * r);
+        for (let q = 0; q < 3; q++) col.push(C.r, C.g, C.b);
+      }
+      const ge = new THREE.BufferGeometry();
+      ge.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); ge.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
+      ge.computeVertexNormals(); return ge;
+    })();
+    // as do gramado (chão 0,2) e as dos canteiros (terra a 0,63): uma malha instanciada para todas, mais os cabinhos
+    const all = fl.map(([x, z, c]) => [x, z, c, 0.2, 0.33 + pzRand() * 0.1, 1.35 + pzRand() * 0.55]).concat(bedFlowers);
+    const fm = new THREE.InstancedMesh(flowerGeo, mat('#ffffff', { vertexColors: true, flatShading: false, side: THREE.DoubleSide }), all.length);
+    all.forEach(([x, z, c, , y, s], i) => { o.position.set(cx + x, y, cz + z); o.rotation.set((pzRand() - 0.5) * 0.5, pzRand() * 6.28, (pzRand() - 0.5) * 0.5); o.scale.setScalar(s); o.updateMatrix(); fm.setMatrixAt(i, o.matrix); fm.setColorAt(i, cc.set(c)); });
+    const stem = new THREE.InstancedMesh(new THREE.CylinderGeometry(0.01, 0.014, 1, 4), mat('#4f8a35'), all.length);
+    all.forEach(([x, z, , g0], i) => { fm.getMatrixAt(i, o.matrix); o.matrix.decompose(o.position, o.quaternion, o.scale); const h = o.position.y - g0; o.position.y = g0 + h / 2; o.rotation.set(0, 0, 0); o.scale.set(1.3, h, 1.3); o.updateMatrix(); stem.setMatrixAt(i, o.matrix); });
     for (const m of [fm, stem]) { m.castShadow = false; m.receiveShadow = true; m.userData.dynamic = true; g.add(m); }
     // arbustos baixos (folhagem redonda, dois tons)
     const sm = new THREE.InstancedMesh(new THREE.IcosahedronGeometry(1, 1), mat('#ffffff', { flatShading: true }), PZ_SHRUBS.length);
@@ -1988,11 +2028,26 @@ function buildPlazaLife() {
   erm.P.root.position.set(sE.x, GY, sE.z); erm.P.root.rotation.y = sE.ry; erm.ry = sE.ry; erm.st = { mode: 'sit', seat: PZ.seat, t: 0 }; erm.look = 0;
   const corn = erm.P.give(figureItem('corn'), 'L');
   const pg = new THREE.Group();                                        // pombo (instanciado)
-  pg.add(at(sphere(0.13, '#8d939c', 7, 5), 0, 0.14, 0)); pg.children[0].scale.set(1, 0.8, 1.45);
-  pg.add(at(sphere(0.075, '#5f6673', 6, 4), 0, 0.27, 0.15)); pg.add(at(cone(0.025, 0.06, '#d9a06a', 5), 0, 0.26, 0.23, Math.PI / 2, 0, 0));
-  pg.add(at(box(0.12, 0.03, 0.14, '#5f6673'), 0, 0.15, -0.2, 0.3, 0, 0));
-  const NP = 9, pigeons = dynamic(new THREE.InstancedMesh(vcMerge(pg).geometry, mat('#ffffff', { vertexColors: true }), NP));
+  // corpo arredondado, peito mais claro, pescoço furta-cor, asas com as duas faixas escuras, cauda de ponta escura,
+  // bico, olhinhos laranja e pés rosados (liso, como as pessoas; antes eram 4 peças facetadas)
+  const pgS = (r, c, x, y, z, sx = 1, sy = 1, sz = 1, ws = 12, hs = 9) => { const m = at(sphere(r, c, ws, hs), x, y, z); m.scale.set(sx, sy, sz); pg.add(m); };
+  pgS(0.13, '#9aa0a9', 0, 0.15, -0.01, 1, 0.82, 1.42);                                    // corpo
+  pgS(0.1, '#b9bdc4', 0, 0.14, 0.08, 1, 0.85, 1.0);                                       // peito
+  pgS(0.07, '#6e8a80', 0, 0.225, 0.11, 1.05, 1.1, 0.95);                                  // pescoço (verde-arroxeado)
+  pgS(0.07, '#5f6673', 0, 0.285, 0.15);                                                   // cabeça
+  for (const sd of [-1, 1]) {
+    pgS(0.085, '#8a909a', sd * 0.085, 0.165, -0.05, 0.42, 0.7, 1.55);                     // asa dobrada
+    for (const zz of [-0.04, -0.1]) pg.add(at(box(0.012, 0.025, 0.055, '#3f444c'), sd * 0.122, 0.16, zz));   // faixas escuras da asa
+    pgS(0.012, '#e07a2a', sd * 0.045, 0.3, 0.2, 1, 1, 1, 6, 4);                          // olho
+    pg.add(at(cyl(0.008, 0.008, 0.07, '#d47b7b', 4), sd * 0.04, 0.035, 0.0));             // perna
+  }
+  pg.add(at(cone(0.022, 0.055, '#d9a06a', 6), 0, 0.27, 0.235, Math.PI / 2, 0, 0));        // bico
+  pg.add(at(box(0.11, 0.025, 0.15, '#7c828c'), 0, 0.16, -0.21, 0.32, 0, 0));             // cauda
+  pg.add(at(box(0.112, 0.027, 0.04, '#3f444c'), 0, 0.142, -0.27, 0.32, 0, 0));           // ponta escura da cauda
+  const NP = 9, pigeons = dynamic(new THREE.InstancedMesh(vcMerge(pg).geometry, mat('#ffffff', { vertexColors: true, flatShading: false }), NP));
   pigeons.castShadow = true; pigeons.frustumCulled = false; group.add(pigeons);
+  { const tint = ['#ffffff', '#d2d5db', '#f4ece4', '#ffffff', '#c3c7cf', '#ffffff', '#efe7e0', '#dadde2', '#ffffff'], c = new THREE.Color();
+    for (let i = 0; i < NP; i++) pigeons.setColorAt(i, c.set(tint[i])); }             // cada pombo com um tom
   const home = { x: sE.x, z: sE.z - 1.9 };                             // na frente dela, no caminho
   const birds = [...Array(NP)].map((_, i) => ({ x: home.x - 1.4 + (i % 5) * 0.7, z: home.z + 0.3 - Math.floor(i / 5) * 0.5, a: i * 1.9, ph: i * 0.77, sp: 0.8 + (i % 3) * 0.25, fly: 0, fx: 0, fz: 0, tx: 0, tz: 0, y: 0, peck: 0 }));
   const grains = [], NG = 10;                                          // milho jogado (voando ou no chão)
@@ -2114,7 +2169,7 @@ function buildPlazaLife() {
   const davi = addNpc('davi', buildFigure({ k: 25, skin: '#f1c9a5', hair: '#6a4a2a', top: '#e0a33a', short: true, pants: '#2f4a6e', shoes: '#3a5f8f', sneakers: true, hat: 'cap', hatColor: '#2f4a6e', capLogo: '#e0a33a' }), 0, 0);
   const dog = pzDog(); group.add(dog.mesh);
   const leash = dynamic(new THREE.InstancedMesh(new THREE.CylinderGeometry(0.016, 0.016, 1, 5), mat('#c8312a'), 14)); leash.frustumCulled = false; leash.castShadow = false; group.add(leash);
-  const D = { node: 'R2', to: 'R3', from: [0, 0], x: 0, z: 0, s: 0, len: 1, lat: 0, sp: 0.8, yaw: 0, ph: 0, v: 0, pause: 0, pauseKind: null, wait: 0, side: 1, look: 0, leashHand: 'L' };
+  const D = { node: 'R2', to: 'R3', from: [0, 0], x: 0, z: 0, s: 0, len: 1, lat: 0, sp: 0.8, yaw: 0, ph: 0, v: 0, pause: 0, pauseKind: null, wait: 0, side: 1, look: 0, hand: 0 };
   const G = { x: 0, z: 0, yaw: 0, v: 0, ph: 0, sniff: 0, sx: 0, sz: 0, sit: 0, wag: 0, mode: 'follow', solo: 3 + Math.random() * 5 };
   let dogPos = null;
   const nodeXY = n => ND[n];
@@ -2193,17 +2248,29 @@ function buildPlazaLife() {
     dog.tail.rotation.set(0, Math.sin(G.wag) * (0.5 + 0.3 * sn), 0);
     dogPos = { x: cx + G.x, z: cz + G.z };
     // ---- a guia: da mão do lado do cachorro até a coleira, uma curva que cede quando está frouxa ----
-    const hand = D.side > 0 ? 'R' : 'L', sd = D.side > 0 ? 1 : -1;
+    // segura com a mão do lado em que o cachorro está DE FATO (com folga, para não ficar trocando de mão a cada passo)
     const taut = Math.min(1, Math.max(0, (gd - 1.3) / 0.8));
     group.updateMatrixWorld(true);
     dog.collar.getWorldPosition(_w);
     P.b.body.updateMatrixWorld(true);
     _v.copy(_w); P.b.body.worldToLocal(_v);                            // a mão vai um pouco na direção do cachorro quando a guia estica
+    if (_v.x > 0.18) D.hand = 1; else if (_v.x < -0.18) D.hand = -1; else if (!D.hand) D.hand = D.side;
+    const sd = D.hand, hand = sd > 0 ? 'R' : 'L';
     const hl = Math.hypot(_v.x, _v.z) || 1;
     reach(P, sd, sd * 0.42 + _v.x / hl * 0.1 * taut, 0.74 + 0.06 * taut, 0.16 + _v.z / hl * 0.12 * taut, sd * 0.6, -0.6, -0.3);
     P.root.updateMatrixWorld(true); P.hand[hand].getWorldPosition(_v);
     const L = 2.4, sag = Math.min(0.7, Math.sqrt(Math.max(0, L * L - _v.distanceToSquared(_w))) * 0.32);
-    const mx = (_v.x + _w.x) / 2, my = Math.max(GY + 0.08, (_v.y + _w.y) / 2 - sag), mz = (_v.z + _w.z) / 2;
+    let mx = (_v.x + _w.x) / 2, my = Math.max(GY + 0.08, (_v.y + _w.y) / 2 - sag), mz = (_v.z + _w.z) / 2;
+    {                                                                  // a curva contorna o corpo dele (nunca passa por dentro das pernas/quadril)
+      const ax = n.x, az = n.z, ex = _w.x - _v.x, ez = _w.z - _v.z, e2 = ex * ex + ez * ez || 1;
+      const tt = Math.min(1, Math.max(0, ((ax - _v.x) * ex + (az - _v.z) * ez) / e2));
+      const px = _v.x + ex * tt - ax, pz = _v.z + ez * tt - az, dd = Math.hypot(px, pz), R = 0.58;
+      if (dd < R && tt > 0.02) {
+        let ux = px / (dd || 1), uz = pz / (dd || 1);
+        if (dd < 1e-3) { ux = Math.cos(D.yaw) * sd; uz = -Math.sin(D.yaw) * sd; }
+        const k = (R - dd) * 2.2; mx += ux * k; mz += uz * k;
+      }
+    }
     const q = (tt, out) => { const a = (1 - tt) * (1 - tt), b2 = 2 * (1 - tt) * tt, c = tt * tt; return out.set(a * _v.x + b2 * mx + c * _w.x, Math.max(GY + 0.03, a * _v.y + b2 * my + c * _w.y), a * _v.z + b2 * mz + c * _w.z); };
     const p0 = new THREE.Vector3(), p1 = new THREE.Vector3();
     for (let i = 0; i < 14; i++) {
@@ -2290,7 +2357,7 @@ export function createWorld({ renderer, buildLot, buildResident, yardBuilders, p
   const ground = moon ? new THREE.Group() : buildGround(venice, SP);
   const sur = SP ? buildSurroundings(SP, dry, sk === 'city' ? cityLight(lights) : null) : null;
   if (sur) SOLIDS.push(...sur.solids);
-  const outskirts = moon || farm || sur ? new THREE.Group() : buildOutskirts(ground);   // Colheita: em volta são plantações (farmOutside.js)
+  const outskirts = moon || farm || sur ? new THREE.Group() : buildOutskirts(ground, snow);   // Colheita: em volta são plantações (farmOutside.js)
   const serra = CANAL && CANAL.canyon ? buildCanyonHills() : null;       // Cachoeira: serra de mata em volta do vale
   if (serra) scene.add(serra);
   if (venice || moon || farm) SOLIDS.length = solidsStart;              // Veneza: sem árvores de fora (laguna)
