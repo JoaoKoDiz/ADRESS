@@ -53,7 +53,7 @@ export function createChickens() {
         for (let k = 0; k < 3 + (gi % 3); k++) {
           const m = buildChicken(k + gi); root.add(m);
           const h = { m, x: A.x + (Math.random() - 0.5) * 2.4, z: A.z + (Math.random() - 0.5) * 2.4, ox: (Math.random() - 0.5) * 2.4, oz: (Math.random() - 0.5) * 2.4,
-            hd: Math.random() * 6, ph: Math.random() * 6, jump: null, flee: 0, delay: k * 0.25 };
+            hd: Math.random() * 6, ph: Math.random() * 6, ph0: Math.random() * 6, jump: null, flee: 0, delay: k * 0.25, mode: 'peck' };
           hens.push(h);
         }
         groups.push({ A, B, nx, nz, side: 'A', state: 'idle', timer: 8 + gi * 7 + Math.random() * 10, hens });
@@ -88,8 +88,15 @@ export function createChickens() {
           }
           let tx = dest.x + h.ox, tz = dest.z + h.oz, speed = g.state === 'cross' ? 3.2 : 0.8;
           if (g.state === 'cross' && g.t < h.delay) { tx = h.x; tz = h.z; }
-          if (g.state === 'idle') {                                       // cisca em volta do ponto, devagar
-            tx = goal.x + h.ox + Math.sin(t * 0.7 + h.ph) * 0.8; tz = goal.z + h.oz + Math.cos(t * 0.5 + h.ph) * 0.8;
+          if (g.state === 'idle') {                                       // cada uma no seu ritmo: anda um pouco, cisca parada, olha em volta
+            const far = Math.hypot(h.x - goal.x - h.ox * 0.6, h.z - goal.z - h.oz * 0.6) > 2.4;   // (fugiu da van: volta para perto do grupo)
+            const stale = h.mode === 'walk' && Math.hypot(h.wx - goal.x, h.wz - goal.z) > 3;      // (alvo escolhido antes de atravessar: ficou do lado de lá)
+            if ((h.it = (h.it ?? Math.random() * 2) - dt) <= 0 || stale || (far && h.mode !== 'walk')) {
+              const r = far ? 0 : Math.random();
+              h.mode = r < 0.4 ? 'walk' : r < 0.8 ? 'peck' : 'look'; h.it = h.mode === 'walk' ? 0.8 + Math.random() * 1.6 : 1.2 + Math.random() * 3;
+              if (h.mode === 'walk') { const a = Math.random() * Math.PI * 2, d = 0.4 + Math.random() * 1.1; h.wx = goal.x + h.ox * 0.6 + Math.cos(a) * d; h.wz = goal.z + h.oz * 0.6 + Math.sin(a) * d; }
+            }
+            if (h.mode === 'walk') { tx = h.wx; tz = h.wz; speed = 1.1; } else { tx = h.x; tz = h.z; }
           }
           if (van) {                                                      // van perto: corre para a beira mais próxima; encostou: pulo
             const d = Math.min(...van.circles.map(([x, z]) => Math.hypot(h.x - x, h.z - z)));
@@ -110,7 +117,14 @@ export function createChickens() {
           const moving = d > 0.05 && speed > 1;
           const ph = (h.ph += dt * (moving ? 22 : 4));
           um.legs[0].rotation.z = moving ? Math.sin(ph) * 0.7 : 0; um.legs[1].rotation.z = moving ? -Math.sin(ph) * 0.7 : 0;
-          um.head.rotation.z = moving ? Math.sin(ph * 2) * 0.25 : (Math.sin(ph) > 0.6 ? -0.7 : 0);   // ciscar
+          const idle = g.state === 'idle' && !moving && !(h.flee > 0);
+          if (idle && h.mode === 'peck') {                                // bicadas rápidas e irregulares, corpo inclinado
+            h.pk = (h.pk || 0) - dt; if (h.pk <= 0) { h.pkT = 0.18; h.pk = 0.25 + Math.random() * 0.9; }
+            h.pkT = Math.max(0, (h.pkT || 0) - dt);
+            um.head.rotation.z = h.pkT > 0 ? -0.9 : -0.15; um.head.rotation.y = 0; um.body.rotation.z = -0.12;
+          } else if (idle && h.mode === 'look') {                         // para e vira a cabeça de um lado para o outro, em trancos
+            um.head.rotation.z = 0.1; um.body.rotation.z = 0; um.head.rotation.y = Math.round(Math.sin(t * 1.7 + h.ph0) * 2) * 0.35;
+          } else { um.head.rotation.z = moving ? Math.sin(ph * 2) * 0.25 : 0; um.head.rotation.y = 0; um.body.rotation.z = 0; }
           um.body.position.y = moving ? Math.abs(Math.sin(ph)) * 0.08 : 0;
           h.m.position.set(h.x, 0, h.z); h.m.rotation.y = -h.hd;
         }

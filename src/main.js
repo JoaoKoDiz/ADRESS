@@ -34,7 +34,7 @@ import { createHUD } from './hud.js';
 import { createAudio } from './audio.js';
 import { buildLot } from './models/house.js';
 import { box as kbox, cyl as kcyl, sphere as ksphere, bakeStatic, mat, at, disposeTree } from './models/kit.js';
-import { buildResident } from './models/resident.js';
+import { buildResident, setResidentHandoff, residentFocus, setResidentPoint } from './models/resident.js';
 import { YARD_BUILDERS, YARD_BUILDERS_SNOW } from './models/yard.js';
 import { buildShopLot } from './models/shop.js';
 import { SHOPS, HOUSES, FUTS, L1_FIXED, L6_FIXED, WARES, TWINS, VENS, FAVS, MODS, FARMS, MOONS, GRILLBY, SNOW_FIXED, SNOW_EXTRAS, SNOW_DROP, GARDS, CANYON_EXTRAS, FOREST_EXTRAS, MDHS, MDSS, ROWS, WSHS, MVHS, MVSS, MVS_KEY } from './data.js';
@@ -2508,6 +2508,68 @@ function focusOf(h) {
   return focusPt;
 }
 
+// Descer/subir na van: o personagem sai pela porta da cabine (ou anda até ela) em vez de surgir/sumir do lado da van,
+// e a carroceria cede um pouco. Só no chão de verdade (não no terraço, na lancha nem na Lua).
+let doorStep = null;
+// A pé, a cabine fica vazia; ao subir, ele aparece ao volante. Cenas da história que escondem o personagem com o jogador
+// fora da van (conversa e missa na igreja, montagem da igreja, Grillby's em 1ª pessoa) também deixam a cabine vazia.
+const CAB_EMPTY_STATES = ['mstory', 'chseq', 'gstory'];
+walker.onShow = on => van.setCabDriver(!on && !CAB_EMPTY_STATES.includes(state));
+function vanDoorStep(out) {
+  if (roofWalk || VENICE || MOONV || !van.object.visible || heli.flying) return false;
+  const fx = Math.cos(van.heading), fz = Math.sin(van.heading);
+  const side = out ? walker.exitSide : ((walker.x - van.x) * fz - (walker.z - van.z) * fx >= 0 ? 1 : -1);   // +1: lado do motorista (esquerda)
+  if (!side) return false;
+  const door = { x: van.x + fx * 0.75 + side * fz * 1.45, z: van.z + fz * 0.75 - side * fx * 1.45 };
+  if (out) {
+    const end = { x: walker.x, z: walker.z };
+    if (!walker.pathFree([end], walkSolids(), door)) { van.jolt(side, 1); return false; }   // algo entre a porta e o lugar livre (cerca, poste): desce direto ao lado
+    walker.pose(door.x, door.z, van.heading);                                  // (controles e câmera seguem a van; só o corpo sai virado para fora)
+    walker.walkPath([end], 5.2, van.heading, Math.atan2(-side * fx, side * fz));
+  } else {
+    const lx = (walker.x - van.x) * fx + (walker.z - van.z) * fz, lat = Math.abs((walker.x - van.x) * fz - (walker.z - van.z) * fx);
+    const pts = [];
+    if (lat < 1.95) { const a = Math.max(-3.1, Math.min(3.2, lx)); pts.push({ x: van.x + fx * a + side * fz * 1.95, z: van.z + fz * a - side * fx * 1.95 }); }   // na frente/atrás: contorna a lataria
+    pts.push(door);
+    if (!walker.pathFree(pts, walkSolids())) return false;   // o caminho até a porta atravessaria algo: entra direto (como antes)
+    walker.walkPath(pts, 6.5);
+  }
+  doorStep = out ? 'out' : 'in';
+  if (out) van.jolt(side, 1);
+  return true;
+}
+/** A caixa do K nos braços do personagem: junto do peito, acompanhando o passo. */
+function carryParcel() {
+  const f = walker.facing, hc = Math.cos(f), hs = Math.sin(f), by = walker.object.children[0] ? walker.object.children[0].position.y : 0;
+  parcel.position.set(walker.x + hc * 0.5, walker.floor + 0.68 + by, walker.z + hs * 0.5); parcel.rotation.set(0, -f, 0);
+}
+function enterVanNow() {
+  if (carrying) resetParcel();
+  const fx = Math.cos(van.heading), fz = Math.sin(van.heading);
+  van.jolt((walker.x - van.x) * fz - (walker.z - van.z) * fx >= 0 ? 1 : -1, 0.8);   // a carroceria cede quando ele sobe
+  walker.show(false); walker.setFloor(0); roofWalk = null; actionLock = 0.5; setState('drive');
+}
+
+const POINT_REL = new Set(['front', 'beside', 'near', 'cross', 'bridge']);
+/** Durante a entrega: no celular em pé, a câmera se vira para o morador; a pé, o personagem olha para ele (e, se estava
+ *  colado na porta, dá um passo para trás quando o morador sai, em vez de ficar dentro dele). */
+let footBack = false;
+function residentLook(dt) {
+  const f = residentFocus();
+  rig.setFocus(f);
+  if (!footDelivery || !walker.visible) return;
+  if (state === 'ring' && stateT < 0.1) footBack = false;
+  if (walker.scripted) { walker.stepScript(dt); return; }
+  if (!f) { walker.idle(dt); return; }
+  const dx = walker.x - f.x, dz = walker.z - f.z, d = Math.hypot(dx, dz);
+  if (!footBack && d < 1.5) {
+    footBack = true;
+    const k = (1.85 - d) / Math.max(d, 1e-3), P = { x: walker.x + dx * k, z: walker.z + dz * k };
+    if (walker.pathFree([P], walkSolids())) { walker.walkPath([P], 2.4, null, walker.facing, true); walker.stepScript(dt); return; }
+  }
+  walker.face(f.x, f.z, dt);
+}
+
 // ---------- Atualização ----------
 function update(dt, t) {
   stateT += dt;
@@ -2559,6 +2621,7 @@ function update(dt, t) {
             if (gameMode === 'career') career.exitVan(van.x, van.z, van.heading, van.speed, shopFronts());   // Bairro 4: "Estacione de ré"
             van.stop(); nearHouse = -1; nearPump = false;
             walker.show(true);
+            vanDoorStep(true);                         // sai pela porta da cabine e dá dois passos para o lado
             setState('walk');
             break;
           }
@@ -2604,18 +2667,27 @@ function update(dt, t) {
       if (stateT > FUEL_TIME) { fuelMsgT = 3; fuelMsg = FUEL_LINES[Math.floor(Math.random() * FUEL_LINES.length)]; actionLock = 0.3; setState('drive'); }
       break;
     case 'ring':
-      if (stateT > RESIDENT_APPEAR && !HOUSES[pending].narrator) world.showResident(pending, 'angry');   // K não atende: continua lendo
+      if (stateT > RESIDENT_APPEAR && !HOUSES[pending].narrator) world.showResident(pending, 'door');   // abre a porta e vem até o portão (K não atende: continua lendo)
+      residentLook(dt);
       if (stateT > RING_TIME) {
         const stepBefore = game.step, indicated = game.route[game.step] === pending;
         dialog = game.visit(pending, gameMode === 'career' ? careerLevel : freeLevel);   // (o bairro dá o jeito das falas)
         if (gameMode === 'career') career.visit(pending, dialog.success, indicated, stepBefore, game, { time: matchTimer.time, bumps });   // na entrega certa, confirma e salva as missões desta partida
         if (gameMode === 'career' && dialog.success) matchTimer.stop();   // Carreira: a entrega certa encerra a partida — o tempo para aqui
-        if (!dialog.narrator) world.showResident(pending, dialog.success ? 'happy' : 'angry');
+        if (!dialog.narrator) {
+          // entrega certa: a encomenda sai do lado da van (ou das mãos do personagem, a pé) e vai para as mãos do morador;
+          // errada: a reação segue o temperamento dele (e reconhece quando o jogador insiste na mesma casa)
+          if (dialog.success) setResidentHandoff(footDelivery ? { x: walker.x, y: walker.floor + 1.1, z: walker.z, r: 0.45 } : { x: van.x, y: van.object.position.y + 1.6, z: van.z, r: 1.35 });
+          // aponta para a próxima casa só quando a própria fala já diz onde ela fica (quadra da frente, do lado, perto, outro lado do canal)
+          setResidentPoint(!dialog.success && dialog.info && (dialog.facts || []).some(f => POINT_REL.has(f)) ? doorPoint(game.slotOf[dialog.info.h]) : null);
+          world.showResident(pending, dialog.success ? 'happy' : 'angry:' + (dialog.temper || '') + ((game.visits.get(pending) || 0) > 1 ? ':again' : ''));
+        }
         dialog.success ? audio.success() : dialog.narrator ? null : audio.grumble();
         setState('dialog');
       }
       break;
     case 'dialog':
+      residentLook(dt);
       if ((stateT > 0.25 && input.action()) || (dialog.success && stateT > SUCCESS_AUTO)) {
         if (dialog.success && gameMode === 'free') nextDelivery();
         else if (dialog.success) { endToMap = true; setState('fadeOut'); }   // Carreira: entrega certa encerra a partida e volta ao mapa
@@ -2655,12 +2727,19 @@ function update(dt, t) {
       van.stop();
       if (!roofWalk && TERRAIN.kind !== 'flat') walker.setFloor(TERRAIN.h(walker.x, walker.z));   // Bairro 9: ladeiras e escadarias
       if (VENICE) walker.setFloor(VENICE.walkH(walker.x, walker.z));   // Veneza: cais, vielas e pontes
+      if (walker.scripted && doorStep === 'out') { const ax = input.axis(); if (ax.x || ax.z || input.action()) { walker.stopScript(); doorStep = null; } }   // descendo: mexeu ou apertou E, já vale
+      if (walker.scripted) {                          // descendo/subindo na van: dois passos curtos (subindo, nada interrompe)
+        const done = walker.stepScript(dt);
+        if (carrying) carryParcel();
+        if (done && doorStep === 'in') { doorStep = null; enterVanNow(); }
+        else if (done) doorStep = null;
+        break;
+      }
+      walker.liveFrame();
       walker.update(dt, input.axis(), rig.mode === 'chase' ? 'car' : 'screen', roofWalk ? roofSolids() : walkSolids(), van);
       if (gameMode === 'career') career.walk(walker.x, walker.z, PLAZA);   // Bairro 2: "Conheça a praça" (fica pendente até a entrega certa)
-      if (carrying) {                               // caixa nas mãos, na frente do peito
-        const hc = Math.cos(walker.heading), hs = Math.sin(walker.heading);
-        parcel.position.set(walker.x + hc * 0.62, 0.62, walker.z + hs * 0.62); parcel.rotation.set(0, -walker.heading, 0);
-      }
+      walker.setCarry(carrying);
+      if (carrying) carryParcel();                  // caixa nas mãos, na frente do peito
       actionLock = Math.max(0, actionLock - dt);
       nearHouse = VENICE || SPOTS ? findNearHouseFoot() : -1;   // Veneza/Morro/Colheita: dá para entregar a pé
       if (nearGrillDoor()) nearHouse = -1;                 // na porta do Grillby's, E entra (a entrega é no ponto da rua)
@@ -2676,9 +2755,9 @@ function update(dt, t) {
       if (nearHouse >= 0) { pending = nearHouse; nearHouse = -1; footDelivery = true; audio.bell(); setState('ring'); }
       else if (nearLounger()) startRoofTalk();             // no terraço a van fica perto: falar com ele tem prioridade
       else if (nearChurchK()) startChurchTalk();       // na igreja também (a van pode ter entrado pela porta)
-      else if (walker.nearVan(van)) { if (carrying) resetParcel(); walker.show(false); walker.setFloor(0); roofWalk = null; actionLock = 0.5; setState('drive'); }   // a caixa volta ao lugar
+      else if (walker.nearVan(van)) { if (!vanDoorStep(false)) enterVanNow(); }   // anda até a porta e entra (a caixa volta ao lugar)
       else if (nearParcel()) carrying = true;
-      else if (nearK()) startTalk();
+      else if (nearK()) { walker.setCarry(false, true); startTalk(); }   // (entrega a caixa: os braços voltam para o lado na hora)
       break;
     }
     case 'grill':                                    // Grillby's: fade, troca de cenário, fade
@@ -2740,7 +2819,8 @@ function update(dt, t) {
       break;
     }
     case 'chat': {                                  // Medieval: conversa com um morador (não é entrega nem dica)
-      walker.update(dt, { x: 0, z: 0 }, 'car', walkSolids(), van);
+      if (chatNpc && chatNpc.x != null) walker.face(chatNpc.x, chatNpc.z, dt, true);   // vira para quem fala (com passinhos) e escuta, assentindo de leve
+      else walker.idle(dt);
       talkBox.update(dt); if (input.action()) talkBox.press();
       break;
     }

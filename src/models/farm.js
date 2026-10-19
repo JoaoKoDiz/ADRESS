@@ -3,7 +3,8 @@
 // celeiro ou galpão), plantação (milharal, horta, pomar ou pasto com vacas) e extras (caixa-d'água, feno, ferramentas).
 // Também o cenário fixo (estradas de terra, lavouras, pastos, árvores) e o trator.
 import * as THREE from 'three';
-import { box, cyl, sphere, cone, at, mat, bakeStatic, dynamic } from './kit.js';
+import { box, cyl, sphere, cone, at, mat, bakeStatic, dynamic, vcMerge } from './kit.js';
+import { buildFigure } from '../grillbyInside.js';
 import { gableRoof } from './venice.js';
 import { FARM_COL, FARM_ROOF, FARM_GATE } from '../data.js';
 import { FARM, FARM_LOCAL as L } from '../farmPlan.js';
@@ -16,12 +17,30 @@ function fenceLine(add, x0, z0, x1, z1) {                     // postes + 2 trav
   for (let k = 0; k <= n; k++) add(box(0.22, 1.3, 0.22, WOOD), x0 + (x1 - x0) * k / n, 0.65, z0 + (z1 - z0) * k / n);
   for (const y of [0.55, 1.05]) add(box(0.1, 0.14, len, '#a5835a'), (x0 + x1) / 2, y, (z0 + z1) / 2, 0, ry, 0);
 }
-function cow(add, x, z, r) {
+/** Vaca (frente +X). Com `anims` (lote), a cabeça e o rabo ficam soltos: ela pasta (baixa a cabeça, mastiga, levanta e
+ *  olha em volta) e espanta mosca com o rabo, cada uma no seu tempo; sem `anims` (cenário), fica parada. */
+function cow(add, x, z, r, anims, ph = 0) {
   const g = new THREE.Group();
   const a = (m, X, Y, Z) => g.add(at(m, X, Y, Z));
   a(box(1.8, 0.9, 0.9, '#f4f1ea'), 0, 1.15, 0); a(box(0.6, 0.5, 0.92, '#2b2b2b'), -0.3, 1.25, 0); a(box(0.5, 0.4, 0.92, '#2b2b2b'), 0.5, 1.0, 0);
-  a(box(0.55, 0.55, 0.55, '#f4f1ea'), 1.1, 1.45, 0); a(box(0.3, 0.25, 0.5, '#e8a7a0'), 1.4, 1.3, 0);
   for (const [lx, lz] of [[-0.65, -0.3], [-0.65, 0.3], [0.65, -0.3], [0.65, 0.3]]) a(box(0.2, 0.7, 0.2, '#f4f1ea'), lx, 0.35, lz);
+  a(box(0.3, 0.12, 0.4, '#e8a7a0'), -0.45, 0.68, 0);                                       // úbere
+  const head = new THREE.Group(), hg = new THREE.Group(); head.position.set(0.85, 1.4, 0);
+  hg.add(at(box(0.55, 0.55, 0.55, '#f4f1ea'), 0.25, 0.05, 0), at(box(0.3, 0.25, 0.5, '#e8a7a0'), 0.55, -0.1, 0));
+  for (const s of [-1, 1]) { hg.add(at(box(0.08, 0.18, 0.08, '#e8dcc0'), 0.18, 0.38, s * 0.2)); hg.add(at(box(0.08, 0.14, 0.24, '#2b2b2b'), 0.12, 0.18, s * 0.36)); hg.add(at(box(0.05, 0.08, 0.04, '#1d1d1d'), 0.5, 0.15, s * 0.2)); }
+  const tail = new THREE.Group(), tg = new THREE.Group(); tail.position.set(-0.9, 1.5, 0);
+  tg.add(at(box(0.08, 0.75, 0.08, '#f4f1ea'), 0, -0.38, 0), at(box(0.14, 0.18, 0.14, '#2b2b2b'), 0, -0.8, 0));
+  if (anims) {
+    head.add(vcMerge(hg)); tail.add(vcMerge(tg)); g.add(dynamic(head), dynamic(tail));
+    let graze = 0, next = 2 + (ph * 7) % 6, down = (ph * 3) % 2 < 1;
+    anims.push((t, dt) => {
+      if ((next -= dt) <= 0) { down = !down; next = down ? 5 + Math.random() * 7 : 2 + Math.random() * 4; }
+      graze += ((down ? 1 : 0) - graze) * Math.min(1, dt * 1.6);
+      head.rotation.z = -0.95 * graze + Math.sin(t * 7 + ph) * 0.03 * graze;               // pastando (mastiga)
+      head.rotation.y = (1 - graze) * Math.sin(t * 0.4 + ph) * 0.5;                          // de cabeça erguida, olha em volta
+      tail.rotation.x = Math.sin(t * 2.3 + ph) * 0.25 + Math.max(0, Math.sin(t * 0.9 + ph * 2) - 0.7) * 1.6 * Math.sin(t * 11);
+    });
+  } else { for (const c of [...hg.children]) head.add(c); for (const c of [...tg.children]) tail.add(c); g.add(head, tail); }
   add(g, x, 0, z, 0, r, 0);
 }
 function tree(add, x, z, s = 1, fruit = null) {
@@ -30,7 +49,7 @@ function tree(add, x, z, s = 1, fruit = null) {
   if (fruit) for (let k = 0; k < 6; k++) { const a = k * 1.05; add(sphere(0.18, fruit, 5, 4), x + Math.cos(a) * 1.1 * s, 2.2 * s + (k % 2) * 0.5, z + Math.sin(a) * 1.1 * s); }
 }
 /** Lavoura/pasto/pomar num retângulo (x0..x1, z0..z1), em coordenadas do grupo. */
-function crop(add, type, x0, x1, z0, z1) {
+function crop(add, type, x0, x1, z0, z1, anims = null, ph = 0) {
   const w = x1 - x0, d = z1 - z0, cx = (x0 + x1) / 2, cz = (z0 + z1) / 2;
   if (type === 'corn') {
     add(box(w, 0.08, d, '#8a6a3c'), cx, 0.04, cz);
@@ -51,7 +70,7 @@ function crop(add, type, x0, x1, z0, z1) {
   } else {                                                          // pasto com vacas e cocho
     add(box(w, 0.06, d, '#a7cf6a'), cx, 0.03, cz);
     fenceLine(add, x0, z0, x1, z0); fenceLine(add, x0, z1, x1, z1); fenceLine(add, x0, z0, x0, z1); fenceLine(add, x1, z0, x1, z1);
-    cow(add, x0 + w * 0.3, z0 + d * 0.35, 0.4); cow(add, x0 + w * 0.7, z0 + d * 0.7, 2.2);
+    cow(add, x0 + w * 0.3, z0 + d * 0.35, 0.4, anims, ph); cow(add, x0 + w * 0.7, z0 + d * 0.7, 2.2, anims, ph + 2.7);
     add(box(2.0, 0.5, 0.7, '#7a7f86'), x1 - 2, 0.25, z0 + 1.4);
   }
 }
@@ -108,7 +127,9 @@ export function buildFarmLot(h) {
     for (let x = -5; x <= 5; x += 1) P(box(0.06, H, 0.06, '#7d838b'), bx + x, H / 2, fz + 0.04);
   }
   // plantação e extras
-  crop(P, h.crop, L.crop.x0, L.crop.x1, L.crop.z0, L.crop.z1);
+  const anims = [], ph = h.index * 1.31;
+  crop(P, h.crop, L.crop.x0, L.crop.x1, L.crop.z0, L.crop.z1, anims, ph);
+  fieldWork(root, h, anims, ph);
   const E = L.extra, ex = (E.x0 + E.x1) / 2, ez = (E.z0 + E.z1) / 2;
   if (h.extra === 'tank') {                                                // caixa-d'água no alto
     for (const [x, z] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) P(box(0.2, 4, 0.2, WOOD), ex + 2 + x * 1.1, 2, ez + z * 1.1);
@@ -157,7 +178,60 @@ export function buildFarmLot(h) {
       P(cyl(0.2, 0.22, 0.4, '#3f8a8a', 8), -3.4, FY + 0.2, FZ + 0.65); P(cyl(0.04, 0.05, 0.5, '#3f8a8a', 5), -3.15, FY + 0.35, FZ + 0.65, 0, 0, -0.9);   // regador
     }
   }
-  return bakeStatic(root);
+  bakeStatic(root);
+  if (anims.length) root.userData.update = (t, dt) => { if (root.visible) for (const f of anims) f(t, dt); };
+  return root;
+}
+
+// roupa de roça (como os moradores da Colheita: xadrez ou lisa, jardineira, chapéu de palha ou boné, botas)
+const WORK_LOOKS = [
+  { shirt: '#c8402f', stripes: '#2b2b2b', pants: '#3a5f8f', overalls: true, hat: 'straw', hair: '#5a3a22', boots: true, shoes: '#5a3b22' },
+  { shirt: '#f1ece0', pants: '#5a4a3a', hat: 'cap', hatColor: '#3f8a4a', hair: '#2a1d14', boots: true, shoes: '#5a3b22', skin: '#c98d62' },
+  { shirt: '#9fc0de', pants: '#2f4a6e', overalls: true, hat: 'straw', hatBand: '#c8402f', hair: '#c9a46a', boots: true, shoes: '#5a3b22' },
+  { shirt: '#e8d27a', pants: '#6b5a3a', hat: 'kerchief', hatColor: '#c8402f', hair: '#3a2a1a', longHair: true, boots: true, shoes: '#5a3b22', skin: '#8d5a3b' },
+];
+/** Trabalho no campo (uma pessoa por propriedade com lavoura, cada uma no seu ritmo): capinando a horta com a enxada,
+ *  colhendo fruta no pomar (cesto no chão), quebrando milho no milharal. Fica na beira da plantação, longe do caminho
+ *  da porteira à porta; o corpo vai junto com o lote assado, só braços e cabeça mexem. */
+function fieldWork(root, h, anims, ph) {
+  if (h.crop === 'pasture') return;
+  const C = L.crop, look = WORK_LOOKS[h.index % WORK_LOOKS.length];
+  const f = buildFigure({ ...look, moving: h.crop === 'garden' ? ['armL', 'armR'] : h.crop === 'corn' ? ['armR', 'head'] : ['armL', 'armR', 'head'],
+    headPose: { x: 0.35 }, armPose: h.crop === 'corn' ? { L: [-0.2, 0, -0.25] } : null });   // (na horta, olha para a enxada; no milharal, o braço do saco fica parado)
+  root.add(f.root);
+  const tool = new THREE.Group();
+  if (h.crop === 'garden') {                                                                  // capinando entre os canteiros
+    f.root.position.set(C.x0 + 0.8, 0, C.z0 + 13.1); f.root.rotation.y = Math.PI / 2;   // (no corredor entre os canteiros da frente)
+    // enxada: o cabo sai da mão para a frente e para baixo e a lâmina fica na ponta (em repouso, encostada na terra)
+    tool.add(at(cyl(0.035, 0.035, 1.5, '#8a5a36', 5), 0, -0.58, 0.14, 2.9, 0, 0), at(box(0.34, 0.05, 0.24, '#6b6f76'), 0, -1.33, 0.33, 2.9, 0, 0));
+    tool.position.set(0, -0.52, 0); f.armR.add(dynamic(tool));
+    anims.push(t => {
+      const k = (t * 0.9 + ph) % 1;                                                       // sobe devagar, desce de uma vez e puxa a terra
+      const lift = k < 0.55 ? Math.sin(k / 0.55 * Math.PI / 2) : k < 0.7 ? Math.cos((k - 0.55) / 0.15 * Math.PI / 2) : 0;
+      f.armR.rotation.set(-0.5 - lift * 1.0, 0, -0.08); f.armL.rotation.set(-0.45 - lift * 0.9, 0, 0.3);
+      tool.rotation.x = -0.3 - lift * 0.15;
+    });
+  } else if (h.crop === 'orchard') {                                                          // colhendo fruta do pé, cesto no chão
+    const tx = C.x0 + 2.2, tz = C.z0 + 2.2 + 4.2 * 3;                                     // (pé da fileira da frente)
+    f.root.position.set(tx - 1.1, 0, tz + 0.2); f.root.rotation.y = Math.PI / 2;
+    root.add(at(cyl(0.38, 0.3, 0.42, '#b8804a', 10), tx - 1.3, 0.21, tz + 1.05));
+    for (const [dx, dz, c] of [[-0.12, 0, '#e0402a'], [0.1, 0.1, '#ff8c1a'], [0.05, -0.12, '#e0402a']]) root.add(at(sphere(0.12, c, 6, 4), tx - 1.3 + dx, 0.44, tz + 1.05 + dz));
+    anims.push(t => {
+      const k = Math.sin(t * 0.8 + ph), reach = Math.max(0, k);
+      f.armR.rotation.set(-1.4 - reach * 1.3, 0, 0.15); f.armL.rotation.set(-0.3 + Math.min(0, k) * 0.4, 0, -0.15);
+      f.head.rotation.x = -0.45 * reach + 0.25 * (1 - reach); f.head.rotation.y = 0.2 * Math.sin(t * 0.3 + ph);
+      f.body.rotation.y = Math.min(0, k) * -0.7;                                              // vira para pôr no cesto
+    });
+  } else {                                                                                    // quebrando milho na beira do milharal
+    f.root.position.set(C.x0 + 0.1, 0, C.z1 - 1.2); f.root.rotation.y = Math.PI / 2;
+    f.body.add(at(box(0.5, 0.6, 0.3, '#c9b48a'), -0.55, 0.42, 0.25, 0, 0, -0.2));         // saco pendurado no braço (vai junto com o lote assado)
+    anims.push(t => {
+      const k = (t * 0.55 + ph) % 1, pull = k < 0.3 ? k / 0.3 : k < 0.45 ? 1 : Math.max(0, 1 - (k - 0.45) / 0.25);
+      f.armR.rotation.set(-1.2 - pull * 0.5, 0, 0.1 + pull * 0.25);
+      f.head.rotation.x = -0.15; f.head.rotation.y = Math.sin(t * 0.25 + ph) * 0.35;
+    });
+  }
+  f.body.userData.dynamic = h.crop === 'orchard';                                              // (no pomar o corpo gira: fica solto)
 }
 
 /** Cenário fixo: estradas de terra e decoração (lavouras, pastos, pomares, grupos de árvores). */
@@ -178,16 +252,66 @@ export function buildFarmScene(g, F) {
   return g;
 }
 
-/** Trator (frente para +X): rodas grandes atrás, cabine e escapamento. */
-export function buildTractor(color = '#c8402f') {
+/** Roda (eixo em Z, gira em torno dele): pneu, aro colorido, cubo e, nas grandes, as garras do pneu. */
+function wheel(r, w, hub, lugs) {
   const g = new THREE.Group();
-  const a = (m, x, y, z, rx = 0, ry = 0, rz = 0) => g.add(at(m, x, y, z, rx, ry, rz));
-  a(box(3.0, 1.0, 1.4, color), 0.2, 1.2, 0);
-  a(box(1.4, 0.7, 1.2, color), 1.6, 1.05, 0);
-  a(box(1.3, 1.5, 1.5, '#dfe6ee'), -0.7, 2.4, 0); a(box(1.5, 0.12, 1.7, color), -0.7, 3.2, 0);
-  a(cyl(0.09, 0.09, 1.2, '#2b2b2b', 6), 1.3, 2.2, 0.4);
-  for (const s of [-1, 1]) { a(cyl(1.0, 1.0, 0.55, '#1f2023', 12), -0.9, 1.0, s * 1.0, Math.PI / 2, 0, 0); a(cyl(0.5, 0.5, 0.58, '#e8c23a', 10), -0.9, 1.0, s * 1.0, Math.PI / 2, 0, 0);
-    a(cyl(0.55, 0.55, 0.4, '#1f2023', 10), 1.7, 0.55, s * 0.85, Math.PI / 2, 0, 0); }
-  g.traverse(o => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
+  g.add(at(cyl(r, r, w, '#1f2023', 14), 0, 0, 0, Math.PI / 2, 0, 0));
+  g.add(at(cyl(r * 0.55, r * 0.55, w + 0.04, hub, 10), 0, 0, 0, Math.PI / 2, 0, 0));
+  g.add(at(cyl(r * 0.18, r * 0.18, w + 0.1, '#5a5a5a', 8), 0, 0, 0, Math.PI / 2, 0, 0));
+  for (let k = 0; k < lugs; k++) { const a = k / lugs * Math.PI * 2; g.add(at(box(0.16, 0.12, w * 0.92, '#2a2b2e'), Math.cos(a) * (r + 0.02), Math.sin(a) * (r + 0.02), 0, 0, 0, a)); }
+  const m = vcMerge(g); m.castShadow = true; m.receiveShadow = true;
+  const pv = new THREE.Group(); pv.add(m); return pv;
+}
+const DRIVERS = [
+  { shirt: '#c8402f', stripes: '#2b2b2b', pants: '#3a5f8f', overalls: true, hat: 'straw', hair: '#5a3a22' },
+  { shirt: '#f1ece0', pants: '#5a4a3a', hat: 'cap', hatColor: '#2f6fb0', hair: '#2a1d14' },
+  { shirt: '#3f8a4a', stripes: '#1f3a28', pants: '#2f4a6e', hat: 'straw', hatBand: '#c8402f', hair: '#c9a46a', skin: '#c98d62' },
+  { shirt: '#e8d27a', pants: '#3d4a66', overalls: true, hat: 'cap', hatColor: '#c8402f', hair: '#3a2a1a', skin: '#8d5a3b' },
+];
+let tractorN = 0;
+/** Trator (frente para +X): capô com grade e faróis, arco de proteção com toldo (dá para ver o tratorista), paralamas
+ *  sobre as rodas grandes de trás (com garras), rodas da frente menores e escapamento. As partes fixas viram uma malha só;
+ *  as rodas giram e o tratorista olha em volta e mexe o volante (userData.drive(dt, v), chamado por quem move o trator). */
+export function buildTractor(color = '#c8402f') {
+  const g = new THREE.Group(), fixed = new THREE.Group(), n = tractorN++;
+  const a = (m, x, y, z, rx = 0, ry = 0, rz = 0) => fixed.add(at(m, x, y, z, rx, ry, rz));
+  a(box(2.6, 0.5, 0.95, '#38393d'), 0.35, 0.95, 0);                                        // chassi
+  a(box(1.9, 0.92, 1.0, color), 1.15, 1.48, 0); for (const s of [-1, 1]) a(box(1.7, 0.07, 0.04, '#f4f1ea'), 1.2, 1.72, s * 0.51);   // capô (com friso claro)
+  a(box(0.08, 0.66, 0.84, '#2b2b2b'), 2.12, 1.42, 0);                                      // grade
+  for (let y = 1.2; y < 1.7; y += 0.14) a(box(0.1, 0.04, 0.8, '#6b6b6b'), 2.14, y, 0);
+  for (const s of [-1, 1]) a(box(0.08, 0.18, 0.22, '#fff6c8', { emissive: '#fff0a0', emissiveIntensity: 0.4 }), 2.15, 1.82, s * 0.36);   // faróis
+  a(box(0.8, 0.6, 1.05, color), -1.05, 1.42, 0);                                          // tanque, sob o assento
+  a(box(1.0, 0.08, 1.15, '#4a4b50'), -0.25, 1.46, 0);                                       // plataforma dos pés
+  for (const s of [-1, 1]) {                                                              // paralamas e degrau
+    a(box(1.75, 0.1, 0.66, color), -0.9, 2.14, s * 1.0); a(box(0.1, 0.5, 0.66, color), -1.8, 1.9, s * 1.0, 0, 0, -0.3); a(box(0.1, 0.42, 0.66, color), 0.0, 1.95, s * 1.0, 0, 0, 0.35);
+    a(box(0.5, 0.06, 0.3, '#5a5a5a'), 0.3, 0.85, s * 0.62);
+  }
+  for (const [x, z] of [[-1.42, -0.6], [-1.42, 0.6], [-0.05, -0.6], [-0.05, 0.6]]) a(box(0.09, 1.5, 0.09, '#2b2b2b'), x, 2.6, z);   // arco de proteção
+  a(box(1.7, 0.1, 1.55, color), -0.72, 3.38, 0); a(box(1.74, 0.06, 1.59, '#f4f1ea'), -0.72, 3.3, 0);   // toldo
+  a(box(0.52, 0.12, 0.56, '#2b2b2b'), -1.02, 1.78, 0); a(box(0.1, 0.55, 0.56, '#2b2b2b'), -1.3, 2.05, 0, 0, 0, 0.12);   // assento
+  a(cyl(0.035, 0.035, 0.75, '#2b2b2b', 5), -0.13, 1.88, 0, 0, 0, 1.05); a(cyl(0.22, 0.22, 0.04, '#2b2b2b', 12), -0.47, 2.1, 0, 0, 0, 1.15);   // volante
+  a(cyl(0.07, 0.08, 1.0, '#3a3a3a', 6), 1.55, 2.45, 0.32); a(cyl(0.1, 0.1, 0.12, '#2b2b2b', 6), 1.55, 2.98, 0.32);   // escapamento
+  const body = vcMerge(fixed); body.castShadow = true; body.receiveShadow = true; g.add(body);
+  const wheels = [];
+  for (const s of [-1, 1]) {
+    const big = wheel(1.0, 0.55, '#e8c23a', 12); big.position.set(-0.9, 1.0, s * 1.0); g.add(big); wheels.push([big, 1.0]);
+    const sm = wheel(0.55, 0.36, '#e8c23a', 0); sm.position.set(1.65, 0.55, s * 0.84); g.add(sm); wheels.push([sm, 0.55]);
+  }
+  const d = buildFigure({ ...DRIVERS[n % DRIVERS.length], sit: 0.42, moving: ['head', 'armL', 'armR'] });
+  d.root.position.set(-1.0, 1.46, 0); d.root.rotation.y = Math.PI / 2; d.root.scale.setScalar(0.86); g.add(d.root);
+  for (const arm of [d.armL, d.armR]) arm.rotation.set(-1.05, 0, 0);
+  let T = n * 1.7, look = 0, lookT = 2 + (n % 3), steer = 0;
+  g.userData.drive = (dt, v) => {
+    T += dt;
+    for (const [w, r] of wheels) w.rotation.z -= v * dt / r;
+    if ((lookT -= dt) <= 0) { look = (Math.random() - 0.5) * 1.6; lookT = 2.5 + Math.random() * 5; }      // olha para o lado de vez em quando
+    d.head.rotation.y += (look - d.head.rotation.y) * Math.min(1, dt * 2.5);
+    d.head.rotation.x = Math.sin(T * 7.3) * 0.03 * Math.min(1, v);                              // sacolejo da estrada de terra
+    steer += ((Math.sin(T * 0.6) * 0.5 + Math.sin(T * 1.9) * 0.2) * Math.min(1, v) - steer) * Math.min(1, dt * 3);
+    d.armL.rotation.z = steer * 0.25; d.armR.rotation.z = steer * 0.25;
+    d.body.position.y = 0.42 + 0.02 - 0.6 + Math.abs(Math.sin(T * 7.3)) * 0.025 * Math.min(1, v);
+    body.position.y = Math.abs(Math.sin(T * 5.1)) * 0.02 * Math.min(1, v);
+  };
+  g.traverse(o => { if (o.isMesh) { o.castShadow = true; } });
   return g;
 }

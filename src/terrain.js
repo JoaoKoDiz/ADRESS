@@ -2,7 +2,7 @@
 // passarelas e placas LADO LESTE / LADO OESTE). Só visual: a colisão está em layout.js (SOLIDS) e a altura em TERRAIN.h.
 import * as THREE from 'three';
 import { box, at, mesh, textTexture, dynamic } from './models/kit.js';
-import { cobble, gableRoof } from './models/venice.js';
+import { cobble, gableRoof, buildLagoonHorizon } from './models/venice.js';
 import { buildRail } from './train.js';
 import { buildFavelaScene } from './models/favela.js';
 import { buildFluxScene } from './models/flux.js';
@@ -392,5 +392,6 @@ function buildVenice(g) {
   }
   signPost(g, '⚓ ATRACAR AQUI', lotX(4) + 2, lotZ(2) + LOT - 0.4, 0, '#c8402f');
   signPost(g, '⚓ ATRACAR AQUI', lotX(3) + LOT - 2, lotZ(5) + 0.4, Math.PI, '#c8402f');
+  g.add(buildLagoonHorizon());   // horizonte da laguna (ilhas, campanário, barcos ao longe; acompanha a câmera)
 }
 function cylLike(r, h, color) { return new THREE.Mesh(new THREE.CylinderGeometry(r, r, h, 10), new THREE.MeshLambertMaterial({ color })); }

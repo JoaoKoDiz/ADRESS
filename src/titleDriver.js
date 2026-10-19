@@ -19,7 +19,7 @@ export function createTitleDriver(container, audio) {
   scene.add(sun);
 
   // a van do jogo, de lado (lado do motorista = −Z, virado para a câmera)
-  const van = createVan(scene);
+  const van = createVan(scene, { driver: false, openWindow: true });   // (o motorista daqui é o sentado com o braço na janela)
   van.teleport(0, 0, 0);
   van.setGhost(true);                         // a van da tela inicial não colide com o bairro
   const heli = createHeli(van, audio);        // "Livre": vira helicóptero e decola

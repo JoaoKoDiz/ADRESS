@@ -23,18 +23,21 @@ export function createGait(rig, o) {
     return [Math.atan2(tx, -ty) + alp, Math.PI - gam];
   }
 
-  /** travel: distância andada neste quadro (local, + para a frente, − de ré). */
-  function update(dt, travel) {
+  /** travel: distância andada neste quadro (local, + para a frente, − de ré). turn: giro do corpo (rad/s) — virando no
+   *  lugar, os pés dão passinhos curtos (levantam e apoiam quase no mesmo ponto) em vez de girar colados no chão. */
+  let tS = 0;
+  function update(dt, travel, turn = 0) {
     dt = Math.max(dt, 1e-4);
     const v = travel / dt;
     vS += (v - vS) * Math.min(1, dt * 10);
-    const av = Math.abs(vS);
-    amt += ((av > 0.12 ? 1 : 0) - amt) * Math.min(1, dt * (av > 0.12 ? 7 : 5));
+    tS += (Math.abs(turn) - tS) * Math.min(1, dt * 12);
+    const av = Math.abs(vS), moving = av > 0.12, shuffle = !moving && tS > 0.8;
+    amt += ((moving || shuffle ? 1 : 0) - amt) * Math.min(1, dt * (moving ? 7 : shuffle ? 9 : 5));
     if (Math.abs(vS) > 0.05) dir = vS > 0 ? 1 : -1;
     const sf = Math.min(1, av / 6);                               // 0 devagar … 1 trote
-    const f = 1.2 + 0.33 * av;                                     // passos por segundo (ciclo completo) acompanham a velocidade
+    const f = shuffle ? 1.5 + 0.12 * Math.min(tS, 5) : 1.2 + 0.33 * av;   // passos por segundo (ciclo completo) acompanham a velocidade (ou o giro)
     const duty = clamp(stride * f / Math.max(av, 1e-3), 0.24, 0.62);
-    const S = Math.min(stride, av * duty / f);                     // quanto o pé recua durante o apoio = quanto o corpo anda
+    const S = shuffle ? 0.04 : Math.min(stride, av * duty / f);    // quanto o pé recua durante o apoio = quanto o corpo anda
     if (amt > 0.002) u = (u + dir * f * dt + 1) % 1;
     const drop = (0.02 + 0.04 * sf) * amt;                       // joelhos levemente dobrados ao andar (peso)
     const bob = -0.022 * sf * Math.cos(4 * Math.PI * (u - 0.08)) * amt;
