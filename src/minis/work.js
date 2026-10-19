@@ -4,7 +4,7 @@
 // fábrica de tijolo com telhado em dentes de serra, doca de carga com caminhão de ré, chaminé, transportadora de telhado em arco
 // com contêineres, caixa-d'água no alto, pracinha, postes e árvores verdes. Silhuetas diferentes para cada uso.
 
-export const signY = 9;
+export const signY = 11;
 export const thumb = { dir: [-7, 24, 26], k: 0.84, dy: -0.8 };
 
 export function build(ctx) {
@@ -18,7 +18,9 @@ export function build(ctx) {
   const add = (m, x, y, z, rx = 0, ry = 0, rz = 0) => { g.add(at(m, x, y, z, rx, ry, rz)); return m; };
   const geoCache = new Map();
   const geo = (k, f) => { if (!geoCache.has(k)) geoCache.set(k, f()); return geoCache.get(k); };
-  const M = (gm, c) => new THREE.Mesh(gm, mat(C(c)));
+  const M = (gm, c) => new THREE.Mesh(gm, mat(c));
+  const F = (w, h, c) => M(geo(`f${w},${h}`, () => new THREE.PlaneGeometry(w, h)), c);   // detalhe chapado na fachada (frente em +z)
+  const SL = (wx, wz, c) => M(geo(`s${wx},${wz}`, () => new THREE.PlaneGeometry(wx, wz).rotateX(-Math.PI / 2)), c);   // água de telhado (só a face de cima)
   /** grupo local (frente em +z quando ry = 0) */
   const local = (x, z, ry = 0, y = 0) => {
     const gg = new THREE.Group(); gg.position.set(x, y, z); gg.rotation.y = ry; g.add(gg);
@@ -67,14 +69,12 @@ export function build(ctx) {
       a(box(1.0, 0.07, d + 0.02, C('#cdc2aa')), x, 0.035, zc + 0.005);                                   // barrado
       a(prism(0.98, d, 0.42, C(fac)), x, h, zc);                                                         // oitão (só aparece nas pontas)
       const th = Math.atan2(0.42, d / 2), L = Math.hypot(0.42, d / 2) + 0.08;
-      a(box(1.02, 0.05, L, C(rc)), x, h + 0.21, zc + d / 4 + 0.02, th); a(box(1.02, 0.05, L, C(rc)), x, h + 0.21, zc - d / 4 - 0.02, -th);
-      a(box(1.04, 0.05, 0.06, C(rc)), x, h + 0.43, zc);                                                 // cumeeira
+      a(SL(1.02, L, C(rc)), x, h + 0.235, zc + d / 4 + 0.02, th); a(SL(1.02, L, C(rc)), x, h + 0.235, zc - d / 4 - 0.02, -th);
       a(box(0.06, h, 0.05, C('#ece4d4')), x - 0.5, h / 2, -0.43);                                       // pilastra da divisa
-      a(box(0.24, 0.42, 0.04, C(DOOR[i % 4])), x - 0.22, 0.21, -0.43);                                  // porta
-      a(box(0.3, 0.26, 0.04, C('#ffffff')), x + 0.2, 0.42, -0.435); a(box(0.22, 0.18, 0.05, C('#8fc6e8')), x + 0.2, 0.42, -0.43);
-      if (up) for (const wx of [-0.22, 0.2]) { a(box(0.3, 0.26, 0.04, C('#ffffff')), x + wx, 0.86, -0.435); a(box(0.22, 0.18, 0.05, C('#8fc6e8')), x + wx, 0.86, -0.43); }
-      for (const wy of up ? [0.42, 0.86] : [0.42]) { a(box(0.3, 0.24, 0.04, C('#ffffff')), x + 0.12, wy, -1.405); a(box(0.22, 0.17, 0.05, C('#8fc6e8')), x + 0.12, wy, -1.41); }   // janela dos fundos
-      a(box(0.22, 0.4, 0.04, C('#6b4428')), x - 0.25, 0.2, -1.405);                                      // porta dos fundos
+      a(F(0.24, 0.42, C(DOOR[i % 4])), x - 0.22, 0.21, -0.446);                                        // porta
+      for (const [wx, wy] of up ? [[0.2, 0.42], [-0.22, 0.86], [0.2, 0.86]] : [[0.2, 0.42]]) { a(F(0.3, 0.26, C('#ffffff')), x + wx, wy, -0.447); a(F(0.22, 0.18, C('#8fc6e8')), x + wx, wy, -0.445); }
+      for (const wy of up ? [0.42, 0.86] : [0.42]) { a(F(0.3, 0.24, C('#ffffff')), x + 0.12, wy, -1.403, 0, Math.PI); a(F(0.22, 0.17, C('#8fc6e8')), x + 0.12, wy, -1.405, 0, Math.PI); }   // janela dos fundos
+      a(F(0.22, 0.4, C('#6b4428')), x - 0.25, 0.2, -1.403, 0, Math.PI);                                  // porta dos fundos
       if (i % 3 === 0) a(box(0.14, 0.3, 0.14, C('#8a4632')), x + 0.28, h + 0.32, zc - 0.22);           // chaminé
       a(box(1.0, 0.03, 0.42, C('#7fc45c')), x, 0.015, -0.22);                                            // jardinzinho
       a(box(0.12, 0.03, 0.42, C('#e2d9c5')), x - 0.22, 0.03, -0.22);                                    // caminho até a porta
@@ -84,7 +84,7 @@ export function build(ctx) {
     }
   };
   // ---------- árvore verde (como as do bairro) ----------
-  const tree = (x, z, r = 0.42, c = '#4f9a3e') => { add(cyl(0.07, 0.09, 0.5, C('#6b4526'), 6), x, Y + 0.25, z); add(sphere(r, C(c), 8, 6), x, Y + 0.5 + r * 0.7, z); };
+  const tree = (x, z, r = 0.42, c = '#4f9a3e') => { add(cyl(0.07, 0.09, 0.5, C('#6b4526'), 6), x, Y + 0.25, z); add(sphere(r, C(c), 7, 5), x, Y + 0.5 + r * 0.7, z); };
   const backyard = (x0, x1, z0, z1) => {                                                                // quintal dos fundos: grama mais escura e cerca de madeira
     add(box(x1 - x0, 0.02, z1 - z0, C('#86bd5c')), (x0 + x1) / 2, Y + 0.01, (z0 + z1) / 2);
   };
@@ -139,7 +139,7 @@ export function build(ctx) {
   tree(-6.1, 6.1, 0.38); tree(-3.4, 6.15, 0.4);
 
   // ---------- veículos (frente em +x local) ----------
-  const wheel = (a, x, z, r) => a(cyl(r, r, 0.08, C('#1f2023'), 8), x, r, z, Math.PI / 2, 0, 0);
+  const wheel = (a, x, z, r) => a(cyl(r, r, 0.08, C('#1f2023'), 6), x, r, z, Math.PI / 2, 0, 0);
   const truck = (x, z, ry, c, flat = false) => {                    // caminhão baú (ou de carroceria com carga)
     const a = local(x, z, ry, Y);
     a(box(1.9, 0.12, 0.42, C('#2e3036')), -0.05, 0.2, 0);
