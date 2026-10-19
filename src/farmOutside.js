@@ -22,7 +22,8 @@ function hash(i, j) { let h = (i * 374761393 + j * 668265263) ^ 0x5bd1e995; h = 
 function buildCombine() {
   const g = new THREE.Group(), m = c => new THREE.MeshStandardMaterial({ color: c, roughness: 0.8, flatShading: true });
   const B = (w, h, d, c, x, y, z, rz = 0) => { const o = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), m(c)); o.position.set(x, y, z); o.rotation.z = rz; g.add(o); return o; };
-  B(5.2, 2.6, 3.0, '#3f8a3a', 0, 2.1, 0); B(2.0, 1.6, 2.2, '#dfe6ee', 1.6, 3.9, 0); B(2.2, 0.15, 2.4, '#3f8a3a', 1.6, 4.75, 0);
+  B(5.2, 2.6, 3.0, '#3f8a3a', 0, 2.1, 0); B(2.0, 1.6, 2.2, '#2b3d52', 1.6, 3.9, 0); B(2.2, 0.15, 2.4, '#f4f1ea', 1.6, 4.75, 0);   // cabine envidraçada
+  for (const [x, z] of [[0.62, -1.08], [0.62, 1.08], [2.58, -1.08], [2.58, 1.08]]) B(0.12, 1.6, 0.12, '#3f8a3a', x, 3.9, z);
   B(1.2, 0.8, 6.4, '#e8c23a', 3.4, 0.9, 0);                                   // plataforma de corte
   const reel = new THREE.Mesh(new THREE.CylinderGeometry(0.55, 0.55, 6.0, 8), m('#c8402f')); reel.rotation.x = Math.PI / 2; reel.position.set(3.9, 1.6, 0); g.add(reel);
   B(4.2, 0.35, 0.35, '#3f8a3a', -0.6, 4.0, 1.9, 0.15);                        // tubo de descarga
@@ -61,15 +62,22 @@ export function createFarmOutside() {
       // fileiras (os milharais que as colheitadeiras usam ficam à parte)
       const near = tiles.filter(tl => tl.type === 'corn').map(tl => ({ tl, d: Math.hypot((tl.ax + tl.bx) / 2 - MAPW / 2, (tl.az + tl.bz) / 2 - MAPW / 2) })).sort((a, b) => a.d - b.d).slice(0, 2).map(o => o.tl);
       const nRows = Math.floor((TD - 2) / ROW);
+      const siteSet = new Set(tiles.filter(tl => tl.type !== 'pasture' && !near.includes(tl) && hash(tl.j * 7 + 3, tl.i * 5 + 1) < 0.16));   // talhões com sítio no canto
+      const inSite = (tl, x, z) => siteSet.has(tl) && x < tl.ax + 34 && z < tl.az + 17;
       const rows = {}; for (const k in CROPS) rows[k] = inst(tiles.filter(tl => tl.type === k && !near.includes(tl)).length * nRows, CROPS[k].c);
       for (const tl of tiles) {
         if (!CROPS[tl.type] || near.includes(tl)) continue; const C = CROPS[tl.type];
-        for (let k = 0; k < nRows; k++) put(rows[tl.type], (tl.ax + tl.bx) / 2, 0.05 + C.h / 2, tl.az + 1.5 + k * ROW, TW - 3, C.h, C.w);
+        for (let k = 0; k < nRows; k++) {
+          const z = tl.az + 1.5 + k * ROW;
+          if (inSite(tl, tl.ax, z)) put(rows[tl.type], (tl.ax + 34 + tl.bx - 1.5) / 2, 0.05 + C.h / 2, z, TW - 35.5, C.h, C.w);   // as fileiras começam depois do sítio
+          else put(rows[tl.type], (tl.ax + tl.bx) / 2, 0.05 + C.h / 2, z, TW - 3, C.h, C.w);
+        }
       }
       // pomares: tronco + copa (algumas com frutas)
       const orch = tiles.filter(tl => tl.type === 'orchard'), per = Math.floor((TW - 6) / 7) * Math.floor((TD - 6) / 7);
       const trunks = inst(orch.length * per, '#6b4526'), crowns = inst(orch.length * per, '#3f8f3a'), fruitC = inst(orch.length * per, '#e0402a');
       for (const tl of orch) for (let x = tl.ax + 4; x < tl.bx - 3; x += 7) for (let z = tl.az + 4; z < tl.bz - 3; z += 7) {
+        if (inSite(tl, x, z)) continue;
         put(trunks, x, 0.8, z, 0.4, 1.6, 0.4); put(crowns, x, 2.6, z, 3.2, 2.6, 3.2); if (hash(x | 0, z | 0) < 0.5) put(fruitC, x + 0.9, 2.5, z + 1.2, 0.5, 0.5, 0.5);
       }
       // pastos: alguns fardos e vacas (caixas)
@@ -82,6 +90,27 @@ export function createFarmOutside() {
         for (let z = tl.az; z <= tl.bz + 0.01; z += 6) for (const x of [tl.ax - 1, tl.bx + 1]) put(posts, x, 0.6, z, 0.25, 1.2, 0.25);
         for (const y of [0.5, 0.95]) { put(rails, (tl.ax + tl.bx) / 2, y, tl.az - 1, TW + 2, 0.12, 0.12); put(rails, (tl.ax + tl.bx) / 2, y, tl.bz + 1, TW + 2, 0.12, 0.12);
           put(rails, tl.ax - 1, y, (tl.az + tl.bz) / 2, 0.12, 0.12, TD + 2); put(rails, tl.bx + 1, y, (tl.az + tl.bz) / 2, 0.12, 0.12, TD + 2); }
+      }
+      // sítios espalhados pelas lavouras: casa e celeiro de telhado de duas águas, silo e um grupo de árvores (dão escala e
+      // dizem que ali também se mora e trabalha). Ficam num canto do talhão, perto da estrada de terra.
+      const sites = [...siteSet];
+      const prism = new THREE.BufferGeometry().setFromPoints([]);
+      { const sh = new THREE.Shape(); sh.moveTo(-0.5, 0); sh.lineTo(0.5, 0); sh.lineTo(0, 1); sh.closePath();
+        const eg = new THREE.ExtrudeGeometry(sh, { depth: 1, bevelEnabled: false }); eg.translate(0, 0, -0.5); prism.copy(eg); }
+      const instG = (geo, n, color) => { const im = new THREE.InstancedMesh(geo, new THREE.MeshStandardMaterial({ color, roughness: 0.9, flatShading: true }), Math.max(1, n)); im.count = 0; im.frustumCulled = false; root.add(im); return im; };
+      const putR = (im, x, y, z, sx, sy, sz, ry) => { M.compose(V.set(x, y, z), q.setFromAxisAngle(V2.set(0, 1, 0), ry), S.set(sx, sy, sz)); im.setMatrixAt(im.count++, M); };
+      const V2 = new THREE.Vector3(), n = sites.length;
+      const walls = inst(n, '#efe6d2'), roofs = instG(prism, n, '#b5532f'), barnW = inst(n, '#a8382c'), barnR = instG(prism, n, '#6b6f76'), trim = inst(n * 2, '#f4f1ea');
+      const silo = instG(new THREE.CylinderGeometry(1, 1, 1, 12).translate(0, 0.5, 0), n, '#c9cdd2'), dome = instG(new THREE.SphereGeometry(1, 12, 5, 0, Math.PI * 2, 0, Math.PI / 2), n, '#9aa3ab');
+      const tTr = inst(n * 4, '#6b4526'), tCr = instG(new THREE.IcosahedronGeometry(1, 0), n * 4, '#3f8a3c');
+      for (const tl of sites) {
+        const cx = tl.ax + 9, cz = tl.az + 8, ry = hash(tl.i, tl.j * 3) < 0.5 ? 0 : Math.PI / 2;
+        put(walls, cx, 1.7, cz, 9, 3.4, 7); putR(roofs, cx, 3.4, cz, 7.6, 2.4, 9.8, Math.PI / 2);   // casa
+        put(barnW, cx + 14, 2.8, cz + 2, 10, 5.6, 9); putR(barnR, cx + 14, 5.6, cz + 2, 9.6, 3.6, 10.6, Math.PI / 2);   // celeiro
+        put(trim, cx + 14, 2.0, cz + 6.55, 4, 4, 0.1); put(trim, cx, 1.1, cz + 3.55, 1.2, 2.2, 0.1);
+        putR(silo, cx + 22, 0, cz - 2, 2.6, 11, 2.6, 0); putR(dome, cx + 22, 11, cz - 2, 2.6, 1.6, 2.6, 0);
+        for (let k = 0; k < 4; k++) { const tx = cx - 6 + (k % 2) * 3.5, tz = cz - 7 + Math.floor(k / 2) * 3.2, sc = 1.2 + hash(k, tl.i) * 0.6;
+          put(tTr, tx, 1.1 * sc, tz, 0.45 * sc, 2.2 * sc, 0.45 * sc); putR(tCr, tx, 3.1 * sc, tz, 1.9 * sc, 1.7 * sc, 1.9 * sc, k); }
       }
       for (const im of root.children) if (im.isInstancedMesh) { im.instanceMatrix.needsUpdate = true; im.castShadow = false; im.receiveShadow = false; }
       // colheitadeiras: cada uma num milharal perto do bairro; as fileiras dele são instâncias próprias (encurtam ao colher)
@@ -123,6 +152,7 @@ export function createFarmOutside() {
           if (s <= len) { const f = s / len; m.mesh.position.set(a[0] + (b[0] - a[0]) * f, 0, a[1] + (b[1] - a[1]) * f); m.mesh.rotation.y = -Math.atan2(b[1] - a[1], b[0] - a[0]); break; }
           s -= len;
         }
+        if (m.mesh.userData.drive) m.mesh.userData.drive(dt, m.v);
       }
       for (const c of combines) {                                   // colheitadeira: passadas de 4 fileiras, ida e volta
         const tl = c.tl, n = c.cut.length, passes = Math.ceil(n / 4), L = TW - 3;

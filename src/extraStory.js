@@ -4,7 +4,7 @@
 // aparece a figura preta gigante e a cena volta para a tela inicial. Nada é salvo como concluído.
 import * as THREE from 'three';
 import { whitenFade } from './whiteout.js';
-import { buildStandingReader, walkK } from './models/reader.js';
+import { buildStandingReader, walkK, kTalk, kGestureReset } from './models/reader.js';
 import { smoothCharacter } from './models/kit.js';
 import { buildStandingReader as buildFigureBody } from './models/readerClassic.js';   // a figura mantém o formato antigo
 import { buildBody } from './models/driver.js';
@@ -83,7 +83,38 @@ const TALK3 = [   // diálogo 3: durante o deslocamento, depois que ela reaparec
   'Seria você contra todos.',
   'Eu só fui o primeiro a dizer.',
 ].map(P_);
+TALK3[15].unshift({ p: 0.5 });                           // "Patético.": um silêncio antes
 const HINT = 'E / Espaço — Continuar';
+// a figura fala devagar, sem pressa nenhuma: letras mais lentas e pausas maiores na pontuação (o texto é o mesmo)
+const FIG_TALK = { hint: HINT, cps: 27, beat: 1.4 };
+// pequenos movimentos da figura (só a silhueta muda): yaw/pitch/roll da cabeça e lean = inclinar o corpo para o jogador.
+// No diálogo 2 a cabeça já está um pouco virada para ele (yaw −0,18). think = durante as pausas […].
+const Y2 = -0.18;
+const FIG2 = [
+  { yaw: Y2, rate: 0.8 }, { yaw: Y2 },
+  { yaw: Y2, roll: 0.2, rate: 0.9 },                        // "Esperando que alguma coisa fosse dita para você também?": a cabeça de lado
+  { yaw: Y2, pitch: -0.18, lean: 0.06, rate: 0.7 },         // "Eu vi o que você fez.": baixa a cabeça para ele
+  { yaw: Y2, pitch: -0.18, lean: 0.06 },
+  { yaw: Y2, roll: -0.08 }, { yaw: Y2 },
+  { yaw: Y2, roll: -0.16, rate: 0.8 },                      // "… você ainda faria tudo outra vez?"
+  { yaw: Y2, pitch: -0.08 }, { yaw: Y2 }, { yaw: Y2 }, { yaw: Y2 },
+  { yaw: Y2, think: { roll: 0.14 } }, { yaw: Y2 },
+  { yaw: Y2, pitch: -0.26, lean: 0.12, rate: 0.6 },         // "Eu estou olhando agora.": debruça-se sobre ele
+  { yaw: Y2, pitch: -0.26, lean: 0.12, think: { roll: 0.2 } },
+  { yaw: Y2, pitch: -0.14, lean: 0.08, roll: 0.08 },
+];
+const FIG3 = TALK3.map(() => ({}));
+Object.assign(FIG3, {
+  0: { pitch: -0.1, rate: 0.8 }, 2: { pitch: -0.14, think: { roll: 0.14 } },
+  7: { roll: 0.2, rate: 0.8 },                              // "É isso que você chama de integridade?"
+  9: { roll: -0.12, yaw: 0.3, rate: 0.7 },                  // "[…] Não precisa responder.": desvia, com desdém
+  15: { roll: -0.18, pitch: 0.12, rate: 3 },                // "Patético.": a cabeça vai para trás, de lado
+  22: { pitch: -0.18, lean: 0.08 }, 26: { roll: 0.18 },
+  29: { roll: 0.12, yaw: 0.3, rate: 0.7 },                  // "E não há mais ninguém aqui…": o vazio em volta
+  30: { think: { roll: 0.14 } },
+  35: { lean: 0.12, pitch: -0.22, rate: 0.7 }, 36: { lean: 0.14, pitch: -0.24 },
+  37: { lean: 0.06, pitch: -0.1, roll: 0.1 },
+});
 const VMAX = 240;                                       // velocidade do deslocamento (cenário relativo)
 
 const SKY_V = `varying vec3 vW; void main(){ vec4 w = modelMatrix * vec4(position, 1.0); vW = w.xyz; gl_Position = projectionMatrix * viewMatrix * w; }`;
@@ -245,7 +276,7 @@ export function createExtraStory(ctx) {
     K.position.copy(K0); K.rotation.y = K_FACE; K.visible = true; K.userData.legs.forEach(l => { l.rotation.z = 0; l.userData.knee.rotation.z = 0; l.userData.foot.rotation.z = 0; });
     delete K.userData.gait; K.userData.arms.forEach(a => { a.sh.quaternion.copy(a.rest); a.elbow.quaternion.copy(a.erest); }); K.userData.body.position.set(0, 0, 0); K.userData.torso.rotation.set(0, 0, 0); K.userData.head.rotation.set(0, 0, 0);
     R.position.copy(R0); R.rotation.y = -Math.PI / 2; R.visible = true;
-    fig.visible = false; figMat.color.copy(BLACK); figMat.opacity = 0; if (fh) fh.rotation.set(0, 0, 0);
+    fig.visible = false; figMat.color.copy(BLACK); figMat.opacity = 0; kGestureReset(fig); if (fh) fh.rotation.set(0, 0, 0);
     fig.position.set(0.4, 0, -19.5); fig.rotation.y = -Math.PI / 2; streaks.visible = false;
     camera.fov = 50; camera.updateProjectionMatrix();
   }
@@ -356,8 +387,8 @@ export function createExtraStory(ctx) {
         const u = Math.min(1, S.phase === 'rise' ? t / (T.rise + T.ease) : (T.rise + t) / (T.rise + T.ease));
         const ue = u * u * (3 - 2 * u);
         outShot(-1.7 + 0.5 * ue, 1.25 + 0.15 * ue, 9 - 1.2 * ue, [0.3, 3.2, -18], 34);   // (a figura acima da caixa de fala, o jogador à frente)   // (a figura fica acima da caixa de fala)
-        if (fh && S.phase === 'talk2') fh.rotation.y = -0.18 * Math.min(1, t / 2.5);   // a cabeça se inclina de leve para o jogador
-        if (S.phase === 'rise' && t >= T.rise) { go('talk2'); talkBox.show(TALK2, () => { if (S && S.phase === 'talk2') startTravel(); }, { hint: HINT }); }
+        if (S.phase === 'talk2' && talkBox.open) kTalk(fig, dt, FIG2, talkBox, {});   // a cabeça se inclina de leve para o jogador (e os gestos das falas)
+        if (S.phase === 'rise' && t >= T.rise) { go('talk2'); talkBox.show(TALK2, () => { if (S && S.phase === 'talk2') startTravel(); }, FIG_TALK); }
         break;
       }
       case 'travel':                                       // levado para trás por uma força de fora; a figura fica para trás
@@ -375,13 +406,14 @@ export function createExtraStory(ctx) {
           if (t >= T.travel) {                             // exatamente 2 s depois: ela reaparece à frente, subindo de baixo para o quadro
             const k = Math.min(1, (t - T.travel) / T.up), e = 1 - Math.pow(1 - k, 3);
             fig.position.set(P.x + F.x * 14, -FIG_H * 1.15 * (1 - e), P.z + F.z * 14); fig.rotation.y = -Math.atan2(-F.z, -F.x); figMat.opacity = 1;
-            if (fh) fh.rotation.y = 0;
+            kGestureReset(fig);
           }
           if (t >= T.travel + T.up) {                      // chegou: começa o diálogo 3 (o deslocamento continua)
             go('talk3');
-            talkBox.show(TALK3, () => { if (S && S.phase === 'talk3') { go('pull'); S.pullFrom = { x: walker.x, z: walker.z }; } }, { hint: HINT });   // a última fala → o puxão
+            talkBox.show(TALK3, () => { if (S && S.phase === 'talk3') { go('pull'); S.pullFrom = { x: walker.x, z: walker.z }; } }, FIG_TALK);   // a última fala → o puxão
           }
         }
+        if (S.phase === 'talk3' && talkBox.open) kTalk(fig, dt, FIG3, talkBox, {});   // gestos da figura nas falas
         // câmera atrás do jogador (costas), olhando para onde ele está virado; tremor leve com a velocidade
         const sh = 0.025 * (v / VMAX) * (S.phase === 'pull' ? 3 : 1), C0 = S.cam;
         camera.position.set(C0.x + (Math.random() - 0.5) * sh, C0.y + (Math.random() - 0.5) * sh, C0.z + (Math.random() - 0.5) * sh);

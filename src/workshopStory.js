@@ -6,7 +6,7 @@
 // os consertos ficam salvos. A pergunta da etapa: o que acontece com a vontade de fazer o bem quando o reconhecimento não vem.
 import * as THREE from 'three';
 import { buildWorkshop } from './models/workshop.js';
-import { buildStandingReader, reachArm } from './models/reader.js';
+import { buildStandingReader, reachArm, kTalk, kGestureReset } from './models/reader.js';
 import { buildMedPerson, animatePerson } from './models/medievalPeople.js';
 
 export const SHOP_KEY = 'adress.med.shop';
@@ -39,11 +39,52 @@ export const INTRO_KEY = 'adress.med.churchIntro';                    // a monta
 const introDone = () => { try { return localStorage.getItem(INTRO_KEY) === '1'; } catch (e) { return false; } };
 // pedidos curtos do K (quem procurar) e falas dos fornecedores (onde estava guardado), sem virar uma missão à parte
 const TASKS = {
-  1: { item: 'ferragens', ask: ['O ferreiro, perto da praça, deve ter dobradiças e um ferrolho que sirvam.'], from: 'smith', give: ['Dobradiças e um ferrolho, como ele pediu.', 'Diga que, se faltar alguma coisa, é só voltar.'], obj: ['Busque as ferragens com o ferreiro (perto da praça).', 'Leve as ferragens até a oficina, ao lado da igreja.'] },
-  2: { item: 'madeira', ask: ['No depósito perto da praça há tábuas boas. [...] Vamos precisar delas para a bancada.'], from: 'depot', give: ['Tábuas de carvalho, secas há dois invernos.', 'Aguentam bem uma bancada.'], obj: ['Busque a madeira no depósito (perto da praça).', 'Leve a madeira até a oficina.'] },
-  3: { item: 'travessa', ask: ['Falta uma travessa firme para a frente da bancada.', 'A senhora do largo, no oeste do bairro, guarda madeira antiga. [...] Talvez tenha uma.'], from: 'elder', give: ['Uma travessa? [...] Guardei uma no celeiro, do tear da minha mãe.', 'Madeira boa. [...] Só estava esperando alguém precisar dela.'], obj: ['A tábua da frente rachou: busque uma travessa com a senhora do largo oeste.', 'Entregue a travessa a K.'] },
+  1: { item: 'ferragens', ask: ['O ferreiro, perto da praça, deve ter dobradiças e um ferrolho que sirvam. [...] Estas aqui já desistiram faz tempo.'], from: 'smith', give: ['Dobradiças e um ferrolho, como ele pediu. Ainda mornos da forja.', 'Diga a ele que, se faltar alguma coisa, é só voltar.'], obj: ['Busque as ferragens com o ferreiro (perto da praça).', 'Leve as ferragens até a oficina, ao lado da igreja.'] },
+  2: { item: 'madeira', ask: ['No depósito perto da praça há tábuas boas. [...] Vamos precisar delas para a bancada.', 'Esta aqui balança só de olhar para ela.'], from: 'depot', give: ['Tábuas de carvalho, secas há dois invernos.', 'Pode levar. [...] Eu estava mesmo precisando de espaço aqui.'], obj: ['Busque a madeira no depósito (perto da praça).', 'Leve a madeira até a oficina.'] },
+  3: { item: 'travessa', ask: ['Falta uma travessa firme para a frente da bancada.', 'A senhora do largo, no oeste do bairro, guarda madeira antiga. [...] Talvez tenha uma.'], from: 'elder', give: ['Uma travessa? [...] Guardei uma no celeiro, do tear da minha mãe.', 'Madeira boa. [...] Só estava esperando alguém precisar dela.'], obj: ['A tábua da frente rachou. Busque uma travessa com a senhora do largo oeste.', 'Entregue a travessa a K.'] },
 };
 const HINT = { hint: 'E / Espaço — Continuar' };   // as conversas da oficina avançam só com E / Espaço
+// Olhares do K nas conversas da oficina (kTalk em models/reader.js): 'p' = o jogador; 'door' = a porta; 'bench' = a bancada;
+// 'wheel' = a roda consertada; 'room' = o alto da oficina (o lugar todo). think = durante as pausas [...] (pensando).
+const G_W1 = [
+  { at: 'p', rate: 2.2 },                                                                    // "Você encontrou."
+  { at: 'p', then: { from: 0.45, at: 'room', w: 0.7 } },                                    // "… tudo pronto"
+  { at: 'p', w: 0.4, pitch: -0.2, think: { w: 0.2, pitch: -0.25 } },                        // "[...] Ainda não consegui."
+  { at: 'room', w: 0.8, rate: 1.8 },                                                         // "Este lugar estava fechado…"
+  { at: 'p', then: [{ from: 0.78, at: 'wheel', w: 0.8 }, { from: 0.89, at: 'door', w: 0.8 }] },   // "uma roda, uma porta"
+  { at: 'p', think: { w: 0.5, pitch: -0.1 } },
+  { at: 'room', w: 0.6, then: { from: 0.5, at: 'door', w: 0.8 } },                          // "Outras continuam dando trabalho."
+  { at: 'door', w: 0.9 },                                                                    // "… terminar essa porta."
+  { at: 'door', w: 0.6, think: { w: 0.3, pitch: -0.25, roll: 0.05 }, then: { from: 0.1, at: 'p', w: 0.8 } },
+  { at: 'p' },
+];
+const G_DOOR = [
+  { at: 'door', w: 0.9 }, { at: 'door', w: 0.9 }, { at: 'p' },
+  { at: 'door', w: 0.7, then: { from: 0.45, at: 'p', w: 1 } },
+  { at: 'p', think: { at: 'bench', w: 0.6 } },                                               // "as peças que sobraram": onde guardar
+];
+const G_END = [
+  { at: 'door', w: 0.8, then: { from: 0.45, at: 'bench', w: 0.9 } },                        // a porta… a bancada
+  { at: 'room', w: 0.6, then: { from: 0.6, at: 'p', w: 1 } },
+  { at: 'p', w: 0.6, pitch: -0.1 },
+  { at: 'p', w: 0.3, pitch: -0.22 },
+  { at: 'door', w: 0.7, then: { from: 0.6, at: 'bench', w: 0.8 } },
+  { at: 'p' },
+  { at: 'p', w: 0.3, yaw: 0.25, pitch: -0.1, think: { w: 0.2, yaw: 0.3, pitch: -0.2 } },   // "Também pensei que… alguém fosse perceber": não olha para quem ouve
+  { at: 'door', w: 0.6, roll: 0.05 },                                                        // "Talvez estejam ocupados…": lá fora
+  { at: 'bench', w: 0.8, pitch: -0.05 },
+  { at: 'bench', w: 0.6, then: { from: 0.45, at: 'p', w: 0.6 } },
+  { at: 'door', w: 0.8, then: { from: 0.45, at: 'bench', w: 0.9 } },                        // "Mas a porta agora abre. … A bancada está firme."
+  { at: 'p' },
+  { at: 'room', w: 0.7, then: { from: 0.55, at: 'door', w: 0.6 } },                         // "servir às pessoas": a porta por onde elas vão entrar
+  { at: 'p', pitch: -0.04 },
+  { at: 'p' },
+  { at: 'bench', w: 0.7, then: { from: 0.8, at: 'p', w: 1 } },                              // "… Aceitar ajuda."
+  { at: 'p', roll: 0.06, pitch: -0.05 },
+  { at: 'p' },
+  { at: 'p', think: { w: 0.4, pitch: -0.12 }, then: { from: 0.3, at: 'door', w: 0.7 } },    // "Bom, [...] acho que já podemos ir."
+];
+const G_ASK = { 1: [{ at: 'p', then: { from: 0.7, at: 'door', w: 0.8 } }], 2: [{ at: 'p' }, { at: 'bench', w: 0.8 }], 3: [{ at: 'bench', w: 0.7 }, { at: 'p' }] };
 
 export function createWorkshopStory(ctx) {
   const { walker, van, talkBox, input } = ctx;
@@ -56,8 +97,12 @@ export function createWorkshopStory(ctx) {
   const W = (x, y, z) => ws.root.localToWorld(_v.set(x, y, z)).clone();
   // junto à porta: do lado do trinco e FORA do arco da folha (dobradiça em x −1,25, folha de 2,5): a mão direita alcança a alça
   const K_DOOR = { x: 1.72, z: 6.3, ry: -1.24 }, K_BENCH = { x: -0.2, z: -4.3, ry: Math.PI / 2 };
+  // nas conversas, o jogador fica de frente para o K (fora do arco da porta) e a câmera, por cima do ombro dele, mostra o rosto do K
+  const P_DOOR = { x: 0.0, z: 4.3 }, P_BENCH = { x: 1.5, z: -3.0 };
+  const twoShot = (K, P) => { const dx = P.x - K.x, dz = P.z - K.z, L = Math.hypot(dx, dz), ux = dx / L, uz = dz / L;
+    return { pos: [P.x + ux * 2.0 - uz * 2.2, 1.9, P.z + uz * 2.0 + ux * 2.2], look: [K.x * 0.7 + P.x * 0.3, 1.25, K.z * 0.7 + P.z * 0.3] }; };   // (de lado o bastante para a cabeça do jogador não tapar o rosto do K)
   const placeK = p => { k.position.set(p.x, 0, p.z); k.rotation.set(0, p.ry, 0); reachArm(k, 1, null, 0); };
-  const _g = new THREE.Vector3();
+  const _g = new THREE.Vector3(), _gp = new THREE.Vector3();
   /** Mão direita do K na alça da porta (k = 0 solta). */
   const holdDoor = (kk) => { if (kk <= 0.001) { reachArm(k, 1, null, 0); return; } ws.root.updateMatrixWorld(true); ws.grip.getWorldPosition(_g); reachArm(k, 1, _g, kk); };
 
@@ -128,25 +173,41 @@ export function createWorkshopStory(ctx) {
   const objective = () => on() && task ? '🔧 Oficina: ' + TASKS[task.step].obj[task.picked ? 1 : 0] : '';
 
   // ---------- cenas (estado 'wstory'; câmera fixa dentro da oficina, menos na coleta) ----------
+  /** Conversa: o jogador de frente para o K (o K vira o corpo para ele quando começa a falar). */
+  function faceTalk(P) {
+    const Pw = W(P.x, 0, P.z), Kw = W(k.position.x, 0, k.position.z);
+    walker.pose(Pw.x, Pw.z, Math.atan2(Kw.z - Pw.z, Kw.x - Pw.x));
+    S.face = Math.atan2(-(P.z - k.position.z), P.x - k.position.x);
+  }
   function startCine(kind) {
     prevState = ctx.getState();
     S = { kind, t: 0, phase: 0 };
     ws.root.updateMatrixWorld(true);
     ctx.setState('wstory');
     const st = stage();
-    if (kind === 'meet') { placeK(K_DOOR); ws.doorPivot.rotation.y = 0.9; }
+    kGestureReset(k);
+    if (kind === 'meet') { placeK(K_DOOR); ws.doorPivot.rotation.y = 0.9; faceTalk(P_DOOR); S.face = null; }   // (o jogador já dentro, longe do arco da porta)
+    if (kind === 'ask') faceTalk(st >= 2 ? P_BENCH : P_DOOR);
+    if (kind === 'end' || kind === 'again') { placeK(K_BENCH); faceTalk(P_BENCH); }
     if (kind === 'pickup') talkBox.show(TASKS[task.step].give.map(L), () => { task.picked = true; done(); }, HINT);
     if (kind === 'ask') { const step = st; talkBox.show(TASKS[step].ask.map(L), () => { task = { step, picked: false }; done(); }, HINT); }
     if (kind === 'end' || kind === 'again') {
       if (ctx.preload) ctx.preload();                                // a faixa da montagem fica pronta antes do tempo zero
       talkBox.show(kind === 'end' ? W_END : W_END.slice(-1), () => {
+        kGestureReset(k);                                            // (corte para a montagem)
         setStage(5); try { localStorage.setItem('adress.med.talk1', '1'); } catch (e) { /* */ }   // oficina concluída (salva antes da montagem)
         S = { kind: 'call', t: 0, phase: 0 }; ctx.onEnding();          // tempo zero: a chamada no celular (main.js conduz a montagem)
       }, HINT);
     }
   }
-  function done() { if (S && (S.kind === 'meet' || S.kind === 'door')) holdDoor(0); S = null; ws.roof.visible = !ws.ruined; ctx.setState(prevState === 'wstory' ? 'walk' : prevState); }
+  function done() {
+    if (S && (S.kind === 'meet' || S.kind === 'door')) holdDoor(0);
+    if (S && S.face != null) k.rotation.y = stage() >= 2 ? K_BENCH.ry : K_DOOR.ry;   // (volta ao que estava fazendo: a câmera do jogo é um corte)
+    kGestureReset(k);
+    S = null; ws.roof.visible = !ws.ruined; ctx.setState(prevState === 'wstory' ? 'walk' : prevState);
+  }
   const cams = {
+    talkDoor: twoShot(K_DOOR, P_DOOR), talkBench: twoShot(K_BENCH, P_BENCH),
     door: { pos: [-4.4, 2.9, 2.2], look: [0.6, 1.4, 5.6] },
     open: { pos: [4.0, 2.7, 1.6], look: [0.0, 1.3, 6.0] },          // teste depois do conserto: do lado do trinco (a folha abre para o outro lado)
     bench: { pos: [2.8, 2.8, 1.8], look: [-0.6, 1.0, -5.4] },
@@ -167,6 +228,11 @@ export function createWorkshopStory(ctx) {
     if (S.kind !== 'call' && talkBox.open && S.t > 0.2 && input.action()) talkBox.press();   // E / Espaço: completa a fala; com ela completa, avança
     if (!S) return;                                                  // (a fala acabou e a cena terminou)
     const T = S.t;
+    if (S.face != null) { let d = S.face - k.rotation.y; while (d > Math.PI) d -= 2 * Math.PI; while (d < -Math.PI) d += 2 * Math.PI; k.rotation.y += d * (1 - Math.exp(-dt * 2.6)); }
+    if (talkBox.open && S.kind !== 'pickup' && S.kind !== 'call') {
+      const plan = S.kind === 'meet' ? G_W1 : S.kind === 'door' ? G_DOOR : S.kind === 'end' ? G_END : S.kind === 'again' ? G_END.slice(-1) : S.kind === 'ask' ? G_ASK[task ? task.step : stage()] || G_ASK[1] : null;
+      if (plan) kTalk(k, dt, plan, talkBox, { p: _gp.set(walker.x, walker.floor + 1.45, walker.z), door: W(0, 1.5, 6.8), bench: W(-0.5, 0.95, -5.4), wheel: W(5.4, 0.8, 4.2), room: W(0, 3.2, 0.5) });
+    }
     switch (S.kind) {
       case 'meet': {                                                 // fecha a porta, tenta abrir: emperra; ele olha para a ferramenta
         const d = ws.doorPivot;
@@ -176,7 +242,7 @@ export function createWorkshopStory(ctx) {
         else if (T < 3.6) { d.rotation.y = 0.02; k.rotation.y = K_DOOR.ry + 0.9 * ease((T - 3.0) / 0.6); }
         // a mão na alça: chega quando a porta está quase fechada, segura nos puxões, solta para olhar a ferramenta
         holdDoor(T < 0.7 ? 0 : T < 1.0 ? ease((T - 0.7) / 0.3) : T < 3.0 ? 1 : T < 3.4 ? 1 - ease((T - 3.0) / 0.4) : 0);
-        if (T >= 3.6 && S.phase === 0) { S.phase = 1; talkBox.show(W1, () => { setStage(1); ws.doorPivot.rotation.y = 0.9; done(); }, HINT); }
+        if (T >= 3.6 && S.phase === 0) { S.phase = 1; faceTalk(P_DOOR); talkBox.show(W1, () => { setStage(1); ws.doorPivot.rotation.y = 0.9; done(); }, HINT); }   // vira para o jogador e conversa
         break;
       }
       case 'door': {                                                 // instala as ferragens: a porta abre e fecha direito
@@ -216,7 +282,9 @@ export function createWorkshopStory(ctx) {
   /** Câmera das cenas lá dentro (depois do rig.update). Coleta e pedidos: a câmera do jogo continua. */
   function applyCam(cam) {
     if (!S || S.kind === 'pickup' || S.kind === 'call') return;
-    const c = S.kind === 'meet' ? cams.door : S.kind === 'door' ? cams.open : cams.bench;
+    const atDoor = k.position.z > 0;                                 // (onde o K está: na porta ou na bancada)
+    const c = S.kind === 'meet' ? (S.phase >= 1 ? cams.talkDoor : cams.door) : S.kind === 'door' ? cams.open
+      : S.kind === 'ask' ? (atDoor ? cams.talkDoor : cams.talkBench) : S.kind === 'end' || S.kind === 'again' ? cams.talkBench : cams.bench;
     const p = W(...c.pos), l = W(...c.look); cam.position.copy(p); cam.lookAt(l);
   }
   return {

@@ -4,7 +4,7 @@
 //     Parada, a câmera sobe para olhar por cima dos telhados; entregando, vira um pouco para a casa visitada.
 //   'overview' (tecla C): visão fixa do SUL, com o bairro inteiro enquadrado na tela.
 import * as THREE from 'three';
-import { MAP, HEDGE, HOUSE_SLOTS, GAS_LIST, GAS_PARTS, BUILD_H, slotOrigin, LOT_ANCHORS, ENTRANCE, FAVELA, FARMLAND, SNOWV, MOONV, GARDV, FORESTV, MEDV, WARE_LIST, VENICE, LOT, ROAD } from './layout.js';
+import { MAP, HEDGE, HOUSE_SLOTS, GAS_LIST, GAS_PARTS, BUILD_H, slotOrigin, LOT_ANCHORS, ENTRANCE, FAVELA, FARMLAND, SNOWV, MOONV, GARDV, FORESTV, MEDV, WARE_LIST, VENICE, LOT, ROAD, SOLIDS } from './layout.js';
 import { FAV } from './favelaPlan.js';
 
 const PITCH = THREE.MathUtils.degToRad(57);   // inclinação para baixo
@@ -179,11 +179,27 @@ rebuildGrid();
 
 /** O segmento P→C (P no pivô) atravessa alguma caixa? (método das placas; as caixas vão do chão até yTopo) */
 let CAM_BASE = 0;                // altura do chão sob o alvo (Morro/encostas): o topo das caixas é absoluto
+// Construções dos arredores (casas, galpões, celeiros, silos, quarteirões fora da sebe): world.js põe em SOLIDS, perto da
+// van, os sólidos de fora (marcados com `out`). Daqui saem as caixas da câmera, com a altura de cada uma (`top`) ou uma
+// altura segura (só peças grandes: cercas, troncos, postes, fardos e placas não seguram a câmera).
+const OUT_BOXES = [];
+let outT = 0;
+function refreshOutBoxes() {
+  OUT_BOXES.length = 0;
+  for (let i = 0; i < SOLIDS.length; i++) {
+    const b = SOLIDS[i];
+    if (!b.out || b.post || b.r) continue;
+    const w = b.x1 - b.x0, d = b.z1 - b.z0;
+    if (!b.top && (Math.min(w, d) < 3.4 || w * d < 14)) continue;
+    const top = b.top || (Math.abs(w - d) < 0.3 && w < 4.6 ? 10 : 8.2);        // (quadrado de 4,2: silo)
+    OUT_BOXES.push([b.x0 - CAM_PAD * 0.6, b.z0 - CAM_PAD * 0.6, b.x1 + CAM_PAD * 0.6, b.z1 + CAM_PAD * 0.6, top + 0.6]);
+  }
+}
 function segmentBlocked(px, pz, cx, cy, cz) {
   const dx = cx - px, dy = cy - PIVOT_Y, dz = cz - pz;
   const mnx = Math.min(px, cx), mxx = Math.max(px, cx), mnz = Math.min(pz, cz), mxz = Math.max(pz, cz);
-  for (let i = 0; i < CAM_BOXES.length; i++) {
-    const b = CAM_BOXES[i], top = b[4] - CAM_BASE;
+  for (let i = 0, n = CAM_BOXES.length + OUT_BOXES.length; i < n; i++) {
+    const b = i < CAM_BOXES.length ? CAM_BOXES[i] : OUT_BOXES[i - CAM_BOXES.length], top = b[4] - CAM_BASE;
     if (mxx < b[0] || mnx > b[2] || mxz < b[1] || mnz > b[3]) continue;
     let t0 = 0, t1 = 1;
     if (Math.abs(dx) > 1e-9) {
@@ -234,19 +250,33 @@ export function createCameraRig() {
   let orbHeld = false, zoom = 1, zoomGoal = 1;
   let lookLift = 0, liftGoal = 0;              // cena: a mira sobe suavemente (ex.: aproximação da igreja, para enquadrar o horizonte)
   let arm = R0;                                // comprimento atual do braço (suavizado); encolhe quando algo fica entre a van e a câmera
+  // Entrega numa tela estreita (celular em pé): a câmera se vira para o morador que atendeu (ele ficava fora do quadro
+  // ou atrás da van). Só com a tela mais alta que larga; no computador nada muda. setFocus vale para o quadro atual.
+  const focus = new THREE.Vector3();
+  let focusOn = false, fk = 0, focusYaw = 0, focusNear = 0;
+  const fOff = new THREE.Vector3();             // o pivô se aproxima do morador: a câmera olha por cima da van, não através da carga do teto
+  let fEl = 0, fElGoal = 0;                     // e sobe mais (em vez de encostar no morador) quando uma casa do outro lado da rua segura o braço
+  const FOCUS_EL = 0.9;                          // inclinação mínima do enquadramento (a linha de visão passa por cima da carga do teto)
+  const focusArm = () => Math.max(MIN_RADIUS, R0 * zoom + (Math.max(9, R0 * 0.85) - R0 * zoom) * smooth(fk));
+  const NARROW = 0.95;
   const camYaw = () => yaw + orbYaw;
 
   /** Direção (unitária) do pivô para a câmera: atrás da van no giro atual, inclinada pela elevação atual. */
-  function rayDir(out) {
-    const cy = camYaw(), el = THREE.MathUtils.clamp(EL0 + orbPitch, MIN_ELEV, MAX_ELEV);
+  function rayDir(out, elAdd = fEl) {
+    let cy = camYaw();
+    if (fk > 0.001) {                          // por trás da van, olhando para o morador; perto demais, de lado (a carga do teto não tampa)
+      const f = smooth(fk), d0 = angleDiff(cy, focusYaw), sd = d0 >= 0 ? 1 : -1, lim = 0.45 + 0.75 * focusNear;
+      const a = focusYaw + sd * Math.max(Math.min(Math.abs(d0), lim), 1.0 * focusNear); cy += angleDiff(a, cy) * f;
+    }
+    const e0 = EL0 + orbPitch, el = THREE.MathUtils.clamp(e0 + (Math.max(0, FOCUS_EL - e0) + elAdd) * smooth(fk), MIN_ELEV, MAX_ELEV);
     return out.set(-Math.cos(cy) * Math.cos(el), Math.sin(el), -Math.sin(cy) * Math.cos(el));
   }
   /** O ponto a distância r do pivô, nessa direção, é uma posição livre (dentro da sebe, sem casa entre ele e a van)? */
   function freeAt(r, d) {
-    const cx = piv.x + d.x * r, cy = piv.y - tgtY + d.y * r, cz = piv.z + d.z * r;
+    const px = piv.x + fOff.x, pz = piv.z + fOff.z, cx = px + d.x * r, cy = piv.y - tgtY + d.y * r, cz = pz + d.z * r;
     const inside = !MOONV && tgt.x > 0 && tgt.x < MAP && tgt.z > 0 && tgt.z < MAP;      // só segura a câmera dentro da sebe enquanto está no bairro
     if (inside && (cx < CAM_LIM0 || cx > CAM_LIM1 || cz < CAM_LIM0 || cz > CAM_LIM1)) return false;
-    CAM_BASE = tgtY; return !segmentBlocked(piv.x, piv.z, cx, cy, cz);
+    CAM_BASE = tgtY; return !segmentBlocked(px, pz, cx, cy, cz);
   }
   /** Maior distância (≤ a pedida pelo zoom) que fica livre ao longo do raio: a câmera para na frente da primeira parede/casa. */
   function armGoal(wanted, d) {
@@ -260,17 +290,18 @@ export function createCameraRig() {
 
   function apply() {
     rayDir(dir);
-    chasePos.set(piv.x + dir.x * arm, piv.y + dir.y * arm, piv.z + dir.z * arm);
+    chasePos.set(piv.x + fOff.x + dir.x * arm, piv.y + dir.y * arm, piv.z + fOff.z + dir.z * arm);
     // onde olhar: um pouco à frente da van; quanto mais o jogador gira/inclina, mais a mira volta para a van (transição contínua, sem saltos)
     const k = smooth(Math.min(1, Math.abs(orbYaw) / 0.7 + Math.abs(orbPitch) / 0.5));
     const hx = Math.cos(yaw), hz = Math.sin(yaw);
     chaseLook.set(piv.x + hx * CHASE_LOOK_AHEAD * (1 - k), piv.y - PIVOT_Y + CHASE_LOOK_Y + (PIVOT_Y - CHASE_LOOK_Y) * k, piv.z + hz * CHASE_LOOK_AHEAD * (1 - k));
     chaseLook.y += lookLift;
+    if (fk > 0.001) { const f = smooth(fk); chaseLook.x += (focus.x - chaseLook.x) * f; chaseLook.y += (focus.y + 0.5 - chaseLook.y) * f; chaseLook.z += (focus.z - chaseLook.z) * f; }   // (um pouco acima da cabeça: cabe o balão)
     chaseQuat.setFromRotationMatrix(m4.lookAt(chasePos, chaseLook, UP));
     const b = smooth(blend);
     camera.position.lerpVectors(overviewPos, chasePos, b);
     camera.quaternion.slerpQuaternions(overviewQuat, chaseQuat, b);
-    const fov = FOV + (CHASE_FOV - FOV) * b;
+    const fov = (FOV + (CHASE_FOV - FOV) * b) * (1 - 0.12 * smooth(fk) * b);
     const near = b > 0.99 && arm < MIN_RADIUS ? Math.max(0.2, arm * 0.3) : 1;   // braço bem curto: plano próximo menor (só aí; a precisão de profundidade normal fica)
     if (Math.abs(camera.fov - fov) > 1e-4 || camera.near !== near) { camera.fov = fov; camera.near = near; camera.updateProjectionMatrix(); }
   }
@@ -294,7 +325,8 @@ export function createCameraRig() {
     tgt.x = target.x; tgt.z = target.z; tgtY = target.y || 0;
     piv.set(tgt.x, PIVOT_Y + tgtY, tgt.z);
     if (target.heading !== undefined) yaw = target.heading;
-    orbYaw = goalYaw = orbPitch = goalPitch = 0; velYaw = velPitch = 0; zoom = zoomGoal = 1; lookLift = liftGoal = 0;      // partida/tela nova: câmera padrão
+    orbYaw = goalYaw = orbPitch = goalPitch = 0; velYaw = velPitch = 0; zoom = zoomGoal = 1; lookLift = liftGoal = 0; fk = 0;      // partida/tela nova: câmera padrão
+    outT = 0; refreshOutBoxes();
     blend = mode === 'chase' ? 1 : 0;
     rayDir(dir); arm = armGoal(Math.max(MIN_RADIUS, R0 * zoom), dir);
     apply();
@@ -314,9 +346,21 @@ export function createCameraRig() {
     orbYaw = ny; orbPitch = np;
     zoom += (zoomGoal - zoom) * (1 - Math.exp(-11 * dt));
     lookLift += (liftGoal - lookLift) * (1 - Math.exp(-0.9 * dt));
+    const fGoal = focusOn && aspect < NARROW && mode === 'chase' ? 1 : 0; focusOn = false;
+    if (fGoal) { focusYaw = Math.atan2(focus.z - tgt.z, focus.x - tgt.x); const n = THREE.MathUtils.clamp((6.5 - Math.hypot(focus.x - tgt.x, focus.z - tgt.z)) / 3, 0, 1); focusNear += (n - focusNear) * Math.min(1, dt * 4); }
+    fk += (fGoal - fk) * (1 - Math.exp(-(fGoal > fk ? 2.8 : 2.2) * dt)); if (fk < 1e-3 && !fGoal) fk = 0;
+    if (fk > 0) { const f = smooth(fk) * 0.75; fOff.set((focus.x - piv.x) * f, 0, (focus.z - piv.z) * f); } else fOff.set(0, 0, 0);
+    if (fGoal && fk > 0.3) {                                   // a inclinação que deixa o braço mais livre (preferindo a mais baixa)
+      const w = focusArm();
+      let best = 0, bestA = -1;
+      for (const e of [0, 0.25, 0.5]) { const a = armGoal(w, rayDir(tmp, e)); if (a > bestA + 0.5) { best = e; bestA = a; } if (a >= w * 0.85) break; }
+      fElGoal = best;
+    } else if (!fGoal) fElGoal = 0;
+    fEl += (fElGoal - fEl) * (1 - Math.exp(-3 * dt));
+    if ((outT -= dt) <= 0) { outT = 0.3; refreshOutBoxes(); }   // construções de fora que estão perto agora
     // braço (distância): para na frente de paredes/casas; encolhe depressa mas nunca de repente, e só volta devagar (sem "pulsar")
     rayDir(dir);
-    const want = armGoal(Math.max(MIN_RADIUS, R0 * zoom), dir);
+    const want = armGoal(focusArm(), dir);
     arm += (want - arm) * (1 - Math.exp(-(want < arm ? 12 : 2.2) * dt));
     const wantB = mode === 'chase' ? 1 : 0;
     const stepB = dt / TRANSITION;
@@ -347,6 +391,10 @@ export function createCameraRig() {
       if (mode !== 'chase') return;
       zoomGoal = THREE.MathUtils.clamp(zoomGoal * Math.exp(THREE.MathUtils.clamp(deltaY, -300, 300) * 0.0011), MIN_ZOOM, 1);
     },
+    /** Entrega (celular em pé): ponto { x, y, z } do morador para enquadrar neste quadro (chame a cada quadro; sem chamada, volta ao normal). */
+    setFocus(p) { if (p) { focus.copy(p); focusOn = true; } },
+    /** Testes: estado do enquadramento da entrega. */
+    get _focus() { return { fk: +fk.toFixed(3), el: +fEl.toFixed(2), arm: +arm.toFixed(2), off: [+fOff.x.toFixed(2), +fOff.z.toFixed(2)], aspect: +aspect.toFixed(2) }; },
     /** Volta à câmera padrão (sem giro nem zoom). */
     resetView() { goalYaw = goalPitch = 0; zoomGoal = 1; },
     /** O bairro mudou de tamanho (ex.: Bairro 2, 6×6): refaz enquadramento e obstáculos da câmera. */

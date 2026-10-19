@@ -468,3 +468,50 @@ continua jogável em `/versao-anterior/` (cópia do `index.html` de antes, com a
   letreiro de destino e passageiros (`buildTram({ line, dest })`); paradas na cor da linha. `traffic.js`: táxis, furgões, picapes.
   `models/ware.js`: itens do pátio no chão, letreiro com nome. `models/apt.js`: ar-condicionados entre as janelas, rodapé, porta com
   moldura, caixas de correio e interfone (o 87 igual).
+
+**Personagens e animações (rodada C)**
+- Morador (`models/resident.js`): `setMood('door' | 'happy' | 'angry:temperamento[:again]')`. Sai pela porta com dois passos; reação
+  por temperamento (direto: "não, não" com as mãos; distraído: coça a cabeça; falante: explica com as mãos; brincalhão: ri; ocupado:
+  olha o relógio e bate o pé; desconfiado: mão no queixo); insistência começa com a mão na testa; balão desenhado por temperamento
+  (! ? … rosto rindo, relógio, ?!) e coração na entrega certa. Fase e velocidade por casa (nada sincronizado).
+- Entrega (`main.js` ring/dialog): `setResidentHandoff` (a encomenda vai num arco da van, ou das mãos a pé, até o morador);
+  `setResidentPoint` (aponta só quando a fala já cita uma relação de lugar calculada); `residentLook`.
+- Câmera (`camera.js`): `rig.setFocus(p)` enquadra o morador só com a tela em pé (aspect < 0,95); `OUT_BOXES` = construções de fora
+  (sólidos `b.out`) também desviam a câmera.
+- Van (`van.js`): janela da cabine vazada com o motorista (`cab-driver`, o mesmo personagem com as cores/boné do Shop), que some
+  quando o jogador desce (`setCabDriver`, `walker.onShow`); van da tela inicial com `{ driver: false, openWindow: true }`; molas da
+  carroceria (`stop()` não zera a inclinação), inclinação pelas 4 rodas nas ladeiras (no ar não copia o chão).
+- Jogador (`walker.js`/`gait.js`): acelera e freia em ~0,2 s, passinhos ao virar no lugar, olhares quando parado, segura a caixa do K
+  com os dois braços (`setCarry`); descer/subir na van são passos curtos pela porta (`vanDoorStep`, com colisão; mover ou E
+  interrompe; não vale no terraço, na lancha nem na Lua). No chat do Medieval ele se vira para o morador.
+
+**Bairros especiais 10, 13, 15, 16 (rodada C)**
+- `buildFigure(o)` (`grillbyInside.js`): figura leve no estilo dos moradores para a vida dos bairros; `lot.userData.update(t, dt)`
+  anima a vida de cada lote. `horizonRing`/`hazeGeo` (`models/snow.js`): horizonte que acompanha a câmera.
+- Veneza: barcos com gente (gondoleiro rema conforme anda), vida nas sacadas/janelas/cais, janelas com moldura, horizonte da laguna
+  (`buildLagoonHorizon`, ligado em `terrain.js`). Morro: casas de enchimento com acabamento, vida nas lajes (pipa, varal, radinho,
+  churrasquinho), cidade e morros no entorno. Colheita: trator com tratorista, trabalho no campo, vacas, sítios nas lavouras.
+  Nevasca: neve na sebe, bosque e cordilheira, crianças na neve, limpa-neve com motorista e giroflex, chaminé do Grillby's.
+
+**História secundária — entrega das conversas (rodada D; nenhuma fala do dono teve o texto alterado)**
+- `models/reader.js`: `kGesture(root, dt, { at, w, yaw, pitch, roll, lean, shake, rate })` (olhar para um ponto, inclinar cabeça/tronco,
+  suavizado), `kGestureReset` (nos cortes) e `kTalk(root, dt, plano, talkBox, alvos)` (roteiro de gestos por fala, com `then` por fração
+  do texto escrito e `think` nas pausas [...]). Roteiros por conversa (K_GEST, ROOF_GEST, VENICE_GEST etc.).
+- `talkBox.js`: cadência de pontuação (vírgula 0,1 s, ponto 0,28, "?" 0,32, "…" 0,4; pulada onde já há [...]), incluída em
+  `lineDuration`; `show(..., { cps, beat })` (a figura escreve a 27 letras/s, pausas 1,4×); getters `thinking`/`progress`; no celular a
+  caixa sobe acima dos botões do rodapé.
+- Oficina (`workshopStory.js`): nas conversas o jogador fica de frente para o K (P_DOOR/P_BENCH), o K vira o corpo e a câmera passa por
+  cima do ombro do jogador (antes o K falava de costas). Veneza e conversa do bonde: enquadramento habitual (jogador de costas, K de
+  frente, um pouco de lado). Falas reescritas só onde o dono não escreveu texto (fornecedores, pedidos do K).
+- 2ª visita à igreja: jogador e motorista da cabine brancos de uma vez; dentro das igrejas o boné do motorista também some.
+- ATENÇÃO: `walker.pose()` zera a velocidade do passo (rodada C). Não chame a cada quadro numa cena em que o personagem anda
+  (era a causa de a saída da igreja e o resgate do Grillby's ficarem lentos; corrigido nos dois).
+
+**Bairros 17, 18, 20, 21, 22, 24 (rodada D)**
+- `createCrowd(n, opts)` (`models/medievalPeople.js`): multidão instanciada (6 InstancedMesh; `opts.alien` para ETs) com passos, giros e
+  caminhadas; usada nos Jardins (porteiro, jardineiro, corredora, pescador, crianças, mãe com carrinho, piscineiro), Modernista
+  (jardineiro cortando grama, passeador, criança, vizinhas), Lua (ETs pulando, regando, consertando, telescópio), Operário (mecânicos,
+  soldadores com faíscas, carregadores, lojistas) e Bosque (pai com ancinho, criança pulando nas folhas, soprador, esquilos).
+- Entornos: `condoOutskirts` (`models/modern.js`, condomínios vizinhos e quebra-ventos nos Jardins/Modernista), `workOutskirts`
+  (`models/work.js`, zona industrial, trem, casas operárias), `medCountryside` (`models/medieval.js`, estrada de terra, moinho, sítios,
+  pasto com ovelhas e pastor, lavouras). Medieval: lavadeira na fonte (rotina `washer`) e galinhas no depósito. Corredor do monstro livre.

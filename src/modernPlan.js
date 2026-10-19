@@ -6,7 +6,12 @@ import { obbBox } from './obb.js';
 
 export const MODERN = { RW: 10, ROUND: 11.5, ISLAND: 4.6, CUL: 9.5, WALL: 0.8, WALL_H: 2.4 };
 
+let CACHE = null;                                   // (o plano é fixo: calculado uma vez — os arredores somam colisões a `solids`)
 export function planModern(MAP, HEDGE) {
+  if (CACHE && CACHE.MAP === MAP && CACHE.HEDGE === HEDGE) return CACHE;
+  return (CACHE = makePlan(MAP, HEDGE));
+}
+function makePlan(MAP, HEDGE) {
   const { RW, ROUND, ISLAND, CUL, WALL } = MODERN, hw = RW / 2, CX = MAP / 2;
   // desenho feito na área 8×8 (209,2) e esticado para a área atual: as ruas ficam mais longas (mais casas), larguras iguais
   const f = MAP / 209.2, P = (x, z) => [x * f, z * f];

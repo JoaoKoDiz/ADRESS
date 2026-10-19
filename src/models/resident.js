@@ -1,5 +1,6 @@
 // Morador que aparece no portão durante o diálogo: bonequinho low-poly, cabeçudo, virado para +Z (câmera).
-// userData.setMood('angry' | 'happy') troca pose e balão; userData.update(t) anima.
+// userData.setMood('door' | 'happy' | 'angry[:temperamento[:again]]') troca pose, rosto e balão; userData.update(t, dt) anima:
+// sai pela porta, recebe a encomenda com as duas mãos (entrega certa) ou reage conforme o temperamento (entrega errada).
 import * as THREE from 'three';
 import { box, cyl, sphere, cone, torus, at, mat, dynamic, bakeStatic, smoothCharacter } from './kit.js';
 import { SHIRTS, HAIRS, HOUSES, MOON_COL } from '../data.js';
@@ -9,10 +10,15 @@ const SKIN = '#f0c49a', PANTS = '#3d4a66', SHOES = '#2b2522', EYES = '#2a1d14', 
 const CARDBOARD = '#c98a4a', TAPE = '#f3d9a6';
 const LIFT = 0.18;      // o morador fica sobre o caminho de pedras (grama + laje), acima de y = 0 do lote
 const BUBBLE_SIZE = 1.7;
+const h01 = n => { const s = Math.sin(n * 127.1 + 311.7) * 43758.5453; return s - Math.floor(s); };   // pseudoaleatório estável por casa
 
-// Texturas dos balões (criadas uma vez, compartilhadas por todos os moradores)
+// Texturas dos balões (criadas uma vez, compartilhadas por todos os moradores). Entrega errada: o símbolo acompanha o
+// temperamento do morador (direto "!", distraído "?", falante "…", brincalhão um sorriso, ocupado um relógio,
+// desconfiado "?!"); certa: coração. Símbolos desenhados (não dependem de fontes especiais).
 const bubbleCache = {};
+const BUBBLE_GLYPH = { happy: 'heart', angry: '?!', direto: '!', distraido: '?', falante: 'dots', brincalhao: 'grin', ocupado: 'clock', desconfiado: '?!' };
 function bubbleMaterial(kind) {
+  if (!BUBBLE_GLYPH[kind]) kind = 'angry';
   if (bubbleCache[kind]) return bubbleCache[kind];
   const S = 256, c = document.createElement('canvas');
   c.width = c.height = S;
@@ -26,13 +32,32 @@ function bubbleMaterial(kind) {
     x.arcTo(x0, y0 + h, x0, y0, r); x.arcTo(x0, y0, x0 + w, y0, r);
     x.closePath();
   };
+  const happy = kind === 'happy', ink = happy ? '#2a9d4b' : '#e0402a';
   shape();
   x.fillStyle = '#ffffff'; x.fill();
-  x.lineWidth = 12; x.strokeStyle = kind === 'happy' ? '#1f7a3a' : '#8a2a1a'; x.lineJoin = 'round'; x.stroke();
-  x.fillStyle = kind === 'happy' ? '#2a9d4b' : '#e0402a';
-  x.textAlign = 'center'; x.textBaseline = 'middle';
-  x.font = kind === 'happy' ? 'bold 150px "Segoe UI Symbol", "Trebuchet MS", sans-serif' : '900 138px "Trebuchet MS", "Segoe UI", sans-serif';
-  x.fillText(kind === 'happy' ? '♥' : '?!', S / 2, y0 + h / 2 + (kind === 'happy' ? 10 : 6));
+  x.lineWidth = 12; x.strokeStyle = happy ? '#1f7a3a' : '#8a2a1a'; x.lineJoin = 'round'; x.stroke();
+  const cx = S / 2, cy = y0 + h / 2 + 4, g = BUBBLE_GLYPH[kind];
+  x.fillStyle = ink; x.strokeStyle = ink; x.lineCap = 'round'; x.lineJoin = 'round';
+  if (g === 'heart') {
+    x.beginPath(); x.moveTo(cx, cy + 50);
+    x.bezierCurveTo(cx - 92, cy - 6, cx - 52, cy - 76, cx, cy - 34);
+    x.bezierCurveTo(cx + 52, cy - 76, cx + 92, cy - 6, cx, cy + 50); x.fill();
+  } else if (g === 'dots') {
+    for (const k of [-1, 0, 1]) { x.beginPath(); x.arc(cx + k * 52, cy + 4, 17, 0, Math.PI * 2); x.fill(); }
+  } else if (g === 'grin') {                                   // rosto rindo (piscando)
+    x.lineWidth = 12; x.beginPath(); x.arc(cx, cy, 58, 0, Math.PI * 2); x.stroke();
+    x.beginPath(); x.arc(cx - 22, cy - 16, 9, 0, Math.PI * 2); x.fill();
+    x.lineWidth = 9; x.beginPath(); x.moveTo(cx + 10, cy - 16); x.lineTo(cx + 34, cy - 18); x.stroke();
+    x.beginPath(); x.moveTo(cx - 34, cy + 6); x.quadraticCurveTo(cx, cy + 50, cx + 34, cy + 6); x.closePath(); x.fill();
+  } else if (g === 'clock') {                                  // relógio: pressa
+    x.lineWidth = 12; x.beginPath(); x.arc(cx, cy, 58, 0, Math.PI * 2); x.stroke();
+    x.lineWidth = 11; x.beginPath(); x.moveTo(cx, cy); x.lineTo(cx, cy - 38); x.moveTo(cx, cy); x.lineTo(cx + 28, cy + 8); x.stroke();
+    x.beginPath(); x.arc(cx, cy, 9, 0, Math.PI * 2); x.fill();
+  } else {                                                     // "!", "?" e "?!"
+    x.textAlign = 'center'; x.textBaseline = 'middle';
+    x.font = `900 ${g.length > 1 ? 138 : 156}px "Trebuchet MS", "Segoe UI", Arial, sans-serif`;
+    x.fillText(g, cx, cy + 2);
+  }
   const tex = new THREE.CanvasTexture(c);
   tex.colorSpace = THREE.SRGBColorSpace;
   tex.anisotropy = 4;
@@ -41,14 +66,22 @@ function bubbleMaterial(kind) {
   return m;
 }
 
+// Braço com cotovelo: pivô no ombro, braço e antebraço pendurados para baixo (−y) em repouso
+// (rolled: manga dobrada, antebraço à mostra). userData.elbow: junta do cotovelo (gira à parte).
 function makeArm(shirt, side, rolled = false, SKIN_ = SKIN) {
-  // pivô no ombro; braço pendurado para baixo (−y) em repouso (rolled: manga dobrada, antebraço à mostra)
   const pivot = dynamic(new THREE.Group());
   pivot.position.set(side * 0.4, 1.12, 0);
   pivot.add(at(sphere(0.13, shirt, 8, 6), 0, 0, 0));
-  if (rolled) { pivot.add(at(cyl(0.1, 0.1, 0.2, shirt, 8), 0, -0.12, 0)); pivot.add(at(cyl(0.11, 0.11, 0.07, shirt, 8), 0, -0.23, 0)); pivot.add(at(cyl(0.085, 0.08, 0.26, SKIN_, 8), 0, -0.36, 0)); }
-  else pivot.add(at(cyl(0.1, 0.09, 0.46, shirt, 8), 0, -0.25, 0));
-  pivot.add(at(sphere(0.1, SKIN_, 8, 6), 0, -0.52, 0));
+  pivot.add(at(cyl(0.1, 0.096, 0.28, shirt, 8), 0, -0.13, 0));
+  if (rolled) pivot.add(at(cyl(0.11, 0.11, 0.07, shirt, 8), 0, -0.23, 0));
+  const elbow = dynamic(new THREE.Group());
+  elbow.position.y = -0.27; elbow.rotation.order = 'YXZ';
+  const fore = rolled ? SKIN_ : shirt;
+  elbow.add(at(sphere(0.094, fore, 8, 6), 0, 0, 0));
+  elbow.add(at(cyl(0.092, 0.084, 0.22, fore, 8), 0, -0.11, 0));
+  elbow.add(at(sphere(0.1, SKIN_, 8, 6), 0, -0.25, 0));
+  pivot.add(elbow);
+  pivot.userData.elbow = elbow;
   return pivot;
 }
 
@@ -129,12 +162,14 @@ function buildCore(houseIndex, { shirt, hair, ven = false, look = null, V = VEN_
   body.position.y = LIFT;
   root.add(body);
 
-  // pernas e sapatos
+  // pernas e sapatos (cada perna gira no quadril: passos ao sair pela porta, pulinhos, pé batendo)
+  const HIP = 0.58, legs = [];
   for (const s of [-1, 1]) {
-    body.add(at(box(0.22, 0.5, 0.24, PANTS_), s * 0.14, 0.33, 0));
-    if (winter) body.add(at(box(0.28, 0.3, 0.36, winter.boots), s * 0.14, 0.15, 0.04));   // Nevasca: botas
-    else if (med) body.add(at(box(0.26, 0.18, 0.34, SHOES_), s * 0.14, 0.09, 0.04));                // Medieval: botas curtas
-    else body.add(at(box(0.26, farm ? 0.26 : 0.12, 0.34, SHOES_), s * 0.14, farm ? 0.13 : 0.06, 0.04));   // Colheita: botas
+    const leg = dynamic(new THREE.Group()); leg.position.set(s * 0.14, HIP, 0); body.add(leg); legs.push(leg);
+    leg.add(at(box(0.22, 0.5, 0.24, PANTS_), 0, 0.33 - HIP, 0));
+    if (winter) leg.add(at(box(0.28, 0.3, 0.36, winter.boots), 0, 0.15 - HIP, 0.04));   // Nevasca: botas
+    else if (med) leg.add(at(box(0.26, 0.18, 0.34, SHOES_), 0, 0.09 - HIP, 0.04));                // Medieval: botas curtas
+    else leg.add(at(box(0.26, farm ? 0.26 : 0.12, 0.34, SHOES_), 0, farm ? 0.13 - HIP : 0.06 - HIP, 0.04));   // Colheita: botas
   }
   // tronco (camisa) + cinto
   body.add(at(cyl(0.34, 0.37, 0.62, shirt, 10), 0, 0.88, 0));
@@ -243,14 +278,16 @@ function buildCore(houseIndex, { shirt, hair, ven = false, look = null, V = VEN_
   const smile = dynamic(new THREE.Group());
   smile.add(at(box(0.14, 0.045, 0.05, EYES), 0, hy - 0.19, 0.36));
   for (const s of [-1, 1]) smile.add(at(box(0.09, 0.045, 0.05, EYES), s * 0.1, hy - 0.165, 0.35, 0, 0, s * 0.6));
-  head.add(brows, frown, smile);
+  const mouthN = dynamic(at(box(0.13, 0.04, 0.05, EYES), 0, hy - 0.18, 0.365));           // boca neutra (atendendo a porta, distraído)
+  const mouthO = dynamic(at(sphere(0.07, '#5a2620', 8, 6), 0, hy - 0.2, 0.34)); mouthO.scale.set(1.2, 0.8, 0.5);   // boca aberta (falando, rindo)
+  head.add(brows, frown, smile, mouthN, mouthO);
 
-  // braços
+  // braços (com cotovelo)
   const HAND = winter ? winter.glove : SK;                            // Nevasca: luvas
   const armL = makeArm(shirt, -1, !!(farm && farm.rolled), HAND), armR = makeArm(shirt, 1, !!(farm && farm.rolled), HAND);
   body.add(armL, armR);
 
-  // pacote (só quando feliz)
+  // pacote (entrega certa: chega às mãos do morador)
   const pkg = dynamic(new THREE.Group());
   pkg.position.set(0, 0.98, 0.5);
   pkg.add(box(0.72, 0.5, 0.5, CARDBOARD));
@@ -258,57 +295,220 @@ function buildCore(houseIndex, { shirt, hair, ven = false, look = null, V = VEN_
   pkg.add(at(box(0.73, 0.06, 0.51, TAPE), 0, 0.12, 0));
   body.add(pkg);
 
-  // balões
-  const bubbles = {};
-  for (const kind of ['angry', 'happy']) {
-    const sp = new THREE.Sprite(bubbleMaterial(kind));
-    sp.scale.set(BUBBLE_SIZE, BUBBLE_SIZE, 1);
-    sp.center.set(0.2, 0.02);            // o rabinho aponta para a cabeça
-    sp.position.set(0.25, 2.2, 0);
-    sp.renderOrder = 20;
-    sp.visible = false;
-    bubbles[kind] = sp;
-    root.add(sp);
-  }
+  // balões: um sprite só; a textura muda com o humor/temperamento
+  const bubble = new THREE.Sprite(bubbleMaterial('angry'));
+  bubble.scale.set(BUBBLE_SIZE, BUBBLE_SIZE, 1);
+  bubble.center.set(0.2, 0.02);            // o rabinho aponta para a cabeça
+  bubble.position.set(0.25, 2.2, 0);
+  bubble.renderOrder = 20;
+  bubble.visible = false;
+  root.add(bubble);
 
   // cada parte animada vira poucos meshes; o resto do corpo é fundido por material
+  dynamic(head);
   smoothCharacter(body);                                       // superfície lisa (mais segmentos, sem facetas)
-  for (const part of [armL, armR, pkg, brows, smile]) bakeStatic(part);
+  for (const arm of [armL, armR]) { bakeStatic(arm.userData.elbow); bakeStatic(arm); }
+  for (const leg of legs) bakeStatic(leg);
+  for (const part of [pkg, brows, smile]) bakeStatic(part);
+  bakeStatic(head);
   bakeStatic(body);
 
-  let mood = 'angry';
+  // ---- animação: cada morador tem o próprio ritmo (fase e velocidade pela casa), nada sincronizado entre eles ----
+  const PH = h01(houseIndex) * 6.283, SP = 0.88 + 0.24 * h01(houseIndex * 3.7 + 1), ALT = h01(houseIndex * 9.1 + 2) < 0.5 ? 1 : -1;
+  const J = { by: 0, bz: 0, rx: 0, ry: 0, rz: 0, hx: 0, hy: 0, hz: 0, lL: 0, lR: 0,
+    L: { f: 0.05, o: 0.12, b: 0.15, t: 0, s: 0 }, R: { f: 0.05, o: 0.12, b: 0.15, t: 0, s: 0 } };
+  const G = { by: 0, bz: 0, rx: 0, ry: 0, rz: 0, hx: 0, hy: 0, hz: 0, lL: 0, lR: 0, L: { ...J.L }, R: { ...J.R } };
+  const REST = { f: 0.05, o: 0.12, b: 0.15, t: 0, s: 0 };
+  const arm = (o, f, out, b, t = 0, s = 0) => { o.f = f; o.o = out; o.b = b; o.t = t; o.s = s; };
+  const applyArm = (a, side, q) => {
+    a.rotation.set(-q.f, 0, side * q.o);
+    a.userData.elbow.rotation.set(-q.b, -side * q.t, side * q.s);
+  };
+  let mood = 'angry', temper = null, again = false;
+  let clock = 0, tau = 0, enterT = 9, lastT = -1, popT = 9;
+  let src = null;                                              // de onde vem a encomenda (local do corpo), na entrega certa
+  let ptQ = null, ptSide = 1, ptYaw = 0;                       // apontar para a próxima casa (só quando a fala diz onde ela fica)
+  const DOWN = new THREE.Vector3(0, -1, 0);
+  const HOLD = new THREE.Vector3(0, 0.95, 0.52), pkgFrom = new THREE.Vector3(0, 0.55, 2.3), _v = new THREE.Vector3();
+
   function setMood(m) {
-    mood = m === 'happy' ? 'happy' : 'angry';
-    const happy = mood === 'happy';
-    bubbles.angry.visible = !happy;
-    bubbles.happy.visible = happy;
-    pkg.visible = happy;
-    smile.visible = happy;
-    brows.visible = frown.visible = !happy;
+    const [md, tp, ag] = String(m).split(':');
+    const nm = md === 'happy' ? 'happy' : md === 'door' ? 'door' : 'angry';
+    mood = nm; temper = nm === 'angry' && BUBBLE_GLYPH[tp] ? tp : null; again = ag === 'again';
+    tau = 0; popT = 0;
+    const happy = mood === 'happy', door = mood === 'door';
+    bubble.material = bubbleMaterial(happy ? 'happy' : temper || 'angry');
+    bubble.visible = !door && !happy;                            // (coração: só quando a encomenda chega às mãos)
+    pkg.visible = false;
+    src = null; ptQ = null;
+    if (nm === 'angry' && pointAt) {                            // a fala diz onde fica ("na quadra da frente", "aqui do lado"…): aponta para lá
+      root.updateMatrixWorld(true);
+      const v = body.worldToLocal(new THREE.Vector3(pointAt.x, 0, pointAt.z)), yaw = Math.atan2(v.x, v.z);
+      if (Math.abs(yaw) < 2.0 && Math.hypot(v.x, v.z) > 3) {
+        ptSide = yaw >= 0 ? 1 : -1; ptYaw = yaw;
+        const d = new THREE.Vector3(v.x, 0, v.z).normalize(); d.y = 0.42; d.normalize();
+        d.x -= ptSide * 0.12; d.normalize();                       // (um pouco para dentro: o braço sai do ombro, não do meio do peito)
+        ptQ = new THREE.Quaternion().setFromUnitVectors(DOWN, d);
+      }
+    }
+    pointAt = null;
+    if (happy) {
+      const H = handoff; handoff = null;
+      if (H) {                                                   // ponto de partida: o lado da van (ou as mãos do personagem) virado para o morador
+        root.updateMatrixWorld(true);
+        const me = root.getWorldPosition(_v), dx = me.x - H.x, dz = me.z - H.z, d = Math.hypot(dx, dz) || 1;
+        src = body.worldToLocal(new THREE.Vector3(H.x + dx / d * H.r, H.y, H.z + dz / d * H.r));
+        if (src.length() > 12) src = null;
+      }
+    }
+    const face = happy ? 'smile' : door ? 'n' : temper === 'distraido' ? 'n' : temper === 'falante' || temper === 'brincalhao' ? 'o' : temper === 'ocupado' ? 'frown' : 'angry';
+    smile.visible = face === 'smile' || (temper === 'brincalhao');
+    brows.visible = face === 'angry';
+    frown.visible = face === 'angry' || face === 'frown';
+    mouthN.visible = face === 'n';
+    mouthO.visible = face === 'o' && temper !== 'brincalhao';
   }
 
-  function update(t) {
-    if (mood === 'happy') {
-      // segura a caixa na frente do peito e dá pulinhos
-      body.position.y = LIFT + Math.abs(Math.sin(t * 6)) * 0.14;
-      armL.rotation.set(-1.25, 0, -0.25);
-      armR.rotation.set(-1.25, 0, 0.25);
-      pkg.rotation.z = Math.sin(t * 6) * 0.05;
-      body.rotation.y = 0;
-      bubbles.happy.position.y = 2.2 + body.position.y - LIFT;
-    } else {
-      // braços para cima, sacudindo de irritação
-      body.position.y = LIFT + Math.abs(Math.sin(t * 9)) * 0.04;
-      armL.rotation.set(0, 0, -2.3 - Math.sin(t * 13) * 0.45);
-      armR.rotation.set(0, 0, 2.3 + Math.sin(t * 13 + 1.3) * 0.45);
-      body.rotation.y = Math.sin(t * 4.5) * 0.12;
-      bubbles.angry.position.y = 2.2 + Math.sin(t * 9) * 0.04;
+  const ss = x => { x = Math.max(0, Math.min(1, x)); return x * x * (3 - 2 * x); };
+  const wave = (f, k = 0) => Math.sin((clock * SP * f + k) * 6.283 + PH);
+  /** Alvos da pose neste instante. */
+  function target() {
+    const g = G; g.by = 0; g.bz = 0; g.rx = 0; g.ry = 0; g.rz = 0; g.hx = 0; g.hy = 0; g.hz = 0; g.lL = 0; g.lR = 0;
+    Object.assign(g.L, REST); Object.assign(g.R, REST);
+    const breath = 0.012 * wave(0.25);
+    g.by = breath;
+    if (mood === 'door') {                                       // sai pela porta: dois passos até o portão e olha para a van
+      const e = ss(enterT / 0.38);
+      g.bz = -0.9 * (1 - e);
+      const step = Math.sin(enterT * 16) * (1 - e);
+      g.by += Math.abs(step) * 0.07; g.rz = step * 0.05; g.lL = -step * 0.55; g.lR = step * 0.55;   // pernas acompanham o passo
+      arm(g.L, 0.05 + step * 0.4, 0.12, 0.25); arm(g.R, 0.05 - step * 0.4, 0.12, 0.25);
+      g.hx = -0.06 * e; g.hz = 0.07 * e * Math.sin(clock * 1.3 + PH);
+      return g;
     }
+    if (mood === 'happy') {                                      // recebe com as duas mãos, puxa para o peito e comemora
+      const reach = ss(tau / 0.18), got = ss((tau - 0.42) / 0.25);
+      const f = 1.15 - 0.15 * got, b = 0.25 + 0.2 * got;
+      arm(g.L, f * reach + 0.05 * (1 - reach), 0.08 * reach + 0.12 * (1 - reach), b, 0, 0);
+      arm(g.R, f * reach + 0.05 * (1 - reach), 0.08 * reach + 0.12 * (1 - reach), b, 0, 0);
+      g.rx = 0.07 * reach * (1 - got);                           // inclina para pegar
+      g.by += -0.05 * Math.sin(Math.PI * ss((tau - 0.4) / 0.3));  // amortece o peso da caixa
+      const party = ss((tau - 0.75) / 0.3), hop = Math.max(0, wave(1.7));
+      g.by += party * 0.1 * hop; g.lL = g.lR = -0.25 * party * hop;   // pulinhos: os joelhos encolhem no ar
+      g.rz = party * 0.06 * wave(0.85, 0.25);
+      g.hz = party * 0.1 * wave(0.85); g.hx = -0.08 * party;
+      return g;
+    }
+    // entrega errada: a reação depende do temperamento (e da insistência)
+    const tp = temper;
+    const palm = again ? ss((tau - 1.1) / 0.3) : 1;              // insistência: primeiro a mão na testa
+    if (again && tau < 1.4) {
+      const k = ss(tau / 0.3) * (1 - ss((tau - 1.1) / 0.3));
+      arm(g.R, 1.75 * k + 0.05, -0.25 * k + 0.12, 1.75 * k + 0.15, 0.2 * k);
+      g.hx = 0.28 * k; g.by -= 0.03 * k; g.rx = 0.04 * k;
+      arm(g.L, 0.1, 0.18 * k + 0.12, 0.3);
+      if (tau < 1.1) return g;
+    }
+    const t0 = again ? tau - 1.1 : tau, k = ss(t0 / 0.22) * palm;
+    const mix = (q, f, o, b, t = 0, s = 0) => arm(q, REST.f + (f - REST.f) * k, REST.o + (o - REST.o) * k, REST.b + (b - REST.b) * k, t * k, s * k);
+    if (tp === 'direto') {                                       // "não, não": as duas mãos espalmadas na frente e a cabeça balançando
+      const up = 1 - ss((t0 - 1.6) / 0.45), nn = Math.sin(t0 * 13) * Math.exp(-0.9 * t0);
+      mix(g.R, 0.15 + 1.15 * up, 0.15 + 0.45 * (1 - up), 0.2 + 1.05 * up + 1.3 * (1 - up), 0, 0.3 * nn * up - 1.45 * (1 - up));   // depois, mãos na cintura
+      mix(g.L, 0.15 + 1.15 * up, 0.15 + 0.45 * (1 - up), 0.2 + 1.05 * up + 1.3 * (1 - up), 0, -0.3 * nn * up - 1.45 * (1 - up));
+      if (up < 1) { g.R.b = REST.b + (0.2 + 1.05 * up - REST.b) * k; g.L.b = g.R.b; }
+      const shake = 0.38 * Math.sin(t0 * 15) * Math.exp(-1.4 * t0) + 0.2 * Math.sin(t0 * 14) * ss(Math.sin(clock * SP * 0.8 + PH) * 3 - 2.4);
+      g.hy = shake; g.rx = -0.05 * k;
+    } else if (tp === 'distraido') {                              // coça a cabeça, olha para o lado, meio perdido
+      const sc = 0.14 * Math.sin(clock * 22) * (0.5 + 0.5 * Math.sin(clock * 2.2 + PH));
+      mix(g.R, 0.35, 2.25, 0.25, 0, 1.75 + sc);
+      g.hz = -0.16 * k + 0.05 * wave(0.3); g.hy = 0.3 * wave(0.18) * k; g.hx = -0.1 * k;
+      g.rz = 0.035 * wave(0.22);
+    } else if (tp === 'falante') {                                // explica com as duas mãos
+      const a = wave(1.5), bb = wave(1.5, 0.5);
+      mix(g.R, 0.75 + 0.35 * a, 0.5 + 0.12 * bb, 1.05 + 0.5 * bb, 0, 0.35);
+      mix(g.L, 0.75 - 0.35 * a, 0.5 - 0.12 * bb, 1.05 - 0.5 * bb, 0, 0.35);
+      g.hx = 0.07 * wave(2.6); g.hy = 0.18 * a * k; g.by += 0.02 * Math.abs(wave(1.5));
+    } else if (tp === 'brincalhao') {                              // ri da situação: mão na barriga, a outra abana
+      const laugh = 0.5 + 0.5 * Math.max(0, Math.sin(clock * 1.3 + PH));
+      mix(g.R, 0.55, -0.12, 1.35, 0.55);
+      mix(g.L, 0.25, 0.95, 0.2, 0, 1.25 + 0.35 * Math.sin(clock * 14));
+      g.by += laugh * 0.045 * Math.abs(Math.sin(clock * 15)); g.hx = -0.22 * k * laugh; g.hz = 0.08 * wave(0.5);
+      g.rx = -0.04 * laugh;
+    } else if (tp === 'ocupado') {                                 // com pressa: mão na cintura, olha o relógio, bate o pé
+      const look = ss(Math.sin(clock * SP * 1.6 + PH) * 2 + 0.5);
+      mix(g.L, -0.1, 0.6, 0.2, 0, -1.55);
+      mix(g.R, 0.2 + 0.85 * look, 0.12 - 0.12 * look, 0.25 + 1.25 * look, 1.15 * look);
+      g.hx = 0.36 * look * k; g.hy = 0.22 * look * k;
+      g.by += 0.012 * Math.max(0, Math.sin(clock * 9)); g.lR = -0.22 * Math.max(0, Math.sin(clock * 9));   // bate o pé, impaciente
+    } else if (tp === 'desconfiado') {                             // desconfiado: mão no queixo, corpo para trás, olhar de lado
+      mix(g.R, 0.55, -0.18, 1.95, 0.55);
+      mix(g.L, 0.45, -0.12, 1.3, 1.0);
+      g.rx = -0.07 * k; g.hz = 0.15 * k; g.hy = (0.22 + 0.12 * wave(0.35)) * k * ALT; g.hx = 0.04 * k;
+    } else {                                                      // sem temperamento (ex.: cena do bonde): braços para cima, inconformado
+      mix(g.L, 0, 2.3 + 0.45 * Math.sin(clock * 13), 0.2);
+      mix(g.R, 0, 2.3 + 0.45 * Math.sin(clock * 13 + 1.3), 0.2);
+      g.by += Math.abs(Math.sin(clock * 9)) * 0.04; g.ry = Math.sin(clock * 4.5) * 0.12;
+    }
+    return g;
+  }
+
+  function pose(k) {                                             // aproxima as juntas dos alvos (k = 1: direto)
+    const g = target(), lerp = (a, b) => a + (b - a) * k;
+    for (const key of ['by', 'bz', 'rx', 'ry', 'rz', 'hx', 'hy', 'hz', 'lL', 'lR']) J[key] = lerp(J[key], g[key]);
+    for (const s of ['L', 'R']) for (const key of ['f', 'o', 'b', 't', 's']) J[s][key] = lerp(J[s][key], g[s][key]);
+    body.position.set(0, LIFT + J.by, J.bz);
+    body.rotation.set(J.rx, J.ry, J.rz);
+    head.rotation.set(-0.42 + J.hx, J.hy, J.hz);
+    applyArm(armL, -1, J.L); applyArm(armR, 1, J.R);
+    legs[0].rotation.x = J.lL; legs[1].rotation.x = J.lR;
+    if (ptQ && mood === 'angry') {                               // depois da reação, aponta (braço esticado) e olha para lá; depois volta
+      const t1 = tau - (again ? 2.4 : 1.3), w = ss(t1 / 0.3) * (1 - ss((t1 - 1.9) / 0.35));
+      if (w > 0.001) {
+        const a = ptSide > 0 ? armR : armL;
+        a.quaternion.slerp(ptQ, w); a.userData.elbow.rotation.x *= 1 - w; a.userData.elbow.rotation.y *= 1 - w; a.userData.elbow.rotation.z *= 1 - w;
+        head.rotation.y += (THREE.MathUtils.clamp(ptYaw * 0.7, -0.8, 0.8) - head.rotation.y) * w;
+      }
+    }
+    // encomenda: do lado da van (ou de perto do portão) até as mãos, num arco curto; depois, junto ao peito
+    if (mood === 'happy') {
+      const from = src || pkgFrom, e = ss(tau / 0.45);
+      pkg.visible = true;
+      _v.copy(from).lerp(HOLD, e); _v.y += Math.sin(Math.PI * e) * (src ? 1.1 : 0.4);
+      pkg.position.copy(_v);
+      pkg.rotation.set(0, (1 - e) * 1.6, (1 - e) * 0.5 + Math.sin(clock * 6) * 0.04 * ss((tau - 0.75) / 0.3));
+      if (tau >= 0.45 && !bubble.visible) { bubble.visible = true; popT = 0; }
+    }
+    const pop = popT < 0.3 ? 0.55 + 0.45 * ss(popT / 0.16) + 0.12 * Math.sin(Math.min(1, popT / 0.3) * Math.PI) : 1;
+    bubble.scale.set(BUBBLE_SIZE * pop, BUBBLE_SIZE * pop, 1);
+    bubble.position.y = 2.2 + Math.max(0, J.by) * 0.8;
+  }
+
+  function update(t, dt) {
+    if (lastT < 0 || t - lastT > 0.3 || t < lastT) enterT = 0;   // acabou de aparecer: sai pela porta
+    if (dt === undefined) dt = lastT >= 0 ? t - lastT : 0;
+    lastT = t; dt = Math.max(0, Math.min(0.1, dt || 0));
+    clock += dt; tau += dt; enterT += dt; popT += dt;
+    active = root;
+    pose(enterT < 0.05 ? 1 : 1 - Math.exp(-14 * dt));
   }
 
   root.userData.setMood = setMood;
   root.userData.update = update;
   setMood('angry');
-  update(0);
+  tau = 1; pose(1);                                              // pose parada inicial (sem entrada; ex.: cena do bonde)
   return root;
+}
+
+// ---- integração com a entrega ----
+let handoff = null, active = null, pointAt = null;
+const _fp = new THREE.Vector3();
+/** Entrega certa: de onde a encomenda sai (posição no mundo: { x, y, z, r } — r: quanto avançar na direção do morador). */
+export function setResidentHandoff(p) { handoff = p ? { ...p } : null; }
+/** Entrega errada cuja fala diz onde fica a próxima casa: o morador aponta para esse ponto do mundo ({ x, z }) depois de reagir. */
+export function setResidentPoint(p) { pointAt = p ? { x: p.x, z: p.z } : null; }
+/** Posição no mundo (altura do rosto) do morador que está atendendo agora, ou null. */
+export function residentFocus() {
+  if (!active || !active.visible || !active.parent) return null;
+  active.getWorldPosition(_fp); _fp.y += 1.5;
+  return _fp;
 }

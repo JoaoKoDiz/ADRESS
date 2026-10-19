@@ -34,7 +34,7 @@ import { createHUD } from './hud.js';
 import { createAudio } from './audio.js';
 import { buildLot } from './models/house.js';
 import { box as kbox, cyl as kcyl, sphere as ksphere, bakeStatic, mat, at, disposeTree } from './models/kit.js';
-import { buildResident } from './models/resident.js';
+import { buildResident, setResidentHandoff, residentFocus, setResidentPoint } from './models/resident.js';
 import { YARD_BUILDERS, YARD_BUILDERS_SNOW } from './models/yard.js';
 import { buildShopLot } from './models/shop.js';
 import { SHOPS, HOUSES, FUTS, L1_FIXED, L6_FIXED, WARES, TWINS, VENS, FAVS, MODS, FARMS, MOONS, GRILLBY, SNOW_FIXED, SNOW_EXTRAS, SNOW_DROP, GARDS, CANYON_EXTRAS, FOREST_EXTRAS, MDHS, MDSS, ROWS, WSHS, MVHS, MVSS, MVS_KEY } from './data.js';
@@ -100,7 +100,7 @@ import snowyUrl from '../assets/snowy.mp3';
 import waterfallUrl from '../assets/waterfall.mp3';
 import { buildChurch, setChurchOpacity, CHURCH_SOLIDS, CHURCH_CAM } from './models/church.js';
 import { buildBell, BELL_SPOT, BELL2_X } from './models/bell.js';
-import { buildPewReader } from './models/reader.js';
+import { buildPewReader, kTalk, kGesture, kGestureReset } from './models/reader.js';
 import { createBackButton } from './backButton.js';
 import { createMissions, createMissionsButton, MISSIONS, RESERVED } from './missions.js';
 import { createCareer } from './career.js';
@@ -545,7 +545,7 @@ let plazaFootCache = null, plazaFootKey = null;
 const plazaSolidsFoot = () => { if (plazaFootKey !== PLAZA) { plazaFootKey = PLAZA; plazaFootCache = plazaFootSolids(); } return plazaFootCache; };
 /** Obstáculos de quem anda a pé: tudo menos os lotes inteiros e a praça (dá para entrar nos quintais); só as paredes das casas. */
 function walkSolids() {
-  const out = SOLIDS.slice(HOUSE_SLOTS.length + (PLAZA ? 1 : 0)).filter(b => !b.vanOnly);   // escadarias e passarelas: só a pé
+  const out = SOLIDS.slice(HOUSE_SLOTS.length + (PLAZA ? 1 : 0)).filter(b => !b.vanOnly && !b.serra);   // escadarias e passarelas: só a pé; a serra da Cachoeira: a pé dá para subir (o chão acompanha)
   if (PLAZA) out.push(...plazaSolidsFoot());
   if (neighborhood === 'night10') out.push(...night.poles);
   if (FLUX) out.push(...fluxParkFoot());
@@ -569,11 +569,18 @@ function walkSolids() {
 }
 let houseFootKey = null, houseFoot = [];
 let wasHigh = false;
+// Cachoeira (23): a serra em volta do vale é só cenário; as colunas de colisão dela (b.serra) existem para a van que vem do
+// vale parar no pé da encosta. Quem já está em cima dela (helicóptero voando baixo, van que pousou lá, personagem a pé) não
+// esbarra nelas — antes o helicóptero baixo empacava no ar ou era jogado para o lado, e a van pousada era empurrada centenas de metros.
+const hasSerra = () => !!(CANAL && CANAL.canyon);
+const onSerra = (x, z) => SOLIDS.some(b => b.serra && x >= b.x0 && x <= b.x1 && z >= b.z0 && z <= b.z1);
+const noSerraList = [];
+function solidsNoSerra() { noSerraList.length = 0; for (const b of SOLIDS) if (!b.serra) noSerraList.push(b); return noSerraList; }
 /** A van (3 círculos R 1,25) está dentro de algum sólido? Se estiver, vai para o ponto livre mais perto (espiral até 30). */
 function unstickVan() {
   const inside = (x, z, hd, R = 1.25) => { const c = Math.cos(hd), sn = Math.sin(hd);
     return [-1.5, 0, 1.5].some(k => { const px = x + c * k, pz = z + sn * k;
-      return SOLIDS.some(b => px > b.x0 - R && px < b.x1 + R && pz > b.z0 - R && pz < b.z1 + R && (b.r ? Math.hypot(px - b.cx, pz - b.cz) < b.r + R : true)); }); };
+      return SOLIDS.some(b => !b.serra && px > b.x0 - R && px < b.x1 + R && pz > b.z0 - R && pz < b.z1 + R && (b.r ? Math.hypot(px - b.cx, pz - b.cz) < b.r + R : true)); }); };   // (a serra da Cachoeira não prende quem voa)
   if (!inside(van.x, van.z, van.heading)) return;
   for (let d = 1; d <= 30; d += 1) for (let k = 0; k < 24; k++) {
     const a = k * Math.PI / 12, x = van.x + Math.cos(a) * d, z = van.z + Math.sin(a) * d;
@@ -601,6 +608,7 @@ function heliTall(alt) {
     for (const sp of V.spots) if (sp.y + (sp.shop ? 9.5 : 9) > y) heliTallOut.push(sp.walkBox);
   }
   if (CANAL && CANAL.rock) for (const b of CANAL.rock) if (b.top > y) heliTallOut.push(b);   // Cachoeira: maciço e degraus de pedra
+  for (const b of SOLIDS) if (b.out && b.top > y) heliTallOut.push(b);   // arredores urbanos: quarteirões e torres de fora (top = altura do prédio; só os que estão perto da van ficam em SOLIDS)
   return heliTallOut;
 }
 // Veneza: cada conjunto de mesa + 4 cadeiras (raio ~1,9) da praça roxa — mesmas posições de terrain.js
@@ -735,7 +743,7 @@ function openGate(s) {
   Object.assign(sp.gateSolid, { x0: -9999, x1: -9998, z0: -9999, z1: -9998 });
   const h = game.layout[s], g = h >= 0 && world.lotGroup(h).userData.gate;
   if (g) gateAnim.set(g, 0);
-  audio.bell && audio.bell();
+  sfx.gate();                                         // trinco e rangido (antes tocava a campainha da entrega)
 }
 function updateGates(dt) {
   for (const [g, t] of gateAnim) { const k = Math.min(1, t + dt / 0.9); g.rotation.y = 1.45 * (1 - Math.pow(1 - k, 3)); if (k >= 1) gateAnim.delete(g); else gateAnim.set(g, k); }
@@ -803,6 +811,7 @@ function updateTrolleySeq(dt) {
     });
   } else if (q.phase === 'talk') {
     talkBox.update(dt); if (input.action()) talkBox.press();
+    trolley.talkUpdate(dt, talkBox);                                  // olhares do K (para os trilhos, para o jogador)
   } else if (q.phase === 'out' && q.t > 0.5) {                        // volta à partida normal
     trolley.stop(); sTrainProblem.stop(); train.clearCharge();
     if (!talkMusic.playing) music.suspend(false);
@@ -1213,6 +1222,63 @@ const bumpHold = new Set();
 const bumpLevel = () => { const lv = gameMode === 'career' ? careerLevel : freeLevel; return lv === 1 || lv === 2 || lv === 6; };
 const bumpShown = () => [2, 6].includes(gameMode === 'career' ? careerLevel : freeLevel);   // Bairros 3 e 7
 const bumpTarget = b => { const i = SOLIDS.indexOf(b); return (i >= 0 && i < HOUSE_SLOTS.length) || (world.extraSolids && world.extraSolids.includes(b)) || !!b.post || b.bar != null || !!b.jam; };   // lotes (casas), troncos das árvores, postes, barreiras
+// ---------- Retorno sonoro de ações sem som próprio (porteira, batidas) ----------
+// Sons curtos gerados aqui (WebAudio), pela saída de efeitos (volume dos Efeitos; calam com o MENU e a aba escondida).
+let sfxNoiseBuf = null, bumpCool = 0, wallMsgCool = 0;
+function sfxNoise(ac) {
+  if (sfxNoiseBuf && sfxNoiseBuf.sampleRate === ac.sampleRate) return sfxNoiseBuf;
+  const n = ac.sampleRate, b = ac.createBuffer(1, n, n), d = b.getChannelData(0);
+  for (let i = 0; i < n; i++) d[i] = Math.random() * 2 - 1;
+  return (sfxNoiseBuf = b);
+}
+function sfxBurst(ac, out, t, dur, vol, type, f, q = 1) {           // ruído filtrado com ataque curto e queda exponencial
+  const src = ac.createBufferSource(), fl = ac.createBiquadFilter(), g = ac.createGain();
+  src.buffer = sfxNoise(ac); fl.type = type; fl.frequency.value = f; fl.Q.value = q;
+  g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(vol, t + 0.006); g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+  src.connect(fl); fl.connect(g); g.connect(out); src.start(t, Math.random() * 0.5, dur + 0.05);
+}
+function sfxTone(ac, out, t, dur, vol, type, f0, f1) {
+  const o = ac.createOscillator(), g = ac.createGain();
+  o.type = type; o.frequency.setValueAtTime(f0, t); o.frequency.exponentialRampToValueAtTime(f1, t + dur);
+  g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(vol, t + 0.01); g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+  o.connect(g); g.connect(out); o.start(t); o.stop(t + dur + 0.05);
+}
+const sfx = {
+  /** Porteira (Colheita): o trinco solta, a folha de madeira range ao girar e encosta (a animação dura ~0,9 s). */
+  gate() {
+    const ac = audio.ctx, out = audio.out; if (!ac || !out) return;
+    try {
+      const t = ac.currentTime + 0.01;
+      sfxBurst(ac, out, t, 0.05, 0.16, 'bandpass', 2600, 3);                  // clique do trinco
+      sfxTone(ac, out, t + 0.012, 0.05, 0.05, 'square', 1500, 900);
+      const o = ac.createOscillator(), lfo = ac.createOscillator(), lg = ac.createGain(), fl = ac.createBiquadFilter(), g = ac.createGain();
+      o.type = 'sawtooth'; o.frequency.setValueAtTime(150, t + 0.08); o.frequency.linearRampToValueAtTime(230, t + 0.75);   // rangido
+      lfo.frequency.value = 23; lg.gain.value = 26; lfo.connect(lg); lg.connect(o.frequency);
+      fl.type = 'bandpass'; fl.frequency.value = 950; fl.Q.value = 6;
+      g.gain.setValueAtTime(0.0001, t + 0.08); g.gain.exponentialRampToValueAtTime(0.045, t + 0.2); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.8);
+      o.connect(fl); fl.connect(g); g.connect(out); o.start(t + 0.08); lfo.start(t + 0.08); o.stop(t + 0.85); lfo.stop(t + 0.85);
+      sfxBurst(ac, out, t + 0.86, 0.12, 0.12, 'lowpass', 520);               // a folha encosta no batente
+      sfxTone(ac, out, t + 0.86, 0.12, 0.08, 'triangle', 140, 90);
+    } catch (e) { /* sem áudio */ }
+  },
+  /** Batida da van (k = 0..1, pela velocidade perdida no choque): baque surdo de lataria. */
+  bump(k) {
+    const ac = audio.ctx, out = audio.out; if (!ac || !out) return;
+    try {
+      const t = ac.currentTime + 0.005, v = 0.05 + 0.2 * k;
+      sfxBurst(ac, out, t, 0.12 + 0.18 * k, v, 'lowpass', 380 + 500 * k);
+      sfxTone(ac, out, t, 0.16 + 0.2 * k, v * 0.9, 'sine', 95, 45);
+      if (k > 0.45) sfxBurst(ac, out, t + 0.02, 0.22, v * 0.35, 'bandpass', 1900, 2);   // forte: um chacoalhar de metal
+    } catch (e) { /* sem áudio */ }
+  },
+};
+/** Chamar logo depois de van.update: a van perdeu velocidade porque encostou em algo → som proporcional ao choque. */
+function bumpFeedback(v0, dt) {
+  bumpCool = Math.max(0, bumpCool - dt);
+  if (!van.touched.size || bumpCool > 0) return;
+  const lost = Math.abs(v0) - Math.abs(van.speed);
+  if (lost > 2.5) { sfx.bump(Math.min(1, (lost - 2.5) / 16)); bumpCool = 0.35; }
+}
 function countBumps() {
   for (const b of van.touched) if (!bumpHold.has(b) && bumpTarget(b)) { bumps++; bumpHold.add(b); if (gameMode === 'career') career.bump(b, barriers.list.length, b.jam || (b.bar != null && barriers.list[b.bar] && barriers.list[b.bar].type === 'truck')); }
   for (const b of bumpHold) if (!van.touched.has(b) && van.gapTo(b) > 1) bumpHold.delete(b);
@@ -1289,6 +1355,7 @@ function startFree(mode = 'free') {
   gameMode = mode;
   if (!COMPOSED.includes(neighborhood)) setupGrid4();   // Bairro 1 tem a casa fixa; o 3 (mesma grade) não
   resetGates();
+  hint.clear(); hintUsed = false; hintStep = -1; hintCount = 0;   // partida nova: a DICA disponível de novo (mesmo sem passar pelo Voltar)
   setupChurch(); setupMedStory(); setupVeniceK();
   if (mode === 'career') career.startMatch(careerLevel); else career.stop();
   music.setTrack(LEVEL_TRACKS[neighborhood] || null, true);   // Veneza, Colheita e Nevasca: a faixa do bairro já tocando
@@ -1376,7 +1443,14 @@ const FUEL_LINES = [
   'Frentista: “Pronto! O cafezinho da loja é por conta da casa.”',
   'Frentista: “Abastecida! Quer o chaveiro de brinde? É um pneuzinho.”',
 ];
-let nearPump = false, fuelArmed = true, fuelMsgT = 0, fuelMsg = '';
+let nearPump = false, fuelArmed = true, fuelMsgT = 0, fuelMsg = '', fuelLast = -1;
+/** Fala do frentista: nunca a mesma duas vezes seguidas; fica na barra o tempo de ler com calma (também no celular). */
+function fuelLine() {
+  let i = Math.floor(Math.random() * (FUEL_LINES.length - 1));
+  if (fuelLast >= 0 && i >= fuelLast) i++;
+  fuelLast = i; fuelMsg = FUEL_LINES[i];
+  fuelMsgT = Math.max(4.5, 1.2 + fuelMsg.length / 15);   // (~5–6,5 s; antes 3 s)
+}
 function atPump() {
   const inZone = GAS_LIST.some(g => {
     const o = slotOrigin(g.slots[0]), lx = van.x - o.x, lz = van.z - o.z;
@@ -1428,7 +1502,7 @@ function findNearHouse() {
 }
 
 function requestHint() {
-  if (state !== 'drive' || hintUsed || hintStep === game.step) return;
+  if ((state !== 'drive' && state !== 'walk') || hintUsed || hintStep === game.step) return;   // (a pé também: em Veneza, no Morro e nos bairros sem grade há entregas a pé)
   hintCount++; hintUsed = hintCount >= hintLimit();
   if (gameMode === 'career') career.hint();
   hintStep = game.step;
@@ -1439,6 +1513,25 @@ function requestHint() {
 
 // Van imparável: casas que ela toca explodem; árvores e sebe viram uma chuva de lascas e folhas.
 const smashCool = new Map();
+// o que voa ao atropelar cada coisa: folhas e lascas (árvore/sebe), tijolo, reboco e telha (construções dos arredores),
+// madeira e tinta (cercas e postes), pedaços listrados (bloqueios), lataria (carros e caminhões)
+const SMASH_COLORS = {
+  tree: ['#3f8f3a', '#57a84a', '#6b4526', '#2f7a32'], hedge: ['#3f8f3a', '#2f7a32', '#57a84a'],
+  building: ['#d8ccb6', '#b8a593', '#8a5e4d', '#9e9a92', '#c7bba9'], fence: ['#e9e3d6', '#8a6a48', '#a88d66', '#d8ccb6'],
+  post: ['#7c8288', '#5f656b', '#a7aaa6'], barrier: ['#ff7a1a', '#f4f1ea', '#e8661a', '#5f656b'], car: ['#c8ccd0', '#5f656b', '#2b2d33', '#d23b2b'],
+  wall: ['#c9c2b5', '#9e9a92', '#b8a593', '#e9e3d6'], gas: ['#d23b2b', '#f4f1ea', '#7c8288', '#ffd23a'],
+};
+const SMASH_N = { tree: 30, hedge: 14, building: 26, fence: 16, post: 10, barrier: 18, car: 20, wall: 16, gas: 18 };
+function smashKind(b, i, treesFrom) {
+  if (b.jam || (b.bar != null && barriers.list[b.bar] && barriers.list[b.bar].type === 'truck')) return 'car';
+  if (b.bar != null) return 'barrier';
+  if (b.post) return 'post';
+  const w = b.x1 - b.x0, d = b.z1 - b.z0, gas0 = HOUSE_SLOTS.length + (PLAZA ? 1 : 0);
+  if (b.out) return Math.max(w, d) <= 1.6 ? 'tree' : Math.min(w, d) <= 0.7 ? 'fence' : 'building';   // arredores: tronco, cerca ou construção
+  if (i >= gas0 && i < gas0 + GAS_LIST.length * GAS_PARTS.length) return 'gas';                     // peças do posto
+  if (i < treesFrom) return 'hedge';                                                                   // praça e sebe
+  return Math.max(w, d) <= 2.2 ? 'tree' : Math.min(w, d) <= 0.7 ? 'wall' : 'building';             // troncos; muros; o resto (igreja, enchimento…)
+}
 function wreck(dt) {
   for (const [k, v] of smashCool) { if (v - dt <= 0) smashCool.delete(k); else smashCool.set(k, v - dt); }
   const R = 1.3, c = Math.cos(van.heading), s = Math.sin(van.heading);
@@ -1461,11 +1554,10 @@ function wreck(dt) {
           else if (!allDestroyed()) { restartMsg = 'Poucas casas de pé! A partida vai reiniciar…'; setState('fadeOut'); }   // (sem destinos possíveis: recomeça, como na entrega certa)
         }
       }
-    } else if (!smashCool.has(i)) {                 // sebe ou árvore
+    } else if (!smashCool.has(i) && !b.serra) {     // sebe, árvore, construção dos arredores, bloqueio… (a serra da Cachoeira é morro: nada voa)
       smashCool.set(i, 0.35);
-      const tree = i >= treesFrom;
-      boom.smash(Math.min(Math.max(van.x + c * 2.4, b.x0), b.x1), Math.min(Math.max(van.z + s * 2.4, b.z0), b.z1),
-        tree ? ['#3f8f3a', '#57a84a', '#6b4526', '#2f7a32'] : ['#3f8f3a', '#2f7a32', '#57a84a'], tree ? 30 : 14);
+      const k = smashKind(b, i, treesFrom);
+      boom.smash(Math.min(Math.max(van.x + c * 2.4, b.x0), b.x1), Math.min(Math.max(van.z + s * 2.4, b.z0), b.z1), SMASH_COLORS[k], SMASH_N[k]);
     }
   }
 }
@@ -1529,6 +1621,13 @@ const K_LINES = [
   ['Mas me diga: foi tão difícil assim encontrar esta casa?'],
   K_LAST,
 ];
+// olhares do K nesta conversa (somados à pose "jornal de lado", que já olha para quem chegou): kTalk em models/reader.js
+const K_GEST = [
+  { at: 'box', rate: 2.6, then: { from: 0.45, at: 'p' } },                                   // "Ah! Finalmente…": a caixa ao lado da cadeira; depois, quem trouxe
+  { at: 'p', w: 0.3, yaw: 0.3, shake: 0.05, then: { from: 0.6, w: 1, yaw: 0, shake: 0 } },     // tanta coisa que não pedi: olha para longe, balança a cabeça
+  { at: 'p', roll: 0.14 },                                                                   // "foi tão difícil assim…?": a cabeça de lado
+  { at: 'p', then: [{ from: 0.2, w: 0.45, pitch: 0.34 }, { from: 0.52, w: 1, pitch: 0 }] },  // o topo de um prédio alto: os olhos sobem; o resto, seco
+];
 const talkCam = { pos: new THREE.Vector3(), look: new THREE.Vector3() };
 let talkPhase = '', talkLines = null;
 function startTalk() {
@@ -1545,13 +1644,13 @@ function startTalk() {
     parcel.position.set(_rp.x + f.x * 0.55 - rt.x * 0.95, 0, _rp.z + f.z * 0.55 - rt.z * 0.95); parcel.rotation.set(0, -r + 0.3, 0);
     talkLines = K_LINES;
   } else talkLines = [K_LAST];
-  sp.userData.setAside(true);
+  sp.userData.setAside(true); kGestureReset(sp);
   talkPhase = 'aside';
   setState('talk');
 }
 function endTalk() {
   if (!parcelDone && talkLines === K_LINES) { parcelDone = true; try { localStorage.setItem(PARCEL_KEY, '1'); } catch (e) { /* */ } }
-  const sp = readerSpot(); sp && sp.userData.setAside(false);   // volta a ler
+  const sp = readerSpot(); sp && sp.userData.setAside(false);   // volta a ler (os gestos somem junto com a pose de conversa)
   talkPhase = ''; actionLock = 0.4;
   rig.snap({ x: walker.x, z: walker.z, heading: walker.heading, speed: 0 });   // câmera de sempre, atrás do personagem
   setState('walk');
@@ -1598,8 +1697,18 @@ const ROOF_LINES = [
   ['Lá no primeiro bairro, as casas escondem o caminho. ', { b: 'Mas o sol ainda aponta a direção.' }],
   ['Deixe o bairro para trás e ', { b: 'dirija na direção do sol.' }, ' Depois de algum tempo, verá o lugar no horizonte. ', { b: 'Estarei lá.' }],
 ];
+// olhares do K reclinado (ele estava olhando a vista, para o lado do sol)
+const ROOF_GEST = [
+  { at: 'p', rate: 1.8 },                                                    // vira a cabeça devagar para quem chegou
+  { at: 'p' },
+  { at: 'p', roll: -0.12 },                                                  // provocando, de leve
+  { at: 'p', w: 0.35 },                                                      // volta a olhar a vista
+  { at: 'p' },
+  { at: 'p', then: { from: 0.56, at: 'sun', w: 0.55, rate: 1.6 } },          // "Mas o sol ainda aponta a direção." (de perfil, sem dar as costas)
+  { at: 'sun', w: 0.5, then: { from: 0.86, at: 'p', w: 1, rate: 2.4 } },     // … e de volta para quem vai procurar: "Estarei lá."
+];
 function startRoofTalk() {
-  const lr = loungerSpot(); lr.getWorldPosition(_rp);
+  const lr = loungerSpot(); lr.getWorldPosition(_rp); kGestureReset(lr);
   van.object.visible = false;                           // o helicóptero some só durante esta cena (não tampa nada)
   const px = _rp.x + 1.45, pz = _rp.z - 0.3;            // em pé ao lado da espreguiçadeira (lado leste), olhando para ele
   walker.pose(px, pz, Math.atan2(_rp.z - pz, _rp.x - px));
@@ -1979,6 +2088,7 @@ function updateMenuMusic() {
   if (menus && !menuPaused) { if (!menuMusic.playing && menuMusic.play(menuFadeIn)) menuFadeIn = 0.6; }
   else if (menuMusic.playing) menuMusic.stop(0.8);
 }
+let cabCap = null;                                      // boné do motorista na cabine (some dentro das igrejas)
 function updateRain(dt) {
   const on = rainOn() && !extra.active && !massStory.active && !battle.active;
   const menuS = MENU_STATES.includes(state) || inMap();
@@ -1991,6 +2101,9 @@ function updateRain(dt) {
   // dentro de qualquer igreja: o jogador a pé sem boné (só esconde o acessório; volta ao sair; a customização salva não muda)
   const capSlot = walker.object.getObjectByName('cap');
   if (capSlot) { const wp = walker.object.position; capSlot.visible = !chs.some(c => { _rl.set(wp.x, wp.y + 1, wp.z).applyMatrix4(_rinv.copy(c.matrixWorld).invert()); return _rl.x > -24 && _rl.x < 24 && _rl.z > -58 && _rl.z < 2.4; }); }
+  // a mesma regra para o motorista na cabine (o mesmo personagem, visto pela janela) quando a van entra numa igreja
+  if (!cabCap || !cabCap.parent) { const cab = van.object.getObjectByName('cab-driver'); cabCap = cab ? cab.getObjectByName('cap') : null; }
+  if (cabCap) cabCap.visible = !chs.some(c => { _rl.set(van.x, van.object.position.y + 1.8, van.z).applyMatrix4(_rinv.copy(c.matrixWorld).invert()); return _rl.x > -24 && _rl.x < 24 && _rl.z > -58 && _rl.z < 2.4; });
   rainAudio.update(dt, document.hidden);
   if (rainFx.object.parent !== world.scene) world.scene.add(rainFx.object);
   rainFx.update(dt, cam, on && !inMap() && (!MENU_STATES.includes(state) || menuRain) ? 0.55 : 0, chs);
@@ -2171,6 +2284,33 @@ const CHURCH_LINES = [
   ['Vá. ', P, 'Só não deixe que a pressa escolha por você.'],
   ['E, ', P, 'quando voltar, ', P, 'não precisa trazer nenhuma encomenda. ', P, 'Sua presença já basta.'],
 ];
+// olhares do K no banco (a pose de antes olha para o altar; 'p' = o jogador no corredor; 'door' = a saída). Nas pausas [...]
+// (think) ele pensa: os olhos descem ou voltam para a frente. kTalk em models/reader.js.
+const CHURCH_GEST = [
+  { at: 'p', w: 0.85, rate: 1.8 },                                                          // "Você encontrou o caminho."
+  { at: 'p', w: 0.7, think: { w: 0.35, pitch: -0.12 } },
+  { at: 'p', w: 0.15, pitch: 0.06, think: { w: 0.05, pitch: 0.12 } },                      // "É curioso…": de novo para a frente
+  { at: 'p', w: 0.25, think: { w: 0.1, pitch: -0.16 }, then: { from: 0.72, w: 0.6 } },
+  { at: 'p', w: 0.55, then: { from: 0.37, w: 0.12, pitch: -0.22 } },                        // "O difícil é…": os olhos nas mãos
+  { at: 'p', w: 0.9, think: { pitch: -0.05 } },
+  { at: 'p', w: 0.85, then: { from: 0.55, at: 'door', w: 0.7 } },                           // "lá fora"
+  { at: 'p', w: 1, lean: 0.04 },                                                            // "Vá."
+  { at: 'p', w: 0.6, think: { w: 0.3, pitch: -0.1 }, then: { from: 0.74, w: 1, pitch: 0 } },   // "Sua presença já basta."
+];
+const CHURCH2_GEST = [
+  { at: 'p', w: 0.9, rate: 1.8, think: { w: 0.6, pitch: -0.1 } },                         // "Você veio. … Que bom."
+  { at: 'p', w: 0.3, pitch: -0.1 },
+  { at: 'p', w: 0.2, then: { from: 0.6, w: 0.9 } },                                        // "… Agora que você veio."
+  { at: 'p', w: 0.1, pitch: 0.08, think: { w: 0.05, pitch: -0.15 } },
+  { at: 'p', w: 0.8, then: { from: 0.4, w: 0.15, yaw: 0.1, pitch: -0.25 } },               // "… sou eu quem precisa ir.": não sustenta o olhar
+  { at: 'p', w: 0, yaw: -0.2, pitch: 0.15 },                                               // "longe daqui"
+  { at: 'p', w: 0.2, think: { w: 0.05, pitch: -0.18 }, then: { from: 0.78, w: 0.1, pitch: -0.22 } },
+  { at: 'p', w: 1, rate: 3.5, then: { from: 0.6, w: 0.7, pitch: -0.08 } },                 // "Não é por algo que você fez."
+  { at: 'p', w: 0.1, pitch: 0.1 },
+  { at: 'p', w: 0.85, pitch: -0.04 },
+  { at: 'p', w: 0.9, think: { w: 0.4, pitch: -0.15 } },
+  { at: 'p', w: 1, roll: 0.07 },
+];
 const K_PEW = { x: 2.3, z: -23 };                       // onde ele está sentado (coordenadas locais da igreja)
 const CL = (lx, ly, lz) => new THREE.Vector3(MAP_W() / 2 - lx, ly, MAP_W() + CHURCH_Z - lz);   // local da igreja → mundo (girada 180°)
 const CINE = {
@@ -2189,6 +2329,13 @@ const nearChurchK = () => churchShown && state === 'walk' && !cine && !approachL
   Math.hypot(walker.x - CL(K_PEW.x, 0, K_PEW.z).x, walker.z - CL(K_PEW.x, 0, K_PEW.z).z) < 3.4;
 const ease = x => x * x * (3 - 2 * x);
 function setCam(posL, lookL) { cine.camPos.copy(CL(...posL)); cine.camLook.copy(CL(...lookL)); }
+const _fcam = new THREE.PerspectiveCamera();
+/** Olhares do K no banco durante a conversa (plan = roteiro por fala) ou, sem roteiro, para o jogador (peso w). */
+function churchKLook(dt, plan, w = 1) {
+  if (!church) return;
+  const tg = { p: _tgP.set(walker.x, walker.floor + 1.45, walker.z), door: _tgA.copy(CL(0, 1.6, 3)) };
+  if (plan) kTalk(church.userData.pewK, dt, plan, talkBox, tg); else kGesture(church.userData.pewK, dt, { at: tg.p, w, rate: 2.2 });
+}
 function startChurchTalk() {
   const p = CL(CINE.player.x, 0, CINE.player.z), k = CL(K_PEW.x, 0, K_PEW.z);
   walker.pose(p.x, p.z, Math.atan2(k.z - p.z, k.x - p.x));
@@ -2197,6 +2344,7 @@ function startChurchTalk() {
   const total = lines.reduce((t, l) => t + lineDuration(l), 0);
   cine = { phase: 'talk', t: 0, total, count: -1, wp: 0, stage, bell: stage === 2 ? greenBell : churchBell, camPos: new THREE.Vector3(), camLook: new THREE.Vector3() };
   setCam(...CINE.camA);
+  if (church) kGestureReset(church.userData.pewK);       // (conversa repetida: começa da pose de sempre)
   setState('cine');
   talkBox.show(lines, churchTalkEnd, { auto: true, onAdvance: i => {
     if (i !== 6 || cine.stage === 2) return;           // terminou a 6ª fala: começa a contagem para voltar ao bairro (na 2ª visita, não há contagem)
@@ -2229,14 +2377,19 @@ function updateWhiteVan() {
   const t = churchMusic.time;
   if (t < WHITE_AT) return;
   if (!vanFade && !unwhite) {
+    // o jogador (a pé, escondido) e o motorista na cabine (o mesmo personagem, visto pela janela) ficam brancos de uma vez;
+    // a van em volta deles, aos poucos. (Primeiro o motorista: a transição da van já o encontra branco.)
+    const cab = van.object.getObjectByName('cab-driver');
+    const undoWalker = cab ? whiten(walker.object, cab) : whiten(walker.object);
     vanFade = whitenFade(van.object);
-    const undoWalker = whiten(walker.object), f = vanFade;
+    const f = vanFade;
     unwhite = () => { f.restore(); undoWalker(); };
   }
   if (vanFade) vanFade.step((t - WHITE_AT) / WHITE_FADE);
 }
 function churchCineEnd() {                              // de volta ao bairro: cores, câmera e controles normais
   if (cine && cine.stage === 2 && church) church.userData.pewK.visible = false;   // despedida: ele já foi embora
+  if (church) kGestureReset(church.userData.pewK);
   restoreLook(); talkBox.warn(null); talkBox.hide();
   cine = null; walker.show(false);
   const z = MAP_W() - HEDGE - 3.9, x = roadCenter(Math.floor(GRID / 2));
@@ -2262,12 +2415,14 @@ function updateChurchCine(dt) {
     if (!c.music && c.stage !== 2 && c.t >= TALK_MUSIC_AT) { c.music = true; startTalkMusic(); }   // 10 s depois da 1ª fala (pausas incluídas); só na 1ª conversa
     talkBox.update(dt);
     walker.update(dt, { x: 0, z: 0 }, 'car', [], van);
+    churchKLook(dt, c.stage === 2 ? CHURCH2_GEST : CHURCH_GEST);
     const k = ease(Math.min(1, c.t / (c.total * 0.92)));   // aproxima devagar durante toda a conversa
     c.camPos.copy(CL(...CINE.camA[0])).lerp(CL(...CINE.camB[0]), k);
     c.camLook.copy(CL(...CINE.camA[1])).lerp(CL(...CINE.camB[1]), k);
     // assim que o jogador sai totalmente do quadro, ele (e a van, lá fora) já fica branco: nada muda de cor na frente da câmera
     if (!unwhite && k > 0.3) {
-      _frus.setFromProjectionMatrix(_m4.multiplyMatrices(rig.camera.projectionMatrix, rig.camera.matrixWorldInverse));
+      _fcam.copy(rig.camera, false); _fcam.position.copy(c.camPos); _fcam.lookAt(c.camLook); _fcam.updateMatrixWorld();   // (o quadro desta cena, mesmo sem desenho entre os quadros)
+      _frus.setFromProjectionMatrix(_m4.multiplyMatrices(_fcam.projectionMatrix, _fcam.matrixWorldInverse));
       if (!_frus.intersectsBox(_bb.setFromObject(walker.object)) && !_frus.intersectsBox(_bb.setFromObject(van.object))) unwhite = whiten(walker.object, van.object);
     }
   } else if (c.phase === 'back') {                      // parada no lugar, a câmera gira até o jogador (já branco) e segura um pouco
@@ -2275,6 +2430,7 @@ function updateChurchCine(dt) {
     const d1 = CL(CINE.player.x, 1.35, CINE.player.z).sub(c.camPos).normalize();
     c.camLook.copy(c.camPos).add(c.dir0.clone().lerp(d1, k).normalize());
     walker.update(dt, { x: 0, z: 0 }, 'car', [], van);
+    churchKLook(dt, null, 0.9);                         // ele continua olhando para o jogador (já branco)
     if (c.t > 2.2 + 1.4) { c.phase = 'walk'; c.t = 0; c.wp = 0; }
   } else if (c.phase === 'walk' || c.phase === 'outside') {
     const [tx, tz] = CINE.walk[c.wp], tgt = CL(tx, 0, tz);
@@ -2282,10 +2438,14 @@ function updateChurchCine(dt) {
     if (d < 0.5) {
       if (++c.wp >= CINE.walk.length) { walker.show(false); c.phase = 'drive'; c.t = 0; return; }   // entra na van
     } else {
-      walker.pose(walker.x, walker.z, Math.atan2(dz, dx));
-      walker.update(dt, { x: 0, z: -1 }, 'car', walkSolids(), { x: 1e6, z: 1e6 });
+      // vira para o próximo ponto sem zerar o passo: walker.pose zera a velocidade, e chamado a cada quadro deixava a saída
+      // lentíssima (a contagem acabava antes do sino). pose só nas curvas do trajeto; no resto, corrige o rumo pelo eixo (TURN 3,2).
+      let dh = Math.atan2(dz, dx) - walker.heading; while (dh > Math.PI) dh -= 2 * Math.PI; while (dh < -Math.PI) dh += 2 * Math.PI;
+      if (Math.abs(dh) > 0.35) { walker.pose(walker.x, walker.z, Math.atan2(dz, dx)); dh = 0; }
+      walker.update(dt, { x: Math.max(-1, Math.min(1, dh / (3.2 * dt))), z: -1 }, 'car', walkSolids(), { x: 1e6, z: 1e6 });
     }
     const lz = MAP_W() + CHURCH_Z - walker.z;           // z local do jogador
+    if (c.phase === 'walk') churchKLook(dt, null, 0.75);   // acompanha com os olhos o jogador indo embora
     if (c.phase === 'walk' && lz > -3.5) { c.phase = 'outside'; setCam(...CINE.outCam); }   // corte para fora
     if (c.phase === 'walk') {                           // dentro: a câmera acompanha por trás, olhando para a porta
       const cp = CL(0.9, 3.4, lz - 6.5), cl = CL(0, 1.6, lz + 4), a = 1 - Math.exp(-3 * dt);
@@ -2336,6 +2496,37 @@ const VENICE_LINES = [
   ['Lembra de onde nos encontramos antes? ', P, 'Vou passar por lá antes de viajar.'],
   ['Se quiser me encontrar mais uma vez, ', P, 'siga o sol. ', P, { b: 'Estarei lá' }, '.'],
 ];
+// olhares do K no banco (w = 0: os olhos no canal, à frente dele; 'p' = quem está conversando com ele)
+const VENICE_GEST = [
+  { at: 'p', rate: 2.2, then: { from: 0.42, w: 0.55, yaw: 0.28, roll: 0.06 } },    // "Olha só quem apareceu." … de lado, ao lembrar do bondinho
+  { at: 'p', w: 0, then: { from: 0.45, w: 1 } },                                   // o sossego: o canal; depois, quem veio
+  { at: 'p', w: 0.3, pitch: -0.22, then: { from: 0.6, w: 1, pitch: 0 } },          // pensou no que aconteceu … "Você escolheu me ajudar."
+  { at: 'p', then: { from: 0.18, w: 0.08, pitch: -0.08 }, think: { w: 0, pitch: -0.2 } },   // as cinco pessoas: os olhos voltam para o canal
+  { at: 'p', w: 0.15 },
+  { at: 'p', w: 0.7 },
+  { at: 'p', w: 0.8, think: { w: 0.45, pitch: 0.06 } },
+  { at: 'p', roll: 0.07 },
+  { at: 'p', then: { from: 0.56, w: 0.12, yaw: 0.35, pitch: -0.12, rate: 2 } },   // "Mas prefiro um lugar mais tranquilo.": desvia o olhar
+  { at: 'p', yaw: 0, pitch: 0 },
+  { at: 'p', then: [{ from: 0.6, w: 0.3, pitch: 0.38 }, { from: 0.8, w: 1, pitch: 0 }] },   // "siga o sol": os olhos sobem; "Estarei lá."
+];
+const _tgP = new THREE.Vector3(), _tgA = new THREE.Vector3();
+/** Olhares do K nas conversas de câmera fixa (caixa do Bairro 1, terraço do Bairro 6, Veneza). */
+function talkGestures(dt) {
+  if (talkPhase !== 'talk') return;
+  const tg = { p: _tgP.set(walker.x, walker.floor + 1.45, walker.z) };
+  if (talkLines === ROOF_LINES) {
+    const lr = loungerSpot(), sun = world.scene.getObjectByName('sun'); if (!lr) return;
+    if (sun) tg.sun = sun.getWorldPosition(_tgA);
+    kTalk(lr, dt, ROOF_GEST, talkBox, tg);
+  } else if (talkLines === VENICE_LINES) {
+    const k = venK && venK.getObjectByName('pew-reader'); if (k) kTalk(k, dt, VENICE_GEST, talkBox, tg);
+  } else {
+    const sp = readerSpot(); if (!sp) return;
+    tg.box = _tgA.set(parcel.position.x, 0.3, parcel.position.z);
+    kTalk(sp, dt, talkLines === K_LINES ? K_GEST : K_GEST.slice(3), talkBox, tg);
+  }
+}
 let venK = null;
 const venKSolid = { x0: 0, x1: 0, z0: 0, z1: 0 };
 function buildVeniceK() {
@@ -2369,15 +2560,18 @@ function startVeniceTalk() {
   walker.pose(px, pz, Math.atan2(k.z - pz, k.x - px));
   van.stop();
   const y = VENICE.LAND;
-  talkCam.pos.set(k.x - 4.4, y + 2.2, k.z - 0.4);       // por cima do canal: ele de frente, o jogador de lado
-  talkCam.look.set((k.x + px) / 2 + 0.2, y + 0.95, (k.z + pz) / 2 + 0.2);
+  // enquadramento habitual das conversas: por cima do ombro do jogador (de costas), o K de frente, um pouco de lado
+  const ux = (px - k.x) / Math.hypot(px - k.x, pz - k.z), uz = (pz - k.z) / Math.hypot(px - k.x, pz - k.z);
+  talkCam.pos.set(px + ux * 2.3 + uz * 2.3, y + 1.95, pz + uz * 2.3 - ux * 2.3);   // (de lado o bastante para a cabeça do jogador não tapar o rosto dele)
+  talkCam.look.set(k.x * 0.7 + px * 0.3, y + 1.0, k.z * 0.7 + pz * 0.3);
   talkLines = VENICE_LINES; talkPhase = 'talk';
+  const vk = venK.getObjectByName('pew-reader'); if (vk) kGestureReset(vk);
   setState('talk');
   talkBox.show(VENICE_LINES, () => {
     try { localStorage.setItem(VENICE_TALK_KEY, '1'); } catch (e) { /* */ }   // libera a 2ª visita à igreja
     talkPhase = 'note';
     talkBox.note('ORIENTAÇÃO DO JOGO', ['Use o ', { b: 'Modo Livre' }, ' no ', { b: 'Bairro 1' }, ', a qualquer momento, caso tenha interesse.'], () => {
-      talkBox.hide(); talkPhase = ''; actionLock = 0.5;
+      talkBox.hide(); talkPhase = ''; actionLock = 0.5; if (vk) kGestureReset(vk);   // (a câmera volta ao jogo: corte)
       setState('walk');                                 // controles de volta, na mesma partida
     });
   }, { auto: true });
@@ -2508,6 +2702,68 @@ function focusOf(h) {
   return focusPt;
 }
 
+// Descer/subir na van: o personagem sai pela porta da cabine (ou anda até ela) em vez de surgir/sumir do lado da van,
+// e a carroceria cede um pouco. Só no chão de verdade (não no terraço, na lancha nem na Lua).
+let doorStep = null;
+// A pé, a cabine fica vazia; ao subir, ele aparece ao volante. Cenas da história que escondem o personagem com o jogador
+// fora da van (conversa e missa na igreja, montagem da igreja, Grillby's em 1ª pessoa) também deixam a cabine vazia.
+const CAB_EMPTY_STATES = ['mstory', 'chseq', 'gstory'];
+walker.onShow = on => van.setCabDriver(!on && !CAB_EMPTY_STATES.includes(state));
+function vanDoorStep(out) {
+  if (roofWalk || VENICE || MOONV || !van.object.visible || heli.flying) return false;
+  const fx = Math.cos(van.heading), fz = Math.sin(van.heading);
+  const side = out ? walker.exitSide : ((walker.x - van.x) * fz - (walker.z - van.z) * fx >= 0 ? 1 : -1);   // +1: lado do motorista (esquerda)
+  if (!side) return false;
+  const door = { x: van.x + fx * 0.75 + side * fz * 1.45, z: van.z + fz * 0.75 - side * fx * 1.45 };
+  if (out) {
+    const end = { x: walker.x, z: walker.z };
+    if (!walker.pathFree([end], walkSolids(), door)) { van.jolt(side, 1); return false; }   // algo entre a porta e o lugar livre (cerca, poste): desce direto ao lado
+    walker.pose(door.x, door.z, van.heading);                                  // (controles e câmera seguem a van; só o corpo sai virado para fora)
+    walker.walkPath([end], 5.2, van.heading, Math.atan2(-side * fx, side * fz));
+  } else {
+    const lx = (walker.x - van.x) * fx + (walker.z - van.z) * fz, lat = Math.abs((walker.x - van.x) * fz - (walker.z - van.z) * fx);
+    const pts = [];
+    if (lat < 1.95) { const a = Math.max(-3.1, Math.min(3.2, lx)); pts.push({ x: van.x + fx * a + side * fz * 1.95, z: van.z + fz * a - side * fx * 1.95 }); }   // na frente/atrás: contorna a lataria
+    pts.push(door);
+    if (!walker.pathFree(pts, walkSolids())) return false;   // o caminho até a porta atravessaria algo: entra direto (como antes)
+    walker.walkPath(pts, 6.5);
+  }
+  doorStep = out ? 'out' : 'in';
+  if (out) van.jolt(side, 1);
+  return true;
+}
+/** A caixa do K nos braços do personagem: junto do peito, acompanhando o passo. */
+function carryParcel() {
+  const f = walker.facing, hc = Math.cos(f), hs = Math.sin(f), by = walker.object.children[0] ? walker.object.children[0].position.y : 0;
+  parcel.position.set(walker.x + hc * 0.5, walker.floor + 0.68 + by, walker.z + hs * 0.5); parcel.rotation.set(0, -f, 0);
+}
+function enterVanNow() {
+  if (carrying) resetParcel();
+  const fx = Math.cos(van.heading), fz = Math.sin(van.heading);
+  van.jolt((walker.x - van.x) * fz - (walker.z - van.z) * fx >= 0 ? 1 : -1, 0.8);   // a carroceria cede quando ele sobe
+  walker.show(false); walker.setFloor(0); roofWalk = null; actionLock = 0.5; setState('drive');
+}
+
+const POINT_REL = new Set(['front', 'beside', 'near', 'cross', 'bridge']);
+/** Durante a entrega: no celular em pé, a câmera se vira para o morador; a pé, o personagem olha para ele (e, se estava
+ *  colado na porta, dá um passo para trás quando o morador sai, em vez de ficar dentro dele). */
+let footBack = false;
+function residentLook(dt) {
+  const f = residentFocus();
+  rig.setFocus(f);
+  if (!footDelivery || !walker.visible) return;
+  if (state === 'ring' && stateT < 0.1) footBack = false;
+  if (walker.scripted) { walker.stepScript(dt); return; }
+  if (!f) { walker.idle(dt); return; }
+  const dx = walker.x - f.x, dz = walker.z - f.z, d = Math.hypot(dx, dz);
+  if (!footBack && d < 1.5) {
+    footBack = true;
+    const k = (1.85 - d) / Math.max(d, 1e-3), P = { x: walker.x + dx * k, z: walker.z + dz * k };
+    if (walker.pathFree([P], walkSolids())) { walker.walkPath([P], 2.4, null, walker.facing, true); walker.stepScript(dt); return; }
+  }
+  walker.face(f.x, f.z, dt);
+}
+
 // ---------- Atualização ----------
 function update(dt, t) {
   stateT += dt;
@@ -2559,15 +2815,21 @@ function update(dt, t) {
             if (gameMode === 'career') career.exitVan(van.x, van.z, van.heading, van.speed, shopFronts());   // Bairro 4: "Estacione de ré"
             van.stop(); nearHouse = -1; nearPump = false;
             walker.show(true);
+            vanDoorStep(true);                         // sai pela porta da cabine e dá dois passos para o lado
             setState('walk');
             break;
           }
         }
       }
       if (free && input.heli()) heli.toggle();
-      van.setGhost(free && (menu.unstoppable || heli.high), menu.unstoppable ? null : heliTall(van.object.position.y));
+      { const ghost = free && (menu.unstoppable || heli.high), serraFree = !ghost && hasSerra() && (heli.flying || onSerra(van.x, van.z));
+        van.setGhost(ghost || serraFree, ghost && menu.unstoppable ? null : ghost ? heliTall(van.object.position.y) : solidsNoSerra()); }
       if (heli.landed) van.stop();                // pousado no teto: parado até decolar (H)
-      if (!mooringStep(dt)) van.update(dt, heli.landed ? { x: 0, z: 0 } : approachLock() ? approachAxis() : input.axis(), approachLock() ? 'car' : rig.mode === 'chase' ? 'car' : 'screen');
+      { const v0 = van.speed;
+        if (!mooringStep(dt)) van.update(dt, heli.landed ? { x: 0, z: 0 } : approachLock() ? approachAxis() : input.axis(), approachLock() ? 'car' : rig.mode === 'chase' ? 'car' : 'screen');
+        bumpFeedback(v0, dt);
+        if (gameMode === 'career' && van.touched.has(ENTRANCE_WALL) && wallMsgCool <= 0) { fuelMsg = 'Na Carreira, a saída do bairro só abre depois da entrega certa.'; fuelMsgT = 3.5; wallMsgCool = 8; }   // (a parede é invisível: sem o aviso, parecia defeito)
+        wallMsgCool = Math.max(0, wallMsgCool - dt); }
       if (bumpLevel() && !heli.flying) countBumps();  // Bairros 2 e 3: batidas da van (não conta no ar, nem descendo do helicóptero)
       if (heli.on && rig.mode === 'chase') {      // no ar, A/D giram mesmo parado
         const ax = input.axis().x;
@@ -2601,21 +2863,30 @@ function update(dt, t) {
     }
     case 'fuel':                                    // abastecendo: a van espera a bomba
       van.stop();
-      if (stateT > FUEL_TIME) { fuelMsgT = 3; fuelMsg = FUEL_LINES[Math.floor(Math.random() * FUEL_LINES.length)]; actionLock = 0.3; setState('drive'); }
+      if (stateT > FUEL_TIME) { fuelLine(); actionLock = 0.3; setState('drive'); }
       break;
     case 'ring':
-      if (stateT > RESIDENT_APPEAR && !HOUSES[pending].narrator) world.showResident(pending, 'angry');   // K não atende: continua lendo
+      if (stateT > RESIDENT_APPEAR && !HOUSES[pending].narrator) world.showResident(pending, 'door');   // abre a porta e vem até o portão (K não atende: continua lendo)
+      residentLook(dt);
       if (stateT > RING_TIME) {
         const stepBefore = game.step, indicated = game.route[game.step] === pending;
         dialog = game.visit(pending, gameMode === 'career' ? careerLevel : freeLevel);   // (o bairro dá o jeito das falas)
         if (gameMode === 'career') career.visit(pending, dialog.success, indicated, stepBefore, game, { time: matchTimer.time, bumps });   // na entrega certa, confirma e salva as missões desta partida
         if (gameMode === 'career' && dialog.success) matchTimer.stop();   // Carreira: a entrega certa encerra a partida — o tempo para aqui
-        if (!dialog.narrator) world.showResident(pending, dialog.success ? 'happy' : 'angry');
+        if (!dialog.narrator) {
+          // entrega certa: a encomenda sai do lado da van (ou das mãos do personagem, a pé) e vai para as mãos do morador;
+          // errada: a reação segue o temperamento dele (e reconhece quando o jogador insiste na mesma casa)
+          if (dialog.success) setResidentHandoff(footDelivery ? { x: walker.x, y: walker.floor + 1.1, z: walker.z, r: 0.45 } : { x: van.x, y: van.object.position.y + 1.6, z: van.z, r: 1.35 });
+          // aponta para a próxima casa só quando a própria fala já diz onde ela fica (quadra da frente, do lado, perto, outro lado do canal)
+          setResidentPoint(!dialog.success && dialog.info && (dialog.facts || []).some(f => POINT_REL.has(f)) ? doorPoint(game.slotOf[dialog.info.h]) : null);
+          world.showResident(pending, dialog.success ? 'happy' : 'angry:' + (dialog.temper || '') + ((game.visits.get(pending) || 0) > 1 ? ':again' : ''));
+        }
         dialog.success ? audio.success() : dialog.narrator ? null : audio.grumble();
         setState('dialog');
       }
       break;
     case 'dialog':
+      residentLook(dt);
       if ((stateT > 0.25 && input.action()) || (dialog.success && stateT > SUCCESS_AUTO)) {
         if (dialog.success && gameMode === 'free') nextDelivery();
         else if (dialog.success) { endToMap = true; setState('fadeOut'); }   // Carreira: entrega certa encerra a partida e volta ao mapa
@@ -2653,14 +2924,22 @@ function update(dt, t) {
       if (missions.isOpen) { if (input.missions()) missions.close(); break; }
       if (gameMode === 'career' && input.missions()) { missions.open(careerLevel); break; }
       van.stop();
-      if (!roofWalk && TERRAIN.kind !== 'flat') walker.setFloor(TERRAIN.h(walker.x, walker.z));   // Bairro 9: ladeiras e escadarias
+      if (!roofWalk && (TERRAIN.kind !== 'flat' || hasSerra())) walker.setFloor(TERRAIN.h(walker.x, walker.z));   // Bairro 9: ladeiras e escadarias; Cachoeira: a serra de fora
       if (VENICE) walker.setFloor(VENICE.walkH(walker.x, walker.z));   // Veneza: cais, vielas e pontes
+      if (walker.scripted && doorStep === 'out') { const ax = input.axis(); if (ax.x || ax.z || input.action()) { walker.stopScript(); doorStep = null; } }   // descendo: mexeu ou apertou E, já vale
+      if (walker.scripted) {                          // descendo/subindo na van: dois passos curtos (subindo, nada interrompe)
+        const done = walker.stepScript(dt);
+        if (carrying) carryParcel();
+        if (done && doorStep === 'in') { doorStep = null; enterVanNow(); }
+        else if (done) doorStep = null;
+        break;
+      }
+      walker.liveFrame();
+      if (input.hint()) requestHint();               // DICA também a pé
       walker.update(dt, input.axis(), rig.mode === 'chase' ? 'car' : 'screen', roofWalk ? roofSolids() : walkSolids(), van);
       if (gameMode === 'career') career.walk(walker.x, walker.z, PLAZA);   // Bairro 2: "Conheça a praça" (fica pendente até a entrega certa)
-      if (carrying) {                               // caixa nas mãos, na frente do peito
-        const hc = Math.cos(walker.heading), hs = Math.sin(walker.heading);
-        parcel.position.set(walker.x + hc * 0.62, 0.62, walker.z + hs * 0.62); parcel.rotation.set(0, -walker.heading, 0);
-      }
+      walker.setCarry(carrying);
+      if (carrying) carryParcel();                  // caixa nas mãos, na frente do peito
       actionLock = Math.max(0, actionLock - dt);
       nearHouse = VENICE || SPOTS ? findNearHouseFoot() : -1;   // Veneza/Morro/Colheita: dá para entregar a pé
       if (nearGrillDoor()) nearHouse = -1;                 // na porta do Grillby's, E entra (a entrega é no ponto da rua)
@@ -2676,9 +2955,9 @@ function update(dt, t) {
       if (nearHouse >= 0) { pending = nearHouse; nearHouse = -1; footDelivery = true; audio.bell(); setState('ring'); }
       else if (nearLounger()) startRoofTalk();             // no terraço a van fica perto: falar com ele tem prioridade
       else if (nearChurchK()) startChurchTalk();       // na igreja também (a van pode ter entrado pela porta)
-      else if (walker.nearVan(van)) { if (carrying) resetParcel(); walker.show(false); walker.setFloor(0); roofWalk = null; actionLock = 0.5; setState('drive'); }   // a caixa volta ao lugar
+      else if (walker.nearVan(van)) { if (!vanDoorStep(false)) enterVanNow(); }   // anda até a porta e entra (a caixa volta ao lugar)
       else if (nearParcel()) carrying = true;
-      else if (nearK()) startTalk();
+      else if (nearK()) { walker.setCarry(false, true); startTalk(); }   // (entrega a caixa: os braços voltam para o lado na hora)
       break;
     }
     case 'grill':                                    // Grillby's: fade, troca de cenário, fade
@@ -2737,10 +3016,12 @@ function update(dt, t) {
       if (talkPhase === 'aside' && (!sp || sp.userData.asideDone())) { talkPhase = 'talk'; talkBox.show(talkLines, endTalk); }
       else if (talkPhase === 'talk') { talkBox.update(dt); if (input.action()) talkBox.press(); }
       else if (talkPhase === 'note') { if (input.action()) talkBox.pressNote(); }
+      talkGestures(dt);                             // olhares do K durante as falas
       break;
     }
     case 'chat': {                                  // Medieval: conversa com um morador (não é entrega nem dica)
-      walker.update(dt, { x: 0, z: 0 }, 'car', walkSolids(), van);
+      if (chatNpc && chatNpc.x != null) walker.face(chatNpc.x, chatNpc.z, dt, true);   // vira para quem fala (com passinhos) e escuta, assentindo de leve
+      else walker.idle(dt);
       talkBox.update(dt); if (input.action()) talkBox.press();
       break;
     }
@@ -2857,7 +3138,13 @@ function update(dt, t) {
     else startBoss();
   }
   hint.update(wdt);
-  heli.update(wdt, state === 'drive' && heli.on ? input.lift() : 0);
+  let lift = state === 'drive' && heli.on ? input.lift() : 0;
+  if (lift === 0 && state === 'drive' && heli.on && (van.x < 0 || van.z < 0 || van.x > MAP_W() || van.z > MAP_W())) {   // fora do bairro (serra da Cachoeira, morros das Encostas):
+    const la = Math.max(0, van.speed) * 0.9, gx = van.x + Math.cos(van.heading) * la, gz = van.z + Math.sin(van.heading) * la;   // o helicóptero sobe sozinho para
+    const tg = Math.max(TERRAIN.h(van.x, van.z), TERRAIN.h(gx, gz));                                                              // manter ~6 m acima do morro à frente
+    if (tg > 0.5 && heli.altitude < tg + 6) lift = 1;                                                                             // (no plano nada muda)
+  }
+  heli.update(wdt, lift);
   { const hi = heli.high; if (wasHigh && !hi && heli.flying && !menu.unstoppable) unstickVan(); wasHigh = hi; }   // descendo do alto no meio do casario: sai do que estiver por baixo
   if (MOONV && !heli.on && !heli.flying) van.object.position.y = van.simY;   // Órbita: a altura da gravidade baixa (saltinhos)
   boom.update(wdt);
@@ -2974,42 +3261,48 @@ function updateHUD() {
     hud.setFade(fade);
     return;
   }
-  hintBtn.set(hintUsed || hintStep === game.step ? 'used' : state === 'drive' ? 'ready' : 'busy');
+  hintBtn.set(hintUsed || hintStep === game.step ? 'used' : state === 'drive' || (state === 'walk' && !walker.scripted) ? 'ready' : 'busy');
+  const walkNear = state === 'walk' && walker.nearVan(van) && !nearLounger() && !nearChurchK() && !nearVenK() && !missions.isOpen;
+  // a pé no Bairro 1: pegar a caixa / entregar ao K / conversar (balão em cima do personagem)
+  const wsWalk = state === 'walk' && !missions.isOpen ? massStory.walkPrompt() || wsStory.walkPrompt() : '';
+  const walkAct = wsWalk ? wsWalk : state === 'walk' && medTalkTarget() && !missions.isOpen ? 'Conversar' : nearGrillDoor() && !missions.isOpen ? "Entrar no Grillby's" : state === 'walk' && nearGate >= 0 && !missions.isOpen ? 'Abrir porteira' : state === 'walk' && nearVenK() && !missions.isOpen ? 'Conversar' : state === 'walk' && nearHouse >= 0 && !missions.isOpen ? 'Entregar' : state === 'walk' && !walkNear && !missions.isOpen ? (nearParcel() ? 'Pegar a caixa' : nearK() ? (carrying ? 'Entregar a caixa' : 'Conversar') : nearLounger() || nearChurchK() ? 'Conversar' : '') : '';
 
   if (state === 'dialog') {
     hud.setSub(dialog.success ? '✔ Entrega concluída!  ·  [E] continuar' : '[E] ou Espaço: continuar',
       dialog.success ? 'success' : 'cont');
     hud.setMain(dialog.narrator ? dialog.text : `${dialog.name}: “${dialog.text}”`, dialog.success ? 'success' : 'dialog');   // narrador: só o pensamento, entre parênteses
   } else {
-    const extraKeys0 = '  ·  L: descer da van';
+    const vehicle = VENICE ? 'lancha' : 'van', touchOn = document.body.classList.contains('touch-on');
+    const extraKeys0 = '  ·  L: descer da ' + vehicle;
     const extraKeys = extraKeys0 + (gameMode === 'free' ? (MOONV ? '  ·  H: helicóptero' : '  ·  H: helicóptero  ·  F: míssil') : '  ·  M: missões');
-    hud.setSub(state === 'talk' || state === 'cine' || state === 'trolley' || state === 'trolleyBlack' || state === 'laser' ? '' : state === 'walk'
-      ? (rig.mode === 'chase' ? 'A PÉ  ·  W/S: andar  ·  A/D: virar  ·  E (perto da van): entrar  ·  C: bairro  ·  botão direito: olhar em volta' : 'A PÉ  ·  WASD: andar  ·  E (perto da van): entrar  ·  C: câmera')
+    const fKey = gameMode === 'free' && !MOONV ? '  ·  F: míssil' : '';                          // (Lua: sem míssil)
+    // cenas, conversas e momentos sem controle de direção: nada de teclas de dirigir na barra (cada cena mostra a própria dica)
+    const noKeys = ['talk', 'cine', 'trolley', 'trolleyBlack', 'laser', 'wstory', 'mstory', 'chseq', 'chat', 'boss', 'missile'].includes(state);
+    hud.setSub(noKeys ? '' : state === 'walk'
+      ? (rig.mode === 'chase' ? `A PÉ  ·  W/S: andar  ·  A/D: virar  ·  E (perto da ${vehicle}): entrar  ·  C: bairro  ·  botão direito: olhar em volta` : `A PÉ  ·  WASD: andar  ·  E (perto da ${vehicle}): entrar  ·  C: câmera`)
       : heli.landed
-      ? 'POUSADO NO PRÉDIO  ·  H: decolar  ·  F: míssil'
+      ? 'POUSADO NO PRÉDIO  ·  H: decolar' + (roofUnderVan() ? '  ·  L: descer na laje' : '') + fKey
       : heli.on
-      ? 'HELICÓPTERO  ·  W/S: frente e ré  ·  A/D: girar  ·  Espaço: subir  ·  Shift: descer  ·  H: pousar (em cima de um prédio, pousa no teto)  ·  F: míssil'
+      ? 'HELICÓPTERO  ·  W/S: frente e ré  ·  A/D: girar  ·  Espaço: subir  ·  Shift: descer  ·  H: pousar' + fKey
       : rig.mode === 'chase'
       ? 'W / ↑: acelerar  ·  S / ↓: frear e ré  ·  A D / ← →: virar  ·  E: entregar  ·  C: bairro  ·  T: dica' + extraKeys
       : 'WASD / Setas: dirigir  ·  E: entregar  ·  C: câmera  ·  T: dica' + extraKeys, 'muted');
     if ((state === 'drive' || state === 'walk') && wsStory.objective()) hud.setMain(wsStory.objective(), 'clue');   // atividade da oficina no lugar da pista
-    else if (state === 'drive' && hint.active && !hint.landed) hud.setMain('Olha a dica caindo do céu!', 'ring');
+    else if ((state === 'drive' || state === 'walk') && hint.active && !hint.landed) hud.setMain('Olha a dica caindo do céu!', 'ring');
     else if (state === 'ring') hud.setMain('Ding-dong… 🔔', 'ring');
     else if (state === 'boss') hud.setMain(monster.phase === 'driveOut' ? 'Todas as casas foram destruídas… algo despertou!' : 'O DEVORADOR DE BAIRROS acordou!', 'dialog');
     else if (state === 'missile') hud.setMain('Míssil disparado!', 'ring');
     else if (state === 'fuel') hud.setMain('⛽ Abastecendo… glub, glub, glub…', 'ring');
     else if (state === 'talk' || state === 'cine' || state === 'wstory' || state === 'chseq' || state === 'mstory' || state === 'trolley' || state === 'trolleyBlack' || state === 'laser') hud.setMain('', 'clue');
     else if (state === 'walk' && carrying) hud.setMain(walker.nearVan(van) ? 'Entrar na van devolve a caixa ao lugar dela.' : 'Carregando uma caixa… de quem será?', 'clue');
-    else if (state === 'walk') hud.setMain(walker.nearVan(van) && !nearLounger() && !nearVenK() ? 'Perto da van — aperte E para entrar.' : SPOTS ? game.mainText() : 'Passeando a pé… (não dá para entregar andando)', 'clue');   // Morro: a pé continua valendo a pista
+    // a pé: "perto da van" só quando E de fato entra nela (perto de uma porta, porteira ou alguém para conversar, o E faz aquilo);
+    // Veneza e os bairros sem grade aceitam entrega a pé, então a pista continua na barra
+    else if (state === 'walk') hud.setMain(walkNear && !walkAct ? (touchOn ? `Perto da ${vehicle} — toque em “Entrar na ${vehicle}”.` : `Perto da ${vehicle} — aperte E para entrar.`) : VENICE || SPOTS ? game.mainText() : 'Passeando a pé… (não dá para entregar andando)', 'clue');
     else if (state === 'drive' && fuelMsgT > 0) hud.setMain(fuelMsg, 'dialog');
     else if (state === 'fadeOut') hud.setMain(restartMsg || (endToMap ? 'Partida concluída!' : 'Entrega concluída! Preparando a próxima…'), restartMsg ? 'dialog' : 'success');   // (na Carreira volta ao mapa)
     else hud.setMain(game.mainText(), 'clue');
   }
 
-  const walkNear = state === 'walk' && walker.nearVan(van) && !nearLounger() && !nearChurchK() && !nearVenK() && !missions.isOpen;
-  // a pé no Bairro 1: pegar a caixa / entregar ao K / conversar (balão em cima do personagem)
-  const wsWalk = state === 'walk' && !missions.isOpen ? massStory.walkPrompt() || wsStory.walkPrompt() : '';
-  const walkAct = wsWalk ? wsWalk : state === 'walk' && medTalkTarget() && !missions.isOpen ? 'Conversar' : nearGrillDoor() && !missions.isOpen ? "Entrar no Grillby's" : state === 'walk' && nearGate >= 0 && !missions.isOpen ? 'Abrir porteira' : state === 'walk' && nearVenK() && !missions.isOpen ? 'Conversar' : state === 'walk' && nearHouse >= 0 && !missions.isOpen ? 'Entregar' : state === 'walk' && !walkNear && !missions.isOpen ? (nearParcel() ? 'Pegar a caixa' : nearK() ? (carrying ? 'Entregar a caixa' : 'Conversar') : nearLounger() || nearChurchK() ? 'Conversar' : '') : '';
   if (walkAct) {
     rig.camera.updateMatrixWorld();
     promptPos.set(walker.x, walker.floor + 2.7, walker.z).project(rig.camera);

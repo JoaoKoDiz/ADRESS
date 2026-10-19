@@ -334,7 +334,8 @@ export function createMassStory(ctx) {
       talkBox.update(dt);
       if (!S) return;
       if (talkBox.open && T > 0.25 && input.action()) talkBox.press();
-      const g = GEST[Math.min(S.line, GEST.length - 1)], k = 1 - Math.exp(-dt * 2.2);
+      const g0 = GEST[Math.min(S.line, GEST.length - 1)], k = 1 - Math.exp(-dt * 2.2);
+      const g = talkBox.thinking ? [g0[0] * 0.3, g0[1], Math.min(1, g0[2] + 0.3)] : g0;   // nas pausas [...]: os olhos vão para longe (imaginando a oficina)
       for (let i = 0; i < 3; i++) S.g[i] += (g[i] - S.g[i]) * k;
       const K = pewK(), h = K.userData.head, tor = K.userData.torso;
       if (h) { h.rotation.y = -0.62 * S.g[0] + 0.05 * Math.sin(T * 0.8); h.rotation.z = -0.1 + 0.12 * S.g[2] + 0.03 * Math.sin(T * 1.3); }

@@ -6,9 +6,11 @@
 // correio de bandeirinha. Modelos: 'classic' (duas águas de lado), 'chalet' (bico do telhado para a rua), 'ell' (em L) e
 // 'garage' (com garagem ao lado).
 import * as THREE from 'three';
-import { box, cyl, cone, sphere, torus, at, mat, mesh, bakeStatic, dynamic, textTexture } from './kit.js';
+import { box, cyl, cone, sphere, torus, at, mat, mesh, bakeStatic, dynamic, textTexture, vcMerge } from './kit.js';
+import { createCrowd, crowdWalkTo, crowdStand, crowdTurn, crowdFollow } from './medievalPeople.js';
 import { GARD_COL } from '../data.js';
 import { GARD } from '../gardenPlan.js';
+import { condoOutskirts } from './modern.js';
 
 const GRASS = '#86c25e', HEDGE = '#3f7d3a', PATH = '#e2d8c4', ASPH = '#5d6470', WOOD = '#8a5a36';
 const HC = { lawn: '#95cc68', tuft: '#74ab4b', walk: '#e2d9c5', stone: '#e2d9c5', post: '#7d5a35', rail: '#a57a4c', picket: '#fbf8f1',
@@ -450,6 +452,7 @@ export function buildGardenScene(g, V) {
   for (const p of V.parking) for (const dx of [-5, -2.5, 0, 2.5, 5]) add(box(0.12, 0.07, 2.6, '#f4f1ea'), p.x + dx, 0.045, p.z + p.n * 1.4);
   // ---- árvores ----
   g.add(buildTrees(V));
+  condoOutskirts(g, V, { roofs: 'gable', seed: 1717 });              // arredores: palmeiras e ipês ao longo da estrada, eucaliptos, condomínios vizinhos
   return g;
 }
 
@@ -489,7 +492,10 @@ export function buildGardLive(V) {
   for (let i = 0; i < n; i++) { const [ax, az] = path[i], [bx, bz] = path[(i + 1) % n]; cum.push(cum[i] + Math.hypot(bx - ax, bz - az)); }
   const total = cum[n], o = new THREE.Object3D();
   const at2 = s => { s = ((s % total) + total) % total; let i = 0; while (cum[i + 1] < s) i++; const [ax, az] = path[i], [bx, bz] = path[(i + 1) % n], f = (s - cum[i]) / (cum[i + 1] - cum[i]); return [ax + (bx - ax) * f, az + (bz - az) * f, Math.atan2(bx - ax, bz - az)]; };
+  const life = createGardenLife(V); g.add(life.object);
+  g.userData.life = life;
   g.userData.update = (dt, t, walker) => {
+    life.update(dt, walker);
     const near = walker && Math.hypot(walker.x - (P.x0 + P.x1) / 2, walker.z - P.z) < 3.6;
     open += ((near ? 1 : 0) - open) * Math.min(1, dt * 4);
     leaf.rotation.y = -open * 1.45;
@@ -513,4 +519,114 @@ function mergeParts(list) {
   for (const q of geos) { if (!q.attributes.normal) q.computeVertexNormals(); P.set(q.attributes.position.array, k * 3); N.set(q.attributes.normal.array, k * 3); k += q.attributes.position.count; }
   out.setAttribute('position', new THREE.BufferAttribute(P, 3)); out.setAttribute('normal', new THREE.BufferAttribute(N, 3));
   return out;
+}
+
+// ---------- Vida do condomínio (Jardins) ----------
+// O porteiro junto à cancela; o jardineiro aparando a cerca viva do parque (para a cada trecho); alguém correndo em volta do
+// lago; um senhor pescando no deck; um casal de idosos passeando devagar pelo caminho do parque (param e olham o chafariz);
+// duas crianças brincando de pega-pega no parquinho; uma mãe empurrando o carrinho de bebê; e o funcionário do clube
+// limpando a piscina com a peneira de cabo comprido. Todos numa multidão instanciada (6 desenhos) + 4 objetos.
+function createGardenLife(V) {
+  const root = new THREE.Group(); root.name = 'garden-life';
+  const crowd = createCrowd(10, { name: 'garden-crowd' }); root.add(crowd.object);
+  const P = crowd.people, B = V.BOOTH, L = V.lake, CL = V.club, pool = CL.pool;
+  [
+    { shirt: '#2f5a4a', pants: '#2b2f3a', shoes: '#1c1c1c', hat: '#22443a', skin: '#a8714c', hair: '#222222' },   // 0 porteiro
+    { shirt: '#3f7a4a', pants: '#5a5048', shoes: '#3a2a20', hat: '#e3c77a', skin: '#d9a074', hair: '#3b2a1a' },   // 1 jardineiro
+    { shirt: '#2f9ad0', pants: '#2b2f3a', shoes: '#f4f4f4', skin: '#f0c49a', hair: '#a0522d', long: true },       // 2 corredora
+    { shirt: '#8a9a6a', pants: '#5a5048', shoes: '#4a3022', hat: '#c9b48a', skin: '#e8b48a', hair: '#d8d4cc' },   // 3 pescador
+    { shirt: '#9a5a6a', pants: '#4a4a52', shoes: '#3a2a20', skin: '#f5d2b0', hair: '#efefe8', long: true },       // 4 idosa
+    { shirt: '#6f8aa0', pants: '#5a5a4a', shoes: '#3a2a20', skin: '#f0c49a', hair: '#d9d9d9' },                    // 5 idoso
+    { shirt: '#e8b02a', pants: '#3d4a66', shoes: '#d8312a', skin: '#c08560', hair: '#222222' },                    // 6 criança
+    { shirt: '#d8455a', pants: '#3a3d44', shoes: '#f4f4f4', skin: '#f0c49a', hair: '#d9b46a', long: true },       // 7 criança
+    { shirt: '#f2efe6', pants: '#6a8aa0', shoes: '#2b2522', skin: '#d9a074', hair: '#5a3a22', long: true },       // 8 mãe com o carrinho
+    { shirt: '#f4f4f4', pants: '#d8312a', shoes: '#f4f4f4', hat: '#d8312a', skin: '#8a5a3c', hair: '#222222' },   // 9 piscineiro do clube
+  ].forEach((o, i) => { crowd.look(i, o); P[i].on = true; });
+  P[6].scale = P[7].scale = 0.72;
+  // ---- objetos ----
+  const held = (group, grip) => { const o = vcMerge(group); o.castShadow = false; o.matrixAutoUpdate = false; o.userData.grip = grip; root.add(o); return o; };
+  const trimmer = held(new THREE.Group().add(at(box(0.16, 0.16, 0.6, '#e8b02a'), 0, 0, 0.1), at(box(0.06, 0.03, 0.9, '#9aa0a8'), 0, 0, 0.8)), new THREE.Matrix4().makeRotationX(1.15).setPosition(0, -0.56, 0.02));   // (de pé na mão: com o braço à frente, a lâmina fica deitada)
+  const rod = held(new THREE.Group().add(at(cyl(0.025, 0.035, 3.4, '#4a3022', 6), 0, 1.5, 0), at(cyl(0.006, 0.006, 2.6, '#e8e8e8', 3), 0, 1.95, 1.9, -1.2, 0, 0)), new THREE.Matrix4().makeRotationX(1.05).setPosition(0, -0.55, 0.05));
+  const net = held(new THREE.Group().add(at(cyl(0.025, 0.025, 4.2, '#c9ccd1', 6), 0, 0, 1.5, Math.PI / 2, 0, 0), at(torus(0.3, 0.03, '#3a3d44', 4, 12), 0, -0.02, 3.6, Math.PI / 2, 0, 0)), new THREE.Matrix4().makeRotationX(1.1).setPosition(0, -0.56, 0.1));
+  const stroller = vcMerge(new THREE.Group().add(
+    at(box(0.62, 0.42, 0.8, '#3f6f9a'), 0, 0.62, 0), at(box(0.64, 0.42, 0.44, '#2f5a80'), 0, 0.92, -0.2, -0.5, 0, 0),
+    ...[[-0.3, 0.3], [0.3, 0.3], [-0.3, -0.3], [0.3, -0.3]].map(([x, z]) => at(cyl(0.13, 0.13, 0.06, '#222222', 10), x, 0.13, z, 0, 0, Math.PI / 2)),
+    at(cyl(0.02, 0.02, 0.9, '#9aa0a8', 5), 0.28, 0.75, -0.55, 0.5, 0, 0), at(cyl(0.02, 0.02, 0.9, '#9aa0a8', 5), -0.28, 0.75, -0.55, 0.5, 0, 0), at(cyl(0.025, 0.025, 0.62, '#222222', 6), 0, 1.12, -0.75, 0, 0, Math.PI / 2)));
+  stroller.castShadow = false; root.add(stroller);
+  // ---- lugares ----
+  const guardAt = { x: B.x0 - 0.7, z: Math.min(B.z1 - 0.6, V.GATE.z - 1.6) };
+  const hedge = V.hedges.find(h => h.z0 < 100 && h.x0 > 99 && h.x1 < 129) || V.hedges[1];
+  const trimZ = hedge.z0 - 0.75, trimX = [hedge.x0 + 1.2, hedge.x1 - 1.2];
+  const prom = L.promenade, deck = L.deck, PZ = V.PZ;
+  // pescador na margem (o lago não tem píer desenhado): no gramado logo fora da borda de pedra, no ponto da margem mais perto
+  // do lugar reservado ao deck, virado para a água
+  const fishAt = (() => { let s = L.shore[0], bd = 1e9; for (const q of L.shore) { const d = Math.hypot(q[0] - deck.x, q[1] - deck.z); if (d < bd) { bd = d; s = q; } }
+    const nx = s[0] - L.x, nz = s[1] - L.z, nl = Math.hypot(nx, nz) || 1; return { x: s[0] + nx / nl * 1.0, z: s[1] + nz / nl * 1.0, ry: Math.atan2(-nx, -nz) }; })();
+  const oldA = [{ x: 84, z: PZ + 0.45 }, { x: 119.5, z: PZ + 0.45 }], strollA = [{ x: 141, z: PZ - 0.5 }, { x: 175, z: PZ - 0.5 }];
+  const play = V.amen.find(a => a.k === 'playground') || V.amen[1];
+  // roda do pega-pega: o maior círculo dentro da areia que passa longe do escorregador, do balanço, da gangorra e da caixa de areia
+  const ring = (() => {
+    const eq = V.solids.filter(s => s.x1 > play.x - 6 && s.x0 < play.x + 6 && s.z1 > play.z - 6 && s.z0 < play.z + 6);
+    const gap = (x, z) => eq.reduce((m, s) => Math.min(m, Math.hypot(Math.max(s.x0 - x, 0, x - s.x1), Math.max(s.z0 - z, 0, z - s.z1))), 1e9);
+    let best = { x: play.x, z: play.z, R: 1.2 };
+    for (let R = 3.6; R >= 1.2 && best.R === 1.2; R -= 0.2) for (let cx = -2; cx <= 2 && best.R === 1.2; cx += 0.25) for (let cz = -2; cz <= 2; cz += 0.25) {
+      let ok = true; for (let k = 0; k < 32 && ok; k++) { const a = k / 32 * Math.PI * 2, x = play.x + cx + Math.cos(a) * R, z = play.z + cz + Math.sin(a) * R; ok = Math.abs(x - play.x) < 4.2 && Math.abs(z - play.z) < 4.2 && gap(x, z) > 0.6; }
+      if (ok) { best = { x: play.x + cx, z: play.z + cz, R }; break; }
+    }
+    return best; })();
+  const st = { trim: { dir: 1, x: trimX[0] + 2, work: 0, cut: 0 }, jog: { i: 5 }, old: { k: 1, pause: 0 }, mom: { k: 1, pause: 0 }, pool: { z: pool.z0 + 1, dir: 1, w: 0 }, kids: { a: 0, b: 2.2, mode: 0, t: 0 } };
+  let T = 0;
+  P[1].x = st.trim.x; P[1].z = trimZ; P[2].x = prom[5][0]; P[2].z = prom[5][1];
+  P[3].x = fishAt.x; P[3].z = fishAt.z; P[3].ry = fishAt.ry;
+  P[4].x = oldA[0].x + 10; P[4].z = oldA[0].z; P[5].x = P[4].x; P[5].z = P[4].z - 0.95;
+  P[8].x = strollA[0].x + 8; P[8].z = strollA[0].z; P[9].x = pool.x0 - 0.9; P[9].z = st.pool.z;
+  P[6].x = ring.x + ring.R; P[6].z = ring.z; P[7].x = ring.x; P[7].z = ring.z + ring.R * 0.85;
+  P[1].hold = [trimmer, null]; P[3].hold = [rod, null]; P[9].hold = [null, net];
+  function update(dt, walker) {
+    T += dt; const t = T;
+    // 0 porteiro: olha a rua e a cancela; de vez em quando acena
+    { const p = P[0]; p.x = guardAt.x; p.z = guardAt.z; p.ry = -Math.PI / 2; const c = (t + 5) % 19;
+      p.yaw = c < 6 ? Math.sin(t * 0.45) * 0.8 : c < 8 ? 0.9 : c < 12 ? -0.5 : 0; const w = c > 12.5 && c < 14;
+      p.arms[2] = w ? -2.6 + Math.sin(t * 9) * 0.25 : 0.25; p.arms[3] = w ? 0.45 : 0.05; p.arms[0] = w ? 0 : 0.25; p.arms[1] = 0.05; }
+    // 1 jardineiro: anda ao lado da cerca viva e apara um trecho por vez
+    { const p = P[1], s = st.trim;
+      if (s.work > 0) { s.work -= dt; crowdStand(p, dt); crowdTurn(p, Math.PI, dt); p.arms[0] = -1.15 + Math.sin(t * 23) * 0.04; p.arms[1] = -0.25; p.arms[2] = -0.9; p.arms[3] = -0.15; p.pitch = 0.2; }
+      else { p.arms[0] = -0.6; p.arms[1] = 0.1; p.arms[2] = 0.05; p.arms[3] = 0.16; p.pitch = 0;
+        const tx = s.x; if (crowdWalkTo(p, tx, trimZ, 0.7, dt)) { s.work = 4 + (s.cut++ % 3); s.x += s.dir * 2.6; if (s.x > trimX[1] || s.x < trimX[0]) { s.dir = -s.dir; s.x += s.dir * 5.2; } } } }
+    // 2 corredora em volta do lago (pelo passeio)
+    { const p = P[2]; p.arms[0] = p.arms[2] = -0.35; p.arms[1] = p.arms[3] = 0.22; crowdFollow(p, st.jog, prom, 2.4, dt, true, true); }
+    // 3 pescador no deck: vara na mão, de vez em quando puxa a linha e confere
+    { const p = P[3]; p.amp = 0; p.x = fishAt.x; p.z = fishAt.z; const c = t % 17; p.ry = fishAt.ry + Math.sin(t * 0.1) * 0.15;
+      p.arms[0] = c > 12 && c < 13.4 ? -1.4 : -0.85; p.arms[1] = 0.05; p.arms[2] = -0.55; p.arms[3] = -0.25; p.pitch = c > 13.4 && c < 15 ? 0.35 : 0.1; p.yaw = c < 8 ? Math.sin(t * 0.3) * 0.2 : 0; }
+    // 4 e 5 casal de idosos: vai e volta devagar pelo caminho do parque; no fim, param um pouco e olham em volta
+    { const a = P[4], b = P[5], s = st.old;
+      if (s.pause > 0) { s.pause -= dt; crowdStand(a, dt, Math.sin(t * 0.5) * 0.6); crowdStand(b, dt, -0.4); a.arms[2] = -0.4; b.arms[0] = -0.5; }
+      else { const q = oldA[s.k]; a.arms[2] = -0.25; b.arms[0] = -0.25; if (crowdWalkTo(a, q.x, q.z, 0.55, dt)) { s.k = 1 - s.k; s.pause = 5 + Math.random() * 4; } }
+      const fx = Math.sin(a.ry), fz = Math.cos(a.ry), bx = a.x + fz * 0.95, bz = a.z - fx * 0.95;      // ele do lado dela, de braço dado
+      const d = Math.hypot(bx - b.x, bz - b.z); if (d > 0.01) { const step = Math.min(d, 0.8 * dt + d * 0.1); b.x += (bx - b.x) / d * step; b.z += (bz - b.z) / d * step; }
+      crowdTurn(b, a.ry, dt, 4); b.amp = a.amp; b.walk = a.walk + Math.PI; }
+    // 6 e 7 crianças no parquinho: pega-pega em volta; às vezes param e pulam
+    { const s = st.kids, a = P[6], b = P[7], R = ring.R; s.t += dt;
+      if (s.t > 9) { s.t = 0; s.mode = (s.mode + 1) % 3; }
+      if (s.mode < 2) { s.a += dt * 0.55 * (s.mode ? -1 : 1); s.b = s.a + (s.mode ? -1 : 1) * (0.7 + Math.sin(t * 0.7) * 0.25);
+        for (const [p, ang, r] of [[a, s.a, R], [b, s.b, R * 0.85]]) { const x = ring.x + Math.cos(ang) * r, z = ring.z + Math.sin(ang) * r; crowdWalkTo(p, x, z, 2.6, dt, true); p.bob = 0; } }
+      else { for (const [p, k] of [[a, 0], [b, 1.3]]) { crowdStand(p, dt); p.bob = Math.max(0, Math.sin(t * 7 + k)) * 0.35; p.arms[0] = p.arms[2] = -2.6 * (p.bob > 0.05 ? 1 : 0.2); } }
+      if (s.mode < 2) for (const p of [a, b]) { p.arms[0] = p.arms[2] = 0; } }
+    // 8 mãe com o carrinho: vai e volta pelo caminho leste do parque, para e olha o bebê
+    { const p = P[8], s = st.mom;
+      if (s.pause > 0) { s.pause -= dt; crowdStand(p, dt); p.pitch = 0.45; p.lean = 0.15; }
+      else { const q = strollA[s.k]; p.pitch = 0; p.lean = 0.08; if (crowdWalkTo(p, q.x, q.z, 0.75, dt)) { s.k = 1 - s.k; s.pause = 3.5; } }
+      p.arms[0] = p.arms[2] = -0.95; p.arms[1] = p.arms[3] = -0.02;
+      stroller.position.set(p.x + Math.sin(p.ry) * 1.15, 0, p.z + Math.cos(p.ry) * 1.15); stroller.rotation.y = p.ry; }
+    // 9 piscineiro: anda pela borda oeste da piscina passando a peneira na água
+    { const p = P[9], s = st.pool, x = pool.x0 - 0.9;
+      if (s.w > 0) { s.w -= dt; crowdStand(p, dt); crowdTurn(p, Math.PI / 2, dt); p.arms[2] = -0.75 + Math.sin(t * 1.7) * 0.35; p.arms[3] = 0.1; p.arms[0] = -0.6; p.arms[1] = -0.2; }
+      else { p.arms[2] = -1.0; p.arms[0] = 0; const zt = s.z;   // (andando, leva a peneira deitada na altura da mão: com o braço baixo o cabo entrava no chão)
+        if (crowdWalkTo(p, x, zt, 0.6, dt)) { s.w = 5 + Math.random() * 3; s.z += s.dir * 4; if (s.z > pool.z1 - 1 || s.z < pool.z0 + 1) { s.dir = -s.dir; s.z += s.dir * 8; } }
+        p.amp = Math.min(p.amp, 0.4); } }                                       // (passos curtos: o cabo comprido não balança a cada passo)
+    void walker;
+    crowd.update();
+  }
+  root.userData.api = { people: P };
+  return { object: root, update };
 }

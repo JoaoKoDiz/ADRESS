@@ -53,10 +53,12 @@ export function createHeli(van, audio) {
     /** lift: +1 sobe, −1 desce, 0 mantém. Chame todo quadro (depois de van.update). */
     update(dt, lift) {
       t += dt;
+      if (van.settle) van.settle(dt);        // parada (entrega, a pé, diálogo): a carroceria termina de assentar nas molas
       ter = terrain ? terrain(van.x, van.z) : 0;
       floor = Math.max(ter, ground ? ground(van.x, van.z) : 0);
       if (!on && !airborne) {                // dirigindo: rampas, descidas e pulinhos nunca viram helicóptero — a van segue o chão
-        alt = ter; form = form < 0.02 ? 0 : form * (1 - Math.min(1, dt * 4));   // (depois de pousar, as peças encolhem e somem)
+        alt = van.groundY !== undefined ? van.groundY : ter;          // (altura média das 4 rodas nas ladeiras)
+        form = form < 0.02 ? 0 : form * (1 - Math.min(1, dt * 4));   // (depois de pousar, as peças encolhem e somem)
         parts.visible = form > 0.02; parts.scale.setScalar(Math.max(0.01, form)); rotor.rotation.y += dt * 28 * form;
         van.object.position.y = alt;
         return;

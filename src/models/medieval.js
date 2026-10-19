@@ -9,9 +9,11 @@
 // (medievalLife.js): userData.door / smoke / flag / cloth / forge / water / anchor (ver MEDIEVAL_SPEC).
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
-import { box, cyl, cone, sphere, torus, at, mat, mesh, bakeStatic, dynamic } from './kit.js';
+import { box, cyl, cone, sphere, torus, at, mat, mesh, bakeStatic, dynamic, vcMerge } from './kit.js';
 import { MV_COL } from '../data.js';
 import { autumnTree } from './forest.js';
+import { SOLIDS, ENTRANCE } from '../layout.js';
+import { buildMedPerson, animatePerson } from './medievalPeople.js';
 
 const WOOD_D = '#4b3322', WOOD = '#6e4a2e', WOOD_L = '#94693f', IRON = '#34302d', STONE_L = '#c3baa8', STONE_D = '#857d70';
 const WICKER = '#b08a50', LEAF = ['#5d7b3d', '#6b8a45', '#4e6b34'], FLOWER = ['#c8453a', '#e3a63a', '#d77aa0', '#f2ecdc', '#8f6ac4'];
@@ -1193,6 +1195,179 @@ export function buildMedScene(g, V, MAP, HEDGE) {
     pts.name = 'lamp-glow'; pts.frustumCulled = false; g.add(pts);
   }
   planarUV(g);
+  medCountryside(g, V, MAP, solids);
   g.userData.solids = solids; g.userData.vanOnly = vanOnly; g.userData.alleyEnds = alleyEnds;
   return g;
+}
+
+/** Arredores do burgo: a estrada do portão norte vira estrada de terra (com marcas de roda e beiras de capim cobrindo o
+ *  meio-fio), e em volta da muralha o campo de um povoado medieval — faixas de lavoura (terra arada, trigo, couves, pousio)
+ *  com sebes vivas, palheiros, o moinho de vento com o pomar do moleiro (as velas giram), dois sítios com cerca de varas, o
+ *  pasto com as ovelhas e o pastor, e capões de mata mais longe. Nada no adro da igreja/oficina (V.extra.area), na estrada nem
+ *  no corredor da cena do monstro; nada em cima das árvores de fora que já existem. Estático numa malha só com cor por
+ *  vértice; as velas, as ovelhas e o pastor mexem por `userData.tick` (medievalLife.js). Colisão nas construções, troncos,
+ *  sebes e cercas (somadas a `solids`, marcadas `out`). */
+function medCountryside(g, V, MAP, solids) {
+  const G2 = new THREE.Group(), add = (m, x, y, z, rx = 0, ry = 0, rz = 0) => { G2.add(at(m, x, y, z, rx, ry, rz)); return m; };
+  const rnd = rng(2424), GX = (ENTRANCE.x0 + ENTRANCE.x1) / 2, A = V.extra ? V.extra.area : { x0: 0, x1: 0, z0: 0, z1: 0 };
+  const old = SOLIDS.filter(b => (b.x1 < -2 || b.x0 > MAP + 2 || b.z1 < -2 || b.z0 > MAP + 2) && b.x1 - b.x0 < 2.5).map(b => ({ x: (b.x0 + b.x1) / 2, z: (b.z0 + b.z1) / 2, r: (b.x1 - b.x0) / 0.6 }));
+  const busy = [];
+  const blocked = (x0, z0, x1, z1, m = 0) => (x1 > -10 - m && x0 < MAP + 10 + m && z1 > -10 - m && z0 < MAP + 10 + m)            // o burgo e a muralha
+    || (x1 > A.x0 - 10 && x0 < A.x1 + 10 && z1 > A.z0 - 10 && z0 < A.z1 + 6)                                                     // igreja, oficina e casas de fora
+    || (x1 > GX - 20 && x0 < GX + 20 && z0 < 6)                                                                                    // a estrada do portão (e o corredor da cena do monstro)
+    || busy.some(r => x1 > r.x0 - m && x0 < r.x1 + m && z1 > r.z0 - m && z0 < r.z1 + m);
+  const treeIn = (x0, z0, x1, z1, m = 0) => old.some(t => t.x > x0 - t.r - m && t.x < x1 + t.r + m && t.z > z0 - t.r - m && t.z < z1 + t.r + m);
+  const solid = (x0, z0, x1, z1, top) => solids.push({ x0, z0, x1, z1, out: true, top });
+  // ---- estrada de terra até o portão: chão de terra batida, duas trilhas de roda, capim nas beiras (cobre o meio-fio) ----
+  const RW = ENTRANCE.x1 - ENTRANCE.x0;
+  add(box(RW, 0.04, 420, '#9c8565'), GX, 0.02, -210);
+  // (o capim da beira não passa na frente do adro da igreja nem do pátio da oficina: ali o calçamento encosta na estrada)
+  const yards = V.extra ? [V.extra.church && V.extra.church.yard, V.extra.shop && V.extra.shop.yard].filter(Boolean) : [];
+  const cuts = sd => yards.filter(y => sd < 0 ? y.x1 >= GX - RW / 2 - 1 : y.x0 <= GX + RW / 2 + 1).map(y => [y.z0 - 1, y.z1 + 1]).sort((a, b) => a[0] - b[0]);
+  const inCut = (sd, z) => cuts(sd).some(([a, b]) => z > a && z < b);
+  for (const s of [-1, 1]) {
+    add(box(0.7, 0.03, 420, '#86704f'), GX + s * 1.25, 0.045, -210);
+    let z0 = -420; for (const [a, b] of [...cuts(s), [0, 0]]) { const z1 = Math.min(Math.max(a, z0), 0); if (z1 - z0 > 3) add(box(0.9, 0.22, z1 - z0, '#78a852'), GX + s * (RW / 2 + 0.15), 0.11, (z0 + z1) / 2); z0 = Math.max(z0, b); }
+  }
+  for (let z = -6; z > -400; z -= 9 + rnd() * 14) { const sd = rnd() < 0.5 ? -1 : 1, t = box(0.5 + rnd() * 0.4, 0.3 + rnd() * 0.4, 0.4 + rnd() * 0.3, '#6f9a48'); if (!inCut(sd, z)) add(t, GX + sd * (RW / 2 + 0.55), 0.2, z); }   // touceiras na beira
+  for (let z = -14; z > -380; z -= 23 + rnd() * 30) add(box(0.35, 0.12, 0.3, STONE_D), GX + (rnd() - 0.5) * 4.6, 0.08, z, 0, rnd() * 3, 0);   // pedrinhas
+  const fields = [];
+  // ---- moinho de vento do moleiro (oeste) e o pomar ----
+  const placeFree = (cx, cz, r, tries = 14) => { for (let k = 0; k < tries; k++) { const x = cx + (k % 4) * 9 * (k % 2 ? 1 : -1), z = cz + Math.floor(k / 4) * 11; if (!blocked(x - r, z - r, x + r, z + r) && !treeIn(x - r, z - r, x + r, z + r) && !fields.some(f => x + r > f.x0 && x - r < f.x1 && z + r > f.z0 && z - r < f.z1)) return [x, z]; } return null; };
+  const mill = placeFree(-30, 128, 7) || placeFree(-40, 60, 7);
+  let sails = null;
+  if (mill) {
+    const [mx, mz] = mill; busy.push({ x0: mx - 8, x1: mx + 8, z0: mz - 8, z1: mz + 8 });
+    add(cyl(2.7, 3.5, 9, '#d8cfbd', 14), mx, 4.5, mz); for (let y = 1.5; y < 9; y += 2.2) add(cyl(3.5 - y * 0.09 + 0.02, 3.5 - y * 0.09 + 0.04, 0.12, '#bfb4a0', 14), mx, y, mz);
+    add(cone(3.4, 3.4, '#8a6a3a', 14), mx, 10.6, mz); add(box(1.4, 2.2, 0.3, WOOD_D), mx + 3.15, 1.1, mz, 0, Math.PI / 2, 0); add(box(0.8, 0.9, 0.2, '#3a2a1e'), mx, 6.2, mz + 3.0);
+    add(box(1.0, 1.0, 1.6, WOOD), mx, 9.0, mz + 3.0);                                                     // eixo das velas
+    for (const [dx, dz] of [[4.8, -1], [5.4, 1.2]]) { add(box(0.9, 0.7, 0.9, '#e6dcc4'), mx + dx, 0.35, mz + dz); add(box(0.9, 0.12, 0.9, '#d0c4a8'), mx + dx, 0.75, mz + dz); }   // sacos de farinha
+    solid(mx - 3.4, mz - 3.4, mx + 3.4, mz + 3.4, 12);
+    const sg = new THREE.Group();
+    for (let k = 0; k < 4; k++) { const a = k * Math.PI / 2, arm = new THREE.Group(); arm.rotation.z = a; sg.add(arm);
+      arm.add(at(box(0.25, 6.4, 0.18, WOOD_D), 0, 3.3, 0)); arm.add(at(box(1.5, 4.8, 0.06, '#efe6d0'), 0.82, 3.9, 0.04));
+      for (let y = 1.6; y < 6.4; y += 0.8) arm.add(at(box(1.6, 0.06, 0.1, WOOD), 0.8, y, 0.08)); }
+    sails = vcMerge(sg); const sp = new THREE.Group(); sp.position.set(mx, 9.0, mz + 3.85); sp.add(sails); sp.name = 'mill-sails';
+    sp.userData.dynamic = true; sp.userData.tick = (t, dt) => { sails.rotation.z -= dt * 0.55; };
+    g.add(sp);
+    busy.push({ x0: mx - 33, x1: mx - 8, z0: mz - 11, z1: mz + 14 });                                      // pomar do moleiro (macieiras em fileiras), ao lado
+    for (let i = 0; i < 4; i++) for (let j = 0; j < 4; j++) {
+      const x = mx - 30 + i * 6.5, z = mz - 8 + j * 6.5; if (blocked(x - 2, z - 2, x + 2, z + 2) || treeIn(x - 2, z - 2, x + 2, z + 2)) continue;
+      add(cyl(0.18, 0.24, 1.4, '#6b4a2e', 6), x, 0.7, z); const c = new THREE.Mesh(new THREE.IcosahedronGeometry(1, 0), mat(j % 2 ? '#5f8a3a' : '#6b9a42')); c.scale.set(1.6, 1.25, 1.6); add(c, x, 2.1, z, rnd() * 3, rnd() * 3);
+      for (let k = 0; k < 5; k++) { const a = k * 1.3 + rnd(); add(box(0.16, 0.16, 0.16, '#c8402f'), x + Math.cos(a) * 1.25, 1.7 + rnd() * 0.9, z + Math.sin(a) * 1.25); }
+      solid(x - 0.3, z - 0.3, x + 0.3, z + 0.3);
+    }
+  }
+  // ---- sítios: casa de pau a pique com telhado de palha, celeirinho, cerca de varas, monte de lenha ----
+  const farm = (cx, cz, ry) => {
+    const c = Math.cos(ry), sn = Math.sin(ry), W = (lx, lz) => [cx + lx * c + lz * sn, cz - lx * sn + lz * c];
+    const house = (lx, lz, w, d, h, wall) => { const [x, z] = W(lx, lz); add(box(w, h, d, wall), x, h / 2, z, 0, ry);
+      const sh = new THREE.Shape([new THREE.Vector2(-d / 2 - 0.7, 0), new THREE.Vector2(d / 2 + 0.7, 0), new THREE.Vector2(0, h * 0.95)]);
+      const rg = new THREE.ExtrudeGeometry(sh, { depth: w + 0.8, bevelEnabled: false }); rg.translate(0, 0, -(w + 0.8) / 2); rg.rotateY(Math.PI / 2 + ry); rg.translate(x, h, z); G2.add(new THREE.Mesh(rg, mat('#b8964e')));
+      const hw2 = Math.abs(c) * w / 2 + Math.abs(sn) * d / 2, hd2 = Math.abs(sn) * w / 2 + Math.abs(c) * d / 2; solid(x - hw2, z - hd2, x + hw2, z + hd2, h * 2); };
+    house(0, 0, 8, 6, 2.8, '#e2d6b8'); house(9, -2, 6, 5, 2.4, '#8a6a48');
+    { const [x, z] = W(-1.5, 3.05); add(box(1.1, 1.9, 0.12, WOOD_D), x, 0.95, z, 0, ry); const [x2, z2] = W(1.8, 3.05); add(box(0.9, 0.8, 0.12, '#3a2a1e'), x2, 1.6, z2, 0, ry); }
+    for (let u = -7; u <= 14; u += 2.2) { const [x, z] = W(u, 7.5); add(box(0.14, 1.0, 0.14, WOOD), x, 0.5, z); }
+    for (const y of [0.45, 0.85]) { const [x, z] = W(3.5, 7.5); add(box(21.4, 0.08, 0.08, WOOD_L), x, y, z, 0, ry); }
+    { const [x, z] = W(-6, 0.5); for (let k = 0; k < 6; k++) add(cyl(0.18, 0.18, 1.6, '#8a6038', 6), x, 0.2 + (k % 3) * 0.34, z + Math.floor(k / 3) * 0.3 - 0.4, 0, ry, Math.PI / 2); }
+    busy.push({ x0: cx - 12, x1: cx + 16, z0: cz - 10, z1: cz + 10 });
+  };
+  for (const [cx, cz, ry] of [[MAP + 58, 30, -Math.PI / 2], [-62, MAP - 40, Math.PI / 2]]) if (!blocked(cx - 12, cz - 12, cx + 16, cz + 12) && !treeIn(cx - 12, cz - 12, cx + 16, cz + 12)) farm(cx, cz, ry);
+  // ---- pasto das ovelhas (cerca de varas) com o pastor ----
+  let flock = null;
+  { const pc = placeFree(MAP + 62, MAP - 70, 22) || placeFree(MAP / 2, MAP + 60, 22);
+    if (pc) {
+      const [px, pz] = pc, P0 = { x0: px - 20, x1: px + 20, z0: pz - 14, z1: pz + 14 }; busy.push(P0);
+      add(box(40, 0.05, 28, '#8fbf5e'), px, 0.03, pz);
+      for (const [x0, z0, x1, z1] of [[P0.x0, P0.z0, P0.x1, P0.z0], [P0.x0, P0.z1, P0.x1, P0.z1], [P0.x0, P0.z0, P0.x0, P0.z1], [P0.x1, P0.z0, P0.x1, P0.z1]]) {
+        const len = Math.hypot(x1 - x0, z1 - z0), ax = x1 !== x0;
+        for (let u = 0; u <= len; u += 2.5) add(box(0.14, 1.0, 0.14, WOOD), ax ? x0 + u : x0, 0.5, ax ? z0 : z0 + u);
+        for (const y of [0.4, 0.8]) add(box(ax ? len : 0.08, 0.07, ax ? 0.08 : len, WOOD_L), (x0 + x1) / 2, y, (z0 + z1) / 2);
+        solid(Math.min(x0, x1) - 0.2, Math.min(z0, z1) - 0.2, Math.max(x0, x1) + 0.2, Math.max(z0, z1) + 0.2);
+      }
+      add(box(2.6, 0.5, 0.9, WOOD), px + 14, 0.25, pz - 10); add(box(2.4, 0.08, 0.7, '#5a8ab0'), px + 14, 0.47, pz - 10);   // cocho com água
+      flock = { px, pz, P0 };
+    }
+  }
+  // ---- lavouras em faixas, com sebes ----
+  const CROP = {
+    plowed: f => { add(box(f.w, 0.06, f.d, '#7a5a3a'), f.cx, 0.03, f.cz, 0, f.ry); for (let u = -f.d / 2 + 0.6; u < f.d / 2 - 0.3; u += 1.25) add(box(f.w - 0.6, 0.14, 0.4, '#6a4a2e'), f.cx + Math.sin(f.ry) * u, 0.1, f.cz + Math.cos(f.ry) * u, 0, f.ry); },
+    wheat: f => { add(box(f.w, 0.06, f.d, '#b89a48'), f.cx, 0.03, f.cz, 0, f.ry); for (let u = -f.d / 2 + 0.7; u < f.d / 2 - 0.4; u += 1.25) add(box(f.w - 0.8, 0.55, 0.62, rnd() < 0.5 ? '#d9b85a' : '#cfae4e'), f.cx + Math.sin(f.ry) * u, 0.3, f.cz + Math.cos(f.ry) * u, 0, f.ry); },
+    greens: f => { add(box(f.w, 0.06, f.d, '#7a5a3a'), f.cx, 0.03, f.cz, 0, f.ry); for (let u = -f.d / 2 + 0.7; u < f.d / 2 - 0.5; u += 1.3) { const x = f.cx + Math.sin(f.ry) * u, z = f.cz + Math.cos(f.ry) * u, c = rnd() < 0.5 ? '#5f8a3a' : '#7aa24a';   // fileiras de couve (uma peça por fileira, com folhas mais altas de vez em quando)
+      add(box(f.w - 1.2, 0.3, 0.62, c), x, 0.2, z, 0, f.ry); for (let v = -f.w / 2 + 2; v < f.w / 2 - 1.5; v += 5 + rnd() * 3) add(box(0.7, 0.42, 0.7, '#6b9a42'), x + Math.cos(f.ry) * v, 0.24, z - Math.sin(f.ry) * v, 0, rnd() * 3); } },
+    fallow: f => { add(box(f.w, 0.06, f.d, '#a2b45e'), f.cx, 0.03, f.cz, 0, f.ry); for (let k = 0; k < f.w * f.d / 34; k++) add(box(0.2, 0.2, 0.2, FLOWER[k % FLOWER.length]), f.cx + (rnd() - 0.5) * f.w * 0.9, 0.12, f.cz + (rnd() - 0.5) * f.d * 0.9); },
+  };
+  const TYPES = ['plowed', 'wheat', 'wheat', 'greens', 'fallow', 'plowed', 'wheat'];
+  const blocks = [[-175, -60, -24, MAP + 40, 'z'], [MAP + 24, -60, MAP + 175, MAP + 40, 'z'], [-60, MAP + 24, MAP + 60, MAP + 150, 'x'], [-150, -175, A.x0 - 14, -30, 'x'], [A.x1 + 14, -175, MAP + 150, -30, 'x']];
+  const hedge = (x0, z0, x1, z1) => { const w = x1 - x0, d = z1 - z0; add(box(Math.max(0.8, w), 1.1, Math.max(0.8, d), '#4f7a3a'), (x0 + x1) / 2, 0.55, (z0 + z1) / 2);
+    for (let u = 0; u < Math.max(w, d); u += 4.6) add(box(1.1, 0.5, 1.1, rnd() < 0.5 ? '#5d8a42' : '#467034'), w > d ? x0 + u + 1 : (x0 + x1) / 2, 1.05, w > d ? (z0 + z1) / 2 : z0 + u + 1, 0, rnd() * 3);
+    solid(x0 - (w > d ? 0 : 0.4), z0 - (w > d ? 0.4 : 0), x1 + (w > d ? 0 : 0.4), z1 + (w > d ? 0.4 : 0)); };
+  for (const [bx0, bz0, bx1, bz1, along] of blocks) {
+    const L = along === 'z' ? 15 : 34, W = along === 'z' ? 34 : 15;      // faixas compridas, perpendiculares à muralha
+    for (let x = bx0; x + (along === 'z' ? W : L) <= bx1; x += (along === 'z' ? W : L) + 2.2) for (let z = bz0; z + (along === 'z' ? L : W) <= bz1; z += (along === 'z' ? L : W) + 2.2) {
+      const w = along === 'z' ? W : L, d = along === 'z' ? L : W, x0 = x, z0 = z, x1 = x + w, z1 = z + d;
+      if (blocked(x0, z0, x1, z1) || rnd() < 0.12) continue;
+      const f = { cx: (x0 + x1) / 2, cz: (z0 + z1) / 2, w: along === 'z' ? w : d, d: along === 'z' ? d : w, ry: along === 'z' ? 0 : Math.PI / 2, type: TYPES[Math.floor(rnd() * TYPES.length)], x0, z0, x1, z1 };
+      if (treeIn(x0, z0, x1, z1) && f.type === 'greens') f.type = 'fallow';
+      fields.push(f); CROP[f.type](f);
+      if (rnd() < 0.35 && !treeIn(x0, z1, x1, z1 + 1.2)) hedge(x0, z1 + 0.3, x1, z1 + 1.1);                // sebe viva no lado comprido
+    }
+  }
+  for (const f of fields) if (f.type === 'wheat' && rnd() < 0.5) {                                          // palheiros no restolho do trigo
+    for (let k = 0; k < 2; k++) { const x = f.cx + (rnd() - 0.5) * (f.x1 - f.x0) * 0.6, z = f.cz + (rnd() - 0.5) * (f.z1 - f.z0) * 0.6; if (treeIn(x - 2, z - 2, x + 2, z + 2)) continue; add(cyl(1.2, 1.4, 1.6, '#d6b45a', 10), x, 0.8, z); add(cone(1.3, 1.4, '#c9a64e', 10), x, 2.3, z); solid(x - 1.2, z - 1.2, x + 1.2, z + 1.2); }
+  }
+  // ---- capões de mata mais longe (fecham o horizonte do povoado) ----
+  for (const [cx, cz, n] of [[-210, -40, 14], [-215, 150, 16], [MAP + 210, 80, 15], [MAP + 200, -120, 12], [40, MAP + 205, 16], [MAP - 30, MAP + 200, 13], [-120, -210, 14], [MAP + 120, -210, 12]]) {
+    for (let k = 0; k < n; k++) { const x = cx + (rnd() - 0.5) * 46, z = cz + (rnd() - 0.5) * 36; if (blocked(x - 2, z - 2, x + 2, z + 2) || treeIn(x - 2, z - 2, x + 2, z + 2)) continue;
+      const s = 1.1 + rnd() * 0.8; if (rnd() < 0.4) { add(cyl(0.25 * s, 0.32 * s, 1.6 * s, '#5a3c26', 6), x, 0.8 * s, z); add(cone(2.0 * s, 4.8 * s, '#3f6a3a', 7), x, 3.6 * s, z); }
+      else { add(cyl(0.28 * s, 0.38 * s, 2.4 * s, '#5a3c26', 6), x, 1.2 * s, z); const c = new THREE.Mesh(new THREE.IcosahedronGeometry(1, 0), mat(['#4f7a3a', '#5d8a42', '#6b8a45'][k % 3])); c.scale.set(2.2 * s, 1.9 * s, 2.2 * s); add(c, x, 3.6 * s, z, rnd() * 3, rnd() * 3); }
+      solid(x - 0.4 * s, z - 0.4 * s, x + 0.4 * s, z + 0.4 * s); }
+  }
+  // em pedaços (quadras de 150 m): o que fica fora da tela não é desenhado; sem sombra
+  // projetada (é cenário de longe; a grama de fora nem recebe sombra) — desligada no 1º tique, depois do assado do terreno
+  const chunks = new Map();
+  G2.updateMatrixWorld(true);
+  for (const o of [...G2.children]) {
+    if (!o.geometry.boundingSphere) o.geometry.computeBoundingSphere();
+    const c = o.geometry.boundingSphere.center.clone().applyMatrix4(o.matrixWorld), big = o.geometry.boundingSphere.radius > 120;   // (a estrada inteira vai num pedaço só)
+    const key = big ? 'road' : Math.floor((c.x + 310) / 150) + ',' + Math.floor((c.z + 310) / 150);   // quadras de 150 m
+    let grp = chunks.get(key); if (!grp) chunks.set(key, grp = new THREE.Group()); grp.attach(o);
+  }
+  const cs = new THREE.Group(); cs.name = 'med-countryside'; cs.userData.dynamic = true;
+  for (const grp of chunks.values()) { const m = vcMerge(grp); m.castShadow = false; m.receiveShadow = false; cs.add(m); }
+  let shadowsOff = false;
+  cs.userData.tick = () => { if (shadowsOff) return; shadowsOff = true; cs.traverse(o => { if (o.isMesh) { o.castShadow = false; o.receiveShadow = false; } }); };
+  g.add(cs);
+  // ---- ovelhas e pastor (vivos: medievalLife chama userData.tick) ----
+  if (flock) {
+    const wool = new THREE.Group(); wool.add(at(new THREE.Mesh(new THREE.IcosahedronGeometry(1, 1), mat('#f2eee4')), 0, 0.62, 0)); wool.children[0].scale.set(0.42, 0.36, 0.6);
+    wool.add(at(box(0.26, 0.3, 0.34, '#2b2622'), 0, 0.72, 0.6), at(box(0.12, 0.08, 0.06, '#2b2622'), -0.17, 0.82, 0.55), at(box(0.12, 0.08, 0.06, '#2b2622'), 0.17, 0.82, 0.55));
+    for (const [x, z] of [[-0.18, 0.3], [0.18, 0.3], [-0.18, -0.3], [0.18, -0.3]]) wool.add(at(box(0.09, 0.36, 0.09, '#2b2622'), x, 0.18, z));
+    const NS = 9, sheep = new THREE.InstancedMesh(vcMerge(wool).geometry, mat('#ffffff', { vertexColors: true }), NS); sheep.castShadow = true; sheep.frustumCulled = false;
+    const fl = new THREE.Group(); fl.name = 'med-flock'; fl.userData.dynamic = true; fl.add(sheep);
+    const S = Array.from({ length: NS }, (_, i) => ({ x: flock.px + (rnd() - 0.5) * 24, z: flock.pz + (rnd() - 0.5) * 16, ry: rnd() * 6.3, tx: 0, tz: 0, t: rnd() * 6, graze: true, k: i }));
+    const shep = buildMedPerson({ role: 'walker', k: 141 }); shep.give('staff', 'R'); fl.add(shep.root);
+    const ps = { x: flock.px - 8, z: flock.pz + 4, ry: 0.6, t: 0, ph: 0, mode: 'idle', tx: 0, tz: 0, wait: 3 };
+    const M4 = new THREE.Matrix4(), Q = new THREE.Quaternion(), E = new THREE.Euler(), V3 = new THREE.Vector3(), ONE = new THREE.Vector3(1, 1, 1), st = { mode: 'idle', ph: 0, t: 0, ev: [] };
+    let T = 0;
+    fl.userData.tick = (t, dt) => {
+      T += dt;
+      for (const a of S) {                                                   // pastam (cabeça baixa), andam uns passos, às vezes olham em volta
+        a.t -= dt;
+        if (a.t <= 0) { a.graze = !a.graze || rnd() < 0.3; a.t = a.graze ? 3 + rnd() * 6 : 1.5 + rnd() * 2; if (!a.graze) { a.tx = Math.max(flock.P0.x0 + 1.5, Math.min(flock.P0.x1 - 1.5, a.x + (rnd() - 0.5) * 7)); a.tz = Math.max(flock.P0.z0 + 1.5, Math.min(flock.P0.z1 - 1.5, a.z + (rnd() - 0.5) * 5)); } }
+        let mv = 0; if (!a.graze) { const dx = a.tx - a.x, dz = a.tz - a.z, d = Math.hypot(dx, dz); if (d > 0.1) { const r2 = Math.atan2(dx, dz); a.ry += Math.atan2(Math.sin(r2 - a.ry), Math.cos(r2 - a.ry)) * Math.min(1, dt * 3); const sp = Math.min(d, 0.6 * dt); a.x += Math.sin(a.ry) * sp; a.z += Math.cos(a.ry) * sp; mv = 1; } }
+        M4.compose(V3.set(a.x, mv ? Math.abs(Math.sin(T * 8 + a.k)) * 0.04 : 0, a.z), Q.setFromEuler(E.set(a.graze ? 0.22 + Math.sin(T * 2 + a.k) * 0.04 : 0, a.ry, 0)), ONE); sheep.setMatrixAt(a.k, M4);
+      }
+      sheep.instanceMatrix.needsUpdate = true;
+      // pastor: apoiado no cajado olhando o rebanho; de vez em quando muda de lugar ao longo da cerca
+      ps.wait -= dt;
+      if (ps.mode === 'idle' && ps.wait <= 0) { ps.mode = 'walk'; ps.tx = flock.px + (rnd() - 0.5) * 30; ps.tz = flock.pz + (rnd() < 0.5 ? -1 : 1) * (8 + rnd() * 4); }
+      if (ps.mode === 'walk') { const dx = ps.tx - ps.x, dz = ps.tz - ps.z, d = Math.hypot(dx, dz); if (d < 0.3) { ps.mode = 'idle'; ps.wait = 8 + rnd() * 10; } else { const r2 = Math.atan2(dx, dz); ps.ry += Math.atan2(Math.sin(r2 - ps.ry), Math.cos(r2 - ps.ry)) * Math.min(1, dt * 4); const sp = Math.min(d, 0.9 * dt); ps.x += Math.sin(ps.ry) * sp; ps.z += Math.cos(ps.ry) * sp; st.ph += sp / 0.62 * Math.PI; } }
+      else { const r2 = Math.atan2(flock.px - ps.x, flock.pz - ps.z); ps.ry += Math.atan2(Math.sin(r2 - ps.ry), Math.cos(r2 - ps.ry)) * Math.min(1, dt * 1.5); }
+      shep.root.position.set(ps.x, 0, ps.z); shep.root.rotation.y = ps.ry;
+      st.mode = ps.mode === 'walk' ? 'walk' : 'idle'; st.t = T; st.lookYaw = ps.mode === 'idle' ? Math.sin(T * 0.4) * 0.5 : 0; st.ev.length = 0;
+      animatePerson(shep, st);
+    };
+    g.add(fl);
+  }
 }

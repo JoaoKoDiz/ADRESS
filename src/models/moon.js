@@ -3,7 +3,8 @@
 // (chão, estradas em faixas que seguem a curvatura, rotatórias, pontes sobre crateras, praças das vilas — estufa, foguete,
 // antenas… —, enchimento e decoração, estrelas e a Terra) e o capacete do jogador.
 import * as THREE from 'three';
-import { box, cyl, sphere, cone, torus, at, mat, bakeStatic } from './kit.js';
+import { box, cyl, sphere, cone, torus, at, mat, bakeStatic, vcMerge } from './kit.js';
+import { createCrowd, crowdStand, crowdTurn, crowdStep } from './medievalPeople.js';
 import { MOON_COL } from '../data.js';
 import { MOON, tangentBasis } from '../moonPlan.js';
 import { FRAME } from '../moonFrame.js';
@@ -58,7 +59,9 @@ export function buildMoonLot(h) {
   if (h.top === 'antenna') { add(cyl(0.08, 0.1, 3.2, GRAY, 6), 0.8, topY + 1.4, -1.5); add(sphere(0.22, '#e0402a', 8, 6), 0.8, topY + 3.0, -1.5); add(box(1.2, 0.08, 0.08, GRAY), 0.8, topY + 2.2, -1.5); }
   else if (h.top === 'dish') { add(cyl(0.12, 0.14, 1.2, GRAY, 6), 0, topY + 0.4, -1.6); const d = cone(1.3, 0.6, '#e8e8e8', 16); add(d, 0, topY + 1.3, -1.6, -2.4, 0, 0); add(cyl(0.05, 0.05, 0.9, GRAY, 6), 0, topY + 1.5, -1.25, 0.7, 0, 0); }
   else for (const s of [-1, 1]) { add(cyl(0.08, 0.08, 1.4, GRAY, 6), s * 1.6, topY + 0.4, -1.5); add(box(2.6, 0.08, 1.6, PANEL), s * 1.6, topY + 1.1, -1.5, 0.35, 0, 0); for (let k = -1; k <= 1; k++) add(box(0.05, 0.1, 1.62, '#8fb0ee'), s * 1.6 + k * 0.85, topY + 1.12, -1.5, 0.35, 0, 0); }
-  return bakeStatic(root);
+  const out = bakeStatic(root);
+  out.userData.update = (t, dt) => { const L = MLIFE || (MLIFE = createMoonLife()); L.lot(out, h, fz, t, dt); };   // o cotidiano dos ETs (abaixo)
+  return out;
 }
 
 /** Altura do topo de um módulo (seta da dica). */
@@ -232,4 +235,80 @@ export function spaceSuit(parent, { headY = 1.55, r = 0.55, back = [0, -0.42], b
   g.add(at(box(0.5, 0.6, 0.26, color), back[0], backY, back[1], 0, ry, 0)); g.add(at(box(0.36, 0.08, 0.27, '#2f78d0'), back[0] * 1.03, backY + 0.18, back[1] * 1.03, 0, ry, 0));
   parent.add(g);
   return g;
+}
+
+// ---------- O cotidiano dos ETs ----------
+// Em alguns módulos (um em cada cinco, os que estão nesta partida), um morador do lado de fora: quem acena e dá pulinhos de
+// gravidade baixa no fim da calçada, quem rega a planta alienígena do vaso ao lado da porta, quem conserta a luz da escotilha
+// na ponta dos pés, quem olha a Terra pela luneta, quem varre a poeira lunar da calçada e quem passeia com o robozinho de
+// estimação. Tudo no referencial do próprio módulo (a esfera desce d²/2R a partir dele); multidão de ETs instanciada (6
+// desenhos) + vasos, lunetas, vassouras e robozinhos (1 desenho cada).
+let MLIFE = null;
+function createMoonLife() {
+  const root = new THREE.Group(); root.name = 'moon-life';
+  const N = 7, crowd = createCrowd(N, { name: 'moon-crowd', alien: true }); root.add(crowd.object);
+  const P = crowd.people;
+  const SK = ['#7ccf5a', '#5aa8e8', '#b48ce0', '#4fc7a8', '#9ad85a', '#8f9cf0', '#7ccf5a'], SU = ['#ff7a1a', '#2f78d0', '#f0c22a', '#e0402a', '#3fae5a', '#7a4fc0', '#2f78d0'];
+  for (let i = 0; i < N; i++) crowd.look(i, { skin: SK[i], shirt: SU[i], belt: '#f1ede2', pants: SU[i], shoes: '#9da1a7', hair: '#16141c', hat: i % 3 === 2 ? null : ['#ffd36b', '#ff6ad5', '#7fe08a'][i % 3] });
+  const inst = (grp, n) => { const im = new THREE.InstancedMesh(vcMerge(grp).geometry, mat('#ffffff', { vertexColors: true }), n); im.frustumCulled = false; im.userData.dynamic = true; root.add(im); return im; };
+  const pots = inst(new THREE.Group().add(at(cyl(0.32, 0.24, 0.5, '#e6dcc4', 10), 0, 0.25, 0), at(sphere(0.32, '#b48ce0', 8, 6), 0, 0.7, 0), at(cyl(0.03, 0.03, 0.6, '#5aa86a', 5), 0.15, 0.9, 0, 0, 0, -0.4), at(sphere(0.1, '#ff6ad5', 6, 4), 0.28, 1.2, 0), at(cyl(0.03, 0.03, 0.5, '#5aa86a', 5), -0.12, 0.85, 0.05, 0.3, 0, 0.3), at(sphere(0.09, '#7fe08a', 6, 4), -0.22, 1.1, 0.14)), N);
+  const scopes = inst(new THREE.Group().add(...[0, 2.1, 4.2].map(a => at(cyl(0.025, 0.025, 1.25, '#2b2f36', 4), Math.sin(a) * 0.28, 0.6, Math.cos(a) * 0.28, Math.cos(a) * 0.22, 0, -Math.sin(a) * 0.22)), at(cyl(0.09, 0.07, 0.9, '#f1ede2', 10), 0, 1.35, 0.1, -1.0, 0, 0), at(cyl(0.1, 0.1, 0.06, '#2b2f36', 10), 0, 1.66, 0.48, -1.0, 0, 0)), N);
+  const brooms = inst(new THREE.Group().add(at(cyl(0.025, 0.025, 1.3, '#9da1a7', 5), 0, 0.55, 0), at(box(0.42, 0.1, 0.12, '#ff7a1a'), 0, -0.12, 0.05)), N);
+  const bots = inst(new THREE.Group().add(at(box(0.5, 0.32, 0.6, '#f1ede2'), 0, 0.32, 0), at(box(0.3, 0.2, 0.06, '#2b2f36'), 0, 0.38, 0.31), at(sphere(0.05, '#7fe08a', 6, 4), -0.08, 0.4, 0.34), at(sphere(0.05, '#7fe08a', 6, 4), 0.08, 0.4, 0.34), at(cyl(0.015, 0.015, 0.3, '#9da1a7', 4), 0, 0.62, 0), at(sphere(0.05, '#ff6ad5', 6, 4), 0, 0.8, 0),
+    ...[[-0.27, 0.18], [0.27, 0.18], [-0.27, -0.18], [0.27, -0.18]].map(([x, z]) => at(cyl(0.11, 0.11, 0.08, '#2b2f36', 10), x, 0.11, z, 0, 0, Math.PI / 2))), N);
+  const ZERO = new THREE.Matrix4().makeScale(0, 0, 0), M4 = new THREE.Matrix4(), B4 = new THREE.Matrix4(), Q = new THREE.Quaternion(), E = new THREE.Euler(), V3 = new THREE.Vector3(), ONE = new THREE.Vector3(1, 1, 1);
+  const R2 = 2 * MOON.R, drop = (x, z) => (Math.abs(x) < 1.65 && z > 3.8 && z < 8.55) || Math.hypot(x, z) < 7.65 ? 0.07 : -(x * x + z * z) / R2;   // base do módulo e calçada (planas); fora delas a lua se afasta do plano
+  const slots = new Array(N).fill(null), S = [];
+  for (let i = 0; i < N; i++) S.push({ t: Math.random() * 10, mode: 0, u: 0, dir: 1 });
+  let T = 0, lastT = -1, attached = false;
+  function frame(dt) {
+    T += dt; const t = T;
+    slots.forEach((o, i) => {
+      const p = P[i], s = S[i];
+      for (const im of [pots, scopes, brooms, bots]) im.setMatrixAt(i, ZERO);
+      if (!o) { p.on = false; return; }
+      p.on = true; s.t += dt; p.base = o.base; const kind = o.h.index % 6, fz = o.fz;
+      const put = (im, x, z, ry, sc = 1) => { M4.compose(V3.set(x, drop(x, z) - 0.02, z), Q.setFromEuler(E.set(0, ry, 0)), ONE.set(sc, sc, sc)); M4.premultiply(o.base); im.setMatrixAt(i, M4); ONE.set(1, 1, 1); };
+      p.arms[0] = p.arms[2] = 0; p.arms[1] = p.arms[3] = 0.16; p.pitch = 0; p.lean = 0; p.bob = 0; p.kneel = 0;
+      if (kind === 0) {                                         // acena e dá pulinhos de gravidade baixa no fim da calçada
+        p.x = 0.8; p.z = 8.2; p.ry = Math.sin(t * 0.2 + i) * 0.5; const c = s.t % 9;
+        if (c < 3) { p.arms[2] = -2.7 + Math.sin(t * 8) * 0.3; p.arms[3] = 0.4; }
+        else if (c < 6) { const u = (c - 3) % 1.5 / 1.5; p.bob = Math.sin(u * Math.PI) * 0.9; p.arms[0] = p.arms[2] = -0.6 - p.bob * 1.6; p.arms[1] = p.arms[3] = 0.5; }
+        else p.yaw = Math.sin(t * 0.7) * 0.8;
+      } else if (kind === 1) {                                  // rega a planta alienígena ao lado da porta
+        p.x = 2.0; p.z = fz + 1.9; p.ry = Math.PI * 0.75; const c = s.t % 12; put(pots, 2.6, fz + 1.0, 0.4);
+        if (c < 7) { p.arms[2] = -1.0 + Math.sin(t * 1.4) * 0.1; p.pitch = 0.45; p.kneel = 0.8; } else { p.yaw = Math.sin(t * 0.9) * 0.6; p.arms[0] = -0.4; }
+      } else if (kind === 2) {                                  // conserta a luz da escotilha, na ponta dos pés
+        p.x = 0; p.z = fz + 1.35; p.ry = Math.PI; const c = s.t % 10;
+        p.arms[0] = p.arms[2] = c < 7 ? -2.75 + Math.sin(t * 5) * 0.12 : 0; p.arms[1] = p.arms[3] = c < 7 ? 0.05 : 0.16; p.pitch = c < 7 ? -0.55 : 0.2; p.bob = c < 7 ? 0.12 + Math.sin(t * 2) * 0.04 : 0;
+      } else if (kind === 3) {                                  // olha a Terra pela luneta
+        p.x = -2.6; p.z = 6.3; p.ry = Math.PI * 0.85; put(scopes, -2.75, 5.75, Math.PI * 0.85); const c = s.t % 14;
+        if (c < 9) { p.pitch = -0.5; p.arms[0] = p.arms[2] = -1.3; p.arms[1] = p.arms[3] = -0.25; } else { p.ry = 0.2; p.yaw = Math.sin(t * 0.8) * 0.7; p.pitch = -0.3; }
+      } else if (kind === 4) {                                  // varre a poeira lunar da calçada
+        s.u += s.dir * dt * 0.4; if (s.u > 1.2 || s.u < -1.2) s.dir = -s.dir; p.x = s.u; p.z = 6.4; p.ry = s.dir > 0 ? Math.PI / 2 : -Math.PI / 2;
+        p.arms[2] = -0.55 + Math.sin(t * 3.4) * 0.35; p.arms[0] = -0.35 + Math.sin(t * 3.4) * 0.3; p.arms[1] = p.arms[3] = -0.1; p.pitch = 0.3;
+        const c = Math.cos(p.ry), sn = Math.sin(p.ry), hx = p.x + sn * 0.75 - c * 0.42, hz = p.z + c * 0.75 + sn * 0.42; put(brooms, hx, hz, p.ry + 0.3);
+      } else {                                                  // passeia com o robozinho de estimação em volta da calçada
+        const a = s.t * 0.22, x = Math.sin(a) * 3.2, z = 6.5 + Math.cos(a) * 1.4, px = p.x, pz = p.z; p.x = x; p.z = z;
+        const d = Math.hypot(x - px, z - pz); if (d > 0.0005) { p.ry = Math.atan2(x - px, z - pz); crowdStep(p, d); p.amp = 0.8; } else p.amp = 0;
+        const b2 = a - 0.42, bx = Math.sin(b2) * 3.2, bz = 6.5 + Math.cos(b2) * 1.4; put(bots, bx, bz, Math.atan2(Math.cos(b2) * 3.2, -Math.sin(b2) * 1.4) + Math.sin(t * 6) * 0.15);
+      }
+      p.y = drop(p.x, p.z); p.ground = p.y;
+    });
+    for (const im of [pots, scopes, brooms, bots]) im.instanceMatrix.needsUpdate = true;
+    crowd.update();
+  }
+  root.userData.api = { slots, people: P };
+  return {
+    lot(lot, h, fz, t, dt) {
+      if (!attached && lot.parent) { lot.parent.add(root); attached = true; }
+      const want = lot.visible && h.index % 5 === 1;
+      let k = slots.findIndex(o => o && o.lot === lot);
+      if (want && k < 0) { k = slots.findIndex(o => !o); if (k >= 0) slots[k] = { lot, h, fz, base: new THREE.Matrix4() }; }
+      if (!want && k >= 0) { slots[k] = null; k = -1; }
+      if (k >= 0) slots[k].base.compose(lot.position, lot.quaternion, lot.scale);
+      if (t !== lastT) { lastT = t; frame(dt); }
+    },
+    get people() { return P; },
+  };
 }

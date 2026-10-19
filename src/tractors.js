@@ -69,6 +69,7 @@ export function createTractors(audio) {
         t.v = t.v < want ? Math.min(want, t.v + 2 * dt) : Math.max(want, t.v - 6 * dt);
         t.s += t.v * dt;
         this.place(t);
+        if (t.mesh.userData.drive) t.mesh.userData.drive(dt, t.v);   // rodas girando, motorista, giroflex (modelos que têm)
         ensureSolid(t.solid);
       }
       if (ear && audio && audio.traffic) {

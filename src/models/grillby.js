@@ -3,7 +3,7 @@
 // porta à direita com coberturinha nevada, barril entre as janelas e a porta, telhado com neve e um caminho limpo até a rua.
 // Origem = centro do lote (17,2 × 17,2), frente para +Z, chão em y = 0 (como os outros lotes do Nevasca).
 import * as THREE from 'three';
-import { box, cyl, sphere, cone, at, textTexture } from './kit.js';
+import { box, cyl, sphere, cone, at, textTexture, bakeStatic, dynamic } from './kit.js';
 
 const SNOWC = '#eef3f7', SNOW2 = '#dfe7ee', WOOD = '#7a4526', WOOD2 = '#5c321b', TRIM = '#e8822c', ROOF = '#4e2c18';
 
@@ -90,7 +90,19 @@ export function buildGrillbyLot() {
   add(cyl(0.55, 0.5, 1.05, '#8a5226', 14), bx, 0.12 + 0.53, bz);
   for (const y of [0.32, 0.92]) add(cyl(0.57, 0.57, 0.08, '#3a2414', 14), bx, 0.12 + y, bz);
   const cap = sphere(0.5, SNOWC, 10, 6); cap.scale.y = 0.45; add(cap, bx, 1.2, bz);
+  // chaminé de pedra na água de trás, com fumaça (a lareira lá de dentro está acesa)
+  const CX = -4.3, CZ = zc - 1.7, cy0 = ytop + RISE * 0.5;
+  add(box(1.0, 2.6, 1.0, '#8f8b85'), CX, cy0 + 1.0, CZ); add(box(1.2, 0.2, 1.2, '#6f6b66'), CX, cy0 + 2.35, CZ);
+  for (let y = 0.4; y < 2.2; y += 0.45) add(box(1.02, 0.05, 1.02, '#7a7670'), CX, cy0 + y, CZ);
+  const chSnow = sphere(0.62, SNOWC, 8, 4); chSnow.scale.set(1, 0.3, 1); add(chSnow, CX, cy0 + 2.5, CZ);
   g.traverse(o => { if (o.isMesh) { o.castShadow = o.material && !o.material.transparent && o.position.y > 0.2; o.receiveShadow = true; } });
+  bakeStatic(g);                                                                // (antes: cada peça era um desenho separado)
+  const smokeMat = new THREE.MeshLambertMaterial({ color: '#e9edf1', transparent: true, opacity: 0.4, depthWrite: false });
+  const puffs = [0, 1, 2, 3, 4].map(() => { const m = new THREE.Mesh(new THREE.IcosahedronGeometry(0.4, 1), smokeMat); m.castShadow = false; g.add(dynamic(m)); return m; });
+  g.userData.update = t => {
+    if (!g.visible) return;
+    puffs.forEach((m, q) => { const u = (t * 0.18 + q / 5) % 1; m.position.set(CX + u * 1.6 + Math.sin(u * 6 + q) * 0.25, cy0 + 2.7 + u * 4.5, CZ - u * 0.8); m.scale.setScalar(0.6 + u * 1.8); m.visible = u < 0.94; });
+  };
   g.name = 'grillby';
   return g;
 }

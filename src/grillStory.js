@@ -7,6 +7,7 @@
 import * as THREE from 'three';
 import { buildNPC } from './grillbyInside.js';
 import { CHAR_MATS } from './models/driver.js';
+import { kTalk, kGesture, kGestureReset } from './models/reader.js';
 
 export const GRILL_TALK_KEY = 'adress.grill.talk1';
 const EYE = 1.6, FAR = { x: 1e6, z: 1e6 };
@@ -72,6 +73,57 @@ const LINES3 = [
   '**Estarei lá.**',
 ].map(L);
 export const _LINES = { LINES1, LINES2, LINES3 };
+// Olhares do K à mesa (kTalk em models/reader.js): 'p' = o jogador sentado à frente; 'window' = a janela (a rua, o poste);
+// 'fire' = a lareira; 'guest' = o vizinho perto do fogo; 'room' = o salão. think = durante as pausas [...] (pensando).
+const G1 = [
+  { at: 'p' },                                                                            // "Você me encontrou de novo."
+  { at: 'p', think: { w: 0.4, yaw: -0.35, pitch: 0.12 } },                                 // "Engraçado...": lembrando
+  { at: 'p', w: 0.5, pitch: -0.15, then: { from: 0.62, w: 1, pitch: 0 } },                // "… Mas parece."
+  { at: 'p', then: { from: 0.55, at: 'window', w: 0.55 } },                               // "numa noite como esta"
+  { at: 'room', w: 0.6, then: { from: 0.6, at: 'p', w: 1 } },
+  { at: 'fire', w: 0.8, then: { from: 0.32, at: 'p', w: 1 } },                            // "Temos a lareira, …"
+  { at: 'window', w: 0.9 },                                                               // "Lá fora, …"
+  { at: 'p', w: 0.2, pitch: -0.32 },                                                      // "Estava pensando nisso…": os olhos na mesa
+  { at: 'p', w: 0.75, think: { w: 0.3, pitch: -0.15 } },
+  { at: 'window', w: 1, rate: 6, lean: 0.05 },                                            // "[...] Espere.": ele percebe primeiro
+  { at: 'window', w: 1, lean: 0.07 },                                                     // "Acho que há alguém lá fora."
+];
+const G2 = [
+  { at: 'window', w: 0.85 },
+  { at: 'window', w: 0.8, then: { from: 0.6, at: 'p', w: 1 } },
+  { at: 'window', w: 0.6 },
+  { at: 'p', think: { w: 0.5, pitch: -0.1 } },
+  { at: 'p', think: { at: 'room', w: 0.9, rate: 2.2 } },                                  // "Talvez alguém aqui possa emprestar um.": procura no salão
+  { at: 'p' },
+  { at: 'p', think: { at: 'window', w: 0.6 } },                                           // "procure a luz"
+  { at: 'p', lean: 0.05 },
+];
+const G3 = [
+  { at: 'guest', w: 0.9, rate: 2 },                                                        // "Ele está se aquecendo."
+  { at: 'guest', w: 0.8, then: { from: 0.75, at: 'p', w: 1 } },
+  { at: 'p' },                                                                            // "Obrigado por ter ido buscá-lo."
+  { at: 'window', w: 0.7, then: { from: 0.5, at: 'p', w: 1 } },
+  { at: 'p' },
+  { at: 'p', think: { w: 0.5, pitch: -0.12 } },
+  { at: 'p', w: 0.5, pitch: -0.08 },
+  { at: 'p', w: 0.85, roll: 0.06 },
+  { at: 'p' },
+  { at: 'p', lean: 0.05 },
+  { at: 'window', w: 0.45 },
+  { at: 'p' },
+  { at: 'guest', w: 0.85 },                                                               // "Agora ele está ali, … perto do fogo."
+  { at: 'guest', w: 0.7, then: { from: 0.5, at: 'p', w: 1 } },
+  { at: 'p' },
+  { at: 'p', pitch: -0.04 },
+  { at: 'p', think: { w: 0.4, pitch: -0.16 } },
+  { at: 'p', think: { w: 0.35, yaw: 0.25, pitch: -0.18 } },                               // "Bom, [...] já está na hora de eu ir.": hesita
+  { at: 'p', w: 0.3, yaw: -0.28, pitch: 0.12 },                                          // "naquele lugar onde costumávamos conversar": lembrando
+  { at: 'window', w: 0.5 },
+  { at: 'p' },
+  { at: 'p', then: { from: 0.52, w: 0.45, pitch: -0.14, roll: 0.07 } },                   // "Quero tentar fazer alguma coisa por lá.": meio sem jeito
+  { at: 'p' },
+  { at: 'p' },
+];
 
 const ease = k => k < 0 ? 0 : k > 1 ? 1 : k * k * (3 - 2 * k);
 const lerpAng = (a, b, k) => { let d = b - a; while (d > Math.PI) d -= 2 * Math.PI; while (d < -Math.PI) d += 2 * Math.PI; return a + d * k; };
@@ -283,7 +335,7 @@ export function createGrillStory(ctx) {
     if (S && S.near0) { rig.camera.near = S.near0; rig.camera.updateProjectionMatrix(); }
     walker.setSpeedMul(1);
     if (ctx.grillIn) {
-      const st = ST(); ctx.grillIn.setFP(false); st.coatOnChair.visible = false; st.guest.root.visible = false; st.resetWalker();
+      const st = ST(); ctx.grillIn.setFP(false); st.coatOnChair.visible = false; st.guest.root.visible = false; st.resetWalker(); kGestureReset(st.k);
       st.k.visible = available();
     }
     try { if (S && !S.rainDone) { if (rainMusic.active) rainMusic.stop(); if (grillMusic.paused) grillMusic.resume(); if (ctx.insideOn()) music.setOverride(ctx.grillOverride); } grillMusic.setLevel(1, 0.5); } catch (e) { /* */ }
@@ -375,12 +427,12 @@ export function createGrillStory(ctx) {
           // vento em rajadas: a resistência varia devagar (sem trancos); na volta, apoiando o vizinho, pesa mais
           const gt = S.t, gust = Math.max(0, 0.5 + 0.5 * Math.sin(gt * 0.55) * Math.sin(gt * 0.23 + 1.3)) ** 1.5;
           const base = S.escort ? 0.14 : 0.22, resist = S.escort ? 0.55 : 0.4;
-          walker.setSpeedMul(base * (1 - resist * gust));
-          const bx = walker.x, bz = walker.z;
+          // o empurrão do vento entra na velocidade do passo (de frente atrasa, de costas ajuda), na mesma medida de antes.
+          // (Antes era um walker.pose a cada quadro; desde que pose() zera a velocidade do passo, isso levava a travessia ideal
+          //  de ~50 s para ~89 s a 60 Hz, e pior em telas mais rápidas. Só a deriva lateral, leve, deixou de existir.)
+          const along = Math.cos(ext.wind + Math.PI - walker.heading) * (S.escort ? 0.42 : 0.3) * gust;
+          walker.setSpeedMul(Math.max(0.02, base * (1 - resist * gust) + along / 6.5));   // (6,5 = passo a pé, walker.js)
           walker.update(dt, input.axis(), 'car', ctx.walkSolids(), FAR);
-          const moving = Math.hypot(walker.x - bx, walker.z - bz) > 1e-4, w = ext.wind + Math.PI;   // o vento empurra de lado quando se anda
-          if (moving) { const push = (S.escort ? 0.42 : 0.3) * gust * dt, nx = walker.x + Math.cos(w) * push, nz = walker.z + Math.sin(w) * push;
-            if (!ctx.walkSolids().some(b => nx > b.x0 - 0.5 && nx < b.x1 + 0.5 && nz > b.z0 - 0.5 && nz < b.z1 + 0.5)) walker.pose(nx, nz, walker.heading); }
           walker.setFloor(ctx.groundH(walker.x, walker.z));
           S.gust = gust;
         }
@@ -469,6 +521,7 @@ export function createGrillStory(ctx) {
       default: break;
     }
     if (S && ['pre1', 'talk1', 'talk2', 'pre3', 'talk3', 'note', 'sit3'].includes(S.phase) && (S.phase !== 'sit3' || S.ly === 0)) { const v = seatView(); view(c, v.x, v.y, v.z, v.yaw, v.pitch); }
+    if (S) kLook(dt);
   }
   let arm = null;
   function supportArm(n) {
@@ -485,6 +538,23 @@ export function createGrillStory(ctx) {
     const dir = to.clone().sub(sh), L = dir.length();
     arm.position.copy(sh); arm.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), dir.normalize());
     arm.userData.seg.scale.y = L; arm.userData.seg.position.y = L / 2; arm.children[1].position.y = L;
+  }
+  const _gp = new THREE.Vector3(), _gw = new THREE.Vector3(), _gf = new THREE.Vector3(), _gg = new THREE.Vector3(), _gr = new THREE.Vector3(0, 1.5, 0);
+  /** Olhares do K à mesa: o roteiro das falas e, fora delas, para onde a atenção dele iria. */
+  function kLook(dt) {
+    const st = ST(), K = st && st.k; if (!K || !K.visible || !S) return;
+    const v = seatView(), tg = { p: _gp.set(v.x, v.y, v.z), window: _gw.set(st.window.x, 1.7, st.window.z), fire: _gf.set(st.fire.x, 0.9, st.fire.z), room: _gr };
+    const gr = st.guest.root.visible ? st.guest.root : st.guestWalk.root; gr.getWorldPosition(_gg); _gg.y += 0.9; tg.guest = _gg;
+    const ph = S.phase;
+    if (ph === 'talk1') kTalk(K, dt, G1, talkBox, tg);
+    else if (ph === 'talk2') kTalk(K, dt, G2, talkBox, tg);
+    else if (ph === 'talk3') kTalk(K, dt, G3, talkBox, tg);
+    else if (ph === 'look') kGesture(K, dt, { at: tg.window, w: 1 });                                // ele também olha a rua
+    else if (ph === 'walkIn' || ph === 'back') {                                                     // acompanha o jogador pelo salão (e o vizinho a caminho do fogo)
+      const g = S.g, follow = ph === 'back' && g && !g.seated;
+      kGesture(K, dt, { at: follow ? tg.guest : _gp.set(walker.x, EYE, walker.z), w: 0.85, rate: 2 });
+    } else if (ph === 'rescue' || ph === 'enter' || ph === 'fail') return;
+    else kGesture(K, dt, { at: tg.p, w: 1 });
   }
   function animateFlakes(dt) {
     const e = ext, p = e.flakes.geometry.attributes.position.array, wx = Math.cos(e.wind), wz = Math.sin(e.wind);

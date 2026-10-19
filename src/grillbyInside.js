@@ -5,7 +5,7 @@
 // mesinha embaixo à esquerda e a entrada do jogador embaixo, no meio. Luz quente; moradores no estilo do jogo.
 // Coordenadas: x = leste, z = sul (para a câmera), frente da sala (porta) em z = +10.
 import * as THREE from 'three';
-import { box, cyl, sphere, at, mat, torus, smoothCharacter } from './models/kit.js';
+import { box, cyl, sphere, at, mat, torus, smoothCharacter, vcMerge, dynamic } from './models/kit.js';
 import { SHIRTS, HAIRS } from './data.js';
 import { WINTER } from './models/resident.js';
 import { buildPewReader } from './models/reader.js';
@@ -85,6 +85,80 @@ export function buildNPC({ shirt, hair, pants, seatY = 0, apron = false, k = 0, 
   const wear = on => { coat.visible = on; for (const a of [armL, armR]) a.userData.coat.visible = on; };
   smoothCharacter(root);                                     // superfície lisa (mais segmentos, sem facetas)
   return { root, body, head, armL, armR, mouth, k, wear, legL: legs[0] || null, legR: legs[1] || null };
+}
+
+/**
+ * Figura leve para a vida dos bairros (gente na laje, na janela, no campo, na neve, no barco): as mesmas proporções e
+ * cores dos moradores (cabeção, olhos, bochechas, camisa cilíndrica), mas cada parte vira UMA malha com cor por vértice.
+ * Só as partes listadas em `moving` ficam soltas para animar (pivôs: cabeça no pescoço, braços no ombro, pernas no
+ * quadril); o resto vai junto com o corpo. Frente = +Z. Altura ~2 (criança: kid = true, ~1,45).
+ * o: { shirt, pants, hair, skin, shoes, hat: 'straw'|'cap'|'beanie'|'kerchief'|'gondolier', hatColor, band, scarf, coat,
+ *      apron, stripes, overalls, longHair, sit (altura do assento: pernas para a frente), kid, moving: ['head','armL',...],
+ *      armPose: { L: [rx, ry, rz], R: … }, headPose: { x, y } (pose fixa das partes que não animam) }
+ */
+export function buildFigure(o = {}) {
+  const SK = o.skin || SKIN, P = o.pants || '#3d4a66', SH = o.shoes || '#2b2522', SHIRT = o.coat || o.shirt || '#d8473a', hair = o.hair || '#4a3020';
+  const moving = new Set(o.moving || []);
+  const root = new THREE.Group(), body = new THREE.Group(); root.add(body);
+  const part = () => new THREE.Group();
+  const head = part(), armL = part(), armR = part(), legL = part(), legR = part();
+  head.position.set(0, 1.18, 0); armL.position.set(-0.4, 1.12, 0); armR.position.set(0.4, 1.12, 0);
+  const hip = o.sit ? o.sit + 0.02 : 0.6;
+  body.position.y = hip - 0.6;
+  for (const [lg, s] of [[legL, -1], [legR, 1]]) {
+    lg.position.set(s * 0.14, 0.58, 0);
+    if (o.sit) { lg.add(at(box(0.23, 0.22, 0.52, P), 0, 0, 0.24)); const shin = Math.max(0.2, o.sit - 0.1); lg.add(at(box(0.2, shin, 0.22, P), 0, -shin / 2, 0.46)); lg.add(at(box(0.25, 0.12, 0.33, SH), 0, -shin, 0.52)); }
+    else { lg.add(at(box(0.22, 0.5, 0.24, P), 0, -0.25, 0)); lg.add(at(box(0.26, o.boots ? 0.24 : 0.12, 0.34, SH), 0, o.boots ? -0.46 : -0.52, 0.04)); }
+  }
+  const torso = part();
+  torso.add(at(cyl(0.34, 0.37, 0.62, SHIRT, 10), 0, 0.88, 0));
+  torso.add(at(cyl(0.375, 0.375, 0.08, P, 10), 0, 0.6, 0));
+  if (o.coat) { torso.add(at(cyl(0.41, 0.46, 0.76, o.coat, 10), 0, 0.84, 0)); torso.add(at(box(0.05, 0.62, 0.04, '#2b2b2b'), 0, 0.86, 0.43)); }
+  if (o.scarf) { torso.add(at(torus(0.3, 0.09, o.scarf, 5, 12), 0, 1.19, 0, Math.PI / 2, 0, 0)); torso.add(at(box(0.15, 0.34, 0.07, o.scarf), 0.13, 0.99, 0.42, 0, 0, 0.12)); }
+  if (o.stripes) for (let k = 0; k < 4; k++) torso.add(at(cyl(0.375 - k * 0.008, 0.38 - k * 0.008, 0.07, o.stripes, 10), 0, 0.7 + k * 0.12, 0));
+  if (o.apron) { torso.add(at(box(0.5, 0.62, 0.05, o.apron), 0, 0.72, 0.37)); torso.add(at(box(0.36, 0.22, 0.05, o.apron), 0, 1.06, 0.35)); }
+  if (o.overalls) { torso.add(at(box(0.44, 0.4, 0.06, P), 0, 0.82, 0.36)); for (const sd of [-1, 1]) torso.add(at(box(0.08, 0.5, 0.75, P), sd * 0.17, 1.02, 0)); }
+  if (o.band) torso.add(at(cyl(0.385, 0.385, 0.1, o.band, 10), 0, 0.62, 0));
+  const hy = 0.34;
+  head.add(at(sphere(0.4, SK, 12, 8), 0, hy, 0));
+  if (o.hat !== 'beanie' && o.hat !== 'kerchief') { const cap = at(sphere(0.43, hair, 12, 7), 0, hy + 0.12, -0.06); cap.scale.set(1, 0.72, 1); head.add(cap); }
+  head.add(at(box(0.72, 0.4, 0.22, hair), 0, hy - 0.02, -0.26));
+  if (o.longHair) head.add(at(box(0.6, 0.62, 0.16, hair), 0, hy - 0.36, -0.3, 0.12, 0, 0));
+  for (const s of [-1, 1]) { head.add(at(sphere(0.065, EYES, 6, 4), s * 0.15, hy + 0.05, 0.36)); head.add(at(sphere(0.065, CHEEK, 6, 4), s * 0.25, hy - 0.08, 0.31)); }
+  head.add(at(sphere(0.06, SK, 6, 4), 0, hy - 0.04, 0.4)); head.add(at(box(0.14, 0.045, 0.05, EYES), 0, hy - 0.18, 0.36));
+  const hc = o.hatColor || '#f3d98f';
+  if (o.hat === 'straw' || o.hat === 'gondolier') {
+    head.add(at(cyl(0.64, 0.64, 0.04, '#f3d98f', 14), 0, hy + 0.38, -0.03)); head.add(at(cyl(0.36, 0.39, 0.25, '#f3d98f', 12), 0, hy + 0.5, -0.03));
+    head.add(at(cyl(0.395, 0.395, 0.07, o.hat === 'gondolier' ? '#c8402f' : o.hatBand || '#6b4428', 12), 0, hy + 0.43, -0.03));
+  } else if (o.hat === 'cap') {
+    head.add(at(cyl(0.44, 0.46, 0.22, hc, 12), 0, hy + 0.4, -0.02)); head.add(at(box(0.5, 0.05, 0.36, hc), 0, hy + 0.31, 0.38, -0.15, 0, 0));
+  } else if (o.hat === 'beanie') {
+    const b = new THREE.Mesh(new THREE.SphereGeometry(0.46, 12, 6, 0, Math.PI * 2, 0, Math.PI / 2), mat(hc)); b.scale.set(1, 0.85, 1); head.add(at(b, 0, hy + 0.13, -0.03));
+    head.add(at(cyl(0.47, 0.47, 0.12, hc, 12), 0, hy + 0.2, -0.03)); head.add(at(sphere(0.13, o.scarf || '#ffffff', 7, 5), 0, hy + 0.56, -0.05));
+  } else if (o.hat === 'kerchief') {
+    const b = new THREE.Mesh(new THREE.SphereGeometry(0.45, 12, 6, 0, Math.PI * 2, 0, Math.PI / 2), mat(hc)); head.add(at(b, 0, hy + 0.06, -0.04)); head.add(at(sphere(0.1, hc, 6, 4), 0, hy, -0.46));
+  }
+  for (const [a, s] of [[armL, -1], [armR, 1]]) {
+    a.add(at(sphere(0.13, SHIRT, 8, 6), 0, 0, 0)); a.add(at(cyl(0.1, 0.09, 0.46, SHIRT, 8), 0, -0.25, 0)); a.add(at(sphere(0.1, o.glove || SK, 8, 6), 0, -0.52, 0));
+    a.rotation.z = s * 0.1;
+  }
+  if (o.armPose) { if (o.armPose.L) armL.rotation.set(...o.armPose.L); if (o.armPose.R) armR.rotation.set(...o.armPose.R); }   // pose fixa de um braço que não anima
+  if (o.headPose) head.rotation.set(o.headPose.x || 0, o.headPose.y || 0, 0);
+  // monta: o que não anima entra no corpo
+  const merged = new THREE.Group();
+  merged.add(torso);
+  for (const [name, p] of [['head', head], ['armL', armL], ['armR', armR], ['legL', legL], ['legR', legR]]) if (!moving.has(name)) merged.add(p);
+  const opts = { flatShading: false };
+  body.add(vcMerge(merged, opts));
+  const out = { root, body };
+  for (const [name, p] of [['head', head], ['armL', armL], ['armR', armR], ['legL', legL], ['legR', legR]]) {
+    if (!moving.has(name)) continue;
+    const pv = new THREE.Group(); pv.position.copy(p.position); pv.rotation.copy(p.rotation); p.position.set(0, 0, 0); p.rotation.set(0, 0, 0);
+    pv.add(vcMerge(p, opts)); body.add(dynamic(pv)); out[name] = pv;   // (dynamic: dentro de um lote assado, só as partes que mexem ficam soltas)
+  }
+  if (o.kid) { root.scale.setScalar(0.72); if (out.head) out.head.scale.setScalar(1.12); }
+  root.traverse(m => { if (m.isMesh) { m.castShadow = true; m.receiveShadow = false; } });
+  return out;
 }
 
 export function createGrillbyInside() {

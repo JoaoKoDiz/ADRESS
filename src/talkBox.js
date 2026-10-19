@@ -7,10 +7,28 @@
 const CPS = 38;                               // letras por segundo
 const READ = (n) => Math.min(7.5, 1.4 + n * 0.055);   // modo automático: tempo de leitura depois de completa (s)
 const textLen = line => line.reduce((n, p) => n + (typeof p === 'string' ? p.length : p.b ? p.b.length : 0), 0);
+// Cadência da digitação: depois de uma pontuação seguida de mais texto, a escrita respira um pouco (como quem fala),
+// a menos que o roteiro já tenha uma pausa [...] logo ali. Vírgula: um instante; ponto: um pouco mais; reticências: mais.
+const BEAT = { ',': 0.1, ';': 0.12, ':': 0.12, '.': 0.28, '!': 0.28, '?': 0.32, '…': 0.4 };
+/** Pausas de uma fala: as do roteiro ({ p }, think = true) e as da pontuação (k = fator; 0 desliga), em ordem. */
+function linePauses(line, k = 1) {
+  let full = '', at = 0; const out = [];
+  for (const p of line) {
+    if (typeof p === 'string' || p.b) { const s = typeof p === 'string' ? p : p.b; full += s; at += s.length; }
+    else if (p && p.p) out.push({ at, d: p.p, think: true });
+  }
+  if (k > 0) for (let i = 0; i < full.length - 2; i++) {
+    let d = BEAT[full[i]]; if (!d || full[i + 1] !== ' ') continue;
+    if (full[i] === '.' && full[i - 1] === '.' && full[i - 2] === '.') d = BEAT['…'];             // "..." = reticências
+    if (out.some(q => q.think && q.at >= i + 1 && q.at <= i + 2)) continue;                        // a pausa do roteiro já está aqui
+    out.push({ at: i + 1, d: d * k, think: false });
+  }
+  return out.sort((a, b) => a.at - b.at);
+}
 /** Duração de uma fala no modo automático (digitação + pausas + leitura), em segundos. */
-export function lineDuration(line) {
+export function lineDuration(line, opts = {}) {
   const n = textLen(line);
-  return n / CPS + line.reduce((t, p) => t + (p && p.p ? p.p : 0), 0) + READ(n);
+  return n / (opts.cps || CPS) + linePauses(line, opts.beat ?? 1).reduce((t, q) => t + q.d, 0) + READ(n);
 }
 
 export function createTalkBox(stage) {
@@ -24,6 +42,9 @@ export function createTalkBox(stage) {
       background: #FFF3D6; color: #000; border: clamp(4px, .6vh, 5px) solid #FF7A1A; border-radius: 18px; box-shadow: 0 6px 0 rgba(0,0,0,.18);
       font: 600 clamp(16px, min(2.9vw, 4.4vh), 23px)/1.45 system-ui, 'Segoe UI', Roboto, sans-serif; z-index: 40; display: none; pointer-events: none; }
     @media (max-width: 560px) { .talkbox { width: calc(100% - 24px); bottom: 3%; } }
+    /* celular (em pé ou deitado): os botões MENU/♪/DICA ficam no rodapé; a caixa sobe para não tampá-los
+       (nas cenas que escondem esses botões — dilema do bonde, níveis extras — ela continua embaixo) */
+    @media (max-width: 560px), (max-height: 500px) { body:not(.title-on):not(.extra-on) .talkbox { bottom: calc(env(safe-area-inset-bottom, 0px) + 58px); } }
     .talkbox-text b { font-weight: 900; }
     .talkbox-next { position: absolute; right: 18px; bottom: 8px; font-size: 14px; font-weight: 700; color: #FF7A1A;
       opacity: 0; animation: talkbox-blink 1s steps(2, start) infinite; }
@@ -58,7 +79,7 @@ export function createTalkBox(stage) {
   const warnEl = document.createElement('div'); warnEl.className = 'gamewarn'; stage.appendChild(warnEl);
 
   let lines = [], idx = 0, shown = 0, total = 0, onDone = null, open = false;
-  let auto = false, onAdvance = null, pauses = [], pauseLeft = 0, hold = 0;
+  let auto = false, onAdvance = null, pauses = [], pauseLeft = 0, hold = 0, cps = CPS, beatK = 1, thinkNow = false;
   const segs = () => lines[idx].filter(p => typeof p === 'string' || p.b).map(p => typeof p === 'string' ? { t: p, b: false } : { t: p.b, b: true });
   const esc = s => s.replace(/&/g, '&amp;').replace(/</g, '&lt;');
   function render() {
@@ -72,9 +93,8 @@ export function createTalkBox(stage) {
     el.classList.toggle('done', shown >= total);
   }
   function startLine() {
-    shown = 0; total = segs().reduce((n, s) => n + s.t.length, 0); pauseLeft = 0; hold = 0;
-    pauses = []; let at = 0;                                     // pausas: posição (em letras) e duração
-    for (const p of lines[idx]) { if (typeof p === 'string') at += p.length; else if (p.b) at += p.b.length; else if (p.p) pauses.push({ at, d: p.p }); }
+    shown = 0; total = segs().reduce((n, s) => n + s.t.length, 0); pauseLeft = 0; hold = 0; thinkNow = false;
+    pauses = linePauses(lines[idx], beatK);                      // pausas: posição (em letras) e duração (roteiro + pontuação)
     render();
   }
   function next() {
@@ -88,22 +108,28 @@ export function createTalkBox(stage) {
     /** Mostra as falas (lista de listas de trechos); cb quando a última termina. */
     show(ls, cb, opts = {}) {
       lines = ls; idx = 0; onDone = cb; open = true; auto = !!opts.auto; onAdvance = opts.onAdvance || null;
+      cps = opts.cps || CPS; beatK = opts.beat ?? 1;            // ritmo próprio de uma cena (ex.: a figura, mais lenta)
       el.querySelector('.talkbox-next').textContent = opts.hint || 'E ▸';
       el.classList.toggle('auto', auto); el.style.display = 'block'; startLine();
     },
     get index() { return idx; },
+    /** Parado numa pausa [...] do roteiro (quem fala está pensando): os gestos podem reagir. */
+    get thinking() { return open && pauseLeft > 0 && thinkNow; },
+    /** Quanto da fala atual já apareceu (0..1). */
+    get progress() { return open && total ? Math.min(1, shown / total) : 1; },
     /** Tecla de avançar: completa a fala ou passa para a próxima. */
     press() {
       if (!open || auto) return;
-      if (shown < total) { shown = total; pauses = []; pauseLeft = 0; render(); return; }
+      if (shown < total) { shown = total; pauses = []; pauseLeft = 0; thinkNow = false; render(); return; }
       next();
     },
     update(dt) {
       if (!open) return;
       if (pauseLeft > 0) { pauseLeft -= dt; return; }                 // pausa dentro da fala: o texto fica parado
+      thinkNow = false;
       if (shown < total) {
-        let to = Math.min(total, shown + dt * CPS);
-        if (pauses.length && to >= pauses[0].at && shown <= pauses[0].at) { to = pauses[0].at; pauseLeft = pauses.shift().d; }
+        let to = Math.min(total, shown + dt * cps);
+        if (pauses.length && to >= pauses[0].at && shown <= pauses[0].at) { to = pauses[0].at; const q = pauses.shift(); pauseLeft = q.d; thinkNow = q.think; }
         shown = to; render(); return;
       }
       if (auto && (hold += dt) >= READ(total)) next();               // completa: tempo de leitura e passa sozinha

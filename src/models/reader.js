@@ -193,14 +193,18 @@ export function buildReaderSpot() {
   root.userData.person = rd.group;                                                 // (o K sozinho, sem a cadeira: o fundo noturno dos menus o esconde)
   root.userData.setAside = on => { goal = on ? 1 : 0; };
   root.userData.asideDone = () => k === goal;
+  // gestos da conversa (kGesture): somados à pose "jornal de lado", que já olha para quem chegou
+  root.userData.head = rd.head; root.userData.torso = rd.torso; root.userData.ownHead = true;
+  root.userData.g0 = { x: 0, y: -0.55, z: -0.05, tz: rd.torso.rotation.z };
   root.userData.update = t => {
     const dt = lastT === null ? 0 : Math.min(0.1, Math.max(0, t - lastT)); lastT = t;
     k = goal > k ? Math.min(goal, k + dt / 1.1) : Math.max(goal, k - dt / 1.1);
-    const e = ease(k), read = 1 - e;
+    const e = ease(k), read = 1 - e, G = root.userData.gc;
+    if (G && e === 0) G.x = G.y = G.z = 0;                                         // (de volta ao jornal: os gestos da conversa acabaram)
     pivot.rotation.z = 0.035 * Math.sin(t * 1.4);                                  // balanço bem leve
-    rd.head.rotation.y = 0.12 * Math.sin(t * 0.55) * read - 0.55 * e;              // lendo: os olhos correm pelas colunas; conversando: olha para quem chegou
-    rd.head.rotation.x = 0.03 * Math.sin(t * 0.37);
-    rd.head.rotation.z = -0.34 * read - 0.05 * e;
+    rd.head.rotation.y = 0.12 * Math.sin(t * 0.55) * read - 0.55 * e + (G ? G.y * e : 0);   // lendo: os olhos correm pelas colunas; conversando: olha para quem chegou
+    rd.head.rotation.x = 0.03 * Math.sin(t * 0.37) + (G ? G.x * e : 0);
+    rd.head.rotation.z = -0.34 * read - 0.05 * e + (G ? G.z * e : 0);
     const turn = Math.max(0, Math.sin(t * 0.21) - 0.96) * 25 * read;               // de vez em quando ajeita o jornal
     // jornal: sai das mãos num arco curto, fecha a dobra e fica deitado no braço da cadeira
     rd.paper.position.lerpVectors(hold.pos, aside.pos, e);
@@ -261,9 +265,12 @@ export function buildLoungerReader() {
   const face = readerHead(0.47, { sun: true }); face.position.y = 0.49; head.add(face);
   head.rotation.z = -0.55;                                                     // olha para a frente, por cima dos pés (para o sol)
   root.traverse(o => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = false; } });
+  root.userData.head = head; root.userData.torso = torso; root.userData.ownHead = true;   // (gestos da conversa: kGesture)
+  root.userData.g0 = { x: 0, y: 0, z: -0.55, tz: torso.rotation.z };
   root.userData.update = t => {
+    const G = root.userData.gc;
     torso.scale.y = 1 + 0.012 * Math.sin(t * 1.6);                               // respiração tranquila
-    head.rotation.y = 0.05 * Math.sin(t * 0.3);
+    head.rotation.set(G ? G.x : 0, 0.05 * Math.sin(t * 0.3) + (G ? G.y : 0), -0.55 + (G ? G.z : 0));
   };
   return root;
 }
@@ -373,6 +380,56 @@ export function walkK(root, dt, travel) {
   u.torso.rotation.set(-o.sway * 2, -o.twist * 1.2, -o.lean);
   u.head.rotation.set(o.sway * 1.5, o.twist * 0.4, o.lean * 0.8);
   return o.amt;
+}
+
+// ---------- gestos nas conversas: olhar, inclinar a cabeça, pensar (sem mudar o modelo) ----------
+const _gl = new THREE.Vector3(), clampA = (v, a, b) => Math.max(a, Math.min(b, v));
+/**
+ * Gestos do K (ou de qualquer modelo com userData.head/torso) numa conversa; chamar a cada quadro.
+ * g = { at: Vector3 (mundo) | null — para onde olhar; w: 0..1 — quanto do olhar vai para `at` (o resto fica na pose de antes);
+ *       yaw, pitch, roll — desvios extras (rad; pitch > 0 olha para cima); lean — tronco para a frente (rad);
+ *       shake — balançar a cabeça (amplitude, rad); rate — rapidez (padrão 3) }.  g = null: volta à pose de antes.
+ * Tudo suavizado (sem estalos). Os modelos com update próprio da cabeça (ownHead) só recebem os desvios em userData.gc.
+ */
+export function kGesture(root, dt, g = null) {
+  const u = root.userData, h = u.head, tor = u.torso; if (!h) return;
+  if (!u.g0) u.g0 = { x: h.rotation.x, y: h.rotation.y, z: h.rotation.z, tz: tor ? tor.rotation.z : 0 };
+  if (!u.gc) u.gc = { x: 0, y: 0, z: 0, lean: 0, t: 0 };
+  const c = u.gc; c.t += dt;
+  let ty = 0, tz = 0, tx = 0, lean = 0;
+  if (g) {
+    const w = g.w ?? 1;
+    if (g.at && w > 0) {                                     // direção do alvo no espaço do tronco, a partir dos olhos
+      h.parent.updateWorldMatrix(true, false);
+      _gl.copy(g.at); h.parent.worldToLocal(_gl); _gl.sub(h.position); _gl.y -= 0.55;
+      const ay = Math.atan2(-_gl.z, _gl.x), az = Math.atan2(_gl.y, Math.hypot(_gl.x, _gl.z));
+      ty += (clampA(ay, -1.3, 1.3) - u.g0.y) * w; tz += (clampA(az, -0.6, 0.5) - u.g0.z) * w;
+    }
+    ty += (g.yaw || 0) + (g.shake ? g.shake * Math.sin(c.t * 7.5) : 0); tz += g.pitch || 0; tx += g.roll || 0; lean = g.lean || 0;
+  }
+  const k = 1 - Math.exp(-dt * (g && g.rate || 3));
+  c.y += (ty - c.y) * k; c.z += (tz - c.z) * k; c.x += (tx - c.x) * k; c.lean += (lean - c.lean) * k;
+  if (u.ownHead) return;
+  h.rotation.set(u.g0.x + c.x, u.g0.y + c.y, u.g0.z + c.z);
+  if (tor) tor.rotation.z = u.g0.tz - c.lean;
+}
+/** Volta na hora à pose de antes dos gestos (ex.: num corte de câmera). */
+export function kGestureReset(root) {
+  const u = root.userData; if (!u.gc) return;
+  u.gc.x = u.gc.y = u.gc.z = u.gc.lean = 0;
+  if (!u.ownHead && u.g0 && u.head) { u.head.rotation.set(u.g0.x, u.g0.y, u.g0.z); if (u.torso) u.torso.rotation.z = u.g0.tz; }
+}
+/**
+ * Roteiro de gestos de uma conversa: plan[i] = gesto da fala i (como em kGesture, com `at` = nome de um alvo em `targets`);
+ * opcional: `then` = gesto (ou lista de gestos) a partir de uma parte da fala (from = fração do texto já escrito) e
+ * `think` = gesto durante as pausas [...] do roteiro (quem fala está pensando). tb = a caixa de fala (index, progress, thinking).
+ */
+export function kTalk(root, dt, plan, tb, targets) {
+  const base = plan[Math.min(tb.index, plan.length - 1)] || {};
+  let s = base;
+  for (const st of [].concat(base.then || [])) if (tb.progress >= (st.from ?? 0.5)) s = { ...base, ...st };
+  if (s.think && tb.thinking) s = { ...s, ...s.think };
+  kGesture(root, dt, { ...s, at: typeof s.at === 'string' ? targets[s.at] : s.at || null });
 }
 
 /** Leva a mão do braço (s = 1 direito, −1 esquerdo) até um ponto do mundo (k = 0..1 mistura com o braço solto).

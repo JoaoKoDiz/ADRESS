@@ -1,10 +1,15 @@
 // Nível 13 (Morro): casas de laje (destinos de entrega), casas de enchimento e o cenário fixo do morro: faixas de altura
-// com muros de contenção, rua sinuosa, ladeiras, escadarias, vagas, becos, mercadinho, pracinha e quadra.
+// com muros de contenção, rua sinuosa, ladeiras, escadarias, vagas, becos, mercadinho, pracinha e quadra; a vida nas lajes
+// (pipa, varal, cadeira com radinho, churrasquinho) e o entorno: o casario que desce, a cidade lá embaixo e os morros do horizonte.
 // Estilo do jogo: caixas simples, cores chapadas. A colisão fica em layout.js; a altura do chão em favelaPlan.js.
 import * as THREE from 'three';
-import { box, cyl, sphere, at, mat, bakeStatic, textTexture } from './kit.js';
+import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
+import { box, cyl, sphere, at, mat, bakeStatic, textTexture, dynamic, vcMerge } from './kit.js';
+import { buildFigure } from '../grillbyInside.js';
+import { horizonRing } from './snow.js';
 import { FAV_FACADE, FAV_AWNING } from '../data.js';
 import { FAV } from '../favelaPlan.js';
+import { MAP } from '../layout.js';
 
 export const FAV_FLOOR = 2.8;
 const SLAB = '#a7a39b', WIN = '#2d3640', FRAME = '#e9e2d2', DOOR = '#6a4a2c', TANK = '#1f78d1', MORTAR = '#d9b49a';
@@ -49,15 +54,20 @@ export function buildFavelaLot(h) {
     add(cyl(0.8, 0.72, 1.25, TANK, 14), x, yT + 0.65, z);
     add(cyl(0.86, 0.86, 0.14, '#3d8fe0', 14), x, yT + 1.33, z);
   }
-  // varal na laje: postes, corda e roupas coloridas
+  // varal na laje: postes, corda e roupas coloridas (na casa em que alguém está estendendo roupa, elas balançam)
+  const life = (h.index * 5 + 2) % 12, hanging = life === 1 && h.items.includes('laundry');   // (gente em uma laje a cada três)
+  let clothes = null;
   if (h.items.includes('laundry')) {
     const z = d / 2 - 0.9;
     for (const s of [-1, 1]) add(box(0.1, 1.9, 0.1, '#6b6b6b'), ox + s * (w / 2 - 0.35), yT + 0.95, z);
     add(box(w - 0.7, 0.04, 0.04, '#eeeeee'), ox, yT + 1.85, z);
+    const cl = new THREE.Group();
     ['#e84a5f', '#ffd23f', '#3fa7d6', '#ffffff', '#7bc950'].forEach((c, i) => {
-      const x = ox - w / 2 + 0.75 + i * (w - 1.5) / 4;
-      add(box(0.7, i % 2 ? 0.9 : 0.65, 0.05, c), x, yT + 1.85 - (i % 2 ? 0.47 : 0.35), z);
+      const x = -w / 2 + 0.75 + i * (w - 1.5) / 4;
+      cl.add(at(box(0.7, i % 2 ? 0.9 : 0.65, 0.05, c), x, -(i % 2 ? 0.47 : 0.35), 0));
     });
+    if (hanging) { clothes = dynamic(new THREE.Group()); clothes.position.set(ox, yT + 1.85, z); clothes.add(vcMerge(cl)); root.add(clothes); }
+    else { cl.position.set(ox, yT + 1.85, z); root.add(cl); }
   }
   // vasos com plantas dos dois lados da porta
   if (h.items.includes('pots')) for (const s of [-1, 1]) {
@@ -81,26 +91,116 @@ export function buildFavelaLot(h) {
     add(box(0.08, 0.08, Math.hypot(H, run), '#8a8a8a'), sx + 0.55, H / 2 + 0.9, 0, Math.atan2(H, run), 0, 0);   // corrimão
     add(box(1.1, 0.16, 0.9, STEP), sx, H - 0.08, -d / 2 + 0.25);
   }
-  return bakeStatic(root);
+  const anim = lajeLife(root, h, life, { w, d, ox, yT, clothes });
+  bakeStatic(root);
+  if (anim) root.userData.update = (t, dt) => { if (root.visible) anim(t, dt); };
+  return root;
 }
 
-const FILL = ['#c9b8a6', '#bdb5a6', '#d3cbbb', '#a8b0ad', '#c7a99a', '#b9a58a', '#a9a49b'];   // tons apagados (as cores vivas são das casas de entrega)
-/** Casa de enchimento (sem entrega): reboco cinza ou caiada, laje, janela e porta; às vezes uma caixa-d'água cinza. */
+// gente de laje (as mesmas proporções dos moradores; roupas leves de calor)
+const LAJE_LOOKS = [
+  { shirt: '#f2d34f', pants: '#2f4a6e', hair: '#2a1d14', skin: '#8d5a3b' }, { shirt: '#3fa7d6', pants: '#e8e2d4', hair: '#1d1d1f', skin: '#c98d62' },
+  { shirt: '#e84a5f', pants: '#3d4a66', hair: '#5a3a22', skin: '#f0c49a', longHair: true }, { shirt: '#ffffff', stripes: '#2f9a4a', pants: '#3a3a3a', hair: '#1d1d1f', skin: '#6b4430' },
+  { shirt: '#7bc950', pants: '#5a4a3a', hair: '#3a2a1a', skin: '#b07850', hat: 'cap', hatColor: '#d23a2e' },
+];
+/** Vida na laje (uma em cada três casas, cada uma no seu tempo): menino soltando pipa, alguém estendendo roupa, um
+ *  senhor na cadeira de plástico com o radinho, churrasquinho com fumaça. O que não mexe vai junto com a casa (assado). */
+function lajeLife(root, h, life, { w, d, ox, yT, clothes }) {
+  const ph = h.index * 1.13, look = LAJE_LOOKS[h.index % LAJE_LOOKS.length];
+  if (life === 0) {                                                                         // menino soltando pipa
+    const f = buildFigure({ ...look, kid: true, pants: '#2f4a6e', hat: null, longHair: false, moving: ['armR'], headPose: { x: -0.5 } });
+    f.root.position.set(ox + w * 0.18, yT, d * 0.12); f.root.rotation.y = Math.PI; root.add(f.root);
+    const kite = dynamic(new THREE.Group()), kg = new THREE.Group(), KC = ['#e8312f', '#ffd23f', '#2f6fb0', '#2f9a4a', '#ff8c1a'][h.index % 5];
+    const dia = box(0.95, 0.95, 0.05, KC); dia.rotation.z = Math.PI / 4; dia.scale.set(1, 1.35, 1); kg.add(dia);
+    kg.add(at(box(0.05, 1.3, 0.06, '#f4f1ea'), 0, 0, 0.03), at(box(1.3, 0.05, 0.06, '#f4f1ea'), 0, 0.12, 0.03));
+    for (let q = 0; q < 5; q++) kg.add(at(box(0.18, 0.12, 0.03, q % 2 ? '#ffffff' : KC), 0.05 * q, -1.0 - q * 0.38, 0, 0, 0, 0.3 * (q % 2 ? 1 : -1)));   // rabiola
+    kite.add(vcMerge(kg)); root.add(kite);
+    const line = dynamic(new THREE.Mesh(new THREE.BoxGeometry(0.03, 0.03, 1), mat('#f4f1ea'))); line.castShadow = false; root.add(line);
+    const hand = new THREE.Vector3(), kp = new THREE.Vector3(), Z = new THREE.Vector3(0, 0, 1), dir = new THREE.Vector3();
+    return t => {
+      kite.position.set(ox + w * 0.18 + Math.sin(t * 0.45 + ph) * 3.2, yT + 13 + Math.sin(t * 0.7 + ph) * 1.2, -9 + Math.cos(t * 0.38 + ph) * 1.5);
+      kite.rotation.set(0.25, Math.sin(t * 0.45 + ph) * 0.3, Math.sin(t * 1.3 + ph) * 0.25);
+      f.armR.rotation.set(-2.25 + Math.sin(t * 1.6 + ph) * 0.12, 0, 0.25);                  // puxa a linha de vez em quando
+      root.worldToLocal(f.armR.localToWorld(hand.set(0, -0.55, 0)));                       // (matrizes do quadro anterior: o desenho as atualiza)
+      kp.copy(kite.position); dir.subVectors(kp, hand); const L = dir.length();
+      line.position.addVectors(hand, kp).multiplyScalar(0.5); line.scale.set(1, 1, L); line.quaternion.setFromUnitVectors(Z, dir.normalize());
+    };
+  }
+  if (life === 1 && clothes) {                                                              // estendendo roupa no varal
+    const f = buildFigure({ ...look, longHair: true, moving: ['armL', 'armR'], headPose: { x: -0.25 } });
+    f.root.position.set(ox + w * 0.12, yT, d / 2 - 1.5); root.add(f.root);
+    return t => {
+      const k = Math.sin(t * 1.1 + ph);
+      f.armL.rotation.set(-2.5 - k * 0.15, 0, -0.15); f.armR.rotation.set(-2.6 + k * 0.15, 0, 0.15);
+      clothes.rotation.x = -0.04 - Math.max(0, Math.sin(t * 1.2 + ph) * 0.6 + Math.sin(t * 2.9 + ph) * 0.25) * 0.25;
+    };
+  }
+  if (life === 1 || life === 2) {                                                           // senhor na cadeira de plástico com o radinho
+    const cx = ox - w * 0.2, cz = d * 0.1, add = (m, x, y, z) => root.add(at(m, cx + x, yT + y, cz + z));
+    add(box(0.62, 0.07, 0.6, '#d23a2e'), 0, 0.45, 0); add(box(0.62, 0.55, 0.07, '#d23a2e'), 0, 0.75, -0.28);   // cadeira de plástico vermelha (de bar)
+    for (const [x, z] of [[-0.27, -0.25], [0.27, -0.25], [-0.27, 0.25], [0.27, 0.25]]) add(box(0.05, 0.45, 0.05, '#b8302a'), x, 0.22, z);
+    add(box(0.36, 0.22, 0.14, '#2b2b2b'), 0.55, 0.11, 0.1); add(cyl(0.05, 0.05, 0.02, '#c8c8c8', 8), 0.55, 0.15, 0.18);
+    const f = buildFigure({ ...look, hair: '#d8d4cc', sit: 0.47, moving: ['head'] });
+    f.root.position.set(cx, yT, cz - 0.05); root.add(f.root);
+    return t => { f.head.rotation.x = Math.abs(Math.sin(t * 3.4 + ph)) * 0.08; f.head.rotation.y = Math.sin(t * 0.22 + ph) * 0.4; };   // balança a cabeça no ritmo do rádio
+  }
+  if (life === 3) {                                                                         // churrasquinho na laje
+    const gx = ox - w * 0.18, gz = d * 0.15, add = (m, x, y, z) => root.add(at(m, gx + x, yT + y, gz + z));
+    add(box(0.9, 0.3, 0.5, '#2b2b2b'), 0, 0.75, 0); add(box(0.86, 0.04, 0.46, '#d24a1a', { emissive: '#ff5a1a', emissiveIntensity: 0.6 }), 0, 0.91, 0);
+    for (const [x, z] of [[-0.38, -0.18], [0.38, -0.18], [-0.38, 0.18], [0.38, 0.18]]) add(box(0.05, 0.6, 0.05, '#4a4a4a'), x, 0.3, z);
+    for (let q = 0; q < 3; q++) add(box(0.5, 0.05, 0.05, '#8a5a36'), -0.2 + q * 0.2, 0.96, 0, 0, 0.3, 0);   // espetinhos
+    const f = buildFigure({ ...look, apron: '#f4f1ea', moving: ['armR'], headPose: { x: 0.3 } });
+    f.root.position.set(gx, yT, gz - 0.75); root.add(f.root);
+    const smokeMat = new THREE.MeshLambertMaterial({ color: '#f2f2f2', transparent: true, opacity: 0.3, depthWrite: false });
+    const puffs = [0, 1, 2, 3].map(q => { const m = new THREE.Mesh(new THREE.IcosahedronGeometry(0.22, 1), smokeMat); m.castShadow = false; root.add(dynamic(m)); return m; });
+    return t => {
+      f.armR.rotation.set(-1.0 + Math.max(0, Math.sin(t * 2.1 + ph)) * 0.45, 0, 0.1);
+      puffs.forEach((m, q) => { const u = ((t * 0.32 + q / 4 + ph) % 1); m.position.set(gx + Math.sin(u * 4 + q) * 0.25 + u * 0.6, yT + 1.05 + u * 2.4, gz - u * 0.4); m.scale.setScalar(0.45 + u * 1.5); m.visible = u < 0.92; });
+    };
+  }
+  return null;
+}
+
+const FILL = ['#c9b8a6', '#bdb5a6', '#d3cbbb', '#a8b0ad', '#c7a99a', '#b9a58a', '#a9a49b', '#d2c39c', '#b3bfae', '#c6b0b2'];   // tons apagados (as cores vivas são das casas de entrega)
+const FILL_FRAME = '#e3dccd', GRILLE = '#4a4a4a', AC = '#e6e4dc';
+/** Casa de enchimento (sem entrega): reboco apagado ou bloco cru, laje, janelas com moldura (grade no térreo), porta,
+ *  às vezes ar-condicionado, antena ou parabólica, vasos e ferros de espera na laje, caixa-d'água cinza. Tudo assado. */
 function filler(g, f, k) {
   const add = (m, x, y, z, ry = 0) => g.add(at(m, x, y, z, 0, ry, 0));
-  const w = f.x1 - f.x0, d = f.z1 - f.z0, cx = (f.x0 + f.x1) / 2, cz = (f.z0 + f.z1) / 2, H = f.floors * FAV_FLOOR, c = FILL[f.tone];
+  const w = f.x1 - f.x0, d = f.z1 - f.z0, cx = (f.x0 + f.x1) / 2, cz = (f.z0 + f.z1) / 2, H = f.floors * FAV_FLOOR, c = FILL[(f.tone + k) % FILL.length];
   const rawTop = f.raw && f.floors > 1;                               // último andar ainda no bloco (obra parada)
   add(box(w, H - (rawTop ? FAV_FLOOR : 0), d, c), cx, f.y + (H - (rawTop ? FAV_FLOOR : 0)) / 2, cz);
-  if (rawTop) add(box(w - 0.1, FAV_FLOOR, d - 0.1, '#8e8a83'), cx, f.y + H - FAV_FLOOR / 2, cz);
-  add(box(w + 0.1, 0.16, d + 0.1, SLAB), cx, f.y + H + 0.06, cz);
-  const face = k % 4;                                                 // janelas numa face qualquer (o casario fica virado para todo lado)
-  for (let fl = 0; fl < f.floors; fl++) {
-    const y = f.y + fl * FAV_FLOOR + 1.6;
-    if (face === 0) add(box(0.95, 0.8, 0.08, WIN), cx, y, f.z1 + 0.04);
-    else if (face === 1) add(box(0.95, 0.8, 0.08, WIN), cx, y, f.z0 - 0.04);
-    else add(box(0.08, 0.8, 0.95, WIN), face === 2 ? f.x1 + 0.04 : f.x0 - 0.04, y, cz);
+  if (rawTop) {
+    add(box(w - 0.1, FAV_FLOOR, d - 0.1, '#8e8a83'), cx, f.y + H - FAV_FLOOR / 2, cz);
+    for (let y = 0.4; y < FAV_FLOOR; y += 0.4) add(box(w - 0.06, 0.03, d - 0.06, '#7d7973'), cx, f.y + H - FAV_FLOOR + y, cz);   // fiadas dos blocos
   }
-  if (f.tank) add(cyl(0.6, 0.55, 0.9, '#8c9196', 10), cx + w * 0.2, f.y + H + 0.6, cz - d * 0.15);
+  add(box(w + 0.1, 0.16, d + 0.1, SLAB), cx, f.y + H + 0.06, cz);
+  // face principal (as janelas ficam numa face qualquer: o casario é virado para todo lado) e uma lateral
+  const faces = [[0, 1], [0, -1], [1, 0], [-1, 0]], [fx, fz] = faces[k % 4], [sx, sz] = faces[k % 4 < 2 ? 2 + ((k >> 2) % 2) : (k >> 2) % 2];
+  const put = (nx, nz, u, y, ww, hh, dd, col, out = 0.04) => {        // peça na face (nx, nz), deslocada u ao longo dela
+    if (nx) add(box(dd, hh, ww, col), nx > 0 ? f.x1 + out : f.x0 - out, y, cz + u);
+    else add(box(ww, hh, dd, col), cx + u, y, nz > 0 ? f.z1 + out : f.z0 - out);
+  };
+  const along = nx => (nx ? d : w);
+  for (let fl = 0; fl < f.floors; fl++) {
+    if (rawTop && fl === f.floors - 1) continue;                      // (o andar em obra não tem janela pronta)
+    const y = f.y + fl * FAV_FLOOR + 1.6, a = along(fx);
+    const us = fl === 0 ? [a * 0.2] : a > 5.6 && (k + fl) % 2 ? [-a * 0.24, a * 0.24] : [0];
+    for (const u of us) {
+      put(fx, fz, u, y, 1.15, 1.0, 0.06, FILL_FRAME, 0.02); put(fx, fz, u, y, 0.95, 0.8, 0.08, WIN, 0.04);
+      if (fl === 0) for (const gx of [-0.3, 0, 0.3]) put(fx, fz, u + gx, y, 0.05, 0.82, 0.05, GRILLE, 0.1);   // grade no térreo
+    }
+    if (fl === 0) { put(fx, fz, -a * 0.24, f.y + 1.03, 1.0, 2.05, 0.08, k % 3 ? DOOR : '#3f5f6a', 0.04); put(fx, fz, -a * 0.24, f.y + 0.06, 1.2, 0.12, 0.4, CAP, 0.2); }
+    if ((k + fl) % 3 === 0) { put(sx, sz, 0, y, 1.05, 0.9, 0.06, FILL_FRAME, 0.02); put(sx, sz, 0, y, 0.85, 0.7, 0.08, WIN, 0.04); }
+    if (fl > 0 && k % 5 === 1) put(fx, fz, a * 0.36, y - 0.2, 0.75, 0.45, 0.38, AC, 0.19);   // ar-condicionado
+  }
+  // laje: caixa-d'água, ferros de espera, antena, parabólica, vasos
+  const top = f.y + H + 0.14;
+  if (f.tank) add(cyl(0.6, 0.55, 0.9, '#8c9196', 10), cx + w * 0.2, top + 0.45, cz - d * 0.15);
+  if (f.raw || k % 4 === 2) for (const [ax, az] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) add(box(0.06, 0.8, 0.06, '#5a3b2c'), cx + ax * (w / 2 - 0.25), top + 0.4, cz + az * (d / 2 - 0.25));
+  if (k % 7 === 2) { add(cyl(0.035, 0.035, 2.2, '#8a8a8a', 5), cx - w * 0.3, top + 1.1, cz + d * 0.2); for (const y of [1.6, 2.0]) add(box(1.1, 0.04, 0.04, '#8a8a8a'), cx - w * 0.3, top + y, cz + d * 0.2); }
+  if (k % 7 === 5) { const dish = cyl(0.42, 0.08, 0.18, '#e9e6de', 10); dish.rotation.x = 1.0; add(dish, cx - w * 0.28, top + 0.65, cz - d * 0.28); add(cyl(0.04, 0.04, 0.5, '#8a8a8a', 5), cx - w * 0.28, top + 0.25, cz - d * 0.28); }
+  if (k % 6 === 3 && !f.raw) for (const dx of [-0.6, 0.1]) { add(cyl(0.22, 0.17, 0.32, '#b5532f', 7), cx + dx, top + 0.16, cz + d * 0.32); add(sphere(0.32, '#4f9a3a', 6, 4), cx + dx, top + 0.5, cz + d * 0.32); }
 }
 
 /** Cenário do Morro (tudo estático). F = plano (favelaPlan.js), MAP e HEDGE do layout. */
@@ -297,7 +397,24 @@ export function buildFavelaOutside(F) {
     put('trunk', t.x, t.y, t.z, t.s, t.s, t.s, '#7a5230');
     put('crown', t.x, t.y + 2.6 * t.s, t.z, 1.7 * t.s, 1.5 * t.s, 1.7 * t.s, ['#4f9a45', '#5ea84e', '#3f8a3c', '#6db256'][Math.floor(t.x * 7 + t.z) & 3]);
   }
+  // a cidade lá embaixo (planície): calçadas por quarteirão, prédios com janelas (desenhadas no material), lajes, caixas-d'água
+  const CT = O.city;
+  if (CT) {
+    const CITY = ['#cfc8b9', '#bdb7aa', '#d9cfb5', '#aab4b9', '#c9b59b', '#b7c0b0', '#d8c9c0', '#9fa6a8', '#e0d8c6'];
+    for (const b of CT.blocks) {
+      put('box', (b.x0 + b.x1) / 2, 0, (b.z0 + b.z1) / 2, b.x1 - b.x0, 0.2, b.z1 - b.z0, b.park ? '#7fae5a' : '#c9c4b8');   // calçada / gramado da pracinha
+      if (b.park) for (let q = 0; q < 5; q++) { const x = b.x0 + 5 + ((q * 7) % 20), z = b.z0 + 5 + ((q * 11) % 20), sc = 1.4;
+        put('trunk', x, 0.2, z, sc, sc, sc, '#7a5230'); put('crown', x, 0.2 + 2.6 * sc, z, 1.7 * sc, 1.5 * sc, 1.7 * sc, ['#4f9a45', '#5ea84e', '#3f8a3c'][q % 3]); }
+    }
+    for (const c of CT.builds) {
+      const H = c.floors * 3;
+      put('city', c.x, 0.2, c.z, c.w, H, c.d, CITY[c.tone]);
+      put('box', c.x, 0.2 + H, c.z, c.w + 0.3, 0.3, c.d + 0.3, '#9a958c');
+      if (c.tank) put('tank', c.x + c.w * 0.22, 0.5 + H, c.z - c.d * 0.2, 1.2, 1.2, 1.2, c.floors > 6 ? '#8c9196' : TANK);
+    }
+  }
   const geo = {
+    city: new THREE.BoxGeometry(1, 1, 1).translate(0, 0.5, 0),
     box: new THREE.BoxGeometry(1, 1, 1).translate(0, 0.5, 0),
     pane: new THREE.PlaneGeometry(1, 1),
     tank: new THREE.CylinderGeometry(0.75, 0.68, 1.15, 8).translate(0, 0.575, 0),
@@ -306,10 +423,44 @@ export function buildFavelaOutside(F) {
   };
   const M = new THREE.Matrix4(), Q = new THREE.Quaternion(), V = new THREE.Vector3(), S = new THREE.Vector3(), C = new THREE.Color(), Y = new THREE.Vector3(0, 1, 0);
   for (const k of Object.keys(L)) {
-    const list = L[k], im = new THREE.InstancedMesh(geo[k], new THREE.MeshStandardMaterial({ color: '#ffffff', roughness: 0.88, flatShading: true }), list.length);
+    const list = L[k], im = new THREE.InstancedMesh(geo[k], k === 'city' ? cityMaterial() : new THREE.MeshStandardMaterial({ color: '#ffffff', roughness: 0.88, flatShading: true }), list.length);
     list.forEach(([x, y, z, sx, sy, sz, c, ry], i) => { M.compose(V.set(x, y, z), Q.setFromAxisAngle(Y, ry), S.set(sx, sy, sz)); im.setMatrixAt(i, M); im.setColorAt(i, C.set(c)); });
     im.castShadow = false; im.receiveShadow = false; im.computeBoundingSphere();
     g.add(im);
   }
+  if (CT) {                                                          // asfalto das ruas da cidade (fora dos corredores ao norte)
+    const asph = new THREE.MeshStandardMaterial({ color: '#626872', roughness: 0.95 }), E = 360, I = 58;
+    const strips = [[-E, -I, -I, MAP + I], [MAP + I, MAP + E, -I, MAP + I], [-E, MAP + E, MAP + I, MAP + E], [-E, 34, -E, -I], [76, 80, -E, -I], [128, MAP + E, -E, -I]];
+    const road = new THREE.Mesh(mergeGeometries(strips.map(([x0, x1, z0, z1]) => new THREE.BoxGeometry(x1 - x0, 0.06, z1 - z0).translate((x0 + x1) / 2, -0.01, (z0 + z1) / 2)), false), asph);
+    road.receiveShadow = false; g.add(road);
+    g.add(horizonRing([                                              // morros verdes no horizonte, com um ou outro pão de açúcar de pedra
+      { N: 24, R: 1150, h: [90, 190], b: [200, 320], shape: 'dome', base: '#4e7a45', haze: 0.36, rock: { every: 6, color: '#6b6560', h: 1.9, b: 0.55 } },
+      { N: 30, R: 880, h: [35, 85], b: [120, 200], shape: 'dome', base: '#5d8b4d', haze: 0.28 },
+    ], 313, 'favela-hills'));
+  }
   return g;
+}
+
+/** Prédios da cidade: as janelas são desenhadas pelo material, pela posição no mundo (andares de 3 e colunas de 2,4), sem
+ *  geometria a mais; o topo fica liso. */
+let CITY_MAT = null;
+function cityMaterial() {
+  if (CITY_MAT) return CITY_MAT;
+  const m = new THREE.MeshStandardMaterial({ color: '#ffffff', roughness: 0.88, flatShading: true });
+  m.onBeforeCompile = sh => {
+    sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nvarying vec3 vCityPos;\nvarying vec3 vCityN;')
+      .replace('#include <project_vertex>', `#include <project_vertex>
+      vec4 cwp = vec4(transformed, 1.0);
+      #ifdef USE_INSTANCING
+        cwp = instanceMatrix * cwp;
+      #endif
+      vCityPos = (modelMatrix * cwp).xyz; vCityN = normalize(mat3(modelMatrix) * objectNormal);`);
+    sh.fragmentShader = sh.fragmentShader.replace('#include <common>', '#include <common>\nvarying vec3 vCityPos;\nvarying vec3 vCityN;')
+      .replace('#include <color_fragment>', `#include <color_fragment>
+      vec3 cn = abs(vCityN);
+      float cu = cn.x > 0.5 ? vCityPos.z : vCityPos.x, fy = fract((vCityPos.y - 0.2) / 3.0), fu = fract(cu / 2.4 + 0.5);
+      float win = step(0.32, fy) * step(fy, 0.8) * step(0.24, fu) * step(fu, 0.76) * step(cn.y, 0.5) * step(1.0, vCityPos.y);
+      diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.16, 0.2, 0.25), win * 0.85);`);
+  };
+  return (CITY_MAT = m);
 }

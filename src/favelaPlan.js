@@ -214,10 +214,34 @@ function planOutside(MAP, HEDGE) {
   for (const c of cells) mark(c.x0 - 1, c.z0 - 1, c.x1 + 1, c.z1 + 1);
   for (const f of fills) mark(f.x0, f.z0, f.x1, f.z1);
   mark(gapsN[0][0] + 3, -56, gapsN[0][1] - 3, 0);                     // o caminho da van na cena do monstro fica sem árvores
+  // 4) a cidade lá embaixo ("o asfalto"): quarteirões em grade na planície, depois de uma faixa verde, até onde a vista
+  //    alcança; livres os corredores ao norte (estrada de acesso e caminho da van na cena do monstro). Um sólido e uma
+  //    caixa de câmera por quarteirão; nada aqui é destino, pista ou SPOT.
+  const city = { blocks: [], builds: [] }, CB = 30, CS = 10, CX0 = -350, CR = 300;
+  const corridor = (x0, x1) => (x1 > 34 && x0 < 76) || (x1 > 80 && x0 < 128);
+  for (let gx = CX0; gx < MAP + 350; gx += CB + CS) for (let gz = CX0; gz < MAP + 350; gz += CB + CS) {
+    const b = { x0: gx, z0: gz, x1: gx + CB, z1: gz + CB }, dn = Math.hypot(Math.max(0, -b.x1, b.x0 - MAP), Math.max(0, -b.z1, b.z0 - MAP));
+    if (dn < D + 9 || dn > CR || (b.z0 < 0 && b.z1 > -N - 40 && corridor(b.x0, b.x1)) || (b.z1 < 0 && corridor(b.x0, b.x1))) continue;
+    const blk = { ...b, top: 0, park: rnd() < 0.08 };
+    city.blocks.push(blk);
+    if (blk.park) continue;                                            // pracinha arborizada
+    const lw = CB / 2;
+    for (const [u, v] of [[0, 0], [1, 0], [0, 1], [1, 1]]) {
+      const w = 9.5 + rnd() * 4, d = 9.5 + rnd() * 4, far = dn > 120, r = rnd();
+      const floors = r < 0.08 ? 10 + Math.floor(rnd() * 6) : far ? 3 + Math.floor(rnd() * 6) : 2 + Math.floor(rnd() * 4);
+      const x = b.x0 + u * lw + lw / 2 + (rnd() - 0.5) * (lw - w - 1.2), z = b.z0 + v * lw + lw / 2 + (rnd() - 0.5) * (lw - d - 1.2);
+      city.builds.push({ x, z, w, d, floors, tone: Math.floor(rnd() * 9), tank: rnd() < 0.45 });
+      blk.top = Math.max(blk.top, floors * 3);
+    }
+    solids.push({ x0: b.x0 + 1.2, z0: b.z0 + 1.2, x1: b.x1 - 1.2, z1: b.z1 - 1.2 });
+    cam.push([b.x0 + 1.2, b.z0 + 1.2, b.x1 - 1.2, b.z1 - 1.2, blk.top + 1]);
+  }
+  const inCity = (x, z) => { const dn = Math.hypot(Math.max(0, -x, x - MAP), Math.max(0, -z, z - MAP)); return dn > D + 6 && dn < CR + 30 && !(z < 0 && corridor(x, x)); };
   const busy = (x, z, r = 0) => {
+    if (inCity(x, z)) return true;                                     // ruas e quarteirões da cidade: sem árvores de fora
     for (let a = Math.floor((x - r - gx0) / G); a <= Math.floor((x + r - gx0) / G); a++) for (let b = Math.floor((z - r - gx0) / G); b <= Math.floor((z + r - gx0) / G); b++)
       if (a >= 0 && b >= 0 && a < gn && b < gn && occ[b * gn + a]) return true;
     return false;
   };
-  return { cells, houses, trees, fills, solids, cam, busy };
+  return { cells, houses, trees, fills, solids, cam, busy, city };
 }

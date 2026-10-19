@@ -144,7 +144,7 @@ export function createReflectPlus(api) {
   function launch(p) {
     p.state = 'in'; p.target.set(p.T.u, p.T.v, WP.zp);
     p.pos.copy(handPos(p.T.u < 0 ? -1 : 1)); aim(p, p.target);
-    if (!p.obj) { p.obj = api.projGet(); p.obj.visible = true; p.obj.userData.claim.visible = false; scene.add(p.obj); }
+    if (!p.obj) { p.obj = api.projGet(); p.obj.visible = true; p.obj.userData.claim.visible = false; if (p.obj.userData.mark) p.obj.userData.mark.visible = false; scene.add(p.obj); }   // (voo em 3D: sem a marca no chão)
     api.sfx('launch'); api.L('p:launch');
   }
   function aim(p, to) { p.vel.copy(to).sub(p.pos).normalize().multiplyScalar(p.speed); }

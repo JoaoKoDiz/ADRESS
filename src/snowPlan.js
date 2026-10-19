@@ -135,5 +135,25 @@ export function planSnow(MAP, HEDGE) {
       if (free(px, pz, 1.0, h(cx, cz)) && !lamps.some(l => Math.hypot(l.x - px, l.z - pz) < 2) && !pines.some(p => Math.hypot(p.x - px, p.z - pz) < 2.2)) mounds.push({ x: px, z: pz, y: h(px, pz), ry });
     }
   }
+  // ---- arredores: a vila fica numa clareira; fora da sebe, grupos de pinheiros nevados (a borda do bosque), com tronco
+  //      sólido como os de dentro (layout.js). Livres: uma faixa junto à sebe (a van contorna a vila), a estrada de acesso
+  //      e o pátio em frente à entrada (onde a van para na cena do monstro). O bosque fechado mais longe é só cenário. ----
+  let s3 = 4111; const r3 = () => (s3 = (s3 * 16807) % 2147483647) / 2147483647;
+  const outOk = (x, z) => {
+    const d = Math.hypot(Math.max(-x, 0, x - MAP), Math.max(-z, 0, z - MAP));
+    if (d < 11 || d > 74) return false;
+    return !(z < 0 && Math.abs(x - 104.6) < (z > -100 ? 34 : 12));
+  };
+  for (let c = 0; c < 60; c++) {
+    let cx = 0, cz = 0, ok = false;
+    for (let t = 0; t < 40 && !ok; t++) { cx = -74 + r3() * (MAP + 148); cz = -74 + r3() * (MAP + 148); ok = outOk(cx, cz); }
+    if (!ok) continue;
+    const n = 3 + Math.floor(r3() * 6);
+    for (let i = 0; i < n; i++) {
+      const a = r3() * Math.PI * 2, d = Math.sqrt(r3()) * 9, x = cx + Math.cos(a) * d, z = cz + Math.sin(a) * d;
+      if (!outOk(x, z) || pines.some(p => Math.hypot(p.x - x, p.z - z) < 3.4)) continue;
+      pines.push({ x, z, y: 0, s: 0.95 + r3() * 0.75, box: { x0: x - 1.6, x1: x + 1.6, z0: z - 1.6, z1: z + 1.6 }, out: true });
+    }
+  }
   return { N, segs, ramps, MID, HIGH, h, level, spots, ice, iceAt, ICE_HALF, cuts, plowLoop, pines, lamps, mounds, roadDist };
 }
