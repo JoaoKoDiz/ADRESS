@@ -146,7 +146,7 @@ export function createEpilogue(ctx) {
   function update(dt, paused) {
     if (!S || paused) return;
     S.t += dt; const t = S.t;
-    const free = S.phase === 'walk' || S.phase === 'toSeat' || S.phase === 'leave';
+    const free = S.phase === 'walk' || S.phase === 'toSeat' || S.phase === 'leave' || S.phase === 'hold';   // (no 'hold' o jogador anda até a ponta da tábua)
     const solids = S.phase === 'walk' || S.phase === 'toSeat' || S.phase === 'leave' || S.phase === 'hold' ? [{ x0: BENCH.x - 1.2, x1: BENCH.x + 1.2, z0: BENCH.z - 0.4, z1: BENCH.z + 0.4 }] : [];
     if (S.phase === 'walk') walker.setSpeedMul(0.34);                // andar junto, no passo dele
     walker.update(dt, free ? input.axis() : { x: 0, z: 0 }, 'car', solids, FAR_VAN);
@@ -199,11 +199,11 @@ export function createEpilogue(ctx) {
         if (t > 7.2) { go('hold'); walker.setSpeedMul(1); }
         break;
       }
-      case 'hold': {                                       // o jogador segura a tábua enquanto o K fixa (três batidas)
+      case 'hold': {                                       // o jogador segura a tábua enquanto o K fixa (três batidas); a ponta fica do lado de quem chega
         chase.update(dt);
-        const end = new THREE.Vector3(BENCH.x + 1.1, 0, BENCH.z + 0.6), dd = Math.hypot(walker.x - end.x, walker.z - end.z);
+        const end = new THREE.Vector3(BENCH.x + 1.1, 0, BENCH.z - 0.9), dd = Math.hypot(walker.x - end.x, walker.z - end.z);
         const holding = dd < 1.4 && (input.held('KeyE') || input.held('Space'));
-        prompt(dd < 1.4 ? (holding ? 'Segurando…' : 'Segure E — Segurar a tábua') : null, input);
+        prompt(dd < 1.4 ? (holding ? 'Segurando…' : 'Segure E — Segurar a tábua') : 'Vá até a ponta da tábua', input);
         walker.setSpeedMul(holding ? 0 : 1);
         reachArm(K, 1, new THREE.Vector3(BENCH.x + 1.05, 0.66, BENCH.z + 0.3), 0.9);
         if (holding) { S.hold += dt; plank.rotation.y = Math.max(0, plank.rotation.y - dt * 0.6); reachArm(K, -1, tool.position.clone().setY(0.9), 1); }
@@ -240,12 +240,12 @@ export function createEpilogue(ctx) {
         KS.userData.head.rotation.y *= 0.98;
         if (t > 4.6) { go('write'); S.shot = 'b'; }
         break;
-      case 'write': {                                      // uma anotação pequena e o caderno fechado (sem voltar a trabalhar compulsivamente)
+      case 'write': {                                      // uma anotação pequena e o caderno fechado (sem voltar a trabalhar compulsivamente); depois o jogador levanta fora da bancada
         talkCam(dt);
         if (t < 0.6) book.position.lerp(new THREE.Vector3(BENCH.x - 0.2, 0.86, BENCH.z - 0.32), Math.min(1, dt * 5));
         if (t > 0.6 && t < 2.6) { KS.userData.torso.rotation.y = 0.05 * Math.sin(t * 9); KS.userData.head.rotation.z = -0.25; }
         if (t > 2.6 && !S.closed) { S.closed = true; book.scale.x = 1; sfx.play('place', 0.25); KS.userData.torso.rotation.y = 0; KS.userData.head.rotation.z = 0; book.position.set(BENCH.x - 0.3, 0.655, BENCH.z + 0.05); }
-        if (t > 4.4) { go('leave'); seated.visible = false; walker.pose(BENCH.x + 0.6, BENCH.z - 0.9, 0.4); walker.show(true); walker.setSpeedMul(1); chase.reset(); }
+        if (t > 4.4) { go('leave'); seated.visible = false; walker.pose(BENCH.x + 0.6, BENCH.z - 1.4, 0.4); walker.show(true); walker.setSpeedMul(1); chase.reset(); }
         break;
       }
       case 'leave': {                                      // o jogador vai até a saída; o K fica, tranquilo
@@ -277,7 +277,7 @@ export function createEpilogue(ctx) {
     get locked() { return !!S && !(S.phase === 'walk' || S.phase === 'toSeat' || S.phase === 'leave' || S.phase === 'hold'); },
     get prog() { return S ? S.prog : 0; }, get waiting() { return !!(S && S.wait); }, get kPos() { return K.position.clone(); }, get shot() { return S ? S.shot : ''; },
     get toolOnGround() { return !!(S && S.down); },
-    _jump(p) { if (!S) return; if (p === 'area') { walker.pose(BENCH.x + 1.5, BENCH.z - 7, Math.PI / 2); K.position.set(BENCH.x - 1.6, 0, BENCH.z - 1.4); S.prog = 1; }
+    _B: BENCH, _jump(p) { if (!S) return; if (p === 'area') { walker.pose(BENCH.x + 1.5, BENCH.z - 7, Math.PI / 2); K.position.set(BENCH.x - 1.6, 0, BENCH.z - 1.4); S.prog = 1; }
       else if (p === 'talk') { S.prog = 1; K.visible = false; KS.visible = true; KS.position.set(BENCH.x - 0.55, 0, BENCH.z); KS.rotation.y = Math.PI / 2; for (const o of [tool, book]) { if (o.parent) o.parent.remove(o); scene.add(o); } book.position.set(BENCH.x - 0.3, 0.655, BENCH.z + 0.05); tool.position.set(BENCH.x - 1.05, 0.04, BENCH.z - 0.55); walker.show(false); seated.visible = true; seated.position.set(BENCH.x + 0.55, 0, BENCH.z); seated.rotation.y = Math.PI / 2; go('talk'); S.shot = 'a'; talkCam(0, true); startTalk(); }
       else go(p); },
   };
