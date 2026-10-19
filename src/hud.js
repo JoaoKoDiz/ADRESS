@@ -166,12 +166,6 @@ body.touch-on .ahud-sub { display: none; }
   font-size: .9em; line-height: 1;
 }
 .ahud-prompt.on { visibility: visible; }
-/* toque: no lugar da tecla E, o símbolo de tocar (o balão inteiro é o botão); sem o travessão */
-.ahud-tap { display: none; place-items: center; width: 1.6em; height: 1.6em; border-radius: 50%; background: #e8661a; color: #fff;
-  box-shadow: inset 0 -.18em 0 #b94c0e; }
-.ahud-tap svg { width: 1.08em; height: 1.08em; display: block; }
-body.touch-on .ahud-tap { display: inline-grid; }
-body.touch-on .ahud-key, body.touch-on .ahud-dash { display: none; }
 /* balão AO LADO do ponto (sobre a rua, sem cobrir o quintal da casa): a ponta aponta para a van */
 .ahud-prompt[data-side="right"] { padding: 0 0 0 calc(.55em - 2px); }
 .ahud-prompt[data-side="left"]  { padding: 0 calc(.55em - 2px) 0 0; }
@@ -220,18 +214,6 @@ const BOX_SVG = `
   <rect x="8.9" y="3" width="2.2" height="15" fill="#f3d9a6"/>
   <rect x="12.6" y="12.2" width="3.6" height="2.8" rx=".4" fill="#f3d9a6" opacity=".85"/>
 </svg>`;
-
-// Dedo tocando (balão no modo toque).
-const TAP_SVG = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8.4 6.4a4.4 4.4 0 0 1 7.2 0" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>' +
-  '<path d="M10.6 22l-3.5-4.6a1.5 1.5 0 0 1 2.3-1.9l1.4 1.4V10a1.5 1.5 0 0 1 3 0v4.6l3.9.7a2 2 0 0 1 1.6 2.3L18.6 22z" fill="currentColor"/></svg>';
-
-// Modo toque: frases da barra que citam teclas viram o gesto equivalente (o texto original continua igual no computador).
-const TOUCH_TEXT = [
-  [/aperte E para entrar/g, 'toque no balão para entrar'],
-  [/\s*\((?:[A-Z]|Esc|Espaço|Shift)\)/g, ''],
-];
-const touchOn = () => document.body.classList.contains('touch-on');
-const forTouch = t => (touchOn() ? TOUCH_TEXT.reduce((a, [re, to]) => a.replace(re, to), t) : t);
 
 function injectStyle() {
   if (document.getElementById('ahud-style')) return;
@@ -292,10 +274,10 @@ export function createHUD(hudEl, stageEl) {
   const prompt = document.createElement('div');
   prompt.className = 'ahud-prompt';
   prompt.setAttribute('aria-hidden', 'true');
-  prompt.innerHTML = `<div class="ahud-bubble"><span class="ahud-key">E</span><span class="ahud-tap">${TAP_SVG}</span><span><span class="ahud-dash">— </span><span class="ahud-lbl">Entregar</span></span></div>`;
+  prompt.innerHTML = '<div class="ahud-bubble"><span class="ahud-key">E</span><span>— Entregar</span></div>';
   stageEl.appendChild(prompt);
   const bubble = prompt.firstElementChild;
-  const promptTxt = bubble.querySelector('.ahud-lbl');
+  const promptTxt = bubble.lastElementChild;
   let promptLabel = 'Entregar';
 
   // Aquece a fonte de emoji (a 1ª "Ding-dong… 🔔" custava ~20 ms procurando a fonte no meio do jogo).
@@ -378,7 +360,6 @@ export function createHUD(hudEl, stageEl) {
 
   // Fala de morador ("Nome: “…”"): o nome ganha destaque; o conteúdo entra sempre como texto puro.
   function renderMain(text) {
-    text = forTouch(text);
     const m = /^([^:“"]{1,40}): (“[\s\S]*)$/.exec(text);
     if (m) {
       const who = document.createElement('span');
@@ -393,7 +374,6 @@ export function createHUD(hudEl, stageEl) {
   const refit = () => { if (mainText) fitMain(); fitSub(); };
   const watch = () => {
     const w = hudEl.clientWidth, t = document.body.classList.contains('touch-on');
-    if (t !== lastTouch && lastTouch !== null && mainText) renderMain(mainText);   // (frases com teclas mudam no toque)
     if (w !== lastW || t !== lastTouch) { lastW = w; lastTouch = t; refit(); }
   };
   if (typeof ResizeObserver !== 'undefined') new ResizeObserver(watch).observe(hudEl);
@@ -447,7 +427,7 @@ export function createHUD(hudEl, stageEl) {
      */
     setPrompt(visible, x, y, side = 'up', label = 'Entregar') {
       tickAnims();
-      if (visible && label !== promptLabel) { promptLabel = label; promptTxt.textContent = label; }
+      if (visible && label !== promptLabel) { promptLabel = label; promptTxt.textContent = '— ' + label; }
       if (!visible || !Number.isFinite(x) || !Number.isFinite(y)) {
         if (promptOn) { promptOn = false; prompt.classList.remove('on'); }
         return;

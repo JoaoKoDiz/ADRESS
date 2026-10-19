@@ -21,7 +21,7 @@ import { createGrillStory, GRILL_TALK_KEY, createCrowd } from './grillStory.js';
 import { createWorkshopStory, INTRO_KEY } from './workshopStory.js';
 import { createChurchCine } from './churchCine.js';
 import { createMassStory, MASS_KEY, BELL3_KEY, NOTICE_KEY, createRainFx, createRainAudio } from './massStory.js';
-import { createTouch, actionIcon } from './touch.js';
+import { createTouch } from './touch.js';
 import { createExtraStory, EXTRA_DONE_KEY, EXTRA1_KEY, EXTRA2_KEY, screenShatter } from './extraStory.js';
 import { createNight } from './night.js';
 import { createFarmOutside } from './farmOutside.js';
@@ -1389,9 +1389,7 @@ function atPump() {
 
 let footDelivery = false;              // Veneza: entrega feita a pé (depois do diálogo volta a andar)
 /** Medieval: morador conversável perto do personagem a pé; só vale se estiver mais perto que a porta de entrega. */
-const chatLife = npc => (npc && npc.plaza && world.plaza ? world.plaza : medLife);   // Bairro 2: gente da praça; Medieval: moradores do burgo
 function medTalkTarget() {
-  if (PLAZA && neighborhood === 'plaza6' && world.plaza) return walker.visible ? world.plaza.nearTalk(walker.x, walker.z) : null;   // Bairro 2: conversar com quem está na praça (a pé não há entrega ali)
   if (!MEDV || neighborhood !== 'med10' || !walker.visible) return null;
   const npc = medLife.nearTalk(walker.x, walker.z);
   if (!npc) return null;
@@ -1403,9 +1401,9 @@ function medTalkTarget() {
 }
 function startChat(npc) {
   chatNpc = npc; nearHouse = -1;
-  const life = chatLife(npc), lines = life.talk(npc, walker.x, walker.z);
+  const lines = medLife.talk(npc, walker.x, walker.z);
   setState('chat');
-  talkBox.show(lines, () => { if (chatNpc) life.endTalk(chatNpc); chatNpc = null; actionLock = 0.4; setState('walk'); });
+  talkBox.show(lines, () => { if (chatNpc) medLife.endTalk(chatNpc); chatNpc = null; actionLock = 0.4; setState('walk'); });
 }
 function findNearHouseFoot() {
   let best = 3.6, found = -1;
@@ -2591,7 +2589,7 @@ function startNewRound(newMatch = true) {
   boom.reset(); clearLaserVoids(); restartMsg = null;
   world.setLayout(game.layout);
   if (neighborhood === 'med10') medLife.layout(world, game, MEDV);   // Medieval: rotinas recomeçam com as casas desta partida
-  if (chatNpc) { chatLife(chatNpc).endTalk(chatNpc); chatNpc = null; }
+  if (chatNpc) { medLife.endTalk(chatNpc); chatNpc = null; }
   resetGates();                                  // Colheita: porteiras fechadas de novo
   if (neighborhood === 'favela8') favPets.reset();   // Morro: bichos sorteados de novo
   if (neighborhood === 'snow8') resetBanks();      // Nevasca: montes de neve de volta nos atalhos
@@ -3094,29 +3092,27 @@ const promptPos = new THREE.Vector3();
 function touchFrame() {
   if (!touch) touch = createTouch({ input, canvas: renderer.domElement });
   if (!touch.on) { touch.update(); return; }
-  // A(controle, tecla, nome acessível, símbolo, segurada?, palavra no botão) — o controle define o lugar na tela (touch.js)
-  const acts = [], A = (id, key, label, icon, hold, word) => acts.push({ id, key, label, icon, hold, word });
+  const acts = [], A = (key, label, k, hold) => acts.push({ key, label, k, hold });
   let joystick = false, look = false;
   const blocked = menu.isOpen || missions.isOpen || talkBox.open || lock.isOpen || fade > 0.5;
-  const cam = () => rig.mode === 'chase' ? A('cam', 'KeyC', 'Ver o bairro inteiro', 'overview') : A('cam', 'KeyC', state === 'walk' ? 'Câmera atrás do personagem' : 'Câmera atrás da van', 'chase');
-  const missile = () => { if (gameMode === 'free' && !MOONV) A('missil', 'KeyF', 'Míssil', 'missile'); };
+  const camLbl = rig.mode === 'chase' ? 'Bairro' : 'Câmera';
   if (!blocked) switch (state) {
     case 'drive':
       joystick = true; look = true;
       if (approachLock()) break;                                     // aproximação da igreja: só a direção
-      if (heli.landed) { A('decolar', 'KeyH', 'Decolar', 'takeoff'); missile(); if (roofUnderVan()) A('sair', 'KeyL', 'Descer no terraço', 'walk'); }
-      else if (heli.on) { A('altura', 'Space', 'Subir', 'up', true); A('altura', 'ShiftLeft', 'Descer', 'down', true); A('pousar', 'KeyH', 'Pousar', 'land'); missile(); }   // ▲ em cima, ▼ embaixo (um controle só)
-      else { A('sair', 'KeyL', VENICE ? 'Descer da lancha' : 'Descer da van', 'walk'); if (gameMode === 'free') { A('heli', 'KeyH', 'Helicóptero', 'heli'); missile(); } }
-      cam();
+      if (heli.landed) { A('KeyH', 'Decolar', 'H'); if (gameMode === 'free' && !MOONV) A('KeyF', 'Míssil', 'F'); if (roofUnderVan()) A('KeyL', 'Descer', 'L'); }
+      else if (heli.on) { A('Space', 'Subir', '␣', true); A('ShiftLeft', 'Descer', '⇧', true); A('KeyH', 'Pousar', 'H'); if (gameMode === 'free' && !MOONV) A('KeyF', 'Míssil', 'F'); }
+      else { A('KeyL', VENICE ? 'Descer da lancha' : 'Descer da van', 'L'); if (gameMode === 'free') { A('KeyH', 'Helicóptero', 'H'); if (!MOONV) A('KeyF', 'Míssil', 'F'); } }
+      A('KeyC', camLbl, 'C');
       break;
-    case 'walk': joystick = true; look = true; cam(); break;
+    case 'walk': joystick = true; look = true; A('KeyC', camLbl, 'C'); break;
     case 'inside': joystick = true; break;                            // Grillby's (visão de cima, sem giro)
     case 'gstory': joystick = true; look = true; break;               // 1ª pessoa / resgate (a história decide o que vale)
     case 'extra': joystick = look = !extra.locked; break;
-    case 'battle': joystick = battle.joystick; if (battle.actionLabel) A('acao', 'Space', battle.actionLabel, actionIcon(battle.actionLabel), true, battle.actionLabel); if (battle.action2Label) A('puxar', 'KeyE', battle.action2Label, 'pull', true, battle.action2Label); break;   // círculo + ação (segurada); no Conduzir também Puxar (os dois juntos)
-    case 'boss': if (monster.phase === 'grace') { joystick = true; if (!monster.robotOn) A('robo', 'KeyT', 'Virar robô', 'robot', false, 'Robô'); } break;
-    case 'map': joystick = true; A('jogar', 'KeyE', 'Jogar', 'play'); A('missoes', 'KeyM', 'Missões', 'list'); break;
-    // dilema do bonde: sem botão — tocar no "Mudar o trajeto" da cena (touch.js)
+    case 'battle': joystick = battle.joystick; if (battle.actionLabel) A('Space', battle.actionLabel, '●', true); if (battle.action2Label) A('KeyE', battle.action2Label, '◆', true); break;   // círculo + ação (segurada); no Conduzir também Puxar (os dois juntos)
+    case 'boss': if (monster.phase === 'grace') { joystick = true; if (!monster.robotOn) A('KeyT', 'Robô', 'T'); } break;
+    case 'map': joystick = true; A('KeyE', 'Jogar', 'E'); A('KeyM', 'Missões', 'M'); break;
+    case 'trolley': if (trolley.choosing) A('KeyE', 'Mudar o trajeto', 'E'); break;
   }
   const bar = document.querySelector('.ahud'), r = bar && bar.offsetParent ? bar.getBoundingClientRect() : null;
   touch.update({ joystick, look, actions: acts, dialog: state === 'dialog' && !menu.isOpen, top: (r && r.height ? r.bottom : 10) + 8 });

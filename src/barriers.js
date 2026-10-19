@@ -13,22 +13,18 @@
 //   Trecho vertical (coluna j, entre as linhas i e i+1): I(j,i) — I(j,i+1). A barreira fica no meio e corta o trecho.
 import * as THREE from 'three';
 import { ROAD, GRID, ENTRANCE, GAS_LIST, HOUSE_SLOTS, roadCenter, SOLIDS } from './layout.js';
-import { mat, box, cyl, cone, sphere, at, dynamic, bakeStatic, textTexture } from './models/kit.js';
-import { buildFigure, figureItem, animatePerson, reach } from './models/resident.js';
+import { mat, box, cyl, cone, sphere, at, dynamic, bakeStatic, textTexture, vcMerge } from './models/kit.js';
 
 // Pisca-pisca dos cavaletes e o alerta dos caminhões: dois materiais que se alternam (atualizados no desenho, sem laço próprio).
 const FLASH_A = new THREE.MeshStandardMaterial({ color: '#ff8a1a', emissive: '#ff6a00', emissiveIntensity: 0.9, roughness: 0.6 });
 const FLASH_B = new THREE.MeshStandardMaterial({ color: '#ff8a1a', emissive: '#ff6a00', emissiveIntensity: 0.9, roughness: 0.6 });
 const HAZARD = new THREE.MeshStandardMaterial({ color: '#ff9a1a', emissive: '#ff7a00', emissiveIntensity: 1, roughness: 0.6 });
 let flashFrame = -1;
-// Relógio do jogo (não o relógio real): avança em world.update com o dt do mundo, então o pisca-pisca, os engarrafamentos e
-// o pessoal das obras e dos caminhões param junto com o resto do mundo quando o MENU (ou a lista de missões) está aberto.
+// Relógio do jogo (não o relógio real): avança em world.update com o dt do mundo, então o pisca-pisca e a placa PARE/SIGA
+// param junto com o resto do mundo quando o MENU (ou a lista de missões) está aberto.
 let clockT = 0;
 /** Avança o relógio dos bloqueios (chamado por world.update). */
-export function tickBarriers(dt) {
-  clockT += dt || 0;
-  for (const f of LIVE) { const sc = sceneOf(f.root); if (sc) f.tick(Math.min(0.1, dt || 0), findVan(sc)); }   // pessoal das obras e dos fretes à vista
-}
+export function tickBarriers(dt) { clockT += dt || 0; }
 function flashTick() {
   const t = clockT;
   if (Math.floor(t * 60) === flashFrame) return;
@@ -37,161 +33,38 @@ function flashTick() {
   FLASH_A.emissiveIntensity = on ? 1.6 : 0.15; FLASH_B.emissiveIntensity = on ? 0.15 : 1.6;
   HAZARD.emissiveIntensity = (t % 0.9) < 0.45 ? 1.5 : 0.1;
 }
-// ---------- pessoal das obras e dos fretes ----------
-// No estilo dos moradores (buildFigure: mesmas proporções, cabeça, rosto, mãos e juntas; uma malha com esqueleto por
-// pessoa) e com a roupa do trabalho: o sinaleiro da obra (capacete amarelo, colete refletivo, luvas, botina e a placa
-// OBRAS), quem cava (capacete branco, camiseta, colete, pá) e o ajudante do caminhão (boné, camisa da transportadora,
-// luvas). Animados no relógio do jogo (tickBarriers): param com o MENU, cada um no seu ritmo.
-const LIVE = new Set();                 // figuras animadas (só as que estão à vista numa cena são atualizadas)
-const WSKINS = ['#c98a62', '#e8b98f', '#8a5a3c', '#f1c9a5', '#a8714c', '#d9a074'];
-const WHAIR = ['#2a1f18', '#5a3a22', '#1e1a18', '#8a6a4a', '#3b2a1a'];
-let crewK = 0;
-const _v = new THREE.Vector3(), _w = new THREE.Vector3(), _m4 = new THREE.Matrix4(), _qy = new THREE.Quaternion(), _up = new THREE.Vector3(0, 1, 0);
-const ss = (a, b, x) => { const u = Math.min(1, Math.max(0, (x - a) / (b - a))); return u * u * (3 - 2 * u); };
-const wrapA = a => Math.atan2(Math.sin(a), Math.cos(a));
-const lerpV = (a, b, k) => a.lerp(b, k);
-/** Raiz de cena de um objeto, se ele e todos os pais estiverem visíveis. */
-function sceneOf(o) { for (let p = o; p; p = p.parent) { if (!p.visible) return null; if (!p.parent) return p.isScene ? p : null; } return null; }
-let vanRef = null, vanScene = null;
-function findVan(sc) { if (sc !== vanScene || !vanRef || vanRef.parent !== sc) { vanScene = sc; vanRef = sc.getObjectByName('van') || null; } return vanRef; }
-/** Onde está a van no espaço local de `root` (x, z, distância, velocidade de aproximação). */
-function vanLocal(f, van, dt) {
-  if (!van) { f.vd = 1e9; f.vsp = 0; return; }
-  f.root.updateWorldMatrix(true, false);
-  _v.setFromMatrixPosition(van.matrixWorld); f.root.worldToLocal(_v);
-  const sc = f.root.getWorldScale(_w).x || 1;                  // (o ajudante fica dentro do grupo do caminhão, que é escalado)
-  const d = Math.hypot(_v.x, _v.z) * sc;
-  f.vsp = dt > 0 && f.vd < 1e8 ? f.vsp + (((f.vd - d) / dt) - f.vsp) * Math.min(1, dt * 4) : 0;
-  f.vd = d; f.vx = _v.x; f.vz = _v.z;
-}
-/** Pose: ponto do item no corpo (B) e eixo do cabo (D); devolve o ponto a `len` do pé ao longo do cabo. */
-function placeTool(it, B, D, len, out) { it.position.copy(B); it.quaternion.setFromUnitVectors(_up, D); return out.copy(D).multiplyScalar(len).add(B); }
-function addCrew(f) { f.vd = 1e9; f.vsp = 0; f.vx = 0; f.vz = 1; f.t = Math.random() * 20; LIVE.add(f); return f; }
-
-/** Sinaleiro da obra: segura a placa OBRAS; olha a rua, aponta a obra, coça o capacete; com a van chegando, ergue a placa
- *  e levanta a mão aberta (a rua está fechada ali — nunca indica passagem); com a van parada perto, aponta a obra. */
-function buildSignWorker() {
-  const k = crewK++;
-  const P = buildFigure({ k, skin: WSKINS[k % WSKINS.length], hair: WHAIR[k % WHAIR.length], top: '#3a6fb0', vest: '#ff7a1a', pants: '#3a3d44',
-    shoes: '#5a3b22', boots: true, hat: 'helmet', hatColor: '#ffd21a', capLogo: '#2f5fb0', gloves: '#e6cf6a', mustache: k % 2 ? WHAIR[k % WHAIR.length] : null, brows: WHAIR[k % WHAIR.length] });
-  const sign = P.give(figureItem('sign'), 'body');
-  const f = addCrew({ P, root: P.root, sign, st: { mode: 'idle', t: 0 }, alert: 0, yaw: 0, gest: 'hang', gT: 0, gDur: 3, look: 0, lookT: 0, lookTo: 0, stopT: 0,
-    hand: new THREE.Vector3(-0.46, 0.66, 0.06), pole: new THREE.Vector3(-0.6, -0.5, -0.4), bar: new THREE.Vector3(1, 0, 0) });
-  f.tick = (dt, van) => signTick(f, dt, van);
-  return f;
-}
-const GEST = {                                                         // mão esquerda do sinaleiro (espaço do corpo) e o cotovelo
-  hang: [[-0.46, 0.66, 0.06], [-0.6, -0.5, -0.4]],
-  hip: [[-0.39, 0.7, 0.06], [-1, -0.1, -0.3]],
-  watch: [[-0.06, 1.0, 0.34], [-0.7, -0.7, 0.1]],
-  scratch: [[-0.5, 1.5, 0.06], [-0.9, 0.3, -0.2]],
-  stop: [[-0.28, 1.42, 0.36], [-0.8, -0.6, -0.2]],
-};
-function signTick(f, dt, van) {
-  const P = f.P, b = P.b, s = f.st;
-  f.t += dt; s.t = f.t;
-  vanLocal(f, van, dt);
-  const coming = (f.vd < 17 && f.vsp > 0.6) || f.vd < 8.5, near = f.vd < 13;
-  f.alert += ((coming ? 1 : 0) - f.alert) * Math.min(1, dt * (coming ? 4 : 1.2));
-  f.stopT = near && Math.abs(f.vsp) < 0.35 ? f.stopT + dt : 0;
-  const al = ss(0, 1, f.alert);
-  // gesto da mão esquerda: com a van chegando, mão levantada (pare); parada perto, aponta a obra; sozinho, varia sem pressa
-  f.gT += dt;
-  let g = f.gest;
-  if (al > 0.5) g = 'stop';
-  else if (f.stopT > 1.2 && f.stopT < 5) g = 'point';
-  else if (f.gT > f.gDur) { const r = Math.random(); f.gest = r < 0.3 ? 'hang' : r < 0.52 ? 'hip' : r < 0.7 ? 'point' : r < 0.85 ? 'scratch' : 'watch'; f.gT = 0; f.gDur = f.gest === 'hang' || f.gest === 'hip' ? 3 + Math.random() * 5 : 2 + Math.random() * 1.5; g = f.gest; }
-  let tgt, pole;
-  if (g === 'point') {                                                // braço estendido para a obra (o cavalete)
-    const d = f.bar; tgt = _w.set(-0.4 + d.x * 0.5, 1.2, d.z * 0.5 + 0.12); pole = _v.set(-0.4, -0.8, -0.3);
-  } else { const G = GEST[g]; tgt = _w.set(...G[0]); pole = _v.set(...G[1]); }
-  if (g === 'stop') tgt.x += 0.06 * Math.sin(f.t * 5.5);              // abana devagar: "não dá para passar"
-  if (g === 'scratch') tgt.y += 0.04 * Math.sin(f.t * 13);
-  lerpV(f.hand, tgt, Math.min(1, dt * 5)); lerpV(f.pole, pole, Math.min(1, dt * 5));
-  // corpo: vira para a van que chega; olhar: a rua para os dois lados, a obra, o relógio
-  const want = al * THREE.MathUtils.clamp(Math.atan2(f.vx, f.vz), -1.1, 1.1);
-  f.yaw += wrapA(want - f.yaw) * Math.min(1, dt * 3);
-  f.lookT -= dt;
-  if (f.lookT <= 0) { f.lookT = 1.8 + Math.random() * 3.5; const r = Math.random(); f.lookTo = r < 0.35 ? 1.05 : r < 0.7 ? -1.05 : (Math.random() - 0.5) * 0.6; }
-  let ly = f.lookTo, lp = 0;
-  if (g === 'point') ly = Math.atan2(f.bar.x, f.bar.z);
-  if (g === 'watch') { ly = -0.25; lp = 0.35; }
-  if (al > 0.05) ly = ly * (1 - al);
-  f.look += (ly - f.look) * Math.min(1, dt * 3);
-  animatePerson(P, { mode: 'idle', t: f.t, lookYaw: f.look, lookPitch: lp, talk: al > 0.6 ? 1 : 0 });
-  b.body.rotation.y += f.yaw;
-  if (al > 0.6) b.head.rotation.y += 0.12 * Math.sin(f.t * 7) * al;   // balança a cabeça: "por aqui, não"
-  // placa: em pé ao lado do pé direito, de frente para quem vem pela rua; com a van chegando, erguida e virada para ela
-  const lift = 0.26 * al, base = _v.set(0.5, lift, 0.26 + 0.14 * al);
-  f.sign.position.copy(base);
-  const roadYaw = Math.PI / 2 - f.yaw, toVan = Math.atan2(f.vx, f.vz) - f.yaw;
-  f.sign.rotation.set(0.05 * al, roadYaw + wrapA(toVan - roadYaw) * al, 0.03 * Math.sin(f.t * 0.7));
-  reach(P, 1, base.x - 0.03, base.y + 0.92, base.z + 0.02, 1.0, -0.4, -0.5);
-  reach(P, -1, f.hand.x, f.hand.y, f.hand.z, f.pole.x, f.pole.y, f.pole.z);
-}
-
-/** Operário compactando o asfalto novo com o soquete (maço de mão): ergue o soquete com as duas mãos e deixa cair; a cada
- *  algumas batidas muda o soquete de lugar; depois de uma série, encosta o soquete, alonga as costas ou põe as mãos na
- *  cintura e olha em volta. Poeira baixa a cada batida. Olha para a van quando ela chega perto. */
-function buildTamper() {
-  const k = crewK++;
-  const P = buildFigure({ k, skin: WSKINS[(k + 2) % WSKINS.length], hair: WHAIR[(k + 1) % WHAIR.length], top: '#8f969e', short: true, vest: '#ff7a1a', pants: '#2f4a6e',
-    shoes: '#4a3022', boots: true, hat: 'helmet', hatColor: '#f2f2ee', capLogo: '#d8312a', gloves: '#9aa0a6', brows: WHAIR[(k + 1) % WHAIR.length] });
-  const tool = P.give(figureItem('tamper'), 'body');
-  const dust = new THREE.Group();                                     // poeira da batida (cresce e some; sem transparência)
-  for (const [x, z, r] of [[0.14, 0.05, 0.12], [-0.12, 0.08, 0.1], [0.02, -0.12, 0.09], [0.0, 0.16, 0.08]]) dust.add(at(sphere(r, '#cfc6b4', 7, 5), x, r * 0.5, z));
-  bakeStatic(dust); dust.visible = false; P.b.body.add(dust);
-  const f = addCrew({ P, root: P.root, tool, dust, st: { mode: 'idle', t: 0 }, ph: 'work', pt: 0, hit: 0, nMax: 9, spot: new THREE.Vector3(0.02, 0, 0.4), to: new THREE.Vector3(0.02, 0, 0.4),
-    look: 0, rest: 'stretch', lastHit: -1 });
-  f.tick = (dt, van) => tamperTick(f, dt, van);
-  return f;
-}
-const TAMP_T = 1.05;                                                  // uma batida: sobe devagar, cai rápido, um respiro
-const SPOTS = [[0.02, 0.4], [0.22, 0.36], [-0.16, 0.38], [0.1, 0.46], [-0.06, 0.34]];
-function tamperTick(f, dt, van) {
-  const P = f.P, b = P.b, s = f.st;
-  f.t += dt; f.pt += dt; s.t = f.t;
-  vanLocal(f, van, dt);
-  const TOP = 0.98;                                                   // altura do punho com o soquete apoiado no chão
-  let lift = 0, bend = 0.06, act = null, at0 = 0, handsOn = true;
-  if (f.ph === 'work') {
-    const n = Math.floor(f.pt / TAMP_T), u = (f.pt % TAMP_T) / TAMP_T;
-    if (n >= f.nMax) { f.ph = 'rest'; f.pt = 0; f.rest = ['stretch', 'hips', 'look'][Math.floor(Math.random() * 3)]; }
-    else {
-      if (n % 3 === 0 && u < 0.3) f.spot.lerp(f.to, Math.min(1, dt * 6));   // a cada 3 batidas, arrasta o soquete para o lado
-      if (n % 3 === 2 && u > 0.95) { const q = SPOTS[Math.floor(Math.random() * SPOTS.length)]; f.to.set(q[0], 0, q[1]); }
-      lift = u < 0.62 ? 0.3 * ss(0, 0.62, u) : u < 0.74 ? 0.3 * (1 - ((u - 0.62) / 0.12) ** 2) : 0;   // sobe… e cai
-      bend = 0.05 - 0.07 * (lift / 0.3) + (u > 0.74 && u < 0.86 ? 0.1 : 0);
-      if (u >= 0.74 && f.lastHit !== n) { f.lastHit = n; f.hitT = 0; }
-    }
-  } else {
-    handsOn = false;
-    const dur = 6.5;
-    if (f.rest === 'stretch' && f.pt > 0.7) { act = 'stretch'; at0 = f.pt - 0.7; }
-    if (f.pt < 0.6 || f.pt > dur - 0.6) handsOn = true;
-    if (f.pt > dur) { f.ph = 'work'; f.pt = 0; f.nMax = 7 + Math.floor(Math.random() * 6); f.lastHit = -1; }
+/** Operário de colete e capacete (frente +Z). pose 'sign': segura a placa PARE/SIGA; 'shovel': apoiado na pá; 'carry': carrega uma caixa. */
+function buildWorker(pose) {
+  const VEST = '#ff7a1a', SHIRT = '#3a6fb0', PANTS = '#3a3d44', SKIN = '#c98a62', HELM = '#ffd21a';
+  const b = new THREE.Group();
+  for (const sx of [-1, 1]) { b.add(at(box(0.2, 0.82, 0.22, PANTS), sx * 0.13, 0.41, 0)); b.add(at(box(0.24, 0.14, 0.34, '#4a3322'), sx * 0.13, 0.07, 0.05)); }
+  b.add(at(box(0.56, 0.68, 0.32, SHIRT), 0, 1.16, 0));
+  b.add(at(box(0.6, 0.5, 0.34, VEST), 0, 1.2, 0));
+  for (const y of [1.08, 1.3]) b.add(at(box(0.62, 0.05, 0.36, '#e8eef2'), 0, y, 0));       // faixas refletivas
+  b.add(at(box(0.16, 0.1, 0.16, SKIN), 0, 1.54, 0));
+  b.add(at(sphere(0.2, SKIN, 10, 8), 0, 1.74, 0));
+  b.add(at(sphere(0.23, HELM, 10, 6), 0, 1.84, 0)); b.add(at(cyl(0.27, 0.27, 0.04, HELM, 12), 0, 1.8, 0));
+  for (const sx of [-1, 1]) b.add(at(sphere(0.03, '#2a2522', 5, 3), sx * 0.07, 1.76, 0.18));
+  if (pose === 'shovel') {                                     // apoiado no cabo da pá, a lâmina no chão
+    b.add(at(box(0.05, 1.3, 0.05, '#8a5a36'), 0.32, 0.75, 0.32, -0.25, 0, 0));
+    b.add(at(box(0.3, 0.36, 0.04, '#7d8187'), 0.32, 0.12, 0.48, -0.25, 0, 0));
+    for (const sx of [-1, 1]) b.add(at(box(0.14, 0.58, 0.16, SHIRT), sx * 0.33, 1.2, 0.12, -0.5, 0, sx * 0.15));
+  } else if (pose === 'carry') {                               // caixa nos braços
+    for (const sx of [-1, 1]) b.add(at(box(0.14, 0.5, 0.16, SHIRT), sx * 0.33, 1.22, 0.16, -0.9, 0, 0));
+    b.add(at(box(0.56, 0.42, 0.42, '#c8955a'), 0, 1.15, 0.42)); b.add(at(box(0.57, 0.06, 0.12, '#e6d3a8'), 0, 1.37, 0.42));
+  } else for (const sx of [-1, 1]) b.add(at(box(0.14, 0.58, 0.16, SHIRT), sx * 0.35, 1.17, 0, 0, 0, sx * 0.06));
+  const g = new THREE.Group(); g.add(vcMerge(b));
+  if (pose === 'sign') {                                       // placa PARE/SIGA girando devagar na mão (só muda o lado de vez em quando)
+    const paddle = new THREE.Group(); paddle.position.set(0.42, 0, 0.18);
+    paddle.add(at(box(0.05, 1.5, 0.05, '#5a5f66'), 0, 0.75, 0));
+    const face = (txt, bg, rot) => { const m = new THREE.Mesh(new THREE.CircleGeometry(0.34, 16), new THREE.MeshStandardMaterial({ map: textTexture(txt, { width: 128, height: 128, bg, fg: '#ffffff', font: 'bold 38px "Trebuchet MS", sans-serif' }), roughness: 0.7 })); m.position.set(0, 1.62, rot ? -0.02 : 0.02); m.rotation.y = rot; return m; };
+    paddle.add(face('PARE', '#d8312a', 0), face('SIGA', '#2f9a4a', Math.PI));
+    g.add(paddle);
+    g.userData.paddle = paddle;
   }
-  // poeira da batida
-  f.hitT = (f.hitT ?? 9) + dt;
-  const hk = f.hitT < 0.5 ? f.hitT / 0.5 : 1;
-  f.dust.visible = hk < 1; if (f.dust.visible) { const sc = Math.sin(hk * Math.PI) * (0.8 + hk); f.dust.scale.set(sc, sc * 0.7, sc); f.dust.position.set(f.spot.x, 0.02 + hk * 0.12, f.spot.z); }
-  const jolt = f.hitT < 0.15 ? Math.sin(f.hitT / 0.15 * Math.PI) : 0;
-  // olhar: o soquete enquanto trabalha; em volta no descanso; a van quando ela chega perto
-  let ly = f.ph === 'rest' ? (f.rest === 'look' ? 0.9 * Math.sin(f.pt * 0.8) : 0.35 * Math.sin(f.pt * 0.5)) : 0.1 * Math.sin(f.t * 0.3);
-  if (f.vd < 11) ly = THREE.MathUtils.clamp(Math.atan2(f.vx, f.vz), -1.2, 1.2);
-  f.look += (ly - f.look) * Math.min(1, dt * 3);
-  animatePerson(P, { mode: 'idle', t: f.t, act, at: at0, lookYaw: f.look, lookPitch: f.ph === 'work' && f.vd >= 11 ? 0.32 : 0 });
-  b.waist.rotation.x += bend;
-  b.body.position.y -= 0.025 * jolt; b.kneeL.rotation.x += 0.12 * jolt; b.kneeR.rotation.x += 0.12 * jolt; b.hipL.rotation.x -= 0.06 * jolt; b.hipR.rotation.x -= 0.06 * jolt;
-  // soquete: em pé sobre o ponto, erguido pelas duas mãos (no descanso fica apoiado sozinho, levemente inclinado)
-  const lean = f.ph === 'rest' && !handsOn ? 0.06 : 0;
-  f.tool.position.set(f.spot.x, lift, f.spot.z); f.tool.rotation.set(-lean, 0, 0);
-  if (handsOn) {
-    const y = TOP + lift;
-    reach(P, -1, f.spot.x - 0.13, y, f.spot.z - 0.02, -0.9, -0.5, -0.3);
-    reach(P, 1, f.spot.x + 0.13, y, f.spot.z - 0.02, 0.9, -0.5, -0.3);
-  } else if (f.rest === 'hips') { reach(P, -1, -0.38, 0.68, -0.02, -1, -0.1, -0.3); reach(P, 1, 0.38, 0.68, -0.02, 1, -0.1, -0.3); b.waist.rotation.x -= 0.08; }
+  return g;
 }
+
 const START = () => [ENTRANCE.road, 0];   // cruzamento da entrada (rua central, borda norte)
 // Por tipo: distância do centro do cruzamento até o bloqueio (trechos horizontais, perto de uma ponta)
 // e meia espessura do obstáculo ao longo da rua. Tudo fica fora do cruzamento e longe do portão (meio do trecho).
@@ -250,7 +123,7 @@ function buildBarrier(stripes) {
   st.add(at(box(1.5, 0.56, 0.06, '#2e3036'), 0, 1.98, 0));
   const plate = textTexture('OBRAS', { width: 256, height: 96, bg: '#ff8a1a', fg: '#1b1b1b', font: 'bold 64px "Trebuchet MS", sans-serif' });
   const pm = new THREE.MeshStandardMaterial({ map: plate, roughness: 0.7 });
-  for (const r of [0, Math.PI]) { const p = new THREE.Mesh(new THREE.PlaneGeometry(1.4, 0.48), pm); p.position.set(0, 1.98, r ? -0.06 : 0.06); p.rotation.y = r; st.add(p); }   // (3 cm à frente da placa)
+  for (const r of [0, Math.PI]) { const p = new THREE.Mesh(new THREE.PlaneGeometry(1.4, 0.48), pm); p.position.set(0, 1.98, r ? -0.035 : 0.035); p.rotation.y = r; st.add(p); }
   st.traverse(o => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
   bakeStatic(st); g.add(st);
   for (const [k, x] of [-W / 2 + 0.4, W / 2 - 0.4].entries()) {   // pisca-pisca alternado
@@ -265,13 +138,13 @@ function buildBarrier(stripes) {
   og.add(at(box(W + 0.4, 0.02, 0.62, '#5b4630'), 0, 0.012, 0));
   for (const [x, s] of [[-1.4, 0.55], [0.3, 0.42], [1.7, 0.5]]) { const m = at(sphere(s, '#7a5c3a', 7, 4), x, 0, 0); m.scale.set(1.4, 0.45, 0.5); og.add(m); }   // montinhos de terra
   og.add(at(box(W + 0.6, 0.012, 2.4, '#3c4048'), 0, 0.006, 1.6));                       // asfalto novo (recapeado), atrás do cavalete
-  for (const x of [-W / 2 - 0.3, W / 2 + 0.3]) og.add(at(box(0.08, 0.014, 2.4, '#ff8a1a'), x, 0.017, 1.6));   // marcas de spray (1,2 cm acima do asfalto novo)
-  og.add(at(box(1.2, 0.014, 0.08, '#ff8a1a'), -0.8, 0.017, 2.9)); og.add(at(box(0.08, 0.014, 0.5, '#ff8a1a'), -0.2, 0.017, 3.15));
+  for (const x of [-W / 2 - 0.3, W / 2 + 0.3]) og.add(at(box(0.08, 0.014, 2.4, '#ff8a1a'), x, 0.008, 1.6));   // marcas de spray
+  og.add(at(box(1.2, 0.014, 0.08, '#ff8a1a'), -0.8, 0.009, 2.9)); og.add(at(box(0.08, 0.014, 0.5, '#ff8a1a'), -0.2, 0.009, 3.15));
   og.traverse(o => { if (o.isMesh) { o.castShadow = false; o.receiveShadow = true; } });
   bakeStatic(og); obra.add(og);
-  const sign = buildSignWorker(), tamp = buildTamper();
-  obra.add(sign.root, tamp.root);
-  obra.userData = { worker: sign.root, shovel: tamp.root, og, crew: [sign, tamp] };
+  const worker = buildWorker('sign'); obra.add(worker);
+  const shovel = buildWorker('shovel'); obra.add(shovel);
+  obra.userData = { worker, shovel, og };
   g.add(dynamic(obra));
   g.userData.obra = obra;
   g.children.forEach(o => { if (o.material === FLASH_A || o.material === FLASH_B) dynamic(o); });
@@ -279,194 +152,59 @@ function buildBarrier(stripes) {
   return g;
 }
 
-/** Caminhão baú parado na diagonal da rua (comprimento ao longo do X local), com as portas de trás abertas e um ajudante
- *  descarregando caixas para uma pilha no chão. O baú é oco (paredes, teto e assoalho na cor da partida, forro escuro por
- *  dentro, caixas lá no fundo); a traseira tem moldura, para-choque e lanternas com caixa e lente saltadas (nada encostado
- *  na mesma superfície da carroceria). Tudo dentro da caixa de colisão de sempre (TYPES.truck). */
+/** Caminhão baú parado na diagonal da rua (comprimento ao longo do X local). */
 const TRUCK_COLORS = ['#f2f2f2', '#3a78d4', '#d8473a', '#efbf2a', '#3c9d55'];
-const TAIL = new THREE.MeshStandardMaterial({ color: '#d42a22', emissive: '#c01a12', emissiveIntensity: 0.55, roughness: 0.45 });
-// pilha de caixas atrás do caminhão (local do caminhão, sem escala): x, altura da base, z, giro; a de cima fica sobre as duas
-const PILE = [[-4.33, 0, -0.78, 0.04], [-5.1, 0, -0.76, -0.05], [-4.35, 0.5, -0.8, -0.06], [-5.08, 0.5, -0.74, 0.07], [-4.72, 1.0, -0.77, 0.12]];
-const DOOR_BOX = [-3.48, 1.16, 0.44], DOOR_STAND = [-4.28, 0.44], BOXS = 1.25;   // a caixa na beira do assoalho; onde o ajudante fica para pegá-la
 function buildTruck() {
   const g = new THREE.Group();
-  const C0 = TRUCK_COLORS[0];
-  // baú (assoalho acima das rodas): paredes, teto e assoalho numa malha só (o material troca a cada partida)
-  const shell = new THREE.Group();
-  shell.add(at(box(4.6, 0.12, 2.48, C0), -1.2, 3.94, 0), at(box(4.6, 0.14, 2.48, C0), -1.2, 1.07, 0));
-  for (const zz of [1.27, -1.27]) shell.add(at(box(4.6, 3.0, 0.06, C0), -1.2, 2.5, zz));
-  shell.add(at(box(0.06, 2.74, 2.48, C0), 1.07, 2.51, 0));
-  bakeStatic(shell); dynamic(shell); g.add(shell);
-  const cargo = shell.children.find(o => o.isMesh);
-  const liner = new THREE.Mesh(new THREE.BoxGeometry(4.44, 2.7, 2.4), new THREE.MeshStandardMaterial({ color: '#3b3e44', roughness: 0.9, side: THREE.BackSide }));
-  liner.position.set(-1.2, 2.51, 0); g.add(liner);                                 // forro por dentro (só as faces de dentro aparecem)
-  g.add(at(box(4.7, 0.22, 2.7, '#c9ced6'), -1.2, 4.05, 0));                       // friso do teto do baú
-  g.add(at(box(4.3, 0.3, 1.9, '#2e3036'), -1.15, 0.85, 0));                       // longarinas sob o baú
-  // traseira: moldura (colunas, travessa e soleira), portas abertas encostadas nas laterais, para-choque e lanternas
-  const FR = '#4a4e56';
-  for (const zz of [1.26, -1.26]) g.add(at(box(0.12, 2.86, 0.16, FR), -3.5, 2.43, zz));
-  g.add(at(box(0.14, 0.2, 2.62, FR), -3.53, 3.8, 0), at(box(0.16, 0.18, 2.62, FR), -3.53, 1.07, 0));
-  for (const zz of [1, -1]) {
-    g.add(at(box(1.25, 2.8, 0.06, '#c9ced6'), -2.9, 2.5, zz * 1.37));              // folha aberta, encostada na lateral (acima das rodas)
-    for (const y of [1.4, 2.5, 3.6]) g.add(at(box(0.16, 0.12, 0.05, '#2e3036'), -3.47, y, zz * 1.41));   // dobradiças
-    g.add(at(box(0.05, 0.9, 0.05, '#8a8f96'), -2.45, 2.5, zz * 1.425));            // trava da porta
-  }
-  g.add(at(box(0.12, 0.3, 2.3, '#2e3036'), -3.6, 0.8, 0));                         // travessa das lanternas
-  g.add(at(box(0.14, 0.14, 2.2, '#2e3036'), -3.66, 0.42, 0));                      // para-choque traseiro (barra baixa)
-  for (const zz of [0.7, -0.7]) g.add(at(box(0.3, 0.42, 0.1, '#2e3036'), -3.48, 0.56, zz));
-  for (const zz of [1, -1]) {
-    g.add(at(box(0.1, 0.26, 0.56, '#2a2c30'), -3.71, 0.8, zz * 0.86));            // caixa da lanterna (presa na travessa)
-    const red = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.17, 0.22), TAIL); red.position.set(-3.785, 0.8, zz * 0.74); g.add(red);   // lente vermelha, saltada da caixa
-    const amb = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.17, 0.18), HAZARD); amb.position.set(-3.785, 0.8, zz * 1.0); g.add(amb);   // pisca-alerta
-  }
-  // cabine (sobre as rodas da frente) e a parte de baixo, entre as rodas
-  g.add(at(box(2.3, 1.75, 2.5, '#4a5568'), 2.3, 1.825, 0));
-  g.add(at(box(2.2, 0.48, 1.96, '#2e3036'), 2.3, 0.74, 0));
-  g.add(at(box(0.08, 1.0, 2.1, '#2b4a6e'), 3.47, 2.1, 0));                       // para-brisa
+  const cargo = at(box(4.6, 3.0, 2.6, TRUCK_COLORS[0]), -1.2, 2.0, 0);
+  g.add(cargo);
+  g.add(at(box(4.62, 0.25, 2.62, '#c9ced6'), -1.2, 3.55, 0));                    // borda do teto do baú
+  g.add(at(box(2.3, 2.2, 2.5, '#4a5568'), 2.3, 1.6, 0));                         // cabine
+  g.add(at(box(0.08, 1.0, 2.1, '#2b4a6e'), 3.46, 2.1, 0));                       // para-brisa
   g.add(at(box(0.25, 0.4, 2.6, '#2e3036'), 3.5, 0.75, 0));                       // para-choque
-  for (const x of [-2.9, -1.4, 2.4]) for (const zz of [1.2, -1.2]) g.add(at(cyl(0.5, 0.5, 0.4, '#1f2023', 12), x, 0.5, zz, Math.PI / 2, 0, 0));
-  g.add(at(box(6.5, 0.3, 1.9, '#2e3036'), -0.1, 0.55, 0));                       // chassi
-  for (const zz of [1.0, -1.0]) { const l = new THREE.Mesh(new THREE.SphereGeometry(0.16, 8, 6), HAZARD); l.position.set(3.55, 1.25, zz); l.onBeforeRender = flashTick; g.add(l); }   // pisca-alerta da frente
+  for (const x of [-2.9, -1.4, 2.4]) for (const zz of [1.2, -1.2]) {
+    g.add(at(cyl(0.5, 0.5, 0.4, '#1f2023', 12), x, 0.5, zz, Math.PI / 2, 0, 0));
+  }
+  g.add(at(box(6.6, 0.3, 2.0, '#2e3036'), -0.15, 0.55, 0));                      // chassi
+  for (const zz of [1.0, -1.0]) {                                                  // pisca-alerta ligado (parado em fila dupla)
+    const l = new THREE.Mesh(new THREE.SphereGeometry(0.16, 8, 6), HAZARD); l.position.set(3.5, 1.2, zz); l.onBeforeRender = flashTick; g.add(l);
+    const r = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.3, 0.3), HAZARD); r.position.set(-3.52, 0.95, zz * 1.05); g.add(r);
+  }
   const st = new THREE.Group();
   for (const zz of [1.35, -1.35]) { st.add(at(box(0.12, 0.42, 0.06, '#2e3036'), 3.0, 2.3, zz)); st.add(at(box(0.06, 0.06, 0.3, '#2e3036'), 3.0, 2.3, zz * 0.92)); }   // retrovisores
   st.add(at(box(2.32, 0.18, 1.6, '#3a3d44'), 2.3, 2.79, 0));                        // teto da cabine
-  for (const zz of [1, -1]) st.add(at(box(0.9, 0.6, 0.08, '#2b4a6e'), 2.3, 2.05, zz * 1.27));   // janelas laterais
-  // caixas lá dentro (fundo do baú) — o ajudante tira a da beira e leva para a pilha
-  const bx = figureItem('box'), bGeo = bx.children[0].geometry, bMat = bx.children[0].material;
-  const inside = [[0.55, 0, 0.62], [0.55, 0, -0.1], [0.55, 0, -0.82], [0.5, 0.5, 0.3], [0.52, 0.5, -0.5], [-0.2, 0, 0.6], [-0.18, 0, -0.75], [0.55, 1.0, -0.15]];
-  for (const [x, y, z] of inside) { const m = new THREE.Mesh(bGeo, bMat); m.position.set(x, 1.14 + y + 0.25, z); m.rotation.y = (x * 7 + z * 3) % 0.2; m.scale.setScalar(BOXS); st.add(m); }
+  st.add(at(box(0.08, 0.6, 0.9, '#2b4a6e'), 2.3, 2.05, 1.26));                       // janela lateral
+  st.add(at(box(0.08, 0.6, 0.9, '#2b4a6e'), 2.3, 2.05, -1.26));
+  // porta de trás do baú aberta (uma folha virada para o lado) e um ajudante descarregando caixas
+  st.add(at(box(0.06, 2.8, 2.5, '#2a2c30'), -3.53, 2.0, 0));                         // vão escuro do baú
+  st.add(at(box(1.25, 2.8, 0.06, '#c9ced6'), -2.88, 2.0, 1.34));                   // folha aberta, encostada na lateral
+  for (const [x, y, z, s] of [[-4.2, 0, -0.6, 0.6], [-4.25, 0.6, -0.55, 0.5], [-4.6, 0, -0.05, 0.5]]) { st.add(at(box(s, s, s, '#c8955a'), x, y + s / 2, z, 0, x * 0.4, 0)); st.add(at(box(s + 0.01, 0.06, s * 0.25, '#e6d3a8'), x, y + s, z, 0, x * 0.4, 0)); }
   st.traverse(o => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
   bakeStatic(st); g.add(st);
+  const helper = buildWorker('carry'); helper.position.set(-4.0, 0, 0.75); helper.rotation.y = Math.PI / 2 + 0.5; helper.scale.setScalar(1.25); g.add(helper);
   const plateT = textTexture('FRETES', { width: 256, height: 96, bg: '#fbf7ee', fg: '#2f3236', font: 'bold 60px "Trebuchet MS", sans-serif' });
   const pm = new THREE.MeshStandardMaterial({ map: plateT, roughness: 0.8 });
-  for (const zz of [1, -1]) { const p = new THREE.Mesh(new THREE.PlaneGeometry(2.6, 0.95), pm); p.position.set(-0.9, 2.7, zz * 1.34); p.rotation.y = zz > 0 ? 0 : Math.PI; g.add(p); }
+  for (const zz of [1, -1]) { const p = new THREE.Mesh(new THREE.PlaneGeometry(2.6, 0.95), pm); p.position.set(-0.9, 2.2, zz * 1.315); p.rotation.y = zz > 0 ? 0 : Math.PI; g.add(p); }
   g.traverse(o => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
-  liner.castShadow = false;
-  // caixas que mudam: a da beira do assoalho e a pilha no chão (uma malha instanciada)
-  const boxes = dynamic(new THREE.InstancedMesh(bGeo, bMat, PILE.length + 1));
-  boxes.castShadow = true; boxes.receiveShadow = true; boxes.count = 0; g.add(boxes);
+  dynamic(cargo);                              // (a cor do baú muda a cada partida; o resto vira poucas malhas)
   g.children.forEach(o => { if (o.material === HAZARD) dynamic(o); });
   bakeStatic(g);
   g.scale.setScalar(0.8);                      // menor: na diagonal não toma a rua de ponta a ponta
   g.userData.cargo = cargo;
-  const helper = buildHelper(g, boxes); g.add(helper.root);
-  g.userData.helper = helper;
   return g;
 }
-
-/** Ajudante do caminhão: tira a caixa da beira do baú, leva até a pilha, abaixa para pôr no lugar e volta; quando a pilha
- *  completa, fica esperando de mãos na cintura, olhando o movimento (e a van, se ela chega perto). Coordenadas no espaço
- *  do caminhão (o ajudante tem escala 1,25 lá dentro: no mundo, o mesmo tamanho dos moradores). */
-const _o = new THREE.Object3D(), _B = new THREE.Vector3();
-function buildHelper(truck, boxes) {
-  const k = crewK++;
-  const P = buildFigure({ k, skin: WSKINS[(k + 4) % WSKINS.length], hair: WHAIR[(k + 3) % WHAIR.length], top: '#2f6fb0', short: true, collar: '#f4f1ea', pants: '#3d4a66',
-    shoes: '#2b2522', sneakers: true, hat: 'cap', hatColor: '#f4f1ea', capLogo: '#2f6fb0', gloves: '#c9b27a', tag: '#f4f1ea' });
-  P.root.scale.setScalar(1 / 0.8);
-  const box = figureItem('box');                                      // (segura só enquanto leva: give/drop)
-  const f = addCrew({ P, root: P.root, box, boxes, truck, st: { mode: 'idle', t: 0, ph: 0, amp: 0 }, ph: 'wait', pt: 0, filled: 0, slot: 0, door: true,
-    x: DOOR_STAND[0], z: DOOR_STAND[1], yaw: Math.PI / 2, tx: 0, tz: 0, wait: 1, look: 0, rest: 'hips' });
-  f.reset = () => { f.filled = 1 + Math.floor(Math.random() * 2); f.door = true; f.ph = 'wait'; f.pt = 0; f.wait = 0.5 + Math.random() * 2; f.x = DOOR_STAND[0]; f.z = DOOR_STAND[1]; f.yaw = Math.PI / 2; P.drop(box); syncBoxes(f); };
-  f.tick = (dt, van) => helperTick(f, dt, van);
-  f.reset();
-  return f;
-}
-function syncBoxes(f) {
-  let n = 0;
-  const put = (x, y, z, ry) => { _o.position.set(x, y, z); _o.rotation.set(0, ry, 0); _o.scale.setScalar(BOXS); _o.updateMatrix(); f.boxes.setMatrixAt(n++, _o.matrix); };
-  if (f.door) put(DOOR_BOX[0], DOOR_BOX[1] + 0.25, DOOR_BOX[2], 0.06);
-  for (let i = 0; i < f.filled; i++) { const q = PILE[i]; put(q[0], q[1] + 0.25, q[2], q[3]); }
-  f.boxes.count = n; f.boxes.instanceMatrix.needsUpdate = true;
-}
-/** Ponto do caminhão (local, sem escala) → espaço do corpo do ajudante. */
-function toBody(f, x, y, z, out) {
-  const dx = x - f.x, dz = z - f.z, c = Math.cos(-f.yaw), s = Math.sin(-f.yaw);
-  return out.set((dx * c + dz * s) * 0.8, y * 0.8, (-dx * s + dz * c) * 0.8);
-}
-const CARRY = new THREE.Vector3(0, 0.94, 0.42);
-function helperTick(f, dt, van) {
-  const P = f.P, b = P.b, s = f.st;
-  f.t += dt; f.pt += dt; s.t = f.t;
-  vanLocal(f, van, dt);
-  let mode = 'idle', act = null, at0 = 0, crouch = 0, bend = 0, hands = null, holding = P.has(f.box);
-  const walkTo = (x, z) => {                                         // anda (1 m/s) até o ponto; true quando chegou
-    const dx = x - f.x, dz = z - f.z, d = Math.hypot(dx, dz);
-    if (d < 0.03) return true;
-    const v = Math.min(d, 1.25 * dt); f.x += dx / d * v; f.z += dz / d * v;
-    f.yaw += wrapA(Math.atan2(dx, dz) - f.yaw) * Math.min(1, dt * 7);
-    mode = 'walk'; s.ph += v * 0.8 * Math.PI / 0.42; return false;
-  };
-  const turnTo = a => { f.yaw += wrapA(a - f.yaw) * Math.min(1, dt * 6); return Math.abs(wrapA(a - f.yaw)) < 0.08; };
-  const q = PILE[Math.min(f.filled, PILE.length - 1)], appr = [q[0] + (q[1] > 0.9 ? 0 : 0), q[2] + 0.92];
-  switch (f.ph) {
-    case 'wait':                                                      // na porta, um respiro antes da próxima
-      if (f.pt > f.wait && turnTo(Math.PI / 2)) { f.ph = f.filled >= PILE.length ? 'done' : 'take'; f.pt = 0; }
-      break;
-    case 'take': {                                                    // inclina, pega a caixa da beira e traz para o peito
-      const u = f.pt;
-      bend = 0.22 * ss(0, 0.6, u) * (1 - ss(0.85, 1.4, u));
-      if (u < 0.85) { const c = toBody(f, DOOR_BOX[0], DOOR_BOX[1] + 0.25, DOOR_BOX[2], _B); hands = [c.x - 0.3, c.y - 0.03, c.z + 0.02, c.x + 0.3, c.y - 0.03, c.z + 0.02]; }
-      else {
-        if (f.door) { f.door = false; P.give(f.box, 'body'); holding = true; syncBoxes(f); }
-        const c0 = toBody(f, DOOR_BOX[0], DOOR_BOX[1] + 0.25, DOOR_BOX[2], _B), k = ss(0.85, 1.4, u);
-        f.box.position.copy(c0).lerp(CARRY, k); f.box.rotation.set(0, 0.06 * (1 - k), 0);
-        const c = f.box.position; hands = [c.x - 0.29, c.y - 0.03, c.z + 0.02, c.x + 0.29, c.y - 0.03, c.z + 0.02];
-      }
-      if (u > 1.45) { f.ph = 'go'; f.pt = 0; }
-      break;
-    }
-    case 'go':                                                        // leva a caixa até a frente da pilha
-      if (walkTo(appr[0], appr[1]) && turnTo(Math.PI)) { f.ph = 'put'; f.pt = 0; }
-      break;
-    case 'put': {                                                     // abaixa (mais, se a pilha ainda está baixa) e põe a caixa no lugar
-      const u = f.pt, low = q[1] < 0.25 ? 1 : q[1] < 0.75 ? 0.45 : 0;
-      const dn = ss(0, 0.7, u) * (1 - ss(1.15, 1.7, u));
-      crouch = low * dn; bend = (0.25 + 0.35 * low) * dn;
-      if (u < 0.95) {
-        const c1 = toBody(f, q[0], q[1] + 0.25, q[2], _B), k = ss(0.1, 0.9, u);
-        f.box.position.copy(CARRY).lerp(c1, k); f.box.rotation.set(0, wrapA(q[3] - f.yaw + Math.PI) * k, 0);
-        const c = f.box.position; hands = [c.x - 0.29, c.y - 0.03, c.z + 0.02, c.x + 0.29, c.y - 0.03, c.z + 0.02];
-      } else if (holding) { P.drop(f.box); holding = false; f.filled++; f.door = f.filled < PILE.length; syncBoxes(f); }
-      if (u > 1.75) { f.ph = 'back'; f.pt = 0; }
-      break;
-    }
-    case 'back':
-      if (walkTo(DOOR_STAND[0], DOOR_STAND[1])) { f.ph = 'wait'; f.pt = 0; f.wait = Math.random() < 0.25 ? 2.6 : 0.3 + Math.random() * 1.2; f.rest = f.wait > 2 ? 'stretch' : 'hips'; }
-      break;
-    case 'done':                                                      // pilha completa: espera, mãos na cintura, olhando a rua
-      turnTo(Math.PI / 2 + 1.1);
-      if (f.pt > 9 && Math.random() < dt * 0.15) f.pt = 0;
-      break;
-  }
-  if (f.ph === 'wait' && f.rest === 'stretch' && f.wait > 2 && f.pt > 0.4) { act = 'stretch'; at0 = f.pt - 0.4; }
-  // olhar: a van perto; parado, a rua; trabalhando, o que está fazendo
-  let ly = 0, lp = 0;
-  if (f.vd < 11) ly = THREE.MathUtils.clamp(wrapA(Math.atan2(f.vx, f.vz) - (f.yaw - f.root.rotation.y)), -1.2, 1.2);
-  else if (f.ph === 'done' || f.ph === 'wait') ly = 0.7 * Math.sin(f.t * 0.45 + k0(f));
-  if (f.ph === 'take' || f.ph === 'put') lp = 0.3;
-  f.look += (ly - f.look) * Math.min(1, dt * 3);
-  s.mode = mode; s.amp = mode === 'walk' ? 0.85 : 0;
-  animatePerson(P, { mode, ph: s.ph, amp: s.amp, t: f.t, act, at: at0, lookYaw: f.look, lookPitch: lp });
-  f.root.position.set(f.x, 0, f.z); f.root.rotation.y = f.yaw;
-  if (crouch > 0) { b.body.position.y -= 0.3 * crouch; b.hipL.rotation.x -= 1.0 * crouch; b.hipR.rotation.x -= 1.0 * crouch; b.kneeL.rotation.x += 1.85 * crouch; b.kneeR.rotation.x += 1.85 * crouch; }
-  b.waist.rotation.x += bend;
-  if (hands) { reach(P, -1, hands[0], hands[1], hands[2], -0.7, -0.6, -0.1); reach(P, 1, hands[3], hands[4], hands[5], 0.7, -0.6, -0.1); }
-  else if (!holding && act !== 'stretch' && (f.ph === 'done' || f.ph === 'wait')) { reach(P, -1, -0.38, 0.68, -0.02, -1, -0.1, -0.3); reach(P, 1, 0.38, 0.68, -0.02, 1, -0.1, -0.3); }
-}
-const k0 = f => f.P.k * 1.7;
 
 /** Buraco largo no asfalto (atravessa a rua inteira): borda de asfalto quebrado e levantado, terra em volta, a parede de
  *  dentro em degradê (dá profundidade sem furar o chão), água parada no fundo, cones e um cavalete de aviso. */
 function buildHole() {
   const g = new THREE.Group();
   const ell = (rx, rz, h, col, y, x = 0, z = 0, seg = 20) => { const m = at(cyl(1, 1, h, col, seg), x, y, z); m.scale.set(rx, 1, rz); g.add(m); return m; };
-  // camadas em degraus de 1,5 cm (antes 2,5–7,5 mm: as de cima disputavam a mesma altura com as de baixo, de longe)
-  ell(4.0, 2.4, 0.03, '#9a7448', 0.015);                                           // terra solta: destaca de longe
-  ell(3.55, 1.85, 0.045, '#5a4630', 0.0225);                                       // parede de dentro (terra úmida)
-  ell(3.15, 1.55, 0.06, '#3a2c1f', 0.03, 0.05, 0.08);
-  ell(2.6, 1.22, 0.075, '#1d1712', 0.0375, 0.12, 0.14);                            // fundo escuro, um pouco deslocado (parece mais fundo)
-  ell(1.4, 0.62, 0.09, '#4d5a63', 0.045, 0.3, 0.22, 14);                           // água parada no fundo
-  ell(0.5, 0.18, 0.105, '#8aa0ad', 0.0525, 0.0, 0.1, 10);                          // reflexo
+  ell(4.0, 2.4, 0.04, '#9a7448', 0.02);                                            // terra solta: destaca de longe
+  ell(3.55, 1.85, 0.05, '#5a4630', 0.03);                                          // parede de dentro (terra úmida)
+  ell(3.15, 1.55, 0.055, '#3a2c1f', 0.035, 0.05, 0.08);
+  ell(2.6, 1.22, 0.06, '#1d1712', 0.04, 0.12, 0.14);                               // fundo escuro, um pouco deslocado (parece mais fundo)
+  ell(1.4, 0.62, 0.065, '#4d5a63', 0.045, 0.3, 0.22, 14);                          // água parada no fundo
+  ell(0.5, 0.18, 0.068, '#8aa0ad', 0.046, 0.0, 0.1, 10);                           // reflexo
   for (let k = 0; k < 18; k++) {                                                   // asfalto quebrado e levantado na borda
     const a = k / 18 * Math.PI * 2;
     g.add(at(box(0.75 + (k % 3) * 0.15, 0.18, 0.5, k % 2 ? '#5d6470' : '#474c55'), Math.cos(a) * 3.85, 0.08, Math.sin(a) * 2.0,
@@ -481,7 +219,7 @@ function buildHole() {
   for (const s of [-1, 1]) g.add(at(box(0.1, 1.2, 0.1, '#2e3036'), 3.9 + s * 0.5, 0.58, -0.6, 0.25, 0, 0));
   const plate = textTexture('BURACO', { width: 256, height: 96, bg: '#ffc61a', fg: '#1b1b1b', font: 'bold 56px "Trebuchet MS", sans-serif' });
   const pm = new THREE.MeshStandardMaterial({ map: plate, roughness: 0.7 });
-  for (const r of [0, Math.PI]) { const p = new THREE.Mesh(new THREE.PlaneGeometry(1.4, 0.5), pm); p.position.set(3.9, 1.05, r ? -0.69 : -0.51); p.rotation.y = r; g.add(p); }
+  for (const r of [0, Math.PI]) { const p = new THREE.Mesh(new THREE.PlaneGeometry(1.4, 0.5), pm); p.position.set(3.9, 1.05, r ? -0.67 : -0.53); p.rotation.y = r; g.add(p); }
   g.add(at(box(1.46, 0.55, 0.1, '#2e3036'), 3.9, 1.05, -0.6));
   g.scale.setScalar(0.68);                     // mais estreito que a rua
   g.traverse(o => { if (o.isMesh) o.receiveShadow = true; });
@@ -491,7 +229,6 @@ function buildHole() {
 
 /** Engarrafamento: fila de carros nas duas faixas ao longo de um trecho de rua (ao longo do X local). */
 export const CAR_COLORS = ['#d8473a', '#3a78d4', '#efbf2a', '#3c9d55', '#f2f2f2', '#8a55c4', '#ff8a1e', '#2b2d33', '#e86aa0'];
-const LENS_R = new THREE.BoxGeometry(0.05, 0.22, 0.36), LENS_F = new THREE.BoxGeometry(0.05, 0.2, 0.34);
 export function buildCar() {
   const g = new THREE.Group();
   const body = at(box(4.4, 0.9, 1.9, CAR_COLORS[0]), 0, 0.85, 0);
@@ -500,11 +237,9 @@ export function buildCar() {
   g.add(at(box(2.0, 0.08, 1.6, '#7b828c'), -0.3, 2.12, 0));                                  // teto
   for (const x of [-1.4, 1.4]) for (const zz of [0.95, -0.95]) g.add(at(cyl(0.42, 0.42, 0.3, '#1f2023', 10), x, 0.42, zz, Math.PI / 2, 0, 0));
   const brake = mat('#ff3b30', { emissive: '#ff1a1a', emissiveIntensity: 1.1 }), head = mat('#fff3c0', { emissive: '#ffe9a0', emissiveIntensity: 0.4 });
-  // lanternas e faróis: caixa escura saltada da carroceria e a lente saltada da caixa (nada na mesma superfície da lataria)
-  for (const zz of [0.68, -0.68]) {
-    g.add(at(box(0.06, 0.3, 0.46, '#1f2023'), -2.225, 0.95, zz), at(box(0.06, 0.28, 0.44, '#1f2023'), 2.225, 0.95, zz));
-    const r = new THREE.Mesh(LENS_R, brake); r.position.set(-2.27, 0.95, zz); r.userData.brake = true; g.add(r);   // luzes de freio
-    const f = new THREE.Mesh(LENS_F, head); f.position.set(2.27, 0.95, zz); g.add(f);
+  for (const zz of [0.7, -0.7]) {
+    const r = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.25, 0.4), brake); r.position.set(-2.2, 0.95, zz); r.userData.brake = true; g.add(r);   // luzes de freio
+    const f = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.22, 0.4), head); f.position.set(2.2, 0.95, zz); g.add(f);
   }
   g.traverse(o => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
   g.userData.body = body;
@@ -548,7 +283,7 @@ const key = (...a) => a.join(',');
 function placeObra(b, c, on) {
   const o = b.userData.obra; if (!o) return;
   o.visible = on; if (!on) return;
-  const N = GRID, { worker, shovel, og, crew } = o.userData, SW = ROAD / 2 - 0.42;   // no asfalto, junto ao meio-fio (os pés no chão)
+  const N = GRID, { worker, shovel, og } = o.userData, SW = ROAD / 2 - 0.15;
   let lx, along;
   if (c[0] === 'H') {                                          // rua leste–oeste: local +z = +x do mundo, local −x = +z do mundo
     const [, , i, side] = c, s = i < N ? 1 : -1;                // calçada do lote ao sul (ou ao norte na última rua)
@@ -557,14 +292,14 @@ function placeObra(b, c, on) {
     const [, j] = c; lx = j < N ? SW : -SW; along = 1;
   }
   og.rotation.y = along > 0 ? 0 : Math.PI;                     // asfalto novo do lado do trecho sem saída (não no cruzamento)
-  const wy = lx > 0 ? -Math.PI / 2 : Math.PI / 2;
-  // o sinaleiro fica do lado de onde vem o trânsito (mais longe do cavalete, à vista de quem chega); o do soquete, no asfalto novo
-  worker.position.set(lx, 0, along * 3.4); worker.rotation.y = wy;
-  shovel.position.set(lx, 0, along * 1.5); shovel.rotation.y = wy + along * (lx > 0 ? -0.35 : 0.35);   // (um pouco virado para o cavalete)
-  // direção (no corpo do sinaleiro) da ponta do cavalete mais perto dele: é para lá que ele aponta
-  const dx = -0.4 * lx, dz = -along * 3.4, L = Math.hypot(dx, dz), cw = Math.cos(wy), sw = Math.sin(wy);
-  crew[0].bar.set((dx * cw - dz * sw) / L, 0, (dx * sw + dz * cw) / L);
-  for (const f of crew) { f.t = Math.random() * 30; f.pt = Math.random() * 3; f.vd = 1e9; f.alert = 0; }
+  worker.position.set(lx, 0.17, along * 1.3); worker.rotation.y = lx > 0 ? -Math.PI / 2 : Math.PI / 2;
+  shovel.position.set(lx, 0.17, along * 2.6); shovel.rotation.y = (lx > 0 ? -Math.PI / 2 : Math.PI / 2) + along * 0.4;
+  worker.userData.t0 = Math.random() * 10;
+  const p = worker.userData.paddle;
+  if (p && !p.userData.hooked) {                               // a placa vira de PARE para SIGA de tempos em tempos
+    p.userData.hooked = true;
+    p.children[0].onBeforeRender = () => { const t = clockT + worker.userData.t0; const k = Math.min(1, Math.max(0, (Math.sin(t * 0.35) + 0.15) * 4)); p.rotation.y = k * Math.PI; };
+  }
 }
 
 /** O conjunto de barreiras deixa tudo alcançável a partir da entrada? (`skipM`: portões dos trechos engarrafados, que ficam de fora de propósito) */
@@ -681,7 +416,7 @@ export function createBarriers() {
       b.rotation.y = type === 'truck'
         ? (Math.random() < 0.5 ? Math.PI / 4 : -Math.PI / 4) + (Math.random() < 0.5 ? Math.PI : 0)   // caminhão parado na diagonal
         : alongX ? Math.PI / 2 : 0;
-      if (type === 'truck') { b.userData.cargo.material = mat(TRUCK_COLORS[Math.floor(Math.random() * TRUCK_COLORS.length)]); b.userData.helper.reset(); }
+      if (type === 'truck') b.userData.cargo.material = mat(TRUCK_COLORS[Math.floor(Math.random() * TRUCK_COLORS.length)]);
       const s = alongX ? { x0: x - T.half, x1: x + T.half, z0: z - T.cross, z1: z + T.cross }
                        : { x0: x - T.cross, x1: x + T.cross, z0: z - T.half, z1: z + T.half };
       s.bar = n;                                   // (contador de batidas e missões das barreiras)
