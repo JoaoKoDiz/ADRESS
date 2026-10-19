@@ -1,0 +1,1199 @@
+diff --git a/src/battle.js b/src/battle.js
+index cc1cdbc..df588dd 100644
+--- a/src/battle.js
++++ b/src/battle.js
+@@ -7,7 +7,11 @@
+ // Estrutura fixa: 18 trechos, 8 fragmentos e o ponto final (fragmentos/final = pausas neutras provisórias, com ganchos).
+ // Música: a adaptação de "Finale" (battleMusic.js); a POSIÇÃO DELA é o relógio: cada trecho tem uma janela (TL) e os
+ // fragmentos começam no alarme do episódio da faixa — quando a janela acaba, o trecho é interrompido e a batalha segue.
+-// Duas câmeras: a de jogo (elevada) em toda janela de ataque; a de impacto (baixa) só em intervalos seguros e na apresentação.
++// Câmeras: a de jogo é baixa e próxima, atrás e à direita do jogador (arena adaptada a ela: grade mais curta, fissuras e
++// estruturas fora das silhuetas, marcas no chão sob os projéteis, prévia da placa, círculo que não sai do quadro); a de
++// impacto (baixa, de lado) só em intervalos seguros e na apresentação; a da grade erguida no REFLETIR aprimorado.
++// Depois do 2º fragmento azul a batalha se intensifica: rajadas/cruzados/leques no Bloquear, o K se defende sozinho (aos
++// poucos), REFLETIR com a grade erguida e trocas, e CONDUZIR aprimorado (a figura segura o objeto; os projéteis o rasgam).
+ // Efeitos curtos procedurais pela saída de efeitos.
+ import * as THREE from 'three';
+ import { buildStandingReader, reachArm } from './models/reader.js';
+@@ -20,8 +24,10 @@ import { createReflectPlus } from './reflectPlus.js';
+ export const BATTLE_CP_KEY = 'adress.dev.battle';   // teste pelo cadeado: libera o cartão Sacrifício para começar a batalha
+ 
+ // ---------- constantes (fáceis de ajustar) ----------
+-const GRID = { x0: -7, x1: 7, z0: -9, z1: 9, cell: 1 };                // 14 × 18 células inteiras, sem moldura
+-const LIM = { x0: -6.5, x1: 6.5, z0: -9, z1: 9 };                  // limites do círculo (os de sempre)          // X = lados, Z = comprimento (figura em −Z, jogador em +Z)
++// Arena adaptada à câmera baixa: a grade (e a área do círculo) é a faixa que essa câmera lê bem — da frente do K até
++// logo atrás do jogador. Além dela, só o vazio, as fissuras e a figura. Células inteiras, sem moldura.
++const GRID = { x0: -7, x1: 7, z0: -2, z1: 9, cell: 1 };                // 14 × 11 células
++const LIM = { x0: -6.5, x1: 6.5, z0: -2, z1: 9 };                  // limites do círculo          // X = lados, Z = comprimento (figura em −Z, jogador em +Z)
+ const P_POS = new THREE.Vector3(-1.0, 0, 8.4), K_POS = new THREE.Vector3(0.7, 0, 2.6), F_POS = new THREE.Vector3(0, 0, -11);
+ const F_SCALE = [4.6, 5.0, 4.6];
+ const FACE_NZ = Math.PI / 2, FACE_PZ = -Math.PI / 2;                 // os modelos olham para +X: π/2 → −Z, −π/2 → +Z
+@@ -31,9 +37,12 @@ const H_PROJ = 1.05, PR = 0.2, HIT_R = 0.45;                          // altura
+ // angle: 0° = de frente para o jogador (ele olha para −Z, a figura), 90° = à direita, 180° = atrás.
+ const camAt = (angle, dist, height) => { const a = angle * Math.PI / 180; return new THREE.Vector3(P_POS.x + Math.sin(a) * dist, height, P_POS.z - Math.cos(a) * dist); };
+ const CAMS = {
+-  // jogo: a 1ª câmera elevada (diagonal atrás/à direita, altura 5, fov 50) com o ângulo e a mira ajustados por busca para
+-  // caberem a área do círculo à frente do jogador, as fissuras laterais e a figura inteira (antes: 128°, 10,5, mira −0,4/2,3/−3)
+-  game: { pos: camAt(136, 11.25, 5.0), look: new THREE.Vector3(-1.73, 1.79, -1.94), fov: 50 },
++  // jogo: baixa e próxima, atrás e à direita do jogador (abaixo do topo da cabeça, ~2,5), olhando a arena na diagonal para a
++  // figura: o jogador à esquerda em primeiro plano, o K no meio, a figura inteira ao fundo. A arena foi adaptada a ela
++  // (grade mais curta, fissuras visíveis, marcas no chão sob os projéteis, prévia da placa no círculo).
++  game: { pos: camAt(129, 5.7, 2.3), look: new THREE.Vector3(-1.8, 0.95, -2.3), fov: 60 },
++  // a câmera elevada anterior (136°, 11,25, altura 5): fica aqui só como referência (GAME_CAM = 'high' a usa de novo)
++  high: { pos: camAt(136, 11.25, 5.0), look: new THREE.Vector3(-1.73, 1.79, -1.94), fov: 50 },
+   // impacto: baixa e próxima (jogador em primeiro plano, K entre os dois, a figura ao fundo) — sobre o 4º quadrado à direita do jogador
+   impact: { pos: new THREE.Vector3(3.5, 1.5, 8.8), look: new THREE.Vector3(-11.0, 3.25, -4.96), fov: 68 },
+   // grade erguida (REFLETIR aprimorado): baixa, perto, atrás e à direita do jogador, olhando pela lateral dele para a figura
+@@ -53,21 +62,31 @@ const glowPulse = age => age < GLOW.up ? age / GLOW.up : Math.max(0, 1 - (age -
+ // saem a 0°/45°/90° e devolvem exatas.
+ const REFL = { step: 0.3, maxLen: 7.0, eps: 0.15, minSeg: 0.45, h: 1.6, minLen: 0.6, assist: 0.09 };   // paredes não expiram
+ const STRUCT = { hitR: 0.95 };
+-// Conduzir: turn = giro máximo dos projéteis (rad/s; perseguem como mísseis, sem fila de posições); grabR = distância do
++// Conduzir: turn = giro máximo dos projéteis (rad/s; perseguem como mísseis, sem fila de posições; 3,3 = raio de curva ~1,7:
++// ainda fazem a curva com inércia, mas dá para enfileirá-los e passá-los pela fenda na arena adaptada — com 2,6 quase nunca); grabR = distância do
+ // círculo ao pé do objeto para agarrar; pull = quanto puxar até romper; objY = altura do objeto; formT = abertura do portal;
+-// closeDelay/closeT = espera depois do último e fechamento; portalW/H = tamanho; passW = meia-largura estável da passagem;
++// closeDelay/closeT = espera depois do último e fechamento; portalW/H = tamanho; passW = meia-largura estável da passagem
++// (1,0: a abertura visível, 1,15 × 0,9 do contorno que ondula — o que se vê entrar, entra);
+ // kLevel/kDelay/kOpenT = o K abre o portal sozinho nos trechos finais (nível de autonomia, espera e duração do gesto).
+-const GUIDE = { turn: 2.6, grabR: 0.8, pull: 3.0, objY: 2.2, formT: 0.7, closeDelay: 2.5, closeT: 0.5, portalW: 2.3, portalH: 1.5,
+-  passW: 0.85, kLevel: 3, kDelay: 1.5, kOpenT: 2.4, spikes: 16, far: 45, ring: 48 };
++const GUIDE = { turn: 3.3, grabR: 0.8, pull: 3.0, objY: 2.2, formT: 0.7, closeDelay: 2.5, closeT: 0.5, portalW: 2.3, portalH: 1.5,
++  passW: 1.0, kLevel: 3, kDelay: 1.5, kOpenT: 2.4, spikes: 16, far: 45, ring: 48 };
++// CONDUZIR aprimorado (só depois do 2º fragmento azul, trechos com `held`): a figura supera a defesa anterior — segura o
++// objeto por um fio preso à mão dela e, se o jogador tenta puxar a ponta, dá um tranco e a ponta escapa. A condução dá outra
++// resposta: os projéteis atraídos são levados CONTRA o objeto; cada um que bate o racha (`held` = batidas para romper) e,
++// rompido, o fio se parte e a fenda se abre ali; os que sobram vão para o vazio branco como antes. y = altura do objeto (a
++// do voo, para os projéteis baterem nele); hitR = raio do choque; yankAt = tensão em que ela dá o tranco.
++const GH = { y: H_PROJ + 0.15, hitR: 0.62, yankAt: 0.36, yankT: 0.32, regrab: 0.45, snapT: 0.6 };
+ // Autonomia do K por nível (gap = intervalo mínimo entre defesas; chance por projétil; hesitate = tempo do gesto;
+ // self = defende a si mesmo; other = chance de proteger o jogador)
+ const K_DEF = [null, { gap: 9, chance: 0.35, hesitate: 0.7, self: true, other: 0 }, { gap: 6, chance: 0.5, hesitate: 0.5 }, { gap: 4.5, chance: 0.65, hesitate: 0.4 }, { gap: 3.5, chance: 0.7, hesitate: 0.3, other: 0.45 }];
+ const kDef = l => Object.assign({}, K_DEF[1], K_DEF[l]);
++const K_ACT_AT = 1.2;                                                 // o K ergue a placa quando faltam ~1,2 s para o projétil chegar
+ const T = { fadeIn: 0.7, startFade: 1.5, intro: 1.0, clear: 1.0, out: 0.7, freeze: 0.35, failMsg: 1.0 };
+ const RETRY_MIN = 4;                                                  // falha com menos que isso de janela: o trecho não recomeça (a música segue)
+ const BOUND = { x: 14, z: 16 };
+ // fissuras suspensas nas laterais (fora da grade)
+-const FIS = { L1: [-8.4, -6.5], L2: [-8.4, -3.5], L3: [-8.4, -0.5], R1: [8.4, -6.5], R2: [8.4, -2.5], R3: [8.4, 1.5] };
++// (postas onde a câmera de jogo as vê: as da esquerda mais ao fundo, para não ficarem atrás do jogador; a R3 dentro do quadro)
++const FIS = { L1: [-8.4, -8.0], L2: [-8.4, -5.0], L3: [-8.0, -2.5], R1: [8.4, -6.5], R2: [8.4, -3.0], R3: [8.4, 0.2] };
+ const COLOR_HEX = { azul: '#003EFF', verde: '#00C000', laranja: '#FCA600', roxo: '#9B00FF' };
+ 
+ // ---------- estrutura: 18 trechos (S), 8 fragmentos (F) e o final (E) ----------
+@@ -131,33 +150,40 @@ const SK = (dx, dz, d) => ({ x: +(K_POS.x + dx * d).toFixed(2), z: +(K_POS.z + d
+ const SP = (dx, dz, d) => ({ x: +(P_POS.x + dx * d).toFixed(2), z: +(P_POS.z + dz * d).toFixed(2), target: 'P' });
+ const st = (o, period, speed, phase) => Object.assign(o, { period, speed, phase });
+ const D = Math.SQRT1_2;
+-// posições conferidas pela câmera: estruturas longe da cabeça do jogador na tela; núcleos na metade de perto da grade
+-const SA = () => SK(-D, -D, 13), SB = () => SK(D, -D, 9.6), SC = () => SP(D, -D, 12.6), SD = () => SP(-D, -D, 14);
++// posições conferidas pela câmera de jogo (baixa): nenhuma estrutura fica atrás do jogador ou do K na tela
++const SA = () => SK(-D, -D, 13), SB = () => SK(D, -D, 9.6), SC = () => SP(D, -D, 12.6), SD = () => SP(0, -1, 15);
+ const SEGMENTS = [
+   { mech: 'block', shots: [[0, 'fig', 'K', 5.5], [3.6, 'fig', 'K', 5.5], [7.2, 'fig', 'K', 5.8]] },                         // 1 introdução: poucos, lentos, só no K
+   { mech: 'block', shots: [[0, 'fig', 'K', 6], [2.6, 'L2', 'K', 6], [5.2, 'fig', 'P', 6.2], [7.8, 'R2', 'K', 6.2], [10.4, 'fig', 'K', 6.4], [13, 'R3', 'P', 6.2]] },
+   { mech: 'reflect', structs: [st(SA(), 5, 5.2, 0.2)] },                                                                      // 3 introdução: 1 estrutura
+   { mech: 'reflect', structs: [st(SA(), 5.5, 5.6, 0.2), st(SC(), 5.5, 5.6, 2.8)] },
+   { mech: 'guide', shots: [[1.5, 'fig', 'K', 5.0], [2.4, 'L2', 'P', 5.0], [3.3, 'R2', 'K', 5.2]] },                                  // 5 introdução: 3 projéteis
+-  { mech: 'block', shots: genShots(6, 8, 1.9, 6.2, 6.8) },
++  { mech: 'block', shots: [[0, 'fig', 'K', 6.2], [1.3, 'L2', 'P', 6.3], [2.6, 'fig', 'K', 6.4], [3.9, 'R2', 'P', 6.4], [5.1, 'fig', 'K', 6.6]] },   // 6: cabe na janela (~9,6 s; antes 8 disparos, cortados)
+   { mech: 'reflect', structs: [st(SB(), 5.2, 5.8, 0.2), st(SD(), 5.2, 5.8, 2.7)] },
+   { mech: 'guide', shots: [[1.5, 'fig', 'P', 5.2], [2.3, 'R1', 'K', 5.2], [3.1, 'L3', 'K', 5.4], [3.9, 'fig', 'P', 5.4]] },
+   { mech: 'block', shots: genShots(9, 9, 1.65, 6.4, 7.0) },
+   { mech: 'reflect', structs: [st(SA(), 5, 6, 0.2), st(SC(), 5, 6, 1.9), st(SD(), 5, 6, 3.6)] },
+   { mech: 'guide', shots: [[1.2, 'L1', 'K', 5.4], [1.9, 'fig', 'P', 5.4], [2.6, 'R3', 'K', 5.6], [3.3, 'fig', 'K', 5.6]] },
+-  { mech: 'block', shots: genShots(12, 10, 1.45, 6.5, 7.2, 0.15) },
++  // depois do 2º azul a batalha se intensifica de verdade: rajadas (2–3 na mesma linha: os anéis do aviso se empilham),
++  // cruzados (K e jogador ao mesmo tempo, de lados opostos) e leques (três de uma vez); o K começa a se defender sozinho
++  { mech: 'block', shots: [[0, 'fig', 'K', 6.4], [1.5, 'L1', 'P', 6.4], [3.0, 'fig', 'K', 6.6], [3.45, 'fig', 'K', 6.6], [5.2, 'R1', 'P', 6.6], [5.2, 'L2', 'K', 6.6],
++    [7.2, 'fig', 'P', 6.8], [7.65, 'fig', 'P', 6.8], [9.4, 'R2', 'K', 6.8], [9.4, 'L3', 'P', 6.8], [11.4, 'fig', 'K', 7.0], [11.85, 'fig', 'K', 7.0]] },   // 12
+   { mech: 'reflect', plus: 'A', structs: [st(SB(), 4.8, 6.2, 0.2), st(SD(), 4.8, 6.2, 1.8), st(SA(), 4.8, 6.2, 3.4)], figEvery: 7 },   // 13: depois do 2º azul → grade erguida (reflectPlus.js)
+-  { mech: 'guide', shots: [[1.2, 'fig', 'K', 5.6], [1.8, 'L2', 'P', 5.6], [2.4, 'R2', 'K', 5.8], [3.0, 'fig', 'P', 5.8], [3.6, 'L3', 'K', 5.8]] },
+-  { mech: 'block', shots: genShots(15, 11, 1.3, 6.8, 7.3, 0.2) },
++  { mech: 'guide', held: 2, shots: [[1.2, 'fig', 'K', 5.6], [1.8, 'L2', 'P', 5.6], [2.4, 'R2', 'K', 5.8], [4.8, 'fig', 'P', 5.8], [5.4, 'L1', 'K', 5.8], [6.0, 'R1', 'P', 6.0], [6.6, 'fig', 'K', 6.0]] },   // 14: aprimorado (a figura segura o objeto)
++  { mech: 'block', shots: [[0, 'fig', 'P', 6.6], [0.45, 'fig', 'P', 6.6], [2.0, 'L1', 'K', 6.8], [2.0, 'R1', 'P', 6.8], [3.8, 'fig', 'K', 6.8], [4.25, 'fig', 'K', 6.8], [4.7, 'fig', 'K', 6.8],
++    [6.6, 'L2', 'P', 7.0], [6.6, 'R2', 'K', 7.0], [6.6, 'fig', 'P', 7.0], [8.8, 'R3', 'K', 7.0], [9.25, 'R3', 'K', 7.0], [10.8, 'fig', 'P', 7.2], [10.8, 'L3', 'K', 7.2], [12.0, 'fig', 'K', 7.2]] },   // 15
+   { mech: 'reflect', plus: 'B', structs: [st(SA(), 4.6, 6.4, 0.2), st(SD(), 4.6, 6.4, 1.4), st(SB(), 4.6, 6.4, 2.6), st(SC(), 4.6, 6.4, 3.8)], figEvery: 6 },   // 16: grade erguida, trocas mais rápidas
+-  { mech: 'guide', kOpens: true, shots: [[1.2, 'R1', 'K', 5.8], [1.7, 'fig', 'P', 5.8], [2.2, 'L1', 'K', 6], [2.7, 'fig', 'K', 6], [3.2, 'R3', 'P', 6], [3.7, 'L2', 'K', 6]] },   // 17: o K abre o portal
+-  { mech: 'block', shots: genShots(18, 14, 1.1, 7.0, 7.5, 0.25) },                                                           // 18: o mais intenso
++  { mech: 'guide', held: 2, kOpens: true, shots: [[1.0, 'R1', 'K', 5.8], [1.5, 'fig', 'P', 5.8], [2.0, 'L1', 'K', 6], [2.5, 'fig', 'K', 6], [4.6, 'R3', 'P', 6], [5.1, 'L2', 'K', 6], [5.6, 'fig', 'P', 6.2], [6.1, 'R2', 'K', 6.2]] },   // 17: aprimorado; o K puxa uma ponta (vale uma batida)
++  { mech: 'block', shots: [[0, 'fig', 'K', 7.0], [0.4, 'fig', 'K', 7.0], [0.8, 'fig', 'K', 7.0], [2.4, 'L1', 'P', 7.0], [2.4, 'R1', 'K', 7.0], [4.0, 'fig', 'P', 7.2], [4.4, 'fig', 'P', 7.2],
++    [5.8, 'L2', 'K', 7.2], [5.8, 'R2', 'P', 7.2], [5.8, 'fig', 'K', 7.2], [7.6, 'R3', 'P', 7.4], [8.0, 'R3', 'P', 7.4], [9.4, 'fig', 'K', 7.4], [9.4, 'L3', 'P', 7.4],
++    [11.0, 'fig', 'P', 7.5], [11.4, 'fig', 'P', 7.5], [11.8, 'fig', 'P', 7.5], [12.3, 'L1', 'K', 7.5]] },                     // 18: o mais intenso (o K já protege o jogador às vezes)
+ ];
+ const LABEL = {
+   block: ['BLOQUEAR · clique esquerdo', 'BLOQUEAR · botão Ação'],
+   reflect: ['REFLETIR · segure o clique e mova (WASD)', 'REFLETIR · segure o botão Ação e mova'],
+   plus: ['REFLETIR · segure o clique e desenhe na grade · W/S sobe e desce · A/D lados', 'REFLETIR · segure o botão Ação e desenhe na grade'],
+   guide: ['CONDUZIR · segure o clique esquerdo para atrair · sob o objeto, segure o direito e puxe', 'CONDUZIR · segure Atrair · sob o objeto, segure Puxar e arraste'],
++  held: ['CONDUZIR · a figura segura o objeto: atraia os projéteis contra ele até rasgá-lo', 'CONDUZIR · segure Atrair e leve os projéteis contra o objeto'],
+ };
+ const ACTION = { block: 'Bloquear', reflect: 'Refletir', guide: 'Atrair' };
+ 
+@@ -281,6 +307,7 @@ export function createBattle(ctx) {
+     barLineP: lineM('#ffffff', 0.85), barLineK: lineM('#d6e4ff', 0.85),
+     wall: basic('#ffffff', GLOW.surf, { side: THREE.DoubleSide }), wallLine: lineM('#ffffff', 0.9),
+     shardW: basic('#ffffff'), shardD: basic('#141418'),
++    mark: basic('#ffffff', 0.55, { depthWrite: false, side: THREE.DoubleSide }),
+   };
+   const ADD = { transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide, toneMapped: false };
+   const glowPlate = (col, half, size) => new THREE.ShaderMaterial({ vertexShader: GLOW_V, fragmentShader: GLOWP_F, ...ADD,
+@@ -357,7 +384,7 @@ export function createBattle(ctx) {
+   cDisc.rotation.x = -Math.PI / 2; circle.add(cDisc);
+   const lenArc = arcRing(CIRCLE_R + 0.08, CIRCLE_R + 0.13); lenArc.visible = false; circle.add(lenArc);
+   const PREV_MAX = 128;
+-  const prevLine = ribbon(PREV_MAX, 0.08, 0.22, 0.14, '#ffffff', 0.6); prevLine.visible = false; scene.add(prevLine);
++  const prevLine = ribbon(PREV_MAX, 0.12, 0.22, 0.14, '#ffffff', 0.7); prevLine.visible = false; scene.add(prevLine);   // (larga o bastante para a câmera baixa)
+ 
+   // ---- estabilidade: anel aos pés (arco = estabilidade) ----
+   const stabRing = { P: arcRing(0.62, 0.68), K: arcRing(0.62, 0.68) };
+@@ -369,19 +396,21 @@ export function createBattle(ctx) {
+   // projétil: fragmento escuro alongado com arestas claras, rastro curto e o anel de "o K vai defender"
+   const projGeo = new THREE.OctahedronGeometry(0.27, 0), projEdges = new THREE.EdgesGeometry(projGeo);
+   const trailGeo = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(0, 0, -0.12), new THREE.Vector3(0, 0, -0.95)]);
+-  const claimGeo = new THREE.RingGeometry(0.36, 0.41, 32);
++  const claimGeo = new THREE.RingGeometry(0.36, 0.41, 32), markGeo = new THREE.RingGeometry(0.07, 0.17, 24);
+   const projPool = pool(() => {
+     const g = new THREE.Group(), spin = new THREE.Group(); spin.scale.set(0.75, 0.55, 1.7); g.add(spin);
+     const edges = new THREE.LineSegments(projEdges, M.edge), trail = new THREE.Line(trailGeo, M.trail);
+     spin.add(new THREE.Mesh(projGeo, M.dark), edges); g.add(trail);
+     const claim = new THREE.Mesh(claimGeo, basic('#dfe9ff', 0.8, { depthWrite: false, side: THREE.DoubleSide })); claim.rotation.x = -Math.PI / 2; g.add(claim);
+-    g.userData = { spin, claim, edges, trail }; return g;
++    // marca no chão logo abaixo (com a câmera baixa, mostra onde o projétil está sobre a grade em relação ao círculo)
++    const mark = new THREE.Mesh(markGeo, M.mark); mark.rotation.x = -Math.PI / 2; mark.position.y = -H_PROJ + 0.035; g.add(mark);
++    g.userData = { spin, claim, edges, trail, mark }; return g;
+   });
+   // estilhaços (impactos, bloqueios)
+   const shardGeo = new THREE.TetrahedronGeometry(0.07, 0);
+   const shardPool = pool(() => new THREE.Mesh(shardGeo, M.shardW));
+   // aviso: linha tracejada no chão (origem → alvo) e anel pulsando na origem
+-  const warnPool = pool(() => ribbon(2, 0.07, 0.34, 0.24, '#ffffff', 0.5));
++  const warnPool = pool(() => ribbon(2, 0.11, 0.34, 0.22, '#ffffff', 0.5));
+   const pulseGeo = new THREE.RingGeometry(0.3, 0.37, 32);
+   const pulsePool = pool(() => new THREE.Mesh(pulseGeo, basic('#ffffff', 0.6, { depthWrite: false, side: THREE.DoubleSide })));
+   // barreira: placa plana branca suspensa na altura do voo (mesma linguagem das paredes do Refletir; a do K com contorno duplo, levemente azulada)
+@@ -400,6 +429,15 @@ export function createBattle(ctx) {
+     return g;
+   };
+   const barPool = { P: pool(makeBar('P')), K: pool(makeBar('K')) };
++  // prévia da placa (Bloquear): contorno tracejado onde ela vai surgir — acima do círculo, na altura do voo, já virada para o
++  // que vem (com a câmera baixa, mostra direto se o caminho do projétil passa por ela)
++  const ghostPlate = new THREE.Group(); ghostPlate.visible = false; scene.add(ghostPlate);
++  {
++    const lm = new THREE.LineDashedMaterial({ color: '#ffffff', transparent: true, opacity: 0.42, dashSize: 0.12, gapSize: 0.08, depthWrite: false });
++    const loop = new THREE.LineLoop(rectGeo(BLOCK.w / 2, BLOCK.h / 2), lm); loop.computeLineDistances();
++    const stem = new THREE.Line(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(0, -H_PROJ + 0.06, 0), new THREE.Vector3(0, -BLOCK.h / 2, 0)]), lm); stem.computeLineDistances();
++    ghostPlate.add(loop, stem); ghostPlate.userData.mat = lm;
++  }
+   // fissuras: rachadura vertical suspensa (preenchida de preto, contorno branco irregular)
+   const crack = (() => {
+     const H = 1.8, n = 9, L = [], R = [], r = rng(77);
+@@ -435,6 +473,11 @@ export function createBattle(ctx) {
+   tether.visible = false; scene.add(tether);                                                                                                  // a ponta esticada (preta, afina com a tensão)
+   const tetherLineGeo = new THREE.BufferGeometry(); tetherLineGeo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(6), 3));
+   const tetherLine = new THREE.Line(tetherLineGeo, lineM('#8a8a92', 0.9)); tetherLine.frustumCulled = false; tetherLine.visible = false; scene.add(tetherLine);
++  // aprimorado: o fio da mão da figura até o objeto (duas metades, para se partir no meio) e as rachaduras do objeto
++  const HOLD_N = 14;
++  const holdLine = () => { const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.BufferAttribute(new Float32Array(HOLD_N * 3), 3)); const l = new THREE.Line(g, lineM('#8f8f98', 0.9)); l.frustumCulled = false; l.visible = false; scene.add(l); return l; };
++  const holdA = holdLine(), holdB = holdLine();
++  const objCracks = new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.IcosahedronGeometry(0.235, 0)), lineM('#ffffff', 0)); obj.add(objCracks);
+   // vazio branco: cena própria, renderizada com a câmera da batalha numa textura (prerender) e vista só pela abertura
+   const ws = new THREE.Scene(); ws.background = new THREE.Color('#f6f6f3'); ws.fog = new THREE.Fog('#f6f6f3', 18, 75);
+   const wsGridMat = new THREE.ShaderMaterial({ vertexShader: GRID_V, fragmentShader: WGRID_F, transparent: true, depthWrite: false, uniforms: { uC: { value: new THREE.Vector2() } } });
+@@ -469,7 +512,7 @@ export function createBattle(ctx) {
+ 
+   // ---- DOM: rótulo do mecanismo (no palco) e mensagens sobre o preto (acima do véu do fade) ----
+   const label = document.createElement('div');
+-  label.style.cssText = 'position:absolute;left:50%;bottom:20px;transform:translateX(-50%);color:rgba(255,255,255,0.7);font:14px "Trebuchet MS",sans-serif;letter-spacing:1.5px;pointer-events:none;z-index:6;opacity:0;transition:opacity .35s;white-space:nowrap;display:none';
++  label.style.cssText = 'position:absolute;left:50%;bottom:16px;transform:translateX(-50%);color:rgba(255,255,255,0.78);background:rgba(11,11,14,0.72);padding:5px 14px;border-radius:12px;font:14px "Trebuchet MS",sans-serif;letter-spacing:1.5px;pointer-events:none;z-index:6;opacity:0;transition:opacity .35s;white-space:nowrap;max-width:calc(100vw - 24px);overflow:hidden;text-overflow:ellipsis;display:none';   // (fundo escuro: legível mesmo sobre o jogador branco)
+   stage.appendChild(label);
+   // véu preto próprio por cima do véu do jogo (o do main é verde-escuro; aqui o vazio é preto puro): mesma opacidade de `fade`
+   const veil = document.createElement('div');
+@@ -529,6 +572,7 @@ export function createBattle(ctx) {
+   let prevAct = false, lastBar = -9, nextId = 1, lastKDef = -99, kAct = null, gest = null, shakeT = 0, traceT = 0;
+   let fragHandler = null, finaleHandler = null, token = 0, figGest = null;
+   let mt = 0;                                                         // posição da música = relógio da batalha
++  let gridPulse = 0;
+   const music = ctx.music || null;
+   let camK = 1, camSnap = false, camForce = null;                                      // 0 = câmera de jogo, 1 = câmera de impacto
+   const camBase = new THREE.Vector3(), camLook = new THREE.Vector3();
+@@ -544,18 +588,38 @@ export function createBattle(ctx) {
+     projGet: () => projPool.get(), projPut: o => projPool.put(o), pose, figGest: g => { figGest = g; }, charPos });
+   const plusSeg = () => !!(seg && seg.plus);
+ 
++  /** Tela em pé (celular): o fov já abre até 80°; além disso a câmera recua ao longo da própria linha de visão (sem passar
++   *  da altura da cabeça do jogador), para o jogador, o K e a figura caberem na largura. */
++  const framePos = (pos, look, asp, out) => { out.copy(pos); if (asp < 1.3) { const f = Math.min(1.35, 1 + 0.25 * (1.3 / asp - 1)); out.sub(look).multiplyScalar(f).add(look); out.y = Math.min(out.y, Math.max(pos.y, 2.45)); } return out; };
++  const fovFor = (base, asp) => { const h = Math.tan(base * Math.PI / 360) * 16 / 9; return asp >= 16 / 9 ? base : Math.min(80, Math.atan(h / asp) * 360 / Math.PI); };
+   function fitFov(base) {
+-    const asp = camera.aspect || 16 / 9, h = Math.tan(base * Math.PI / 360) * 16 / 9;
+-    const fov = asp >= 16 / 9 ? base : Math.min(80, Math.atan(h / asp) * 360 / Math.PI);
++    const fov = fovFor(base, camera.aspect || 16 / 9);
+     if (Math.abs(camera.fov - fov) > 0.01) { camera.fov = fov; camera.updateProjectionMatrix(); }
+   }
++  // Cerca da tela: com a câmera baixa, o canto da grade atrás/à esquerda do jogador fica fora do quadro — o círculo para na
++  // borda da imagem (desliza ao longo dela), nunca some. Usa a pose fixa da câmera de jogo (não muda com as trocas).
++  const fenceCam = new THREE.PerspectiveCamera(50, 16 / 9, 0.05, 300); let fenceAsp = 0;
++  const FENCE = { x: 0.93, y0: -0.9, y1: 0.86 };
++  function onScreen(x, z) {
++    const asp = camera.aspect || 16 / 9;
++    if (asp !== fenceAsp) {
++      fenceAsp = asp; fenceCam.aspect = asp; fenceCam.fov = fovFor(CAMS.game.fov, asp); fenceCam.updateProjectionMatrix();
++      framePos(CAMS.game.pos, CAMS.game.look, asp, fenceCam.position); fenceCam.lookAt(CAMS.game.look); fenceCam.updateMatrixWorld(true);
++    }
++    for (const dx of [-CIRCLE_R, CIRCLE_R]) {                          // as duas pontas do disco (de lado) e o meio
++      _fp.set(x + dx, 0.04, z).project(fenceCam);
++      if (_fp.z >= 1 || Math.abs(_fp.x) > FENCE.x || _fp.y < FENCE.y0 || _fp.y > FENCE.y1) return false;
++    }
++    return true;
++  }
++  const _fp = new THREE.Vector3();
+   /** Câmera entre as duas posições (k: 0 = jogo, 1 = impacto), com a troca suavizada. */
+   function placeCamera() {
+     const e = ease(camK), G = CAMS.game, I = CAMS.impact;
+     camBase.lerpVectors(G.pos, I.pos, e); camLook.lerpVectors(G.look, I.look, e); let fov = G.fov + (I.fov - G.fov) * e;
+     const pw = plus.camW;                                             // grade erguida: câmera baixa atrás/à direita do jogador
+     if (pw > 0) { camBase.lerp(CAMS.wall.pos, pw); camLook.lerp(CAMS.wall.look, pw); fov += (CAMS.wall.fov - fov) * pw; }
+-    camera.position.copy(camBase); camera.lookAt(camLook); fitFov(fov);
++    framePos(camBase, camLook, camera.aspect || 16 / 9, camera.position); camera.lookAt(camLook); fitFov(fov);
+     for (const f of Object.values(fissures)) f.g.rotation.y = Math.atan2(camBase.x - f.x, camBase.z - f.z);   // de frente para a câmera
+   }
+   /** Nada que exija reação: sem projéteis/avisos, sem traço sendo desenhado, sem núcleo sendo segurado. */
+@@ -596,7 +660,9 @@ export function createBattle(ctx) {
+     const w = { from, target, speed, t: 0, dur, ox: o.x, oz: o.z, tx: tp.x, tz: tp.z, src: o.src, fis: o.fis, line: warnPool.get(), pulse: pulsePool.get(), proj: null };
+     w.line.userData.set([{ x: o.x, z: o.z }, { x: tp.x, z: tp.z }], 0.03);
+     w.line.material.uniforms.uOp.value = 0.12; w.line.visible = true; scene.add(w.line);
+-    w.pulse.position.set(o.x, H_PROJ, o.z); w.pulse.visible = true; scene.add(w.pulse);
++    // rajada (outro aviso ainda armado na mesma origem): os anéis se empilham — dá para contar quantos vêm na mesma linha
++    const stack = warnings.filter(x => !x.done && Math.hypot(x.ox - o.x, x.oz - o.z) < 0.1).length;
++    w.pulse.position.set(o.x, H_PROJ + 0.34 * stack, o.z); w.pulse.visible = true; scene.add(w.pulse);
+     if (o.src) o.src.busy = true;
+     if (o.fis) o.fis.want++;
+     if (from === 'fig') figGest = { s: tp.x < 0 ? 1 : -1, pt: new THREE.Vector3(o.x, H_PROJ, o.z).lerp(new THREE.Vector3(tp.x, H_PROJ, tp.z), 0.25), t: 0, dur: dur + 0.5 };
+@@ -608,8 +674,8 @@ export function createBattle(ctx) {
+   function launch(w) {
+     const dx = w.tx - w.ox, dz = w.tz - w.oz, l = Math.hypot(dx, dz) || 1;
+     const p = { id: nextId++, x: w.ox, z: w.oz, vx: dx / l * w.speed, vz: dz / l * w.speed, speed: w.speed, target: w.target, tx: w.tx, tz: w.tz,
+-      reflected: false, alive: true, kClaim: false, kEval: 1.4 + Math.random() * 0.4, evaluated: false, src: w.src, obj: projPool.get(), age: 0 };
+-    const u = p.obj.userData; u.edges.material = M.edge; u.trail.material = M.trail;   // (pode voltar do vazio branco)
++      reflected: false, alive: true, kClaim: false, kEval: kLevel() >= 2 ? 99 : 1.4 + Math.random() * 0.4, evaluated: false, src: w.src, obj: projPool.get(), age: 0 };
++    const u = p.obj.userData; u.edges.material = M.edge; u.trail.material = M.trail; u.mark.visible = true;   // (pode voltar do vazio branco)
+     p.obj.position.set(p.x, H_PROJ, p.z); p.obj.visible = true; u.claim.visible = false; scene.add(p.obj);
+     if (seg && seg.guide) {                                           // Conduzir: míssil que guarda o alvo original
+       p.homing = true; p.through = false; seg.guide.armed = true;
+@@ -618,6 +684,7 @@ export function createBattle(ctx) {
+       }
+     }
+     projectiles.push(p); w.proj = p; w.done = true; w.pulse.visible = false;
++    if (w.from === 'fig' && fragmentsDone >= PLUS_AFTER) gridPulse = 1;   // depois do 2º azul: a grade acusa cada disparo da figura
+     sfx('launch');
+   }
+   function killProjectile(p, burst = 0, darkMix = burst > 8 ? 0.5 : 0.3) {
+@@ -790,26 +857,45 @@ export function createBattle(ctx) {
+ 
+   // ---------- Conduzir ----------
+   /** Ponto válido para o objeto: na grade, longe dos personagens, visível e com espaço para puxar (vale para qualquer lado de dentro). */
+-  function pickObjSpot() {
+-    for (let k = 0; k < 200; k++) {
+-      const x = -5.2 + Math.random() * 10.4, z = -7.0 + Math.random() * 13.0;
++  function pickObjSpot(objY = GUIDE.objY) {
++    for (let k = 0; k < 300; k++) {
++      // na metade de trás da grade: a fenda abre virada para a câmera, e os projéteis precisam de espaço À FRENTE dela (lado da
++      // câmera) para serem trazidos e de um pouco ATRÁS (para onde o círculo passa e os leva)
++      const x = -5.2 + Math.random() * 10.4, z = 0.2 + Math.random() * 3.0;
+       if (Math.hypot(x - P_POS.x, z - P_POS.z) < 3.4 || Math.hypot(x - K_POS.x, z - K_POS.z) < 2.6) continue;
+       if (Math.hypot(x - CIRCLE_HOME.x, z - CIRCLE_HOME.z) < 1.2) continue;
++      if (!onScreen(x, z) || !screenFree(x, objY, z) || !screenFree(x, 0.05, z)) continue;   // visível e fora das silhuetas
++      const cx = CAMS.game.pos.x - x, cz = CAMS.game.pos.z - z, cl = Math.hypot(cx, cz), ux = cx / cl, uz = cz / cl;
++      const fits = (px, pz) => px > LIM.x0 + CIRCLE_R && px < LIM.x1 - CIRCLE_R && pz > LIM.z0 + CIRCLE_R && pz < LIM.z1 - CIRCLE_R && onScreen(px, pz);
++      if (!fits(x + ux * 4.4, z + uz * 4.4) || !fits(x - ux * 2.2, z - uz * 2.2)) continue;
+       return { x, z };
+     }
+-    return { x: -3.5, z: -2.0 };
++    return { x: -3.2, z: 1.4 };
++  }
++  /** O ponto não cai atrás do jogador nem do K na imagem da câmera de jogo. */
++  function screenFree(x, y, z) {
++    onScreen(0, CIRCLE_HOME.z);                                        // (garante a câmera de referência atualizada)
++    _fp.set(x, y, z).project(fenceCam); const qx = _fp.x, qy = _fp.y;
++    for (const c of [P_POS, K_POS]) {
++      let x0 = 9, x1 = -9, y0 = 9, y1 = -9;
++      for (const dx of [-0.6, 0.6]) for (const dz of [-0.6, 0.6]) for (const yy of [0, 2.6]) { _fp.set(c.x + dx, yy, c.z + dz).project(fenceCam); x0 = Math.min(x0, _fp.x); x1 = Math.max(x1, _fp.x); y0 = Math.min(y0, _fp.y); y1 = Math.max(y1, _fp.y); }
++      if (qx > x0 - 0.04 && qx < x1 + 0.04 && qy > y0 - 0.04 && qy < y1 + 0.04) return false;
++    }
++    return true;
+   }
+   function setupGuide() {
+-    const o = pickObjSpot();
+-    seg.guide = { x: o.x, z: o.z, state: 'idle', t: 0, attract: false, armed: false, tension: 0, pullTo: null, passed: 0, endT: -1,
+-      portal: null, kTried: false };
+-    obj.position.set(o.x, GUIDE.objY, o.z); obj.scale.setScalar(1); obj.visible = true;
++    const held = !!seg.def.held && fragmentsDone >= PLUS_AFTER, y = held ? GH.y : GUIDE.objY;   // aprimorado só depois do 2º azul
++    const o = pickObjSpot(y);
++    seg.guide = { x: o.x, z: o.z, y, state: 'idle', t: 0, attract: false, armed: false, tension: 0, pullTo: null, passed: 0, endT: -1,
++      portal: null, kTried: false, held, need: held ? seg.def.held : 0, hits: 0, crackT: 0, yank: 0, regrab: 0, snap: -1, holdS: o.x < F_POS.x ? 1 : -1 };
++    obj.position.set(o.x, y, o.z); obj.scale.setScalar(1); obj.visible = true; objCracks.material.opacity = 0;
++    if (held) L(`guide:held ${seg.guide.need}`);
+     const pts = []; for (let i = 0; i <= 48; i++) { const a = i / 48 * Math.PI * 2; pts.push({ x: o.x + Math.cos(a) * GUIDE.grabR * 0.85, z: o.z + Math.sin(a) * GUIDE.grabR * 0.85 }); }
+     footRing.userData.set(pts, 0.035); footRing.visible = true;
+     L(`guide:obj ${o.x.toFixed(2)},${o.z.toFixed(2)}`);
+   }
+   function clearGuide() {
+-    obj.visible = false; footRing.visible = false; tether.visible = false; tetherLine.visible = false; portal.visible = false;
++    obj.visible = false; footRing.visible = false; tether.visible = false; tetherLine.visible = false; portal.visible = false; holdA.visible = holdB.visible = false;
+     for (const ch of ws.children.slice()) if (ch !== wsGrid) { ws.remove(ch); }
+   }
+   /** Romper: o portal nasce no lugar do objeto, de frente para quem puxou (sem depois girar). */
+@@ -823,13 +909,20 @@ export function createBattle(ctx) {
+     obj.visible = false; footRing.visible = false; tether.visible = false; tetherLine.visible = false;
+     portal.position.set(g.x, H_PROJ, g.z); portal.rotation.set(0, Math.atan2(nx, nz), 0); portal.visible = true; shapePortal(0.01, time);
+     wsGridMat.uniforms.uC.value.set(g.x, g.z);
+-    spawnShards(g.x, GUIDE.objY, g.z, 16, 0.9, 2.2); sfx('struct'); L(`guide:rupture ${by} ${nx.toFixed(2)},${nz.toFixed(2)}`);
++    if (g.held) { g.snap = 0; sfx('frebound'); }                       // o fio da figura se parte
++    spawnShards(g.x, g.y, g.z, 16, 0.9, 2.2); sfx('struct'); L(`guide:rupture ${by} ${nx.toFixed(2)},${nz.toFixed(2)}`);
++  }
++  /** Aprimorado: um projétil (ou o puxão do K) racha o objeto; com as batidas necessárias, ele se rompe e a fenda abre ali. */
++  function crackObj(g, by) {
++    g.hits++; g.crackT = 1; spawnShards(g.x, g.y, g.z, 9, 0.55, 2.2); sfx('block'); L(`guide:crack ${by} ${g.hits}/${g.need}`);
++    objCracks.material.opacity = Math.min(0.9, 0.3 + 0.6 * g.hits / g.need);
++    if (g.hits >= g.need) rupture(cpos.x - g.x, cpos.z - g.z, by === 'K' ? 'K' : 'C');
+   }
+   /** Atravessou a abertura: passa para o vazio branco (segue reto, não persegue mais nada). */
+   function passThrough(p) {
+     p.through = true; p.kClaim = false; seg.guide.passed++;
+     const o = p.obj; if (o.parent) o.parent.remove(o); ws.add(o);
+-    o.userData.edges.material = WSM.edge; o.userData.trail.material = WSM.trail; o.userData.claim.visible = false;
++    o.userData.edges.material = WSM.edge; o.userData.trail.material = WSM.trail; o.userData.claim.visible = false; o.userData.mark.visible = false;
+     if (p.src) { p.src.busy = false; p.src = null; }
+     sfx('reflect'); L('guide:pass');
+   }
+@@ -849,11 +942,21 @@ export function createBattle(ctx) {
+     while (seg.shotIdx < def.shots.length && seg.t >= def.shots[seg.shotIdx][0]) { const [, from, tg, v] = def.shots[seg.shotIdx++]; createWarning(from, tg, v); }
+     // o K abre o portal sozinho só nos trechos finais (autonomia já alta)
+     if (def.kOpens && g.state === 'idle' && !g.kTried && kLevel() >= GUIDE.kLevel && seg.t >= GUIDE.kDelay) { g.kTried = true; g.state = 'kpull'; g.t = 0; L('guide:kpull'); }
++    g.crackT = Math.max(0, g.crackT - dt / 0.35); g.yank = Math.max(0, g.yank - dt / 0.5);
++    if (g.snap >= 0 && g.snap < 1) g.snap = Math.min(1, g.snap + dt / GH.snapT);
+     if (g.state === 'grab') {
+       const d = Math.hypot(cpos.x - g.x, cpos.z - g.z); g.tension = Math.min(1, d / GUIDE.pull);
+-      if (d >= GUIDE.pull) rupture(cpos.x - g.x, cpos.z - g.z, 'P');
++      if (g.held && g.tension >= GH.yankAt) { g.state = 'yank'; g.t = 0; g.yank = 1; g.yanked = true; g.regrab = seg.t + GH.regrab; sfx('frebound'); L('guide:yank'); }   // a figura dá um tranco: a ponta escapa
++      else if (d >= GUIDE.pull) rupture(cpos.x - g.x, cpos.z - g.z, 'P');
+     } else if (g.state === 'release') { g.tension = Math.max(0, g.tension - dt / 0.35); if (g.tension <= 0) g.state = 'idle'; }
+-    else if (g.state === 'kpull') { g.tension = ease(g.t / GUIDE.kOpenT); if (g.t >= GUIDE.kOpenT) rupture(cpos.x - g.x, cpos.z - g.z, 'K'); }
++    else if (g.state === 'yank') { g.tension = Math.max(0, g.tension - dt / 0.12); if (g.t >= GH.yankT) { g.state = 'idle'; g.tension = 0; } }
++    else if (g.state === 'kpull') {
++      g.tension = ease(g.t / GUIDE.kOpenT);
++      if (g.t >= GUIDE.kOpenT) {
++        if (!g.held) rupture(cpos.x - g.x, cpos.z - g.z, 'K');
++        else { g.state = 'idle'; g.tension = 0; crackObj(g, 'K'); }      // aprimorado: o puxão do K vale uma batida (ela não consegue segurar contra ele)
++      }
++    }
+     else if (g.state === 'form') { g.portal.k = ease(g.t / GUIDE.formT); if (g.t >= GUIDE.formT) { g.state = 'open'; g.t = 0; g.portal.k = 1; } }
+     else if (g.state === 'closing') { g.portal.k = 1 - ease(g.t / GUIDE.closeT); if (g.t >= GUIDE.closeT) { g.state = 'closed'; portal.visible = false; toClear(); return; } }
+     // conclusão: tudo lançado e nada pendente → espera 2–3 s com o portal aberto (os transferidos seguem pelo branco) e fecha
+@@ -866,15 +969,22 @@ export function createBattle(ctx) {
+   }
+   function updateGuideVisuals() {
+     const g = seg && seg.guide; if (!g) return;
+-    if (g.state === 'idle' || g.state === 'grab' || g.state === 'release' || g.state === 'kpull') {
++    const back = g.state === 'release' || g.state === 'yank';             // a ponta voltando (soltou, ou a figura deu o tranco)
++    if (g.state === 'idle' || g.state === 'grab' || back || g.state === 'kpull') {
+       // pontas que mudam dezenas de vezes por segundo; com tensão, puxadas para o lado do puxão e mais compridas
+       let px = 0, pz = 0, py = 0; const T2 = g.tension || 0;
+       let to = null;
+-      if (g.state === 'grab' || (g.state === 'release' && g.pullTo)) to = g.pullTo = new THREE.Vector3(cpos.x, 0.04, cpos.z);
++      if (g.state === 'grab') to = g.pullTo = new THREE.Vector3(cpos.x, 0.04, cpos.z);
++      else if (back && g.pullTo) to = g.pullTo;
+       if (g.state === 'kpull') { const a = KU.arms.find(x => x.s === g.kSide) || KU.arms[0]; to = kWrist(a).localToWorld(new THREE.Vector3(0, -0.1, 0)); }
+       if (to) { const d = to.clone().sub(obj.position).normalize(); px = d.x; py = d.y; pz = d.z; }
+-      obj.position.set(g.x + px * 0.3 * T2, GUIDE.objY + py * 0.3 * T2, g.z + pz * 0.3 * T2);
+-      obj.scale.set(1 + 0.5 * T2 * Math.abs(px), 1 + 0.5 * T2 * Math.abs(py), 1 + 0.5 * T2 * Math.abs(pz));
++      // aprimorado: o tranco da figura puxa o objeto para o lado dela; cada batida o sacode
++      const hd = g.held ? figHand(g.holdS, _hh).sub(obj.position).normalize() : null, yk = g.held ? g.yank * g.yank : 0, ck = g.crackT || 0;
++      const jx = ck ? (Math.random() - 0.5) * 0.12 * ck : 0, jy = ck ? (Math.random() - 0.5) * 0.12 * ck : 0;
++      obj.position.set(g.x + px * 0.3 * T2 + (hd ? hd.x * 0.45 * yk : 0) + jx, g.y + py * 0.3 * T2 + (hd ? hd.y * 0.45 * yk : 0) + jy, g.z + pz * 0.3 * T2 + (hd ? hd.z * 0.45 * yk : 0));
++      const sb = 1 + 0.22 * ck;
++      obj.scale.set((1 + 0.5 * T2 * Math.abs(px)) * sb, (1 + 0.5 * T2 * Math.abs(py)) * sb, (1 + 0.5 * T2 * Math.abs(pz)) * sb);
++      const sl = 0.5 + 0.5 * ck; spikeLines.material.color.setRGB(sl, sl, sl * 1.03);
+       const lp = spikeLineGeo.attributes.position;
+       spikes.forEach((sp, i) => {
+         if (Math.random() < 0.55) {                                    // troca de forma irregular (várias vezes por segundo, nem todas juntas)
+@@ -887,14 +997,14 @@ export function createBattle(ctx) {
+       });
+       lp.needsUpdate = true;
+       objHalo.quaternion.copy(camera.quaternion);
+-      footRing.visible = g.state === 'idle' || g.state === 'release';
++      footRing.visible = g.state === 'idle' || back;
+       footRing.material.uniforms.uOp.value = Math.hypot(cpos.x - g.x, cpos.z - g.z) <= GUIDE.grabR ? 0.95 : 0.5;
+       footRing.material.uniforms.uShift.value += 0.004;
+       // a ponta esticada até o círculo (ou até a mão do K): afina e clareia com a tensão
+-      const show = to && (g.state === 'grab' || g.state === 'kpull' || (g.state === 'release' && T2 > 0.02));
++      const show = to && (g.state === 'grab' || g.state === 'kpull' || (back && T2 > 0.02));
+       tether.visible = tetherLine.visible = !!show;
+       if (show) {
+-        const from = obj.position, end = g.state === 'release' ? from.clone().lerp(to, T2) : to;
++        const from = obj.position, end = back ? from.clone().lerp(to, T2) : to;
+         const len = from.distanceTo(end), r = 0.07 * (1 - 0.75 * T2) + 0.012;
+         tether.position.copy(from); tether.lookAt(end); tether.scale.set(r, r, len);
+         const tp = tetherLineGeo.attributes.position; tp.setXYZ(0, from.x, from.y, from.z); tp.setXYZ(1, end.x, end.y, end.z); tp.needsUpdate = true;
+@@ -903,6 +1013,30 @@ export function createBattle(ctx) {
+     }
+     if (g.portal && portal.visible) shapePortal(Math.max(0.01, g.portal.k), time);
+   }
++  const _hh = new THREE.Vector3(), _ha = new THREE.Vector3(), _hb = new THREE.Vector3(), _hc2 = new THREE.Vector3();
++  /** Mão da figura (lado s), em coordenadas do mundo. */
++  function figHand(s, out) { const a = FU.arms.find(x => x.s === s) || FU.arms[0]; fig.updateMatrixWorld(true); return kWrist(a).localToWorld(out.set(0, -0.12, 0)); }
++  /** Aprimorado: o fio da mão da figura até o objeto; treme com a tensão (tranco, puxão do K) e, na ruptura, parte-se ao meio
++   *  e cada metade volta para a sua ponta. Desenhado depois das poses (a mão já no lugar deste quadro). */
++  function updateHold() {
++    const g = seg && seg.guide, on = !!(g && g.held && (obj.visible || (g.snap >= 0 && g.snap < 1)));
++    holdA.visible = holdB.visible = on; if (!on) return;
++    const H = figHand(g.holdS, _ha), O = _hb.set(g.x, g.y, g.z); if (obj.visible) O.copy(obj.position);
++    const C = _hc2.copy(H).lerp(O, 0.5); C.y -= 0.9;                  // cai um pouco no meio (fio comprido, sem peso exagerado)
++    const shake = 0.05 * (g.yank + (g.state === 'kpull' ? g.tension : 0) + (g.crackT || 0));
++    const snap = g.snap < 0 ? 0 : ease(g.snap), half = 0.5 * (1 - snap);
++    const put = (line, t0, t1) => {
++      const pa = line.geometry.attributes.position;
++      for (let i = 0; i < HOLD_N; i++) {
++        const t = t0 + (t1 - t0) * i / (HOLD_N - 1), u = 1 - t, w = Math.sin(Math.PI * t);
++        pa.setXYZ(i, u * u * H.x + 2 * u * t * C.x + t * t * O.x + (Math.random() - 0.5) * shake * w,
++          u * u * H.y + 2 * u * t * C.y + t * t * O.y + Math.sin(time * 31 + t * 9) * shake * w,
++          u * u * H.z + 2 * u * t * C.z + t * t * O.z);
++      }
++      pa.needsUpdate = true; line.material.opacity = 0.9 * (1 - snap * snap);
++    };
++    put(holdA, 0, half); put(holdB, 1, 1 - half);
++  }
+   /** Antes de desenhar a batalha: o vazio branco visto pela câmera da batalha (só com o portal aberto). */
+   function prerender() {
+     if (!active || !portal.visible || !ctx.renderer) return;
+@@ -913,6 +1047,8 @@ export function createBattle(ctx) {
+   }
+ 
+   // ---------- defesa do K ----------
++  // Quando o K decide: no nível 1 (logo depois do 2º azul) só tarde, se ninguém cobriu (hesitante); a partir do 2 ele já
++  // assume o projétil no lançamento (anel claro em volta dele — o jogador vê que pode deixar aquele com o K).
+   /** O caminho restante de p já está coberto por uma barreira/parede que ainda vai existir quando ele chegar lá? */
+   function covered(p) {
+     const px = p.x, pz = p.z, dx = p.tx - px, dz = p.tz - pz, L2 = Math.hypot(dx, dz) || 1, ux = dx / L2, uz = dz / L2, R = BLOCK.r + PR;
+@@ -941,6 +1077,8 @@ export function createBattle(ctx) {
+   function updateK(dt) {
+     if (!kAct) return;
+     const a = kAct; a.t += dt;
++    // assumido cedo (anel no projétil), mas a placa só sai perto da chegada — senão ela venceria (BLOCK.life) antes do impacto
++    if (!a.made && !a.cancel && !a.go) { const p = a.proj; if (p.alive && Math.hypot(p.tx - p.x, p.tz - p.z) / p.speed > K_ACT_AT + a.hes) a.t = 0; else a.go = true; }
+     if (!a.made && !a.cancel && a.t >= a.hes) {
+       const p = a.proj;
+       if (!p.alive || p.reflected) a.cancel = true;
+@@ -959,8 +1097,11 @@ export function createBattle(ctx) {
+   function moveCircle(dt) {
+     if (plusSeg()) { plus.move(dt, input.axis()); return; }
+     const ax = input.axis(); let x = ax.x, z = ax.z; const l = Math.hypot(x, z); if (l > 1) { x /= l; z /= l; }
+-    cpos.x = clamp(cpos.x + x * CIRCLE_SPEED * dt, LIM.x0 + CIRCLE_R, LIM.x1 - CIRCLE_R);
+-    cpos.z = clamp(cpos.z + z * CIRCLE_SPEED * dt, LIM.z0 + CIRCLE_R, LIM.z1 - CIRCLE_R);
++    const nx = clamp(cpos.x + x * CIRCLE_SPEED * dt, LIM.x0 + CIRCLE_R, LIM.x1 - CIRCLE_R);
++    const nz = clamp(cpos.z + z * CIRCLE_SPEED * dt, LIM.z0 + CIRCLE_R, LIM.z1 - CIRCLE_R);
++    if (onScreen(nx, nz)) { cpos.x = nx; cpos.z = nz; }               // na borda da imagem: para naquele eixo e desliza no outro
++    else if (onScreen(nx, cpos.z)) cpos.x = nx;
++    else if (onScreen(cpos.x, nz)) cpos.z = nz;
+   }
+   function actionInput() {
+     const act = mouseDown || simAct || input.held('Space'), click = act && !prevAct; prevAct = act;
+@@ -993,7 +1134,7 @@ export function createBattle(ctx) {
+     } else if (seg.mech === 'guide') {
+       const g = seg.guide, pull = rightDown || input.held('KeyE');
+       g.attract = act && g.armed;                                     // só depois do 1º lançamento (segurar antes não adianta, mas vale assim que ele surge)
+-      if (g.state === 'idle' && pull && Math.hypot(cpos.x - g.x, cpos.z - g.z) <= GUIDE.grabR) { g.state = 'grab'; g.t = 0; L('guide:grab'); }
++      if (g.state === 'idle' && pull && seg.t >= g.regrab && Math.hypot(cpos.x - g.x, cpos.z - g.z) <= GUIDE.grabR) { g.state = 'grab'; g.t = 0; L('guide:grab'); }
+       else if (g.state === 'grab' && !pull) { g.state = 'release'; g.t = 0; L('guide:release'); }
+     }
+   }
+@@ -1016,6 +1157,9 @@ export function createBattle(ctx) {
+           if (Math.abs(u) <= GUIDE.passW * P.k) { p.x = x1; p.z = z1; passThrough(p); p.obj.position.set(p.x, H_PROJ, p.z); continue; }
+         }
+       }
++      // aprimorado: o objeto que a figura segura racha quando um projétil bate nele
++      const gg = seg && seg.guide;
++      if (gg && gg.held && obj.visible && gg.hits < gg.need && segDist2(gg.x, gg.z, p.x, p.z, x1, z1) <= GH.hitR * GH.hitR) { killProjectile(p, 10, 0.2); crackObj(gg, 'P'); continue; }
+       // 1) barreiras (de pé o bastante para cobrir a altura de voo)
+       let hit = false;
+       for (const b of barriers) {
+@@ -1080,7 +1224,7 @@ export function createBattle(ctx) {
+         if (w.t >= w.dur) launch(w);
+       } else {
+         if (w.fis && !w.fisOff && w.t - w.dur > 0.35) { w.fisOff = true; w.fis.want = Math.max(0, w.fis.want - 1); }   // a fissura se fecha depois do disparo
+-        w.line.material.uniforms.uOp.value = 0.13;                               // durante o voo: bem fraca (para saber onde pôr a barreira)
++        w.line.material.uniforms.uOp.value = 0.2;                                // durante o voo: fraca (para saber onde pôr a barreira)
+         if (!w.proj.alive || w.proj.reflected) w.gone = true;
+       }
+     }
+@@ -1112,7 +1256,7 @@ export function createBattle(ctx) {
+   // ---------- transparência localizada ----------
+   // Quem estiver entre a câmera e um elemento interativo (projétil, aviso, estrutura, núcleo/área, círculo) fica translúcido
+   // só enquanto cobrir; nada muda de lugar nem de colisão.
+-  const OCC = { op: 0.32, h: { P: 1.75, K: 1.9 }, r: 0.42 };
++  const OCC = { op: 0.32, h: { P: 2.5, K: 2.6 }, r: 0.42 };      // (alturas reais dos modelos, com a cabeça)
+   const _p = new THREE.Vector3(), _q = new THREE.Vector3();
+   const charBox = who => {                                           // retângulo do personagem na tela (NDC) e distância à câmera
+     const c = charPos(who), h = OCC.h[who]; let x0 = 9, x1 = -9, y0 = 9, y1 = -9;
+@@ -1156,6 +1300,10 @@ export function createBattle(ctx) {
+     circle.position.x = cpos.x; circle.position.z = cpos.z;
+     circle.visible = !plusSeg() && (phase === 'intro' || phase === 'play' || phase === 'clear' || phase === 'fail');
+     updatePreview();
++    gridPulse = Math.max(0, gridPulse - dt / 0.3); gridMat.uniforms.uAlpha.value = 0.5 + 0.16 * gridPulse;
++    const gp = !!seg && seg.mech === 'block' && phase === 'play';
++    ghostPlate.visible = gp;
++    if (gp) { const d = incomingDir(cpos.x, cpos.z); ghostPlate.position.set(cpos.x, H_PROJ, cpos.z); ghostPlate.rotation.set(0, Math.atan2(d.x, d.z), 0); ghostPlate.userData.mat.opacity = time - lastBar < 0.25 ? 0.1 : 0.42; }
+     // barreiras
+     barriers = barriers.filter(b => {
+       b.age += dt;
+@@ -1205,12 +1353,12 @@ export function createBattle(ctx) {
+       traceT -= dt; const a = KU.arms.find(x => x.s === kAct.s), hp = kWrist(a).localToWorld(new THREE.Vector3(0, -0.1, 0)), pa = traceGeo.attributes.position;
+       pa.setXYZ(0, hp.x, hp.y, hp.z); pa.setXYZ(1, kAct.bx, H_PROJ, kAct.bz); pa.needsUpdate = true; trace.material.opacity = 0.9 * Math.max(0, traceT / 0.5);
+     } else trace.material.opacity = 0;
+-    animateChars(dt);
++    animateChars(dt); updateHold();
+     // câmera (troca suave entre as duas; tremor curto e sutil num impacto) e transparência de quem cobre algo interativo
+     updateCamera(dt); updateOcclusion(dt);
+     if (shakeT > 0) { shakeT -= dt; const a = 0.035 * shakeT / 0.18; camera.position.x += (Math.random() - 0.5) * a; camera.position.y += (Math.random() - 0.5) * a; }
+   }
+-  const _v = new THREE.Vector3();
++  const _v = new THREE.Vector3(), _fh = new THREE.Vector3(), _fh2 = new THREE.Vector3();
+   function animateChars(dt) {
+     const lv = kLevel(), firm = lv / 4;
+     for (const w of ['P', 'K']) react[w] = Math.max(0, react[w] - dt / 0.5);
+@@ -1223,7 +1371,7 @@ export function createBattle(ctx) {
+     let pk = 0, ps = cpos.x >= P_POS.x ? 1 : -1, ptgt = _v.set(cpos.x, 0.8, cpos.z);
+     if (gest) { gest.t += dt; const t = gest.t; pk = t < 0.12 ? t / 0.12 : t < 0.32 ? 1 : Math.max(0, 1 - (t - 0.32) / 0.35); ps = gest.x >= P_POS.x ? 1 : -1; ptgt.set(gest.x, 0.8, gest.z); if (t > 0.7) gest = null; }
+     else if (drawing) pk = 0.8;
+-    else if (seg && seg.guide && phase === 'play' && seg.guide.state === 'grab') { pk = 0.85; ps = seg.guide.x >= P_POS.x ? 1 : -1; ptgt.set(seg.guide.x, GUIDE.objY, seg.guide.z); }
++    else if (seg && seg.guide && phase === 'play' && seg.guide.state === 'grab') { pk = 0.85; ps = seg.guide.x >= P_POS.x ? 1 : -1; ptgt.set(seg.guide.x, seg.guide.y, seg.guide.z); }
+     else if (seg && seg.guide && phase === 'play' && seg.guide.attract) pk = 0.6;
+     for (const a of pModel.userData.arms) { a.k = (a.k || 0) + ((a.s === ps ? pk : 0) - (a.k || 0)) * Math.min(1, dt * 12); reachArm(pModel, a.s, ptgt, a.k); }
+     pose.setGuard(barriers.some(b => b.owner === 'P' && (b.alive || b.die < 0.15)));   // guarda até a última placa se desfazer
+@@ -1240,7 +1388,7 @@ export function createBattle(ctx) {
+     for (const a of KU.arms) {
+       let k = 0, tgt = _v.set(a.s * 2 + K_POS.x, 0.6, K_POS.z - 1.5);
+       const kp = seg && seg.guide && seg.guide.state === 'kpull';
+-      if (kp && a.s === (seg.guide.kSide || (seg.guide.kSide = seg.guide.x >= K_POS.x ? 1 : -1))) { tgt.set(seg.guide.x, GUIDE.objY, seg.guide.z); k = 0.35 + 0.6 * ease(seg.guide.t / 0.6); }   // gesto de puxar a ponta
++      if (kp && a.s === (seg.guide.kSide || (seg.guide.kSide = seg.guide.x >= K_POS.x ? 1 : -1))) { tgt.set(seg.guide.x, seg.guide.y, seg.guide.z); k = 0.35 + 0.6 * ease(seg.guide.t / 0.6); }   // gesto de puxar a ponta
+       else if (kAct && kAct.s === a.s) {
+         tgt.set(kAct.bx, 1.2, kAct.bz);
+         if (kAct.made) k = Math.max(0, 1 - kAct.back / 0.7);
+@@ -1254,14 +1402,30 @@ export function createBattle(ctx) {
+     if (FU.head) { FU.head.rotation.z = -0.12 + 0.03 * Math.sin(time * 0.4); FU.head.rotation.y = 0.06 * Math.sin(time * 0.27); }
+     let fk = 0, fs = 1, ft = _v.set(0, 3, 0);
+     if (figGest) { figGest.t += dt; const t = figGest.t, d = figGest.dur; fk = (t < 0.35 ? t / 0.35 : t < d - 0.4 ? 1 : Math.max(0, (d - t) / 0.4)) * (figGest.soft ? 0.55 : 1); fs = figGest.s; ft.copy(figGest.pt); if (t >= d) figGest = null; }
+-    for (const a of FU.arms) { a.k = (a.k || 0) + ((a.s === fs ? fk : 0) - (a.k || 0)) * Math.min(1, dt * 8); reachArm(fig, a.s, ft, a.k); }
++    // CONDUZIR aprimorado: um braço segura o fio do objeto (dá o tranco puxando para si; na ruptura, recua e cai); os disparos usam o outro
++    const hg = seg && seg.guide && seg.guide.held ? seg.guide : null;
++    const hold = hg && (obj.visible || (hg.snap >= 0 && hg.snap < 1)) ? hg : null;
++    let hk = 0; const htg = _fh.set(0, 0, 0);
++    if (hold) {
++      if (fs === hold.holdS) fs = -hold.holdS;
++      // como quem segura um fio de marionete: braço erguido à frente, do lado do objeto; o fio desce da mão até ele
++      const sx = Math.sign(hold.x - F_POS.x) || 1;
++      htg.set(F_POS.x + sx * 4.4, 10.4 + 0.25 * Math.sin(time * 1.3), F_POS.z + 1.8);
++      const yk = hold.yank * hold.yank; htg.lerp(_fh2.set(F_POS.x + sx * 2.4, 13, F_POS.z - 0.5), 0.7 * yk);   // tranco: puxa para cima e para si
++      if (hold.snap >= 0) { const sn = ease(hold.snap); htg.lerp(_fh2.set(F_POS.x + sx * 2.0, 13, F_POS.z - 1.5), 0.6 * sn); hk = 0.92 * (1 - sn); }   // o fio se parte: o braço recua e baixa
++      else hk = 0.92;
++    }
++    for (const a of FU.arms) {
++      const isHold = hold && a.s === hold.holdS, want = isHold ? hk : a.s === fs ? fk : 0;
++      a.k = (a.k || 0) + (want - (a.k || 0)) * Math.min(1, dt * (isHold && hold.yank > 0.5 ? 18 : 8)); reachArm(fig, a.s, isHold ? htg : ft, a.k);
++    }
+   }
+ 
+   // ---------- rótulo ----------
+   let labelOn = false, labelText = '';
+   function updateLabel() {
+     const on = !!seg && (phase === 'play' || phase === 'clear' || (phase === 'intro' && pt > 0.4));
+-    const txt = seg ? LABEL[seg.plus ? 'plus' : seg.mech][document.body.classList.contains('touch-on') ? 1 : 0] : '';
++    const txt = seg ? LABEL[seg.plus ? 'plus' : seg.guide && seg.guide.held ? 'held' : seg.mech][document.body.classList.contains('touch-on') ? 1 : 0] : '';
+     if (txt !== labelText) { label.textContent = txt; labelText = txt; }
+     if (on !== labelOn) { labelOn = on; label.style.display = 'block'; label.style.opacity = on ? '1' : '0'; }
+   }
+@@ -1347,7 +1511,7 @@ export function createBattle(ctx) {
+     get active() { return active; }, get fade() { return fade; },
+     get joystick() { return active && !!seg && (phase === 'play' || phase === 'clear' || (phase === 'intro' && fade <= 0) || (phase === 'wait' && camK < 0.02)); },
+     get actionLabel() { return active && seg && phase === 'play' ? ACTION[seg.mech] : null; },
+-    get action2Label() { return active && seg && phase === 'play' && seg.mech === 'guide' && seg.guide && (seg.guide.state === 'idle' || seg.guide.state === 'grab' || seg.guide.state === 'release') ? 'Puxar' : null; },
++    get action2Label() { return active && seg && phase === 'play' && seg.mech === 'guide' && seg.guide && !seg.guide.yanked && (seg.guide.state === 'idle' || seg.guide.state === 'grab' || seg.guide.state === 'release') ? 'Puxar' : null; },   // (aprimorado: depois do 1º tranco o botão sai — puxar não adianta)
+     prerender,
+     setFragmentHandler(fn) { fragHandler = fn || null; },
+     setFinaleHandler(fn) { finaleHandler = fn || null; },
+@@ -1361,7 +1525,8 @@ export function createBattle(ctx) {
+     get walls() { return walls.map(w => ({ pts: w.pts.map(p => ({ x: p.x, z: p.z })), alive: w.alive, preview: false })); },
+     get preview() { return drawing ? drawing.pts.map(p => ({ x: p.x, z: p.z })) : null; }, get previewLen() { return drawing ? drawing.len : 0; },
+     get structures() { return seg ? seg.structures.map(s => ({ x: s.x, z: s.z, alive: s.alive })) : []; },
+-    get guide() { const g = seg && seg.guide; return g ? { x: g.x, z: g.z, state: g.state, attract: g.attract, armed: g.armed, tension: g.tension, passed: g.passed, portal: g.portal ? { ...g.portal } : null, by: g.by || null } : null; },
++    get warnings() { return warnings.map(w => ({ ox: w.ox, oz: w.oz, tx: w.tx, tz: w.tz, t: w.t, dur: w.dur, done: !!w.done, target: w.target, struct: !!w.src })); },
++    get guide() { const g = seg && seg.guide; return g ? { x: g.x, y: g.y, z: g.z, state: g.state, attract: g.attract, armed: g.armed, tension: g.tension, passed: g.passed, portal: g.portal ? { ...g.portal } : null, by: g.by || null, held: g.held, hits: g.hits, need: g.need } : null; },
+     get through() { return projectiles.filter(p => p.alive && p.through).map(p => ({ x: p.x, z: p.z, vx: p.vx, vz: p.vz, inWhite: !!p.obj.parent && p.obj.parent === ws })); },
+     _pull(down) { rightDown = !!down; },
+     get _plus() { return plus; }, get _rig() { return { pModel, PB }; }, get _pose() { return pose; }, _camK(k) { camForce = k == null ? null : k; },
+diff --git a/src/battlePose.js b/src/battlePose.js
+index 376eff8..237af92 100644
+--- a/src/battlePose.js
++++ b/src/battlePose.js
+@@ -76,7 +76,7 @@ export function createPlayerPose(PB, pModel, scene) {
+   // poses finais do punho (lado do braço s = +1; para s = −1 o Z troca de sinal)
+   // (meio da mão; todas fora da cabeça, que é grande, e ao alcance com o cotovelo um pouco dobrado)
+   const ENDS = {
+-    up: V(0.36, 0.98, 0.56),         // para cima, à frente e para fora (o 1º rebate: de baixo para cima)
++    up: V(0.34, 0.9, 0.72),          // para cima, à frente e para fora (o 1º rebate: de baixo para cima; longe da bochecha)
+     upOut: V(0.12, 0.95, 0.76),      // alto e aberto
+     across: V(0.56, 0.55, -0.05),    // à frente, cruzando o corpo
+     side: V(0.15, 0.7, 0.95),        // lateral
+@@ -117,7 +117,9 @@ export function createPlayerPose(PB, pModel, scene) {
+     pModel.updateMatrixWorld(true);
+     const lp = pModel.worldToLocal(_p.set(wx, 1, wz));
+     const chain = sw.w > 0.05;
+-    if (!chain) { sw.s = lp.z >= -0.25 ? 1 : -1; sw.count = 0; sw.end = 'low'; }
++    // (as câmeras da batalha ficam atrás e à direita: o braço direito é o preferido — o esquerdo varre escondido atrás do corpo;
++    // ele só entra quando o contato fica bem à esquerda)
++    if (!chain) { sw.s = lp.z >= -2.0 ? 1 : -1; sw.count = 0; sw.end = 'low'; }
+     const arm = bySide(sw.s);
+     // ponto de partida = onde o punho está agora (com continuidade, mesmo no meio de outro gesto)
+     if (chain && sw.phase !== 'relax') sw.from.copy(sw.cur); else wristNow(arm, sw.from);   // relaxando: parte de onde a mão está desenhada
+diff --git a/src/boom.js b/src/boom.js
+index 26bf639..734737f 100644
+--- a/src/boom.js
++++ b/src/boom.js
+@@ -3,7 +3,7 @@
+ import * as THREE from 'three';
+ import { mat, box, cyl, cone, at, dynamic, bakeStatic } from './models/kit.js';
+ import { HOUSES, ROOF_COL, WALL_COL } from './data.js';
+-import { LOT, LOT_ANCHORS, slotOrigin, slotY } from './layout.js';
++import { LOT, LOT_ANCHORS, slotOrigin, slotY, TERRAIN } from './layout.js';
+ import { GROUND_Y } from './models/house.js';
+ 
+ const HS = LOT_ANCHORS.house;
+@@ -104,13 +104,14 @@ export function createBoom(scene, getWorld, audio) {
+   /** Chuva de lascas/folhas quando a van imparável atropela uma árvore ou a sebe. */
+   function smash(x, z, colors, count = 24) {
+     fx = (pinAt && pinAt(x, z)) || fxMain;
++    const gy = fx === fxMain ? TERRAIN.h(x, z) || 0 : 0;             // (encostas, patamares, morro: os cacos saem e caem no chão de verdade)
+     for (let i = 0; i < count; i++) {
+-      const s = rnd(0.25, 0.7);
++      const s = Math.round(rnd(0.25, 0.7) * 20) / 20;                 // (tamanhos em passos de 0,05: o cache de geometrias do kit não cresce a cada atropelada)
+       const m = box(s, s * 0.5, s * 0.8, colors[i % colors.length]);
+-      m.position.set(x + rnd(-1, 1), rnd(0.8, 3), z + rnd(-1, 1));
++      m.position.set(x + rnd(-1, 1), gy + rnd(0.8, 3), z + rnd(-1, 1));
+       fx.add(m);
+       const a = Math.random() * Math.PI * 2, sp = rnd(3, 9);
+-      parts.push({ m, vx: Math.cos(a) * sp, vz: Math.sin(a) * sp, vy: rnd(5, 12), rx: rnd(-10, 10), rz: rnd(-10, 10), rest: false });
++      parts.push({ m, vx: Math.cos(a) * sp, vz: Math.sin(a) * sp, vy: rnd(5, 12), rx: rnd(-10, 10), rz: rnd(-10, 10), rest: false, floor: gy });
+     }
+     shake = Math.max(shake, 0.5);
+     audio.crash && audio.crash();
+diff --git a/src/career.js b/src/career.js
+index ad8dac5..35007c3 100644
+--- a/src/career.js
++++ b/src/career.js
+@@ -89,6 +89,7 @@ const CSS = `
+   transition: opacity .25s, transform .25s; width: max-content; max-width: min(92vw, 720px); text-align: center; box-sizing: border-box; }
+ @media (max-width: 560px) { .career-toast { top: 152px; border-radius: 18px; } }
+ .career-toast.on { opacity: 1; transform: translate(-50%, 0); }
++.career-toast.pend { background: #fff3d6; color: #5a3c1e; border: 2px solid #ff7a1a; }   /* cumprida nesta partida, ainda não salva */
+ `;
+ 
+ export function createCareer() {
+@@ -99,11 +100,36 @@ export function createCareer() {
+   toastEl.className = 'career-toast';
+   document.body.appendChild(toastEl);
+   let toastTimer = 0;
+-  function toast(text) {
++  // logo abaixo da barra do topo (a altura dela muda com a tela e o modo toque); se encostar no botão MISSÕES ou no
++  // cronômetro, desce para baixo deles
++  // (o aviso "Toque para continuar" do celular aparece logo depois, com a fala: por isso a posição é revista enquanto o aviso está na tela)
++  function placeToast() {
++    const bar = document.querySelector('.ahud'), r = bar && bar.offsetParent ? bar.getBoundingClientRect() : null;
++    let top = (r && r.height ? r.bottom : 0) + 12;
++    const t = toastEl.getBoundingClientRect(), avoid = [];
++    for (const el of document.querySelectorAll('.missions-btn.on, .match-timer.on, .match-bumps.on, .tc-cue.on')) {
++      const o = el.getBoundingClientRect(), cs = getComputedStyle(el);
++      if (o.width && o.height && cs.display !== 'none' && cs.visibility !== 'hidden') avoid.push(o);
++    }
++    for (let k = 0, moved = true; moved && k < 5; k++) {
++      moved = false;
++      for (const o of avoid) if (o.left < t.right && o.right > t.left && o.top < top + t.height && o.bottom > top) { top = o.bottom + 8; moved = true; }
++    }
++    if (toastEl.style.top !== top + 'px') toastEl.style.top = top + 'px';
++  }
++  let placeTimer = 0;
++  /** Aviso curto abaixo da barra; fica o tempo de ler (mín. 3,2 s). pend: missão cumprida nesta partida, ainda não salva. Devolve a duração (ms). */
++  function toast(text, pend = false) {
+     toastEl.textContent = text;
++    toastEl.classList.toggle('pend', pend);
++    const place = () => { try { placeToast(); } catch (e) { /* sem layout: fica na posição do CSS */ } };
++    place();
+     toastEl.classList.add('on');
+-    clearTimeout(toastTimer);
+-    toastTimer = setTimeout(() => toastEl.classList.remove('on'), 3200);
++    clearTimeout(toastTimer); clearInterval(placeTimer);
++    placeTimer = setInterval(place, 200);
++    const ms = Math.max(3200, 1200 + text.length * 50);
++    toastTimer = setTimeout(() => { toastEl.classList.remove('on'); clearInterval(placeTimer); }, ms);
++    return ms;
+   }
+ 
+   // progresso salvo: progress[nível][missão]
+@@ -173,13 +199,27 @@ export function createCareer() {
+     MISSIONS[l].forEach((m, i) => { if (m.id && ids.has(m.id) && progress[l][i] < m.goal) { progress[l][i] = m.goal; names.push(m.name); } });
+     if (!names.length) return;
+     save();
+-    toast(names.length === 1 ? `✔ Missão concluída: ${names[0]}` : `✔ Missões concluídas: ${names.join(', ')}`);
++    const ms = toast(names.length === 1 ? `✔ Missão concluída: ${names[0]}` : `✔ Missões concluídas: ${names.join(', ')}`);
+     let nx = l + 1; while (RESERVED.includes(nx)) nx++;
+-    if (!wasDone && levelDone(l) && nx < LEVELS && !allOpen) setTimeout(() => toast(`🔓 Bairro ${nx + 1} desbloqueado!`), 3400);
++    if (!wasDone && levelDone(l) && nx < LEVELS && !allOpen) setTimeout(() => toast(`🔓 ${nx === 9 ? 'Nível' : 'Bairro'} ${nx + 1} desbloqueado!`), ms + 200);   // (Veneza é o "Nível 10", como no cartão e na placa)
+   }
+ 
+   // tentativa atual (Carreira): o que foi cumprido fica PENDENTE e só é salvo se esta partida terminar com a entrega certa
+   let level = -1, active = false, pending = new Set(), hintUsed = false;
++  // aviso discreto (uma vez por missão e partida) quando um objetivo é cumprido no meio da partida: antes só a lista de missões
++  // mostrava o "Pendente", e o jogador não sabia que tinha conseguido. As que se cumprem na própria entrega certa já saem salvas.
++  let announced = new Set();
++  function notePending() {
++    if (!active || level < 0) return;
++    const fresh = [];
++    for (const id of pending) {
++      if (announced.has(id)) continue;
++      announced.add(id);
++      const i = MISSIONS[level].findIndex(m => m.id === id);
++      if (i >= 0 && !done(level, i)) fresh.push(MISSIONS[level][i].name);
++    }
++    if (fresh.length) toast(fresh.length === 1 ? `Missão cumprida: ${fresh[0]} — será salva na entrega certa.` : `Missões cumpridas: ${fresh.join(', ')} — serão salvas na entrega certa.`, true);
++  }
+   // Bairro 1, "Volta no bairro": cada rua externa é dividida em 8 trechos; vale com 6 de 8 em cada lado (folga nas esquinas)
+   const LAP_BINS = 8, LAP_NEED = 6;
+   let lapBins = null;
+@@ -195,7 +235,7 @@ export function createCareer() {
+   // Bairro 7: batidas em veículos, espera atrás do engarrafamento, recuo diante do caminhão
+   let vehHits = 0, jamWait = null, jamArmed = null, backOff = null;
+ 
+-  return {
++  const api = {
+     get progress() { return progress; },
+     isDone: done,
+     isUnlocked: unlocked,
+@@ -231,7 +271,7 @@ export function createCareer() {
+ 
+     /** Nova partida da Carreira na fase l: tudo que foi cumprido na tentativa anterior (e não salvo) é descartado. */
+     startMatch(l) {
+-      level = l; active = l >= 0; pending = new Set(); hintUsed = false;
++      level = l; active = l >= 0; pending = new Set(); hintUsed = false; announced = new Set();
+       legs = new Map(); barHits = new Map(); barHitN = 0; offRoute = new Set();
+       deliveries = 0; fueled = false; fuelStops = 0; lastDelT = null; lastH = null; rev = null; look = null; stopAt = null; lookSet = new Set(); prevPos = null;
+       man = null; vanLaps = new Map(); footLaps = new Map(); prevFoot = null;
+@@ -240,7 +280,7 @@ export function createCareer() {
+       lapBins = { n: new Array(LAP_BINS).fill(false), s: new Array(LAP_BINS).fill(false), w: new Array(LAP_BINS).fill(false), e: new Array(LAP_BINS).fill(false) };
+     },
+     /** Fim do acompanhamento (saiu da partida): descarta o que estava pendente. */
+-    stop() { active = false; pending = new Set(); },
++    stop() { active = false; pending = new Set(); announced = new Set(); },
+ 
+     /** A cada quadro dirigindo (Carreira). ctx = { speed (da van; < 0 = ré), time (s no cronômetro), bars (barriers.list) }. */
+     tick(x, z, heading = 0, ctx = {}) {
+@@ -384,6 +424,7 @@ export function createCareer() {
+         if (!backOff) for (const b of trucks) { const n = near(b); if (n && n.u <= 10 && n.facing >= 0.8) { backOff = { b, dx: n.dx, dz: n.dz, anchor: n.anchor, bwd: 0, fwd: 0 }; break; } }
+       }
+       prevPos = { x, z, h: heading };
++      if (level === 0 && (ctx.time || 0) >= 600) pending.add('noRush');  // Sem pressa: chegou aos 10:00 (o cronômetro só aumenta; a entrega certa salva)
+       if (level === 0 && !pending.has('lap')) {                          // Volta no bairro: as 4 ruas externas
+         const a = roadCenter(0), b = roadCenter(GRID), near = c => (v => Math.abs(v - c) < ROAD / 2 + 1.5);
+         const bin = v => Math.floor((v - a) / (b - a) * LAP_BINS);
+@@ -442,7 +483,7 @@ export function createCareer() {
+         pending.add('firstDelivery');                                    // Primeira entrega: qualquer entrega (certa ou falsa)
+         if (!success && !indicated) pending.add('wrongAddress');         // Endereço errado: numa casa diferente da indicada
+       }
+-      if (!success) return;
++      if (!success) { notePending(); return; }
+       if (level === 0) {
+         pending.add('rightAddress');
+         if ((ctx.time || 0) >= 600) pending.add('noRush');               // Sem pressa: 10 min no cronômetro
+@@ -485,4 +526,6 @@ export function createCareer() {
+     /** O jogador usou a DICA (botão ou T). */
+     hint() { if (active) hintUsed = true; },
+   };
++  for (const k of ['tick', 'walk', 'bump', 'exitVan']) { const f = api[k]; api[k] = (...a) => { f(...a); notePending(); }; }   // objetivo cumprido no meio da partida: avisa
++  return api;
+ }
+diff --git a/src/main.js b/src/main.js
+index dfacf3a..e4eeadf 100644
+--- a/src/main.js
++++ b/src/main.js
+@@ -535,6 +535,9 @@ heli.setGround((x, z) => {
+     const o = slotOrigin(s), R = APT_ROOF;
+     if (x > o.x + R.x0 + 0.5 && x < o.x + R.x1 - 0.5 && z > o.z + R.z0 + 0.5 && z < o.z + R.z1 - 0.5) return (HOUSES[h].kind === 'fut' ? futRoofHeight(HOUSES[h], x - o.x, z - o.z) : aptRoofHeight(HOUSES[h], x - o.x, z - o.z)) + TERRAIN.h(o.x + 8.6, o.z + 8.6);
+   }
++  // prédios dos arredores das cidades (top = altura): o helicóptero que desce em cima de um pousa no terraço em vez de
++  // afundar nele (antes atravessava; com a colisão no ar, seria empurrado de lado ao descer)
++  if (heli.flying) for (const b of SOLIDS) if (b.out && b.top && x > b.x0 + 0.3 && x < b.x1 - 0.3 && z > b.z0 + 0.3 && z < b.z1 - 0.3) return b.top + 0.5;
+   return 0;
+ });
+ heli.setTerrain((x, z) => TERRAIN.h(x, z));   // Bairro 9: o chão sobe nas encostas
+@@ -545,7 +548,7 @@ let plazaFootCache = null, plazaFootKey = null;
+ const plazaSolidsFoot = () => { if (plazaFootKey !== PLAZA) { plazaFootKey = PLAZA; plazaFootCache = plazaFootSolids(); } return plazaFootCache; };
+ /** Obstáculos de quem anda a pé: tudo menos os lotes inteiros e a praça (dá para entrar nos quintais); só as paredes das casas. */
+ function walkSolids() {
+-  const out = SOLIDS.slice(HOUSE_SLOTS.length + (PLAZA ? 1 : 0)).filter(b => !b.vanOnly);   // escadarias e passarelas: só a pé
++  const out = SOLIDS.slice(HOUSE_SLOTS.length + (PLAZA ? 1 : 0)).filter(b => !b.vanOnly && !b.serra);   // escadarias e passarelas: só a pé; a serra da Cachoeira: a pé dá para subir (o chão acompanha)
+   if (PLAZA) out.push(...plazaSolidsFoot());
+   if (neighborhood === 'night10') out.push(...night.poles);
+   if (FLUX) out.push(...fluxParkFoot());
+@@ -569,11 +572,18 @@ function walkSolids() {
+ }
+ let houseFootKey = null, houseFoot = [];
+ let wasHigh = false;
++// Cachoeira (23): a serra em volta do vale é só cenário; as colunas de colisão dela (b.serra) existem para a van que vem do
++// vale parar no pé da encosta. Quem já está em cima dela (helicóptero voando baixo, van que pousou lá, personagem a pé) não
++// esbarra nelas — antes o helicóptero baixo empacava no ar ou era jogado para o lado, e a van pousada era empurrada centenas de metros.
++const hasSerra = () => !!(CANAL && CANAL.canyon);
++const onSerra = (x, z) => SOLIDS.some(b => b.serra && x >= b.x0 && x <= b.x1 && z >= b.z0 && z <= b.z1);
++const noSerraList = [];
++function solidsNoSerra() { noSerraList.length = 0; for (const b of SOLIDS) if (!b.serra) noSerraList.push(b); return noSerraList; }
+ /** A van (3 círculos R 1,25) está dentro de algum sólido? Se estiver, vai para o ponto livre mais perto (espiral até 30). */
+ function unstickVan() {
+   const inside = (x, z, hd, R = 1.25) => { const c = Math.cos(hd), sn = Math.sin(hd);
+     return [-1.5, 0, 1.5].some(k => { const px = x + c * k, pz = z + sn * k;
+-      return SOLIDS.some(b => px > b.x0 - R && px < b.x1 + R && pz > b.z0 - R && pz < b.z1 + R && (b.r ? Math.hypot(px - b.cx, pz - b.cz) < b.r + R : true)); }); };
++      return SOLIDS.some(b => !b.serra && px > b.x0 - R && px < b.x1 + R && pz > b.z0 - R && pz < b.z1 + R && (b.r ? Math.hypot(px - b.cx, pz - b.cz) < b.r + R : true)); }); };   // (a serra da Cachoeira não prende quem voa)
+   if (!inside(van.x, van.z, van.heading)) return;
+   for (let d = 1; d <= 30; d += 1) for (let k = 0; k < 24; k++) {
+     const a = k * Math.PI / 12, x = van.x + Math.cos(a) * d, z = van.z + Math.sin(a) * d;
+@@ -601,6 +611,7 @@ function heliTall(alt) {
+     for (const sp of V.spots) if (sp.y + (sp.shop ? 9.5 : 9) > y) heliTallOut.push(sp.walkBox);
+   }
+   if (CANAL && CANAL.rock) for (const b of CANAL.rock) if (b.top > y) heliTallOut.push(b);   // Cachoeira: maciço e degraus de pedra
++  for (const b of SOLIDS) if (b.out && b.top > y) heliTallOut.push(b);   // arredores urbanos: quarteirões e torres de fora (top = altura do prédio; só os que estão perto da van ficam em SOLIDS)
+   return heliTallOut;
+ }
+ // Veneza: cada conjunto de mesa + 4 cadeiras (raio ~1,9) da praça roxa — mesmas posições de terrain.js
+@@ -735,7 +746,7 @@ function openGate(s) {
+   Object.assign(sp.gateSolid, { x0: -9999, x1: -9998, z0: -9999, z1: -9998 });
+   const h = game.layout[s], g = h >= 0 && world.lotGroup(h).userData.gate;
+   if (g) gateAnim.set(g, 0);
+-  audio.bell && audio.bell();
++  sfx.gate();                                         // trinco e rangido (antes tocava a campainha da entrega)
+ }
+ function updateGates(dt) {
+   for (const [g, t] of gateAnim) { const k = Math.min(1, t + dt / 0.9); g.rotation.y = 1.45 * (1 - Math.pow(1 - k, 3)); if (k >= 1) gateAnim.delete(g); else gateAnim.set(g, k); }
+@@ -1214,6 +1225,63 @@ const bumpHold = new Set();
+ const bumpLevel = () => { const lv = gameMode === 'career' ? careerLevel : freeLevel; return lv === 1 || lv === 2 || lv === 6; };
+ const bumpShown = () => [2, 6].includes(gameMode === 'career' ? careerLevel : freeLevel);   // Bairros 3 e 7
+ const bumpTarget = b => { const i = SOLIDS.indexOf(b); return (i >= 0 && i < HOUSE_SLOTS.length) || (world.extraSolids && world.extraSolids.includes(b)) || !!b.post || b.bar != null || !!b.jam; };   // lotes (casas), troncos das árvores, postes, barreiras
++// ---------- Retorno sonoro de ações sem som próprio (porteira, batidas) ----------
++// Sons curtos gerados aqui (WebAudio), pela saída de efeitos (volume dos Efeitos; calam com o MENU e a aba escondida).
++let sfxNoiseBuf = null, bumpCool = 0, wallMsgCool = 0;
++function sfxNoise(ac) {
++  if (sfxNoiseBuf && sfxNoiseBuf.sampleRate === ac.sampleRate) return sfxNoiseBuf;
++  const n = ac.sampleRate, b = ac.createBuffer(1, n, n), d = b.getChannelData(0);
++  for (let i = 0; i < n; i++) d[i] = Math.random() * 2 - 1;
++  return (sfxNoiseBuf = b);
++}
++function sfxBurst(ac, out, t, dur, vol, type, f, q = 1) {           // ruído filtrado com ataque curto e queda exponencial
++  const src = ac.createBufferSource(), fl = ac.createBiquadFilter(), g = ac.createGain();
++  src.buffer = sfxNoise(ac); fl.type = type; fl.frequency.value = f; fl.Q.value = q;
++  g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(vol, t + 0.006); g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
++  src.connect(fl); fl.connect(g); g.connect(out); src.start(t, Math.random() * 0.5, dur + 0.05);
++}
++function sfxTone(ac, out, t, dur, vol, type, f0, f1) {
++  const o = ac.createOscillator(), g = ac.createGain();
++  o.type = type; o.frequency.setValueAtTime(f0, t); o.frequency.exponentialRampToValueAtTime(f1, t + dur);
++  g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(vol, t + 0.01); g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
++  o.connect(g); g.connect(out); o.start(t); o.stop(t + dur + 0.05);
++}
++const sfx = {
++  /** Porteira (Colheita): o trinco solta, a folha de madeira range ao girar e encosta (a animação dura ~0,9 s). */
++  gate() {
++    const ac = audio.ctx, out = audio.out; if (!ac || !out) return;
++    try {
++      const t = ac.currentTime + 0.01;
++      sfxBurst(ac, out, t, 0.05, 0.16, 'bandpass', 2600, 3);                  // clique do trinco
++      sfxTone(ac, out, t + 0.012, 0.05, 0.05, 'square', 1500, 900);
++      const o = ac.createOscillator(), lfo = ac.createOscillator(), lg = ac.createGain(), fl = ac.createBiquadFilter(), g = ac.createGain();
++      o.type = 'sawtooth'; o.frequency.setValueAtTime(150, t + 0.08); o.frequency.linearRampToValueAtTime(230, t + 0.75);   // rangido
++      lfo.frequency.value = 23; lg.gain.value = 26; lfo.connect(lg); lg.connect(o.frequency);
++      fl.type = 'bandpass'; fl.frequency.value = 950; fl.Q.value = 6;
++      g.gain.setValueAtTime(0.0001, t + 0.08); g.gain.exponentialRampToValueAtTime(0.045, t + 0.2); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.8);
++      o.connect(fl); fl.connect(g); g.connect(out); o.start(t + 0.08); lfo.start(t + 0.08); o.stop(t + 0.85); lfo.stop(t + 0.85);
++      sfxBurst(ac, out, t + 0.86, 0.12, 0.12, 'lowpass', 520);               // a folha encosta no batente
++      sfxTone(ac, out, t + 0.86, 0.12, 0.08, 'triangle', 140, 90);
++    } catch (e) { /* sem áudio */ }
++  },
++  /** Batida da van (k = 0..1, pela velocidade perdida no choque): baque surdo de lataria. */
++  bump(k) {
++    const ac = audio.ctx, out = audio.out; if (!ac || !out) return;
++    try {
++      const t = ac.currentTime + 0.005, v = 0.05 + 0.2 * k;
++      sfxBurst(ac, out, t, 0.12 + 0.18 * k, v, 'lowpass', 380 + 500 * k);
++      sfxTone(ac, out, t, 0.16 + 0.2 * k, v * 0.9, 'sine', 95, 45);
++      if (k > 0.45) sfxBurst(ac, out, t + 0.02, 0.22, v * 0.35, 'bandpass', 1900, 2);   // forte: um chacoalhar de metal
++    } catch (e) { /* sem áudio */ }
++  },
++};
++/** Chamar logo depois de van.update: a van perdeu velocidade porque encostou em algo → som proporcional ao choque. */
++function bumpFeedback(v0, dt) {
++  bumpCool = Math.max(0, bumpCool - dt);
++  if (!van.touched.size || bumpCool > 0) return;
++  const lost = Math.abs(v0) - Math.abs(van.speed);
++  if (lost > 2.5) { sfx.bump(Math.min(1, (lost - 2.5) / 16)); bumpCool = 0.35; }
++}
+ function countBumps() {
+   for (const b of van.touched) if (!bumpHold.has(b) && bumpTarget(b)) { bumps++; bumpHold.add(b); if (gameMode === 'career') career.bump(b, barriers.list.length, b.jam || (b.bar != null && barriers.list[b.bar] && barriers.list[b.bar].type === 'truck')); }
+   for (const b of bumpHold) if (!van.touched.has(b) && van.gapTo(b) > 1) bumpHold.delete(b);
+@@ -1290,6 +1358,7 @@ function startFree(mode = 'free') {
+   gameMode = mode;
+   if (!COMPOSED.includes(neighborhood)) setupGrid4();   // Bairro 1 tem a casa fixa; o 3 (mesma grade) não
+   resetGates();
++  hint.clear(); hintUsed = false; hintStep = -1; hintCount = 0;   // partida nova: a DICA disponível de novo (mesmo sem passar pelo Voltar)
+   setupChurch(); setupMedStory(); setupVeniceK();
+   if (mode === 'career') career.startMatch(careerLevel); else career.stop();
+   music.setTrack(LEVEL_TRACKS[neighborhood] || null, true);   // Veneza, Colheita e Nevasca: a faixa do bairro já tocando
+@@ -1377,7 +1446,14 @@ const FUEL_LINES = [
+   'Frentista: “Pronto! O cafezinho da loja é por conta da casa.”',
+   'Frentista: “Abastecida! Quer o chaveiro de brinde? É um pneuzinho.”',
+ ];
+-let nearPump = false, fuelArmed = true, fuelMsgT = 0, fuelMsg = '';
++let nearPump = false, fuelArmed = true, fuelMsgT = 0, fuelMsg = '', fuelLast = -1;
++/** Fala do frentista: nunca a mesma duas vezes seguidas; fica na barra o tempo de ler com calma (também no celular). */
++function fuelLine() {
++  let i = Math.floor(Math.random() * (FUEL_LINES.length - 1));
++  if (fuelLast >= 0 && i >= fuelLast) i++;
++  fuelLast = i; fuelMsg = FUEL_LINES[i];
++  fuelMsgT = Math.max(4.5, 1.2 + fuelMsg.length / 15);   // (~5–6,5 s; antes 3 s)
++}
+ function atPump() {
+   const inZone = GAS_LIST.some(g => {
+     const o = slotOrigin(g.slots[0]), lx = van.x - o.x, lz = van.z - o.z;
+@@ -1429,7 +1505,7 @@ function findNearHouse() {
+ }
+ 
+ function requestHint() {
+-  if (state !== 'drive' || hintUsed || hintStep === game.step) return;
++  if ((state !== 'drive' && state !== 'walk') || hintUsed || hintStep === game.step) return;   // (a pé também: em Veneza, no Morro e nos bairros sem grade há entregas a pé)
+   hintCount++; hintUsed = hintCount >= hintLimit();
+   if (gameMode === 'career') career.hint();
+   hintStep = game.step;
+@@ -1440,6 +1516,25 @@ function requestHint() {
+ 
+ // Van imparável: casas que ela toca explodem; árvores e sebe viram uma chuva de lascas e folhas.
+ const smashCool = new Map();
++// o que voa ao atropelar cada coisa: folhas e lascas (árvore/sebe), tijolo, reboco e telha (construções dos arredores),
++// madeira e tinta (cercas e postes), pedaços listrados (bloqueios), lataria (carros e caminhões)
++const SMASH_COLORS = {
++  tree: ['#3f8f3a', '#57a84a', '#6b4526', '#2f7a32'], hedge: ['#3f8f3a', '#2f7a32', '#57a84a'],
++  building: ['#d8ccb6', '#b8a593', '#8a5e4d', '#9e9a92', '#c7bba9'], fence: ['#e9e3d6', '#8a6a48', '#a88d66', '#d8ccb6'],
++  post: ['#7c8288', '#5f656b', '#a7aaa6'], barrier: ['#ff7a1a', '#f4f1ea', '#e8661a', '#5f656b'], car: ['#c8ccd0', '#5f656b', '#2b2d33', '#d23b2b'],
++  wall: ['#c9c2b5', '#9e9a92', '#b8a593', '#e9e3d6'], gas: ['#d23b2b', '#f4f1ea', '#7c8288', '#ffd23a'],
++};
++const SMASH_N = { tree: 30, hedge: 14, building: 26, fence: 16, post: 10, barrier: 18, car: 20, wall: 16, gas: 18 };
++function smashKind(b, i, treesFrom) {
++  if (b.jam || (b.bar != null && barriers.list[b.bar] && barriers.list[b.bar].type === 'truck')) return 'car';
++  if (b.bar != null) return 'barrier';
++  if (b.post) return 'post';
++  const w = b.x1 - b.x0, d = b.z1 - b.z0, gas0 = HOUSE_SLOTS.length + (PLAZA ? 1 : 0);
++  if (b.out) return Math.max(w, d) <= 1.6 ? 'tree' : Math.min(w, d) <= 0.7 ? 'fence' : 'building';   // arredores: tronco, cerca ou construção
++  if (i >= gas0 && i < gas0 + GAS_LIST.length * GAS_PARTS.length) return 'gas';                     // peças do posto
++  if (i < treesFrom) return 'hedge';                                                                   // praça e sebe
++  return Math.max(w, d) <= 2.2 ? 'tree' : Math.min(w, d) <= 0.7 ? 'wall' : 'building';             // troncos; muros; o resto (igreja, enchimento…)
++}
+ function wreck(dt) {
+   for (const [k, v] of smashCool) { if (v - dt <= 0) smashCool.delete(k); else smashCool.set(k, v - dt); }
+   const R = 1.3, c = Math.cos(van.heading), s = Math.sin(van.heading);
+@@ -1462,11 +1557,10 @@ function wreck(dt) {
+           else if (!allDestroyed()) { restartMsg = 'Poucas casas de pé! A partida vai reiniciar…'; setState('fadeOut'); }   // (sem destinos possíveis: recomeça, como na entrega certa)
+         }
+       }
+-    } else if (!smashCool.has(i)) {                 // sebe ou árvore
++    } else if (!smashCool.has(i) && !b.serra) {     // sebe, árvore, construção dos arredores, bloqueio… (a serra da Cachoeira é morro: nada voa)
+       smashCool.set(i, 0.35);
+-      const tree = i >= treesFrom;
+-      boom.smash(Math.min(Math.max(van.x + c * 2.4, b.x0), b.x1), Math.min(Math.max(van.z + s * 2.4, b.z0), b.z1),
+-        tree ? ['#3f8f3a', '#57a84a', '#6b4526', '#2f7a32'] : ['#3f8f3a', '#2f7a32', '#57a84a'], tree ? 30 : 14);
++      const k = smashKind(b, i, treesFrom);
++      boom.smash(Math.min(Math.max(van.x + c * 2.4, b.x0), b.x1), Math.min(Math.max(van.z + s * 2.4, b.z0), b.z1), SMASH_COLORS[k], SMASH_N[k]);
+     }
+   }
+ }
+@@ -2716,10 +2810,11 @@ function update(dt, t) {
+           setState('walk');
+           break;
+         }
+-        if (heli.flying) { fuelMsg = 'Pouse o helicóptero antes de descer.'; fuelMsgT = 2.5; }
+-        else if (Math.abs(van.speed) > 3.5) { fuelMsg = 'Pare a van para descer (L).'; fuelMsgT = 2.5; }
++        if (heli.landed) { fuelMsg = 'Daqui não dá para descer: decole e pouse no chão ou num terraço do bairro.'; fuelMsgT = 3; }   // (terraço de um prédio dos arredores)
++        else if (heli.flying) { fuelMsg = 'Pouse o helicóptero antes de descer.'; fuelMsgT = 2.5; }
++        else if (Math.abs(van.speed) > 3.5) { fuelMsg = VENICE ? 'Pare a lancha para descer.' : 'Pare a van para descer.'; fuelMsgT = 2.5; }
+         else {
+-          if (!walker.placeBesideVan(van, walkSolids(), !!VENICE)) { fuelMsg = 'Encoste a lancha no cais para descer (L).'; fuelMsgT = 2.5; }   // Veneza: só desce em terra
++          if (!walker.placeBesideVan(van, walkSolids(), !!VENICE)) { fuelMsg = 'Encoste a lancha no cais para descer.'; fuelMsgT = 2.5; }   // Veneza: só desce em terra
+           else {
+             if (gameMode === 'career') career.exitVan(van.x, van.z, van.heading, van.speed, shopFronts());   // Bairro 4: "Estacione de ré"
+             van.stop(); nearHouse = -1; nearPump = false;
+@@ -2731,9 +2826,13 @@ function update(dt, t) {
+         }
+       }
+       if (free && input.heli()) heli.toggle();
+-      van.setGhost(free && (menu.unstoppable || heli.high), menu.unstoppable ? null : heliTall(van.object.position.y));
++      { const ghost = free && (menu.unstoppable || heli.high), serraFree = !ghost && hasSerra() && (heli.flying || onSerra(van.x, van.z));
++        van.setGhost(ghost || serraFree, ghost && menu.unstoppable ? null : ghost ? heliTall(van.object.position.y) : solidsNoSerra()); }
+       if (heli.landed) van.stop();                // pousado no teto: parado até decolar (H)
+-      if (!mooringStep(dt)) van.update(dt, heli.landed ? { x: 0, z: 0 } : approachLock() ? approachAxis() : input.axis(), approachLock() ? 'car' : rig.mode === 'chase' ? 'car' : 'screen');
++      { const v0 = van.speed;
++        if (!mooringStep(dt)) { van.update(dt, heli.landed ? { x: 0, z: 0 } : approachLock() ? approachAxis() : input.axis(), approachLock() ? 'car' : rig.mode === 'chase' ? 'car' : 'screen'); bumpFeedback(v0, dt); }   // (atracada, a lancha não bate)
++        if (gameMode === 'career' && van.touched.has(ENTRANCE_WALL) && wallMsgCool <= 0) { fuelMsg = 'Na Carreira, a saída do bairro só abre depois da entrega certa.'; fuelMsgT = 3.5; wallMsgCool = 8; }   // (a parede é invisível: sem o aviso, parecia defeito)
++        wallMsgCool = Math.max(0, wallMsgCool - dt); }
+       if (bumpLevel() && !heli.flying) countBumps();  // Bairros 2 e 3: batidas da van (não conta no ar, nem descendo do helicóptero)
+       if (heli.on && rig.mode === 'chase') {      // no ar, A/D giram mesmo parado
+         const ax = input.axis().x;
+@@ -2767,7 +2866,7 @@ function update(dt, t) {
+     }
+     case 'fuel':                                    // abastecendo: a van espera a bomba
+       van.stop();
+-      if (stateT > FUEL_TIME) { fuelMsgT = 3; fuelMsg = FUEL_LINES[Math.floor(Math.random() * FUEL_LINES.length)]; actionLock = 0.3; setState('drive'); }
++      if (stateT > FUEL_TIME) { fuelLine(); actionLock = 0.3; setState('drive'); }
+       break;
+     case 'ring':
+       if (stateT > RESIDENT_APPEAR && !HOUSES[pending].narrator) world.showResident(pending, 'door');   // abre a porta e vem até o portão (K não atende: continua lendo)
+@@ -2828,7 +2927,7 @@ function update(dt, t) {
+       if (missions.isOpen) { if (input.missions()) missions.close(); break; }
+       if (gameMode === 'career' && input.missions()) { missions.open(careerLevel); break; }
+       van.stop();
+-      if (!roofWalk && TERRAIN.kind !== 'flat') walker.setFloor(TERRAIN.h(walker.x, walker.z));   // Bairro 9: ladeiras e escadarias
++      if (!roofWalk && (TERRAIN.kind !== 'flat' || hasSerra())) walker.setFloor(TERRAIN.h(walker.x, walker.z));   // Bairro 9: ladeiras e escadarias; Cachoeira: a serra de fora
+       if (VENICE) walker.setFloor(VENICE.walkH(walker.x, walker.z));   // Veneza: cais, vielas e pontes
+       if (walker.scripted && doorStep === 'out') { const ax = input.axis(); if (ax.x || ax.z || input.action()) { walker.stopScript(); doorStep = null; } }   // descendo: mexeu ou apertou E, já vale
+       if (walker.scripted) {                          // descendo/subindo na van: dois passos curtos (subindo, nada interrompe)
+@@ -2839,6 +2938,7 @@ function update(dt, t) {
+         break;
+       }
+       walker.liveFrame();
++      if (input.hint()) requestHint();               // DICA também a pé
+       walker.update(dt, input.axis(), rig.mode === 'chase' ? 'car' : 'screen', roofWalk ? roofSolids() : walkSolids(), van);
+       if (gameMode === 'career') career.walk(walker.x, walker.z, PLAZA);   // Bairro 2: "Conheça a praça" (fica pendente até a entrega certa)
+       walker.setCarry(carrying);
+@@ -3041,7 +3141,13 @@ function update(dt, t) {
+     else startBoss();
+   }
+   hint.update(wdt);
+-  heli.update(wdt, state === 'drive' && heli.on ? input.lift() : 0);
++  let lift = state === 'drive' && heli.on ? input.lift() : 0;
++  if (lift === 0 && state === 'drive' && heli.on && (van.x < 0 || van.z < 0 || van.x > MAP_W() || van.z > MAP_W())) {   // fora do bairro (serra da Cachoeira, morros das Encostas):
++    const la = Math.max(0, van.speed) * 0.9, gx = van.x + Math.cos(van.heading) * la, gz = van.z + Math.sin(van.heading) * la;   // o helicóptero sobe sozinho para
++    const tg = Math.max(TERRAIN.h(van.x, van.z), TERRAIN.h(gx, gz));                                                              // manter ~7,5 m acima do morro à frente (acima de 6,5
++    if (tg > 0.5 && heli.altitude < tg + 7.5) lift = 1;                                                                           // passa por cima de árvores e casas baixas, como no plano); no plano nada muda
++  }
++  heli.update(wdt, lift);
+   { const hi = heli.high; if (wasHigh && !hi && heli.flying && !menu.unstoppable) unstickVan(); wasHigh = hi; }   // descendo do alto no meio do casario: sai do que estiver por baixo
+   if (MOONV && !heli.on && !heli.flying) van.object.position.y = van.simY;   // Órbita: a altura da gravidade baixa (saltinhos)
+   boom.update(wdt);
+@@ -3158,42 +3264,48 @@ function updateHUD() {
+     hud.setFade(fade);
+     return;
+   }
+-  hintBtn.set(hintUsed || hintStep === game.step ? 'used' : state === 'drive' ? 'ready' : 'busy');
++  hintBtn.set(hintUsed || hintStep === game.step ? 'used' : state === 'drive' || (state === 'walk' && !walker.scripted) ? 'ready' : 'busy');
++  const walkNear = state === 'walk' && walker.nearVan(van) && !nearLounger() && !nearChurchK() && !nearVenK() && !missions.isOpen;
++  // a pé no Bairro 1: pegar a caixa / entregar ao K / conversar (balão em cima do personagem)
++  const wsWalk = state === 'walk' && !missions.isOpen ? massStory.walkPrompt() || wsStory.walkPrompt() : '';
++  const walkAct = wsWalk ? wsWalk : state === 'walk' && medTalkTarget() && !missions.isOpen ? 'Conversar' : nearGrillDoor() && !missions.isOpen ? "Entrar no Grillby's" : state === 'walk' && nearGate >= 0 && !missions.isOpen ? 'Abrir porteira' : state === 'walk' && nearVenK() && !missions.isOpen ? 'Conversar' : state === 'walk' && nearHouse >= 0 && !missions.isOpen ? 'Entregar' : state === 'walk' && !walkNear && !missions.isOpen ? (nearParcel() ? 'Pegar a caixa' : nearK() ? (carrying ? 'Entregar a caixa' : 'Conversar') : nearLounger() || nearChurchK() ? 'Conversar' : '') : '';
+ 
+   if (state === 'dialog') {
+     hud.setSub(dialog.success ? '✔ Entrega concluída!  ·  [E] continuar' : '[E] ou Espaço: continuar',
+       dialog.success ? 'success' : 'cont');
+     hud.setMain(dialog.narrator ? dialog.text : `${dialog.name}: “${dialog.text}”`, dialog.success ? 'success' : 'dialog');   // narrador: só o pensamento, entre parênteses
+   } else {
+-    const extraKeys0 = '  ·  L: descer da van';
++    const vehicle = VENICE ? 'lancha' : 'van', touchOn = document.body.classList.contains('touch-on');
++    const extraKeys0 = '  ·  L: descer da ' + vehicle;
+     const extraKeys = extraKeys0 + (gameMode === 'free' ? (MOONV ? '  ·  H: helicóptero' : '  ·  H: helicóptero  ·  F: míssil') : '  ·  M: missões');
+-    hud.setSub(state === 'talk' || state === 'cine' || state === 'trolley' || state === 'trolleyBlack' || state === 'laser' ? '' : state === 'walk'
+-      ? (rig.mode === 'chase' ? 'A PÉ  ·  W/S: andar  ·  A/D: virar  ·  E (perto da van): entrar  ·  C: bairro  ·  botão direito: olhar em volta' : 'A PÉ  ·  WASD: andar  ·  E (perto da van): entrar  ·  C: câmera')
++    const fKey = gameMode === 'free' && !MOONV ? '  ·  F: míssil' : '';                          // (Lua: sem míssil)
++    // cenas, conversas e momentos sem controle de direção: nada de teclas de dirigir na barra (cada cena mostra a própria dica)
++    const noKeys = ['talk', 'cine', 'trolley', 'trolleyBlack', 'laser', 'wstory', 'mstory', 'chseq', 'chat', 'boss', 'missile', 'fadeOut'].includes(state);
++    hud.setSub(noKeys ? '' : state === 'walk'
++      ? (rig.mode === 'chase' ? `A PÉ  ·  W/S: andar  ·  A/D: virar  ·  E (perto da ${vehicle}): entrar  ·  C: bairro  ·  botão direito: olhar em volta` : `A PÉ  ·  WASD: andar  ·  E (perto da ${vehicle}): entrar  ·  C: câmera`)
+       : heli.landed
+-      ? 'POUSADO NO PRÉDIO  ·  H: decolar  ·  F: míssil'
++      ? 'POUSADO NO PRÉDIO  ·  H: decolar' + (roofUnderVan() ? '  ·  L: descer na laje' : '') + fKey
+       : heli.on
+-      ? 'HELICÓPTERO  ·  W/S: frente e ré  ·  A/D: girar  ·  Espaço: subir  ·  Shift: descer  ·  H: pousar (em cima de um prédio, pousa no teto)  ·  F: míssil'
++      ? 'HELICÓPTERO  ·  W/S: frente e ré  ·  A/D: girar  ·  Espaço: subir  ·  Shift: descer  ·  H: pousar' + fKey
+       : rig.mode === 'chase'
+       ? 'W / ↑: acelerar  ·  S / ↓: frear e ré  ·  A D / ← →: virar  ·  E: entregar  ·  C: bairro  ·  T: dica' + extraKeys
+       : 'WASD / Setas: dirigir  ·  E: entregar  ·  C: câmera  ·  T: dica' + extraKeys, 'muted');
+     if ((state === 'drive' || state === 'walk') && wsStory.objective()) hud.setMain(wsStory.objective(), 'clue');   // atividade da oficina no lugar da pista
+-    else if (state === 'drive' && hint.active && !hint.landed) hud.setMain('Olha a dica caindo do céu!', 'ring');
++    else if ((state === 'drive' || state === 'walk') && hint.active && !hint.landed) hud.setMain('Olha a dica caindo do céu!', 'ring');
+     else if (state === 'ring') hud.setMain('Ding-dong… 🔔', 'ring');
+     else if (state === 'boss') hud.setMain(monster.phase === 'driveOut' ? 'Todas as casas foram destruídas… algo despertou!' : 'O DEVORADOR DE BAIRROS acordou!', 'dialog');
+     else if (state === 'missile') hud.setMain('Míssil disparado!', 'ring');
+     else if (state === 'fuel') hud.setMain('⛽ Abastecendo… glub, glub, glub…', 'ring');
+     else if (state === 'talk' || state === 'cine' || state === 'wstory' || state === 'chseq' || state === 'mstory' || state === 'trolley' || state === 'trolleyBlack' || state === 'laser') hud.setMain('', 'clue');
+     else if (state === 'walk' && carrying) hud.setMain(walker.nearVan(van) ? 'Entrar na van devolve a caixa ao lugar dela.' : 'Carregando uma caixa… de quem será?', 'clue');
+-    else if (state === 'walk') hud.setMain(walker.nearVan(van) && !nearLounger() && !nearVenK() ? 'Perto da van — aperte E para entrar.' : SPOTS ? game.mainText() : 'Passeando a pé… (não dá para entregar andando)', 'clue');   // Morro: a pé continua valendo a pista
++    // a pé: "perto da van" só quando E de fato entra nela (perto de uma porta, porteira ou alguém para conversar, o E faz aquilo);
++    // Veneza e os bairros sem grade aceitam entrega a pé, então a pista continua na barra
++    else if (state === 'walk') hud.setMain(walkNear && !walkAct ? (touchOn ? `Perto da ${vehicle} — toque em “Entrar na ${vehicle}”.` : `Perto da ${vehicle} — aperte E para entrar.`) : VENICE || SPOTS ? game.mainText() : 'Passeando a pé… (neste bairro, as entregas são feitas da van)', 'clue');
+     else if (state === 'drive' && fuelMsgT > 0) hud.setMain(fuelMsg, 'dialog');
+     else if (state === 'fadeOut') hud.setMain(restartMsg || (endToMap ? 'Partida concluída!' : 'Entrega concluída! Preparando a próxima…'), restartMsg ? 'dialog' : 'success');   // (na Carreira volta ao mapa)
+     else hud.setMain(game.mainText(), 'clue');
+   }
+ 
+-  const walkNear = state === 'walk' && walker.nearVan(van) && !nearLounger() && !nearChurchK() && !nearVenK() && !missions.isOpen;
+-  // a pé no Bairro 1: pegar a caixa / entregar ao K / conversar (balão em cima do personagem)
+-  const wsWalk = state === 'walk' && !missions.isOpen ? massStory.walkPrompt() || wsStory.walkPrompt() : '';
+-  const walkAct = wsWalk ? wsWalk : state === 'walk' && medTalkTarget() && !missions.isOpen ? 'Conversar' : nearGrillDoor() && !missions.isOpen ? "Entrar no Grillby's" : state === 'walk' && nearGate >= 0 && !missions.isOpen ? 'Abrir porteira' : state === 'walk' && nearVenK() && !missions.isOpen ? 'Conversar' : state === 'walk' && nearHouse >= 0 && !missions.isOpen ? 'Entregar' : state === 'walk' && !walkNear && !missions.isOpen ? (nearParcel() ? 'Pegar a caixa' : nearK() ? (carrying ? 'Entregar a caixa' : 'Conversar') : nearLounger() || nearChurchK() ? 'Conversar' : '') : '';
+   if (walkAct) {
+     rig.camera.updateMatrixWorld();
+     promptPos.set(walker.x, walker.floor + 2.7, walker.z).project(rig.camera);
+diff --git a/src/reflectPlus.js b/src/reflectPlus.js
+index 7949a11..d740aee 100644
+--- a/src/reflectPlus.js
++++ b/src/reflectPlus.js
+@@ -144,7 +144,7 @@ export function createReflectPlus(api) {
+   function launch(p) {
+     p.state = 'in'; p.target.set(p.T.u, p.T.v, WP.zp);
+     p.pos.copy(handPos(p.T.u < 0 ? -1 : 1)); aim(p, p.target);
+-    if (!p.obj) { p.obj = api.projGet(); p.obj.visible = true; p.obj.userData.claim.visible = false; scene.add(p.obj); }
++    if (!p.obj) { p.obj = api.projGet(); p.obj.visible = true; p.obj.userData.claim.visible = false; if (p.obj.userData.mark) p.obj.userData.mark.visible = false; scene.add(p.obj); }   // (voo em 3D: sem a marca no chão)
+     api.sfx('launch'); api.L('p:launch');
+   }
+   function aim(p, to) { p.vel.copy(to).sub(p.pos).normalize().multiplyScalar(p.speed); }
+diff --git a/src/settings.js b/src/settings.js
+index b77806c..991e171 100644
+--- a/src/settings.js
++++ b/src/settings.js
+@@ -28,8 +28,9 @@ const CSS = `
+ .st-confirm.on { display: flex; flex-direction: column; justify-content: center; min-height: var(--st-h, auto); }   /* mesma altura do painel principal (o cartão não encolhe ao confirmar) */
+ .st-rev { margin: 10px 0 0; text-align: center; font-size: 11px; font-weight: 600; letter-spacing: .02em; color: #a88b66; }
+ .st-ctrl { margin: 0; padding: 0; list-style: none; font-size: 14px; line-height: 1.35; }
+-.st-ctrl li { display: grid; grid-template-columns: minmax(96px, auto) 1fr; gap: 10px; padding: 5px 0; border-bottom: 1px dashed #e6cc98; }
+-.st-ctrl b { white-space: nowrap; }
++.st-ctrl li { display: grid; grid-template-columns: 9.6em 1fr; gap: 10px; padding: 5px 0; border-bottom: 1px dashed #e6cc98; }   /* 1ª coluna com a mesma largura em todas as linhas (as descrições ficam alinhadas) */
++.st-ctrl b { overflow-wrap: break-word; }
++@media (max-width: 400px) { .st-ctrl li { grid-template-columns: 8.2em 1fr; } }
+ .st-ctrl small { color: #7a5536; }
+ .st-confirm p { margin: 4px 0 10px; font-size: 15px; line-height: 1.4; text-align: center; }
+ .st-two { display: flex; gap: 10px; } .st-two .st-btn { flex: 1; }
+@@ -53,14 +54,14 @@ const CSS = `
+ 
+ const CONTROLS = [
+   ['W A S D / setas', 'Dirigir (A/D viram; S freia e dá ré)'],
+-  ['E / Espaço / Enter', 'Entregar, abastecer no posto, continuar o diálogo, conversar; no mapa da Carreira, jogar no bairro'],
++  ['E / Espaço / Enter', 'Entregar, abastecer no posto, abrir porteiras, conversar e continuar o diálogo; no mapa da Carreira, jogar no bairro'],
+   ['L', 'Descer da van e andar a pé (van parada); E perto da van volta a dirigir'],
+   ['C', 'Câmera: atrás da van ↔ bairro inteiro'],
+   ['Botão direito + arrastar', 'Girar e inclinar a câmera; roda do mouse aproxima; botão do meio volta ao padrão'],
+   ['T ou botão DICA', 'Seta do céu na casa indicada (1 por entrega)'],
+   ['M ou botão MISSÕES', 'Lista de missões <small>(só Modo Carreira)</small>'],
+   ['A / D no mapa', 'Andar pela estrada do mapa <small>(Carreira)</small>'],
+-  ['H', 'Helicóptero; Shift desce <small>(só Modo Livre)</small>'],
++  ['H', 'Helicóptero: Espaço sobe, Shift desce, H pousa <small>(só Modo Livre)</small>'],
+   ['F', 'Míssil <small>(só Modo Livre)</small>'],
+   ['Esc ou botão MENU', 'Pausar a partida (e opções do Modo Livre)'],
+   ['Botão ♪', 'Pausar / continuar a música'],

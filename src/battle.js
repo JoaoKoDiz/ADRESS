@@ -20,10 +20,8 @@ import { createReflectPlus } from './reflectPlus.js';
 export const BATTLE_CP_KEY = 'adress.dev.battle';   // teste pelo cadeado: libera o cartão Sacrifício para começar a batalha
 
 // ---------- constantes (fáceis de ajustar) ----------
-// Arena adaptada à câmera baixa: a grade (e a área do círculo) é a faixa que essa câmera lê bem — da frente do K até
-// logo atrás do jogador. Além dela, só o vazio, as fissuras e a figura. Células inteiras, sem moldura.
-const GRID = { x0: -7, x1: 7, z0: -2, z1: 9, cell: 1 };                // 14 × 11 células
-const LIM = { x0: -6.5, x1: 6.5, z0: -2, z1: 9 };                  // limites do círculo          // X = lados, Z = comprimento (figura em −Z, jogador em +Z)
+const GRID = { x0: -7, x1: 7, z0: -9, z1: 9, cell: 1 };                // 14 × 18 células inteiras, sem moldura
+const LIM = { x0: -6.5, x1: 6.5, z0: -9, z1: 9 };                  // limites do círculo (os de sempre)          // X = lados, Z = comprimento (figura em −Z, jogador em +Z)
 const P_POS = new THREE.Vector3(-1.0, 0, 8.4), K_POS = new THREE.Vector3(0.7, 0, 2.6), F_POS = new THREE.Vector3(0, 0, -11);
 const F_SCALE = [4.6, 5.0, 4.6];
 const FACE_NZ = Math.PI / 2, FACE_PZ = -Math.PI / 2;                 // os modelos olham para +X: π/2 → −Z, −π/2 → +Z
@@ -33,12 +31,9 @@ const H_PROJ = 1.05, PR = 0.2, HIT_R = 0.45;                          // altura 
 // angle: 0° = de frente para o jogador (ele olha para −Z, a figura), 90° = à direita, 180° = atrás.
 const camAt = (angle, dist, height) => { const a = angle * Math.PI / 180; return new THREE.Vector3(P_POS.x + Math.sin(a) * dist, height, P_POS.z - Math.cos(a) * dist); };
 const CAMS = {
-  // jogo: baixa e próxima, atrás e à direita do jogador (abaixo do topo da cabeça, ~2,5), olhando a arena na diagonal para a
-  // figura: o jogador à esquerda em primeiro plano, o K no meio, a figura inteira ao fundo. A arena foi adaptada a ela
-  // (grade mais curta, fissuras visíveis, marcas no chão sob os projéteis, prévia da placa no círculo).
-  game: { pos: camAt(129, 5.7, 2.3), look: new THREE.Vector3(-1.8, 0.95, -2.3), fov: 60 },
-  // a câmera elevada anterior (136°, 11,25, altura 5): fica aqui só como referência (GAME_CAM = 'high' a usa de novo)
-  high: { pos: camAt(136, 11.25, 5.0), look: new THREE.Vector3(-1.73, 1.79, -1.94), fov: 50 },
+  // jogo: a 1ª câmera elevada (diagonal atrás/à direita, altura 5, fov 50) com o ângulo e a mira ajustados por busca para
+  // caberem a área do círculo à frente do jogador, as fissuras laterais e a figura inteira (antes: 128°, 10,5, mira −0,4/2,3/−3)
+  game: { pos: camAt(136, 11.25, 5.0), look: new THREE.Vector3(-1.73, 1.79, -1.94), fov: 50 },
   // impacto: baixa e próxima (jogador em primeiro plano, K entre os dois, a figura ao fundo) — sobre o 4º quadrado à direita do jogador
   impact: { pos: new THREE.Vector3(3.5, 1.5, 8.8), look: new THREE.Vector3(-11.0, 3.25, -4.96), fov: 68 },
   // grade erguida (REFLETIR aprimorado): baixa, perto, atrás e à direita do jogador, olhando pela lateral dele para a figura
@@ -64,12 +59,6 @@ const STRUCT = { hitR: 0.95 };
 // kLevel/kDelay/kOpenT = o K abre o portal sozinho nos trechos finais (nível de autonomia, espera e duração do gesto).
 const GUIDE = { turn: 2.6, grabR: 0.8, pull: 3.0, objY: 2.2, formT: 0.7, closeDelay: 2.5, closeT: 0.5, portalW: 2.3, portalH: 1.5,
   passW: 0.85, kLevel: 3, kDelay: 1.5, kOpenT: 2.4, spikes: 16, far: 45, ring: 48 };
-// CONDUZIR aprimorado (só depois do 2º fragmento azul, trechos com `held`): a figura supera a defesa anterior — segura o
-// objeto por um fio preso à mão dela e, se o jogador tenta puxar a ponta, dá um tranco e a ponta escapa. A condução dá outra
-// resposta: os projéteis atraídos são levados CONTRA o objeto; cada um que bate o racha (`held` = batidas para romper) e,
-// rompido, o fio se parte e a fenda se abre ali; os que sobram vão para o vazio branco como antes. y = altura do objeto (a
-// do voo, para os projéteis baterem nele); hitR = raio do choque; yankAt = tensão em que ela dá o tranco.
-const GH = { y: H_PROJ + 0.15, hitR: 0.62, yankAt: 0.36, yankT: 0.32, regrab: 0.45, snapT: 0.6 };
 // Autonomia do K por nível (gap = intervalo mínimo entre defesas; chance por projétil; hesitate = tempo do gesto;
 // self = defende a si mesmo; other = chance de proteger o jogador)
 const K_DEF = [null, { gap: 9, chance: 0.35, hesitate: 0.7, self: true, other: 0 }, { gap: 6, chance: 0.5, hesitate: 0.5 }, { gap: 4.5, chance: 0.65, hesitate: 0.4 }, { gap: 3.5, chance: 0.7, hesitate: 0.3, other: 0.45 }];
@@ -78,8 +67,7 @@ const T = { fadeIn: 0.7, startFade: 1.5, intro: 1.0, clear: 1.0, out: 0.7, freez
 const RETRY_MIN = 4;                                                  // falha com menos que isso de janela: o trecho não recomeça (a música segue)
 const BOUND = { x: 14, z: 16 };
 // fissuras suspensas nas laterais (fora da grade)
-// (postas onde a câmera de jogo as vê: as da esquerda mais ao fundo, para não ficarem atrás do jogador; a R3 dentro do quadro)
-const FIS = { L1: [-8.4, -8.0], L2: [-8.4, -5.0], L3: [-8.0, -2.5], R1: [8.4, -6.5], R2: [8.4, -3.0], R3: [8.4, 0.2] };
+const FIS = { L1: [-8.4, -6.5], L2: [-8.4, -3.5], L3: [-8.4, -0.5], R1: [8.4, -6.5], R2: [8.4, -2.5], R3: [8.4, 1.5] };
 const COLOR_HEX = { azul: '#003EFF', verde: '#00C000', laranja: '#FCA600', roxo: '#9B00FF' };
 
 // ---------- estrutura: 18 trechos (S), 8 fragmentos (F) e o final (E) ----------
@@ -143,40 +131,33 @@ const SK = (dx, dz, d) => ({ x: +(K_POS.x + dx * d).toFixed(2), z: +(K_POS.z + d
 const SP = (dx, dz, d) => ({ x: +(P_POS.x + dx * d).toFixed(2), z: +(P_POS.z + dz * d).toFixed(2), target: 'P' });
 const st = (o, period, speed, phase) => Object.assign(o, { period, speed, phase });
 const D = Math.SQRT1_2;
-// posições conferidas pela câmera de jogo (baixa): nenhuma estrutura fica atrás do jogador ou do K na tela
-const SA = () => SK(-D, -D, 13), SB = () => SK(D, -D, 9.6), SC = () => SP(D, -D, 12.6), SD = () => SP(0, -1, 15);
+// posições conferidas pela câmera: estruturas longe da cabeça do jogador na tela; núcleos na metade de perto da grade
+const SA = () => SK(-D, -D, 13), SB = () => SK(D, -D, 9.6), SC = () => SP(D, -D, 12.6), SD = () => SP(-D, -D, 14);
 const SEGMENTS = [
   { mech: 'block', shots: [[0, 'fig', 'K', 5.5], [3.6, 'fig', 'K', 5.5], [7.2, 'fig', 'K', 5.8]] },                         // 1 introdução: poucos, lentos, só no K
   { mech: 'block', shots: [[0, 'fig', 'K', 6], [2.6, 'L2', 'K', 6], [5.2, 'fig', 'P', 6.2], [7.8, 'R2', 'K', 6.2], [10.4, 'fig', 'K', 6.4], [13, 'R3', 'P', 6.2]] },
   { mech: 'reflect', structs: [st(SA(), 5, 5.2, 0.2)] },                                                                      // 3 introdução: 1 estrutura
   { mech: 'reflect', structs: [st(SA(), 5.5, 5.6, 0.2), st(SC(), 5.5, 5.6, 2.8)] },
   { mech: 'guide', shots: [[1.5, 'fig', 'K', 5.0], [2.4, 'L2', 'P', 5.0], [3.3, 'R2', 'K', 5.2]] },                                  // 5 introdução: 3 projéteis
-  { mech: 'block', shots: [[0, 'fig', 'K', 6.2], [1.3, 'L2', 'P', 6.3], [2.6, 'fig', 'K', 6.4], [3.9, 'R2', 'P', 6.4], [5.1, 'fig', 'K', 6.6]] },   // 6: cabe na janela (~9,6 s; antes 8 disparos, cortados)
+  { mech: 'block', shots: genShots(6, 8, 1.9, 6.2, 6.8) },
   { mech: 'reflect', structs: [st(SB(), 5.2, 5.8, 0.2), st(SD(), 5.2, 5.8, 2.7)] },
   { mech: 'guide', shots: [[1.5, 'fig', 'P', 5.2], [2.3, 'R1', 'K', 5.2], [3.1, 'L3', 'K', 5.4], [3.9, 'fig', 'P', 5.4]] },
   { mech: 'block', shots: genShots(9, 9, 1.65, 6.4, 7.0) },
   { mech: 'reflect', structs: [st(SA(), 5, 6, 0.2), st(SC(), 5, 6, 1.9), st(SD(), 5, 6, 3.6)] },
   { mech: 'guide', shots: [[1.2, 'L1', 'K', 5.4], [1.9, 'fig', 'P', 5.4], [2.6, 'R3', 'K', 5.6], [3.3, 'fig', 'K', 5.6]] },
-  // depois do 2º azul a batalha se intensifica de verdade: rajadas (2–3 na mesma linha: os anéis do aviso se empilham),
-  // cruzados (K e jogador ao mesmo tempo, de lados opostos) e leques (três de uma vez); o K começa a se defender sozinho
-  { mech: 'block', shots: [[0, 'fig', 'K', 6.4], [1.5, 'L1', 'P', 6.4], [3.0, 'fig', 'K', 6.6], [3.45, 'fig', 'K', 6.6], [5.2, 'R1', 'P', 6.6], [5.2, 'L2', 'K', 6.6],
-    [7.2, 'fig', 'P', 6.8], [7.65, 'fig', 'P', 6.8], [9.4, 'R2', 'K', 6.8], [9.4, 'L3', 'P', 6.8], [11.4, 'fig', 'K', 7.0], [11.85, 'fig', 'K', 7.0]] },   // 12
+  { mech: 'block', shots: genShots(12, 10, 1.45, 6.5, 7.2, 0.15) },
   { mech: 'reflect', plus: 'A', structs: [st(SB(), 4.8, 6.2, 0.2), st(SD(), 4.8, 6.2, 1.8), st(SA(), 4.8, 6.2, 3.4)], figEvery: 7 },   // 13: depois do 2º azul → grade erguida (reflectPlus.js)
-  { mech: 'guide', held: 2, shots: [[1.2, 'fig', 'K', 5.6], [1.8, 'L2', 'P', 5.6], [2.4, 'R2', 'K', 5.8], [4.8, 'fig', 'P', 5.8], [5.4, 'L1', 'K', 5.8], [6.0, 'R1', 'P', 6.0], [6.6, 'fig', 'K', 6.0]] },   // 14: aprimorado (a figura segura o objeto)
-  { mech: 'block', shots: [[0, 'fig', 'P', 6.6], [0.45, 'fig', 'P', 6.6], [2.0, 'L1', 'K', 6.8], [2.0, 'R1', 'P', 6.8], [3.8, 'fig', 'K', 6.8], [4.25, 'fig', 'K', 6.8], [4.7, 'fig', 'K', 6.8],
-    [6.6, 'L2', 'P', 7.0], [6.6, 'R2', 'K', 7.0], [6.6, 'fig', 'P', 7.0], [8.8, 'R3', 'K', 7.0], [9.25, 'R3', 'K', 7.0], [10.8, 'fig', 'P', 7.2], [10.8, 'L3', 'K', 7.2], [12.0, 'fig', 'K', 7.2]] },   // 15
+  { mech: 'guide', shots: [[1.2, 'fig', 'K', 5.6], [1.8, 'L2', 'P', 5.6], [2.4, 'R2', 'K', 5.8], [3.0, 'fig', 'P', 5.8], [3.6, 'L3', 'K', 5.8]] },
+  { mech: 'block', shots: genShots(15, 11, 1.3, 6.8, 7.3, 0.2) },
   { mech: 'reflect', plus: 'B', structs: [st(SA(), 4.6, 6.4, 0.2), st(SD(), 4.6, 6.4, 1.4), st(SB(), 4.6, 6.4, 2.6), st(SC(), 4.6, 6.4, 3.8)], figEvery: 6 },   // 16: grade erguida, trocas mais rápidas
-  { mech: 'guide', held: 2, kOpens: true, shots: [[1.0, 'R1', 'K', 5.8], [1.5, 'fig', 'P', 5.8], [2.0, 'L1', 'K', 6], [2.5, 'fig', 'K', 6], [4.6, 'R3', 'P', 6], [5.1, 'L2', 'K', 6], [5.6, 'fig', 'P', 6.2], [6.1, 'R2', 'K', 6.2]] },   // 17: aprimorado; o K puxa uma ponta (vale uma batida)
-  { mech: 'block', shots: [[0, 'fig', 'K', 7.0], [0.4, 'fig', 'K', 7.0], [0.8, 'fig', 'K', 7.0], [2.4, 'L1', 'P', 7.0], [2.4, 'R1', 'K', 7.0], [4.0, 'fig', 'P', 7.2], [4.4, 'fig', 'P', 7.2],
-    [5.8, 'L2', 'K', 7.2], [5.8, 'R2', 'P', 7.2], [5.8, 'fig', 'K', 7.2], [7.6, 'R3', 'P', 7.4], [8.0, 'R3', 'P', 7.4], [9.4, 'fig', 'K', 7.4], [9.4, 'L3', 'P', 7.4],
-    [11.0, 'fig', 'P', 7.5], [11.4, 'fig', 'P', 7.5], [11.8, 'fig', 'P', 7.5], [12.3, 'L1', 'K', 7.5]] },                     // 18: o mais intenso (o K já protege o jogador às vezes)
+  { mech: 'guide', kOpens: true, shots: [[1.2, 'R1', 'K', 5.8], [1.7, 'fig', 'P', 5.8], [2.2, 'L1', 'K', 6], [2.7, 'fig', 'K', 6], [3.2, 'R3', 'P', 6], [3.7, 'L2', 'K', 6]] },   // 17: o K abre o portal
+  { mech: 'block', shots: genShots(18, 14, 1.1, 7.0, 7.5, 0.25) },                                                           // 18: o mais intenso
 ];
 const LABEL = {
   block: ['BLOQUEAR · clique esquerdo', 'BLOQUEAR · botão Ação'],
   reflect: ['REFLETIR · segure o clique e mova (WASD)', 'REFLETIR · segure o botão Ação e mova'],
   plus: ['REFLETIR · segure o clique e desenhe na grade · W/S sobe e desce · A/D lados', 'REFLETIR · segure o botão Ação e desenhe na grade'],
   guide: ['CONDUZIR · segure o clique esquerdo para atrair · sob o objeto, segure o direito e puxe', 'CONDUZIR · segure Atrair · sob o objeto, segure Puxar e arraste'],
-  held: ['CONDUZIR · a figura segura o objeto: atraia os projéteis contra ele até rasgá-lo', 'CONDUZIR · segure Atrair e leve os projéteis contra o objeto'],
 };
 const ACTION = { block: 'Bloquear', reflect: 'Refletir', guide: 'Atrair' };
 
@@ -300,7 +281,6 @@ export function createBattle(ctx) {
     barLineP: lineM('#ffffff', 0.85), barLineK: lineM('#d6e4ff', 0.85),
     wall: basic('#ffffff', GLOW.surf, { side: THREE.DoubleSide }), wallLine: lineM('#ffffff', 0.9),
     shardW: basic('#ffffff'), shardD: basic('#141418'),
-    mark: basic('#ffffff', 0.55, { depthWrite: false, side: THREE.DoubleSide }),
   };
   const ADD = { transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide, toneMapped: false };
   const glowPlate = (col, half, size) => new THREE.ShaderMaterial({ vertexShader: GLOW_V, fragmentShader: GLOWP_F, ...ADD,
@@ -389,21 +369,19 @@ export function createBattle(ctx) {
   // projétil: fragmento escuro alongado com arestas claras, rastro curto e o anel de "o K vai defender"
   const projGeo = new THREE.OctahedronGeometry(0.27, 0), projEdges = new THREE.EdgesGeometry(projGeo);
   const trailGeo = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(0, 0, -0.12), new THREE.Vector3(0, 0, -0.95)]);
-  const claimGeo = new THREE.RingGeometry(0.36, 0.41, 32), markGeo = new THREE.RingGeometry(0.07, 0.17, 24);
+  const claimGeo = new THREE.RingGeometry(0.36, 0.41, 32);
   const projPool = pool(() => {
     const g = new THREE.Group(), spin = new THREE.Group(); spin.scale.set(0.75, 0.55, 1.7); g.add(spin);
     const edges = new THREE.LineSegments(projEdges, M.edge), trail = new THREE.Line(trailGeo, M.trail);
     spin.add(new THREE.Mesh(projGeo, M.dark), edges); g.add(trail);
     const claim = new THREE.Mesh(claimGeo, basic('#dfe9ff', 0.8, { depthWrite: false, side: THREE.DoubleSide })); claim.rotation.x = -Math.PI / 2; g.add(claim);
-    // marca no chão logo abaixo (com a câmera baixa, mostra onde o projétil está sobre a grade em relação ao círculo)
-    const mark = new THREE.Mesh(markGeo, M.mark); mark.rotation.x = -Math.PI / 2; mark.position.y = -H_PROJ + 0.035; g.add(mark);
-    g.userData = { spin, claim, edges, trail, mark }; return g;
+    g.userData = { spin, claim, edges, trail }; return g;
   });
   // estilhaços (impactos, bloqueios)
   const shardGeo = new THREE.TetrahedronGeometry(0.07, 0);
   const shardPool = pool(() => new THREE.Mesh(shardGeo, M.shardW));
   // aviso: linha tracejada no chão (origem → alvo) e anel pulsando na origem
-  const warnPool = pool(() => ribbon(2, 0.11, 0.34, 0.22, '#ffffff', 0.5));
+  const warnPool = pool(() => ribbon(2, 0.07, 0.34, 0.24, '#ffffff', 0.5));
   const pulseGeo = new THREE.RingGeometry(0.3, 0.37, 32);
   const pulsePool = pool(() => new THREE.Mesh(pulseGeo, basic('#ffffff', 0.6, { depthWrite: false, side: THREE.DoubleSide })));
   // barreira: placa plana branca suspensa na altura do voo (mesma linguagem das paredes do Refletir; a do K com contorno duplo, levemente azulada)
@@ -422,15 +400,6 @@ export function createBattle(ctx) {
     return g;
   };
   const barPool = { P: pool(makeBar('P')), K: pool(makeBar('K')) };
-  // prévia da placa (Bloquear): contorno tracejado onde ela vai surgir — acima do círculo, na altura do voo, já virada para o
-  // que vem (com a câmera baixa, mostra direto se o caminho do projétil passa por ela)
-  const ghostPlate = new THREE.Group(); ghostPlate.visible = false; scene.add(ghostPlate);
-  {
-    const lm = new THREE.LineDashedMaterial({ color: '#ffffff', transparent: true, opacity: 0.42, dashSize: 0.12, gapSize: 0.08, depthWrite: false });
-    const loop = new THREE.LineLoop(rectGeo(BLOCK.w / 2, BLOCK.h / 2), lm); loop.computeLineDistances();
-    const stem = new THREE.Line(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(0, -H_PROJ + 0.06, 0), new THREE.Vector3(0, -BLOCK.h / 2, 0)]), lm); stem.computeLineDistances();
-    ghostPlate.add(loop, stem); ghostPlate.userData.mat = lm;
-  }
   // fissuras: rachadura vertical suspensa (preenchida de preto, contorno branco irregular)
   const crack = (() => {
     const H = 1.8, n = 9, L = [], R = [], r = rng(77);
@@ -466,11 +435,6 @@ export function createBattle(ctx) {
   tether.visible = false; scene.add(tether);                                                                                                  // a ponta esticada (preta, afina com a tensão)
   const tetherLineGeo = new THREE.BufferGeometry(); tetherLineGeo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(6), 3));
   const tetherLine = new THREE.Line(tetherLineGeo, lineM('#8a8a92', 0.9)); tetherLine.frustumCulled = false; tetherLine.visible = false; scene.add(tetherLine);
-  // aprimorado: o fio da mão da figura até o objeto (duas metades, para se partir no meio) e as rachaduras do objeto
-  const HOLD_N = 14;
-  const holdLine = () => { const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.BufferAttribute(new Float32Array(HOLD_N * 3), 3)); const l = new THREE.Line(g, lineM('#8f8f98', 0.9)); l.frustumCulled = false; l.visible = false; scene.add(l); return l; };
-  const holdA = holdLine(), holdB = holdLine();
-  const objCracks = new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.IcosahedronGeometry(0.235, 0)), lineM('#ffffff', 0)); obj.add(objCracks);
   // vazio branco: cena própria, renderizada com a câmera da batalha numa textura (prerender) e vista só pela abertura
   const ws = new THREE.Scene(); ws.background = new THREE.Color('#f6f6f3'); ws.fog = new THREE.Fog('#f6f6f3', 18, 75);
   const wsGridMat = new THREE.ShaderMaterial({ vertexShader: GRID_V, fragmentShader: WGRID_F, transparent: true, depthWrite: false, uniforms: { uC: { value: new THREE.Vector2() } } });
@@ -505,7 +469,7 @@ export function createBattle(ctx) {
 
   // ---- DOM: rótulo do mecanismo (no palco) e mensagens sobre o preto (acima do véu do fade) ----
   const label = document.createElement('div');
-  label.style.cssText = 'position:absolute;left:50%;bottom:16px;transform:translateX(-50%);color:rgba(255,255,255,0.78);background:rgba(11,11,14,0.72);padding:5px 14px;border-radius:12px;font:14px "Trebuchet MS",sans-serif;letter-spacing:1.5px;pointer-events:none;z-index:6;opacity:0;transition:opacity .35s;white-space:nowrap;max-width:calc(100vw - 24px);overflow:hidden;text-overflow:ellipsis;display:none';   // (fundo escuro: legível mesmo sobre o jogador branco)
+  label.style.cssText = 'position:absolute;left:50%;bottom:20px;transform:translateX(-50%);color:rgba(255,255,255,0.7);font:14px "Trebuchet MS",sans-serif;letter-spacing:1.5px;pointer-events:none;z-index:6;opacity:0;transition:opacity .35s;white-space:nowrap;display:none';
   stage.appendChild(label);
   // véu preto próprio por cima do véu do jogo (o do main é verde-escuro; aqui o vazio é preto puro): mesma opacidade de `fade`
   const veil = document.createElement('div');
@@ -565,7 +529,6 @@ export function createBattle(ctx) {
   let prevAct = false, lastBar = -9, nextId = 1, lastKDef = -99, kAct = null, gest = null, shakeT = 0, traceT = 0;
   let fragHandler = null, finaleHandler = null, token = 0, figGest = null;
   let mt = 0;                                                         // posição da música = relógio da batalha
-  let gridPulse = 0;
   const music = ctx.music || null;
   let camK = 1, camSnap = false, camForce = null;                                      // 0 = câmera de jogo, 1 = câmera de impacto
   const camBase = new THREE.Vector3(), camLook = new THREE.Vector3();
@@ -581,28 +544,11 @@ export function createBattle(ctx) {
     projGet: () => projPool.get(), projPut: o => projPool.put(o), pose, figGest: g => { figGest = g; }, charPos });
   const plusSeg = () => !!(seg && seg.plus);
 
-  const fovFor = (base, asp) => { const h = Math.tan(base * Math.PI / 360) * 16 / 9; return asp >= 16 / 9 ? base : Math.min(80, Math.atan(h / asp) * 360 / Math.PI); };
   function fitFov(base) {
-    const fov = fovFor(base, camera.aspect || 16 / 9);
+    const asp = camera.aspect || 16 / 9, h = Math.tan(base * Math.PI / 360) * 16 / 9;
+    const fov = asp >= 16 / 9 ? base : Math.min(80, Math.atan(h / asp) * 360 / Math.PI);
     if (Math.abs(camera.fov - fov) > 0.01) { camera.fov = fov; camera.updateProjectionMatrix(); }
   }
-  // Cerca da tela: com a câmera baixa, o canto da grade atrás/à esquerda do jogador fica fora do quadro — o círculo para na
-  // borda da imagem (desliza ao longo dela), nunca some. Usa a pose fixa da câmera de jogo (não muda com as trocas).
-  const fenceCam = new THREE.PerspectiveCamera(50, 16 / 9, 0.05, 300); let fenceAsp = 0;
-  const FENCE = { x: 0.93, y0: -0.9, y1: 0.86 };
-  function onScreen(x, z) {
-    const asp = camera.aspect || 16 / 9;
-    if (asp !== fenceAsp) {
-      fenceAsp = asp; fenceCam.aspect = asp; fenceCam.fov = fovFor(CAMS.game.fov, asp); fenceCam.updateProjectionMatrix();
-      fenceCam.position.copy(CAMS.game.pos); fenceCam.lookAt(CAMS.game.look); fenceCam.updateMatrixWorld(true);
-    }
-    for (const dx of [-CIRCLE_R, CIRCLE_R]) {                          // as duas pontas do disco (de lado) e o meio
-      _fp.set(x + dx, 0.04, z).project(fenceCam);
-      if (_fp.z >= 1 || Math.abs(_fp.x) > FENCE.x || _fp.y < FENCE.y0 || _fp.y > FENCE.y1) return false;
-    }
-    return true;
-  }
-  const _fp = new THREE.Vector3();
   /** Câmera entre as duas posições (k: 0 = jogo, 1 = impacto), com a troca suavizada. */
   function placeCamera() {
     const e = ease(camK), G = CAMS.game, I = CAMS.impact;
@@ -650,9 +596,7 @@ export function createBattle(ctx) {
     const w = { from, target, speed, t: 0, dur, ox: o.x, oz: o.z, tx: tp.x, tz: tp.z, src: o.src, fis: o.fis, line: warnPool.get(), pulse: pulsePool.get(), proj: null };
     w.line.userData.set([{ x: o.x, z: o.z }, { x: tp.x, z: tp.z }], 0.03);
     w.line.material.uniforms.uOp.value = 0.12; w.line.visible = true; scene.add(w.line);
-    // rajada (outro aviso ainda armado na mesma origem): os anéis se empilham — dá para contar quantos vêm na mesma linha
-    const stack = warnings.filter(x => !x.done && Math.hypot(x.ox - o.x, x.oz - o.z) < 0.1).length;
-    w.pulse.position.set(o.x, H_PROJ + 0.34 * stack, o.z); w.pulse.visible = true; scene.add(w.pulse);
+    w.pulse.position.set(o.x, H_PROJ, o.z); w.pulse.visible = true; scene.add(w.pulse);
     if (o.src) o.src.busy = true;
     if (o.fis) o.fis.want++;
     if (from === 'fig') figGest = { s: tp.x < 0 ? 1 : -1, pt: new THREE.Vector3(o.x, H_PROJ, o.z).lerp(new THREE.Vector3(tp.x, H_PROJ, tp.z), 0.25), t: 0, dur: dur + 0.5 };
@@ -665,7 +609,7 @@ export function createBattle(ctx) {
     const dx = w.tx - w.ox, dz = w.tz - w.oz, l = Math.hypot(dx, dz) || 1;
     const p = { id: nextId++, x: w.ox, z: w.oz, vx: dx / l * w.speed, vz: dz / l * w.speed, speed: w.speed, target: w.target, tx: w.tx, tz: w.tz,
       reflected: false, alive: true, kClaim: false, kEval: 1.4 + Math.random() * 0.4, evaluated: false, src: w.src, obj: projPool.get(), age: 0 };
-    const u = p.obj.userData; u.edges.material = M.edge; u.trail.material = M.trail; u.mark.visible = true;   // (pode voltar do vazio branco)
+    const u = p.obj.userData; u.edges.material = M.edge; u.trail.material = M.trail;   // (pode voltar do vazio branco)
     p.obj.position.set(p.x, H_PROJ, p.z); p.obj.visible = true; u.claim.visible = false; scene.add(p.obj);
     if (seg && seg.guide) {                                           // Conduzir: míssil que guarda o alvo original
       p.homing = true; p.through = false; seg.guide.armed = true;
@@ -674,7 +618,6 @@ export function createBattle(ctx) {
       }
     }
     projectiles.push(p); w.proj = p; w.done = true; w.pulse.visible = false;
-    if (w.from === 'fig' && fragmentsDone >= PLUS_AFTER) gridPulse = 1;   // depois do 2º azul: a grade acusa cada disparo da figura
     sfx('launch');
   }
   function killProjectile(p, burst = 0, darkMix = burst > 8 ? 0.5 : 0.3) {
@@ -847,44 +790,26 @@ export function createBattle(ctx) {
 
   // ---------- Conduzir ----------
   /** Ponto válido para o objeto: na grade, longe dos personagens, visível e com espaço para puxar (vale para qualquer lado de dentro). */
-  function pickObjSpot(objY = GUIDE.objY) {
-    for (let k = 0; k < 300; k++) {
-      const x = -5.2 + Math.random() * 10.4, z = LIM.z0 + 0.9 + Math.random() * (6.2 - LIM.z0 - 0.9);
+  function pickObjSpot() {
+    for (let k = 0; k < 200; k++) {
+      const x = -5.2 + Math.random() * 10.4, z = -7.0 + Math.random() * 13.0;
       if (Math.hypot(x - P_POS.x, z - P_POS.z) < 3.4 || Math.hypot(x - K_POS.x, z - K_POS.z) < 2.6) continue;
       if (Math.hypot(x - CIRCLE_HOME.x, z - CIRCLE_HOME.z) < 1.2) continue;
-      if (!onScreen(x, z) || !screenFree(x, objY, z) || !screenFree(x, 0.05, z)) continue;   // visível e fora das silhuetas
-      let room = 0;                                                    // espaço para puxar (dentro da grade e do quadro) em algum lado
-      for (let a = 0; a < 8; a++) { const ax = Math.cos(a * Math.PI / 4), az = Math.sin(a * Math.PI / 4), px = x + ax * (GUIDE.pull + 0.3), pz = z + az * (GUIDE.pull + 0.3);
-        if (px > LIM.x0 + CIRCLE_R && px < LIM.x1 - CIRCLE_R && pz > LIM.z0 + CIRCLE_R && pz < LIM.z1 - CIRCLE_R && onScreen(px, pz)) room++; }
-      if (room < 3) continue;
       return { x, z };
     }
-    return { x: -3.2, z: 0.4 };
-  }
-  /** O ponto não cai atrás do jogador nem do K na imagem da câmera de jogo. */
-  function screenFree(x, y, z) {
-    onScreen(0, CIRCLE_HOME.z);                                        // (garante a câmera de referência atualizada)
-    _fp.set(x, y, z).project(fenceCam); const qx = _fp.x, qy = _fp.y;
-    for (const c of [P_POS, K_POS]) {
-      let x0 = 9, x1 = -9, y0 = 9, y1 = -9;
-      for (const dx of [-0.6, 0.6]) for (const dz of [-0.6, 0.6]) for (const yy of [0, 2.6]) { _fp.set(c.x + dx, yy, c.z + dz).project(fenceCam); x0 = Math.min(x0, _fp.x); x1 = Math.max(x1, _fp.x); y0 = Math.min(y0, _fp.y); y1 = Math.max(y1, _fp.y); }
-      if (qx > x0 - 0.04 && qx < x1 + 0.04 && qy > y0 - 0.04 && qy < y1 + 0.04) return false;
-    }
-    return true;
+    return { x: -3.5, z: -2.0 };
   }
   function setupGuide() {
-    const held = !!seg.def.held && fragmentsDone >= PLUS_AFTER, y = held ? GH.y : GUIDE.objY;   // aprimorado só depois do 2º azul
-    const o = pickObjSpot(y);
-    seg.guide = { x: o.x, z: o.z, y, state: 'idle', t: 0, attract: false, armed: false, tension: 0, pullTo: null, passed: 0, endT: -1,
-      portal: null, kTried: false, held, need: held ? seg.def.held : 0, hits: 0, crackT: 0, yank: 0, regrab: 0, snap: -1, holdS: o.x < F_POS.x ? 1 : -1 };
-    obj.position.set(o.x, y, o.z); obj.scale.setScalar(1); obj.visible = true; objCracks.material.opacity = 0;
-    if (held) L(`guide:held ${seg.guide.need}`);
+    const o = pickObjSpot();
+    seg.guide = { x: o.x, z: o.z, state: 'idle', t: 0, attract: false, armed: false, tension: 0, pullTo: null, passed: 0, endT: -1,
+      portal: null, kTried: false };
+    obj.position.set(o.x, GUIDE.objY, o.z); obj.scale.setScalar(1); obj.visible = true;
     const pts = []; for (let i = 0; i <= 48; i++) { const a = i / 48 * Math.PI * 2; pts.push({ x: o.x + Math.cos(a) * GUIDE.grabR * 0.85, z: o.z + Math.sin(a) * GUIDE.grabR * 0.85 }); }
     footRing.userData.set(pts, 0.035); footRing.visible = true;
     L(`guide:obj ${o.x.toFixed(2)},${o.z.toFixed(2)}`);
   }
   function clearGuide() {
-    obj.visible = false; footRing.visible = false; tether.visible = false; tetherLine.visible = false; portal.visible = false; holdA.visible = holdB.visible = false;
+    obj.visible = false; footRing.visible = false; tether.visible = false; tetherLine.visible = false; portal.visible = false;
     for (const ch of ws.children.slice()) if (ch !== wsGrid) { ws.remove(ch); }
   }
   /** Romper: o portal nasce no lugar do objeto, de frente para quem puxou (sem depois girar). */
@@ -898,20 +823,13 @@ export function createBattle(ctx) {
     obj.visible = false; footRing.visible = false; tether.visible = false; tetherLine.visible = false;
     portal.position.set(g.x, H_PROJ, g.z); portal.rotation.set(0, Math.atan2(nx, nz), 0); portal.visible = true; shapePortal(0.01, time);
     wsGridMat.uniforms.uC.value.set(g.x, g.z);
-    if (g.held) { g.snap = 0; sfx('frebound'); }                       // o fio da figura se parte
-    spawnShards(g.x, g.y, g.z, 16, 0.9, 2.2); sfx('struct'); L(`guide:rupture ${by} ${nx.toFixed(2)},${nz.toFixed(2)}`);
-  }
-  /** Aprimorado: um projétil (ou o puxão do K) racha o objeto; com as batidas necessárias, ele se rompe e a fenda abre ali. */
-  function crackObj(g, by) {
-    g.hits++; g.crackT = 1; spawnShards(g.x, g.y, g.z, 9, 0.55, 2.2); sfx('block'); L(`guide:crack ${by} ${g.hits}/${g.need}`);
-    objCracks.material.opacity = Math.min(0.9, 0.3 + 0.6 * g.hits / g.need);
-    if (g.hits >= g.need) rupture(cpos.x - g.x, cpos.z - g.z, by === 'K' ? 'K' : 'C');
+    spawnShards(g.x, GUIDE.objY, g.z, 16, 0.9, 2.2); sfx('struct'); L(`guide:rupture ${by} ${nx.toFixed(2)},${nz.toFixed(2)}`);
   }
   /** Atravessou a abertura: passa para o vazio branco (segue reto, não persegue mais nada). */
   function passThrough(p) {
     p.through = true; p.kClaim = false; seg.guide.passed++;
     const o = p.obj; if (o.parent) o.parent.remove(o); ws.add(o);
-    o.userData.edges.material = WSM.edge; o.userData.trail.material = WSM.trail; o.userData.claim.visible = false; o.userData.mark.visible = false;
+    o.userData.edges.material = WSM.edge; o.userData.trail.material = WSM.trail; o.userData.claim.visible = false;
     if (p.src) { p.src.busy = false; p.src = null; }
     sfx('reflect'); L('guide:pass');
   }
@@ -931,21 +849,11 @@ export function createBattle(ctx) {
     while (seg.shotIdx < def.shots.length && seg.t >= def.shots[seg.shotIdx][0]) { const [, from, tg, v] = def.shots[seg.shotIdx++]; createWarning(from, tg, v); }
     // o K abre o portal sozinho só nos trechos finais (autonomia já alta)
     if (def.kOpens && g.state === 'idle' && !g.kTried && kLevel() >= GUIDE.kLevel && seg.t >= GUIDE.kDelay) { g.kTried = true; g.state = 'kpull'; g.t = 0; L('guide:kpull'); }
-    g.crackT = Math.max(0, g.crackT - dt / 0.35); g.yank = Math.max(0, g.yank - dt / 0.5);
-    if (g.snap >= 0 && g.snap < 1) g.snap = Math.min(1, g.snap + dt / GH.snapT);
     if (g.state === 'grab') {
       const d = Math.hypot(cpos.x - g.x, cpos.z - g.z); g.tension = Math.min(1, d / GUIDE.pull);
-      if (g.held && g.tension >= GH.yankAt) { g.state = 'yank'; g.t = 0; g.yank = 1; g.regrab = seg.t + GH.regrab; sfx('frebound'); L('guide:yank'); }   // a figura dá um tranco: a ponta escapa
-      else if (d >= GUIDE.pull) rupture(cpos.x - g.x, cpos.z - g.z, 'P');
+      if (d >= GUIDE.pull) rupture(cpos.x - g.x, cpos.z - g.z, 'P');
     } else if (g.state === 'release') { g.tension = Math.max(0, g.tension - dt / 0.35); if (g.tension <= 0) g.state = 'idle'; }
-    else if (g.state === 'yank') { g.tension = Math.max(0, g.tension - dt / 0.12); if (g.t >= GH.yankT) { g.state = 'idle'; g.tension = 0; } }
-    else if (g.state === 'kpull') {
-      g.tension = ease(g.t / GUIDE.kOpenT);
-      if (g.t >= GUIDE.kOpenT) {
-        if (!g.held) rupture(cpos.x - g.x, cpos.z - g.z, 'K');
-        else { g.state = 'idle'; g.tension = 0; crackObj(g, 'K'); }      // aprimorado: o puxão do K vale uma batida (ela não consegue segurar contra ele)
-      }
-    }
+    else if (g.state === 'kpull') { g.tension = ease(g.t / GUIDE.kOpenT); if (g.t >= GUIDE.kOpenT) rupture(cpos.x - g.x, cpos.z - g.z, 'K'); }
     else if (g.state === 'form') { g.portal.k = ease(g.t / GUIDE.formT); if (g.t >= GUIDE.formT) { g.state = 'open'; g.t = 0; g.portal.k = 1; } }
     else if (g.state === 'closing') { g.portal.k = 1 - ease(g.t / GUIDE.closeT); if (g.t >= GUIDE.closeT) { g.state = 'closed'; portal.visible = false; toClear(); return; } }
     // conclusão: tudo lançado e nada pendente → espera 2–3 s com o portal aberto (os transferidos seguem pelo branco) e fecha
@@ -958,22 +866,15 @@ export function createBattle(ctx) {
   }
   function updateGuideVisuals() {
     const g = seg && seg.guide; if (!g) return;
-    const back = g.state === 'release' || g.state === 'yank';             // a ponta voltando (soltou, ou a figura deu o tranco)
-    if (g.state === 'idle' || g.state === 'grab' || back || g.state === 'kpull') {
+    if (g.state === 'idle' || g.state === 'grab' || g.state === 'release' || g.state === 'kpull') {
       // pontas que mudam dezenas de vezes por segundo; com tensão, puxadas para o lado do puxão e mais compridas
       let px = 0, pz = 0, py = 0; const T2 = g.tension || 0;
       let to = null;
-      if (g.state === 'grab') to = g.pullTo = new THREE.Vector3(cpos.x, 0.04, cpos.z);
-      else if (back && g.pullTo) to = g.pullTo;
+      if (g.state === 'grab' || (g.state === 'release' && g.pullTo)) to = g.pullTo = new THREE.Vector3(cpos.x, 0.04, cpos.z);
       if (g.state === 'kpull') { const a = KU.arms.find(x => x.s === g.kSide) || KU.arms[0]; to = kWrist(a).localToWorld(new THREE.Vector3(0, -0.1, 0)); }
       if (to) { const d = to.clone().sub(obj.position).normalize(); px = d.x; py = d.y; pz = d.z; }
-      // aprimorado: o tranco da figura puxa o objeto para o lado dela; cada batida o sacode
-      const hd = g.held ? figHand(g.holdS, _hh).sub(obj.position).normalize() : null, yk = g.held ? g.yank * g.yank : 0, ck = g.crackT || 0;
-      const jx = ck ? (Math.random() - 0.5) * 0.12 * ck : 0, jy = ck ? (Math.random() - 0.5) * 0.12 * ck : 0;
-      obj.position.set(g.x + px * 0.3 * T2 + (hd ? hd.x * 0.45 * yk : 0) + jx, g.y + py * 0.3 * T2 + (hd ? hd.y * 0.45 * yk : 0) + jy, g.z + pz * 0.3 * T2 + (hd ? hd.z * 0.45 * yk : 0));
-      const sb = 1 + 0.22 * ck;
-      obj.scale.set((1 + 0.5 * T2 * Math.abs(px)) * sb, (1 + 0.5 * T2 * Math.abs(py)) * sb, (1 + 0.5 * T2 * Math.abs(pz)) * sb);
-      const sl = 0.5 + 0.5 * ck; spikeLines.material.color.setRGB(sl, sl, sl * 1.03);
+      obj.position.set(g.x + px * 0.3 * T2, GUIDE.objY + py * 0.3 * T2, g.z + pz * 0.3 * T2);
+      obj.scale.set(1 + 0.5 * T2 * Math.abs(px), 1 + 0.5 * T2 * Math.abs(py), 1 + 0.5 * T2 * Math.abs(pz));
       const lp = spikeLineGeo.attributes.position;
       spikes.forEach((sp, i) => {
         if (Math.random() < 0.55) {                                    // troca de forma irregular (várias vezes por segundo, nem todas juntas)
@@ -986,14 +887,14 @@ export function createBattle(ctx) {
       });
       lp.needsUpdate = true;
       objHalo.quaternion.copy(camera.quaternion);
-      footRing.visible = g.state === 'idle' || back;
+      footRing.visible = g.state === 'idle' || g.state === 'release';
       footRing.material.uniforms.uOp.value = Math.hypot(cpos.x - g.x, cpos.z - g.z) <= GUIDE.grabR ? 0.95 : 0.5;
       footRing.material.uniforms.uShift.value += 0.004;
       // a ponta esticada até o círculo (ou até a mão do K): afina e clareia com a tensão
-      const show = to && (g.state === 'grab' || g.state === 'kpull' || (back && T2 > 0.02));
+      const show = to && (g.state === 'grab' || g.state === 'kpull' || (g.state === 'release' && T2 > 0.02));
       tether.visible = tetherLine.visible = !!show;
       if (show) {
-        const from = obj.position, end = back ? from.clone().lerp(to, T2) : to;
+        const from = obj.position, end = g.state === 'release' ? from.clone().lerp(to, T2) : to;
         const len = from.distanceTo(end), r = 0.07 * (1 - 0.75 * T2) + 0.012;
         tether.position.copy(from); tether.lookAt(end); tether.scale.set(r, r, len);
         const tp = tetherLineGeo.attributes.position; tp.setXYZ(0, from.x, from.y, from.z); tp.setXYZ(1, end.x, end.y, end.z); tp.needsUpdate = true;
@@ -1001,30 +902,6 @@ export function createBattle(ctx) {
       }
     }
     if (g.portal && portal.visible) shapePortal(Math.max(0.01, g.portal.k), time);
-  }
-  const _hh = new THREE.Vector3(), _ha = new THREE.Vector3(), _hb = new THREE.Vector3(), _hc2 = new THREE.Vector3();
-  /** Mão da figura (lado s), em coordenadas do mundo. */
-  function figHand(s, out) { const a = FU.arms.find(x => x.s === s) || FU.arms[0]; fig.updateMatrixWorld(true); return kWrist(a).localToWorld(out.set(0, -0.12, 0)); }
-  /** Aprimorado: o fio da mão da figura até o objeto; treme com a tensão (tranco, puxão do K) e, na ruptura, parte-se ao meio
-   *  e cada metade volta para a sua ponta. Desenhado depois das poses (a mão já no lugar deste quadro). */
-  function updateHold() {
-    const g = seg && seg.guide, on = !!(g && g.held && (obj.visible || (g.snap >= 0 && g.snap < 1)));
-    holdA.visible = holdB.visible = on; if (!on) return;
-    const H = figHand(g.holdS, _ha), O = _hb.set(g.x, g.y, g.z); if (obj.visible) O.copy(obj.position);
-    const C = _hc2.copy(H).lerp(O, 0.5); C.y -= 0.9;                  // cai um pouco no meio (fio comprido, sem peso exagerado)
-    const shake = 0.05 * (g.yank + (g.state === 'kpull' ? g.tension : 0) + (g.crackT || 0));
-    const snap = g.snap < 0 ? 0 : ease(g.snap), half = 0.5 * (1 - snap);
-    const put = (line, t0, t1) => {
-      const pa = line.geometry.attributes.position;
-      for (let i = 0; i < HOLD_N; i++) {
-        const t = t0 + (t1 - t0) * i / (HOLD_N - 1), u = 1 - t, w = Math.sin(Math.PI * t);
-        pa.setXYZ(i, u * u * H.x + 2 * u * t * C.x + t * t * O.x + (Math.random() - 0.5) * shake * w,
-          u * u * H.y + 2 * u * t * C.y + t * t * O.y + Math.sin(time * 31 + t * 9) * shake * w,
-          u * u * H.z + 2 * u * t * C.z + t * t * O.z);
-      }
-      pa.needsUpdate = true; line.material.opacity = 0.9 * (1 - snap * snap);
-    };
-    put(holdA, 0, half); put(holdB, 1, 1 - half);
   }
   /** Antes de desenhar a batalha: o vazio branco visto pela câmera da batalha (só com o portal aberto). */
   function prerender() {
@@ -1082,11 +959,8 @@ export function createBattle(ctx) {
   function moveCircle(dt) {
     if (plusSeg()) { plus.move(dt, input.axis()); return; }
     const ax = input.axis(); let x = ax.x, z = ax.z; const l = Math.hypot(x, z); if (l > 1) { x /= l; z /= l; }
-    const nx = clamp(cpos.x + x * CIRCLE_SPEED * dt, LIM.x0 + CIRCLE_R, LIM.x1 - CIRCLE_R);
-    const nz = clamp(cpos.z + z * CIRCLE_SPEED * dt, LIM.z0 + CIRCLE_R, LIM.z1 - CIRCLE_R);
-    if (onScreen(nx, nz)) { cpos.x = nx; cpos.z = nz; }               // na borda da imagem: para naquele eixo e desliza no outro
-    else if (onScreen(nx, cpos.z)) cpos.x = nx;
-    else if (onScreen(cpos.x, nz)) cpos.z = nz;
+    cpos.x = clamp(cpos.x + x * CIRCLE_SPEED * dt, LIM.x0 + CIRCLE_R, LIM.x1 - CIRCLE_R);
+    cpos.z = clamp(cpos.z + z * CIRCLE_SPEED * dt, LIM.z0 + CIRCLE_R, LIM.z1 - CIRCLE_R);
   }
   function actionInput() {
     const act = mouseDown || simAct || input.held('Space'), click = act && !prevAct; prevAct = act;
@@ -1119,7 +993,7 @@ export function createBattle(ctx) {
     } else if (seg.mech === 'guide') {
       const g = seg.guide, pull = rightDown || input.held('KeyE');
       g.attract = act && g.armed;                                     // só depois do 1º lançamento (segurar antes não adianta, mas vale assim que ele surge)
-      if (g.state === 'idle' && pull && seg.t >= g.regrab && Math.hypot(cpos.x - g.x, cpos.z - g.z) <= GUIDE.grabR) { g.state = 'grab'; g.t = 0; L('guide:grab'); }
+      if (g.state === 'idle' && pull && Math.hypot(cpos.x - g.x, cpos.z - g.z) <= GUIDE.grabR) { g.state = 'grab'; g.t = 0; L('guide:grab'); }
       else if (g.state === 'grab' && !pull) { g.state = 'release'; g.t = 0; L('guide:release'); }
     }
   }
@@ -1142,9 +1016,6 @@ export function createBattle(ctx) {
           if (Math.abs(u) <= GUIDE.passW * P.k) { p.x = x1; p.z = z1; passThrough(p); p.obj.position.set(p.x, H_PROJ, p.z); continue; }
         }
       }
-      // aprimorado: o objeto que a figura segura racha quando um projétil bate nele
-      const gg = seg && seg.guide;
-      if (gg && gg.held && obj.visible && gg.hits < gg.need && segDist2(gg.x, gg.z, p.x, p.z, x1, z1) <= GH.hitR * GH.hitR) { killProjectile(p, 10, 0.2); crackObj(gg, 'P'); continue; }
       // 1) barreiras (de pé o bastante para cobrir a altura de voo)
       let hit = false;
       for (const b of barriers) {
@@ -1209,7 +1080,7 @@ export function createBattle(ctx) {
         if (w.t >= w.dur) launch(w);
       } else {
         if (w.fis && !w.fisOff && w.t - w.dur > 0.35) { w.fisOff = true; w.fis.want = Math.max(0, w.fis.want - 1); }   // a fissura se fecha depois do disparo
-        w.line.material.uniforms.uOp.value = 0.2;                                // durante o voo: fraca (para saber onde pôr a barreira)
+        w.line.material.uniforms.uOp.value = 0.13;                               // durante o voo: bem fraca (para saber onde pôr a barreira)
         if (!w.proj.alive || w.proj.reflected) w.gone = true;
       }
     }
@@ -1241,7 +1112,7 @@ export function createBattle(ctx) {
   // ---------- transparência localizada ----------
   // Quem estiver entre a câmera e um elemento interativo (projétil, aviso, estrutura, núcleo/área, círculo) fica translúcido
   // só enquanto cobrir; nada muda de lugar nem de colisão.
-  const OCC = { op: 0.32, h: { P: 2.5, K: 2.6 }, r: 0.42 };      // (alturas reais dos modelos, com a cabeça)
+  const OCC = { op: 0.32, h: { P: 1.75, K: 1.9 }, r: 0.42 };
   const _p = new THREE.Vector3(), _q = new THREE.Vector3();
   const charBox = who => {                                           // retângulo do personagem na tela (NDC) e distância à câmera
     const c = charPos(who), h = OCC.h[who]; let x0 = 9, x1 = -9, y0 = 9, y1 = -9;
@@ -1285,10 +1156,6 @@ export function createBattle(ctx) {
     circle.position.x = cpos.x; circle.position.z = cpos.z;
     circle.visible = !plusSeg() && (phase === 'intro' || phase === 'play' || phase === 'clear' || phase === 'fail');
     updatePreview();
-    gridPulse = Math.max(0, gridPulse - dt / 0.3); gridMat.uniforms.uAlpha.value = 0.5 + 0.16 * gridPulse;
-    const gp = !!seg && seg.mech === 'block' && phase === 'play';
-    ghostPlate.visible = gp;
-    if (gp) { const d = incomingDir(cpos.x, cpos.z); ghostPlate.position.set(cpos.x, H_PROJ, cpos.z); ghostPlate.rotation.set(0, Math.atan2(d.x, d.z), 0); ghostPlate.userData.mat.opacity = time - lastBar < 0.25 ? 0.1 : 0.42; }
     // barreiras
     barriers = barriers.filter(b => {
       b.age += dt;
@@ -1338,12 +1205,12 @@ export function createBattle(ctx) {
       traceT -= dt; const a = KU.arms.find(x => x.s === kAct.s), hp = kWrist(a).localToWorld(new THREE.Vector3(0, -0.1, 0)), pa = traceGeo.attributes.position;
       pa.setXYZ(0, hp.x, hp.y, hp.z); pa.setXYZ(1, kAct.bx, H_PROJ, kAct.bz); pa.needsUpdate = true; trace.material.opacity = 0.9 * Math.max(0, traceT / 0.5);
     } else trace.material.opacity = 0;
-    animateChars(dt); updateHold();
+    animateChars(dt);
     // câmera (troca suave entre as duas; tremor curto e sutil num impacto) e transparência de quem cobre algo interativo
     updateCamera(dt); updateOcclusion(dt);
     if (shakeT > 0) { shakeT -= dt; const a = 0.035 * shakeT / 0.18; camera.position.x += (Math.random() - 0.5) * a; camera.position.y += (Math.random() - 0.5) * a; }
   }
-  const _v = new THREE.Vector3(), _fh = new THREE.Vector3(), _fh2 = new THREE.Vector3();
+  const _v = new THREE.Vector3();
   function animateChars(dt) {
     const lv = kLevel(), firm = lv / 4;
     for (const w of ['P', 'K']) react[w] = Math.max(0, react[w] - dt / 0.5);
@@ -1356,7 +1223,7 @@ export function createBattle(ctx) {
     let pk = 0, ps = cpos.x >= P_POS.x ? 1 : -1, ptgt = _v.set(cpos.x, 0.8, cpos.z);
     if (gest) { gest.t += dt; const t = gest.t; pk = t < 0.12 ? t / 0.12 : t < 0.32 ? 1 : Math.max(0, 1 - (t - 0.32) / 0.35); ps = gest.x >= P_POS.x ? 1 : -1; ptgt.set(gest.x, 0.8, gest.z); if (t > 0.7) gest = null; }
     else if (drawing) pk = 0.8;
-    else if (seg && seg.guide && phase === 'play' && seg.guide.state === 'grab') { pk = 0.85; ps = seg.guide.x >= P_POS.x ? 1 : -1; ptgt.set(seg.guide.x, seg.guide.y, seg.guide.z); }
+    else if (seg && seg.guide && phase === 'play' && seg.guide.state === 'grab') { pk = 0.85; ps = seg.guide.x >= P_POS.x ? 1 : -1; ptgt.set(seg.guide.x, GUIDE.objY, seg.guide.z); }
     else if (seg && seg.guide && phase === 'play' && seg.guide.attract) pk = 0.6;
     for (const a of pModel.userData.arms) { a.k = (a.k || 0) + ((a.s === ps ? pk : 0) - (a.k || 0)) * Math.min(1, dt * 12); reachArm(pModel, a.s, ptgt, a.k); }
     pose.setGuard(barriers.some(b => b.owner === 'P' && (b.alive || b.die < 0.15)));   // guarda até a última placa se desfazer
@@ -1373,7 +1240,7 @@ export function createBattle(ctx) {
     for (const a of KU.arms) {
       let k = 0, tgt = _v.set(a.s * 2 + K_POS.x, 0.6, K_POS.z - 1.5);
       const kp = seg && seg.guide && seg.guide.state === 'kpull';
-      if (kp && a.s === (seg.guide.kSide || (seg.guide.kSide = seg.guide.x >= K_POS.x ? 1 : -1))) { tgt.set(seg.guide.x, seg.guide.y, seg.guide.z); k = 0.35 + 0.6 * ease(seg.guide.t / 0.6); }   // gesto de puxar a ponta
+      if (kp && a.s === (seg.guide.kSide || (seg.guide.kSide = seg.guide.x >= K_POS.x ? 1 : -1))) { tgt.set(seg.guide.x, GUIDE.objY, seg.guide.z); k = 0.35 + 0.6 * ease(seg.guide.t / 0.6); }   // gesto de puxar a ponta
       else if (kAct && kAct.s === a.s) {
         tgt.set(kAct.bx, 1.2, kAct.bz);
         if (kAct.made) k = Math.max(0, 1 - kAct.back / 0.7);
@@ -1387,30 +1254,14 @@ export function createBattle(ctx) {
     if (FU.head) { FU.head.rotation.z = -0.12 + 0.03 * Math.sin(time * 0.4); FU.head.rotation.y = 0.06 * Math.sin(time * 0.27); }
     let fk = 0, fs = 1, ft = _v.set(0, 3, 0);
     if (figGest) { figGest.t += dt; const t = figGest.t, d = figGest.dur; fk = (t < 0.35 ? t / 0.35 : t < d - 0.4 ? 1 : Math.max(0, (d - t) / 0.4)) * (figGest.soft ? 0.55 : 1); fs = figGest.s; ft.copy(figGest.pt); if (t >= d) figGest = null; }
-    // CONDUZIR aprimorado: um braço segura o fio do objeto (dá o tranco puxando para si; na ruptura, recua e cai); os disparos usam o outro
-    const hg = seg && seg.guide && seg.guide.held ? seg.guide : null;
-    const hold = hg && (obj.visible || (hg.snap >= 0 && hg.snap < 1)) ? hg : null;
-    let hk = 0; const htg = _fh.set(0, 0, 0);
-    if (hold) {
-      if (fs === hold.holdS) fs = -hold.holdS;
-      // como quem segura um fio de marionete: braço erguido à frente, do lado do objeto; o fio desce da mão até ele
-      const sx = Math.sign(hold.x - F_POS.x) || 1;
-      htg.set(F_POS.x + sx * 4.4, 10.4 + 0.25 * Math.sin(time * 1.3), F_POS.z + 1.8);
-      const yk = hold.yank * hold.yank; htg.lerp(_fh2.set(F_POS.x + sx * 2.4, 13, F_POS.z - 0.5), 0.7 * yk);   // tranco: puxa para cima e para si
-      if (hold.snap >= 0) { const sn = ease(hold.snap); htg.lerp(_fh2.set(F_POS.x + sx * 2.0, 13, F_POS.z - 1.5), 0.6 * sn); hk = 0.92 * (1 - sn); }   // o fio se parte: o braço recua e baixa
-      else hk = 0.92;
-    }
-    for (const a of FU.arms) {
-      const isHold = hold && a.s === hold.holdS, want = isHold ? hk : a.s === fs ? fk : 0;
-      a.k = (a.k || 0) + (want - (a.k || 0)) * Math.min(1, dt * (isHold && hold.yank > 0.5 ? 18 : 8)); reachArm(fig, a.s, isHold ? htg : ft, a.k);
-    }
+    for (const a of FU.arms) { a.k = (a.k || 0) + ((a.s === fs ? fk : 0) - (a.k || 0)) * Math.min(1, dt * 8); reachArm(fig, a.s, ft, a.k); }
   }
 
   // ---------- rótulo ----------
   let labelOn = false, labelText = '';
   function updateLabel() {
     const on = !!seg && (phase === 'play' || phase === 'clear' || (phase === 'intro' && pt > 0.4));
-    const txt = seg ? LABEL[seg.plus ? 'plus' : seg.guide && seg.guide.held ? 'held' : seg.mech][document.body.classList.contains('touch-on') ? 1 : 0] : '';
+    const txt = seg ? LABEL[seg.plus ? 'plus' : seg.mech][document.body.classList.contains('touch-on') ? 1 : 0] : '';
     if (txt !== labelText) { label.textContent = txt; labelText = txt; }
     if (on !== labelOn) { labelOn = on; label.style.display = 'block'; label.style.opacity = on ? '1' : '0'; }
   }
@@ -1510,8 +1361,7 @@ export function createBattle(ctx) {
     get walls() { return walls.map(w => ({ pts: w.pts.map(p => ({ x: p.x, z: p.z })), alive: w.alive, preview: false })); },
     get preview() { return drawing ? drawing.pts.map(p => ({ x: p.x, z: p.z })) : null; }, get previewLen() { return drawing ? drawing.len : 0; },
     get structures() { return seg ? seg.structures.map(s => ({ x: s.x, z: s.z, alive: s.alive })) : []; },
-    get warnings() { return warnings.map(w => ({ ox: w.ox, oz: w.oz, tx: w.tx, tz: w.tz, t: w.t, dur: w.dur, done: !!w.done, target: w.target, struct: !!w.src })); },
-    get guide() { const g = seg && seg.guide; return g ? { x: g.x, y: g.y, z: g.z, state: g.state, attract: g.attract, armed: g.armed, tension: g.tension, passed: g.passed, portal: g.portal ? { ...g.portal } : null, by: g.by || null, held: g.held, hits: g.hits, need: g.need } : null; },
+    get guide() { const g = seg && seg.guide; return g ? { x: g.x, z: g.z, state: g.state, attract: g.attract, armed: g.armed, tension: g.tension, passed: g.passed, portal: g.portal ? { ...g.portal } : null, by: g.by || null } : null; },
     get through() { return projectiles.filter(p => p.alive && p.through).map(p => ({ x: p.x, z: p.z, vx: p.vx, vz: p.vz, inWhite: !!p.obj.parent && p.obj.parent === ws })); },
     _pull(down) { rightDown = !!down; },
     get _plus() { return plus; }, get _rig() { return { pModel, PB }; }, get _pose() { return pose; }, _camK(k) { camForce = k == null ? null : k; },
