@@ -37,6 +37,49 @@ function carGlow() {
   g.fillStyle = gr; g.fillRect(0, 0, 64, 64); glowT = new THREE.CanvasTexture(c); glowT.colorSpace = THREE.SRGBColorSpace; return glowT;
 }
 
+// Variedade no trânsito (mesmo tamanho de carro: as filas e as colisões não mudam): táxi com luminoso no teto, furgão de
+// entregas (baú alto, sem janelas atrás) e picape com a caçamba carregada, entre os carros comuns.
+let taxiTex = null, taxiMat = null;
+function buildVehicle() {
+  const r = Math.random();
+  const kind = r < 0.14 ? 'taxi' : r < 0.26 ? 'van' : r < 0.34 ? 'pickup' : 'car';
+  if (kind === 'car') return { mesh: buildCar(), color: CAR_COLORS[Math.floor(Math.random() * CAR_COLORS.length)] };
+  const g = new THREE.Group();
+  if (kind === 'van') {                                                  // furgão: baú alto na cor da carroceria, cabine com para-brisa
+    const body = at(box(4.4, 1.75, 1.95, '#f2f2f2'), -0.1, 1.3, 0); g.add(body); g.userData.body = body;
+    g.add(at(box(0.08, 0.75, 1.6, '#2b4a6e'), 2.13, 1.7, 0));                                   // para-brisa
+    for (const zz of [0.99, -0.99]) g.add(at(box(0.9, 0.6, 0.04, '#2b4a6e'), 1.45, 1.7, zz));   // janelas da cabine
+    g.add(at(box(0.3, 0.3, 2.0, '#2e3036'), 2.25, 0.55, 0));                                    // para-choque
+    for (const x of [-1.4, 1.4]) for (const zz of [0.95, -0.95]) g.add(at(cyl(0.42, 0.42, 0.3, '#1f2023', 10), x, 0.42, zz, Math.PI / 2, 0, 0));
+    const brake = mat('#ff3b30', { emissive: '#ff1a1a', emissiveIntensity: 1.1 }), head = mat('#fff3c0', { emissive: '#ffe9a0', emissiveIntensity: 0.4 });
+    for (const zz of [0.7, -0.7]) { g.add(at(new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.25, 0.4), brake), -2.32, 0.95, zz)); g.add(at(new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.22, 0.4), head), 2.15, 0.95, zz)); }
+    g.traverse(o => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
+    const cols = ['#f2f2f2', '#f2f2f2', '#3a78d4', '#d8473a', '#efbf2a', '#8f959c'];
+    return { mesh: g, color: cols[Math.floor(Math.random() * cols.length)] };
+  }
+  if (kind === 'taxi') {
+    const car = buildCar();                                                 // táxi: amarelo, faixa xadrez e luminoso no teto
+    if (!taxiTex) { const c = document.createElement('canvas'); c.width = 128; c.height = 32; const x = c.getContext('2d'); x.fillStyle = '#ffe9a0'; x.fillRect(0, 0, 128, 32); x.fillStyle = '#1b1b1b'; x.font = 'bold 24px "Trebuchet MS", sans-serif'; x.textAlign = 'center'; x.textBaseline = 'middle'; x.fillText('TÁXI', 64, 17); taxiTex = new THREE.CanvasTexture(c); taxiTex.colorSpace = THREE.SRGBColorSpace; }
+    if (!taxiMat) { taxiMat = new THREE.MeshStandardMaterial({ map: taxiTex, emissive: '#ffd060', emissiveMap: taxiTex, emissiveIntensity: 0.5, roughness: 0.6 }); taxiMat.userData.keep = true; }
+    const sign = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.24, 0.8), taxiMat);   // (um material só: uma chamada de desenho por táxi)
+    sign.rotation.y = Math.PI / 2; sign.position.set(-0.3, 2.28, 0); car.add(sign);
+    for (const zz of [0.955, -0.955]) for (let k = 0; k < 8; k++) car.add(at(box(0.27, 0.12, 0.02, k % 2 ? '#1b1b1b' : '#f2f2f2'), -1.9 + k * 0.54, 0.95, zz));   // faixa xadrez
+    return { mesh: car, color: '#efbf2a' };
+  }
+  // picape: cabine curta na frente e caçamba aberta atrás, com a carga coberta por uma lona
+  const pk = new THREE.Group();
+  const body = at(box(4.4, 0.9, 1.9, '#d8473a'), 0, 0.85, 0); pk.add(body); pk.userData.body = body;
+  pk.add(at(box(1.6, 0.8, 1.7, '#dfe6ee'), 0.55, 1.68, 0)); pk.add(at(box(1.45, 0.08, 1.6, '#7b828c'), 0.55, 2.12, 0));   // cabine e teto
+  for (const zz of [0.9, -0.9]) pk.add(at(box(2.1, 0.42, 0.08, '#3a3d44'), -1.15, 1.5, zz));                              // laterais da caçamba
+  pk.add(at(box(0.08, 0.42, 1.88, '#3a3d44'), -2.17, 1.5, 0));
+  pk.add(at(box(1.5, 0.45, 1.5, ['#6b8a4a', '#8a6a48', '#4a6b8a'][Math.floor(Math.random() * 3)]), -1.15, 1.5, 0, 0, 0.04, 0));   // carga com lona
+  for (const x of [-1.4, 1.4]) for (const zz of [0.95, -0.95]) pk.add(at(cyl(0.42, 0.42, 0.3, '#1f2023', 10), x, 0.42, zz, Math.PI / 2, 0, 0));
+  const brake = mat('#ff3b30', { emissive: '#ff1a1a', emissiveIntensity: 1.1 }), head = mat('#fff3c0', { emissive: '#ffe9a0', emissiveIntensity: 0.4 });
+  for (const zz of [0.7, -0.7]) { pk.add(at(new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.25, 0.4), brake), -2.2, 0.95, zz)); pk.add(at(new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.22, 0.4), head), 2.2, 0.95, zz)); }
+  pk.traverse(o => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
+  return { mesh: pk, color: CAR_COLORS[Math.floor(Math.random() * CAR_COLORS.length)] };
+}
+
 export function createTraffic(audio) {
   const root = new THREE.Group(); root.name = 'traffic';
   let cars = [], lanes = new Map(), nodes = [], blockedV = new Set(), lights = [], t = 0, built = false;
@@ -217,7 +260,7 @@ export function createTraffic(audio) {
         for (let tries = 0; n > 0 && tries < 400; tries++) {
           const L = pool[Math.floor(Math.random() * pool.length)], s = CAR / 2 + Math.random() * (L.len - CAR);
           if (L.cars.some(c => Math.abs(c.s - s) < CAR + 3) || (L.i <= 1 && Math.abs(L.a.x - rc(Math.floor(GRID / 2))) < 12)) continue;   // nada colado na entrada
-          const mesh = buildCar(); mesh.userData.body.material = mat(CAR_COLORS[Math.floor(Math.random() * CAR_COLORS.length)]);
+          const veh = buildVehicle(), mesh = veh.mesh; mesh.userData.body.material = mat(veh.color);
           bakeStatic(mesh);                                              // 1 malha por material (de 11 para 6 por carro: a avenida cheia pesa menos)
           if (night) for (const zz of [0.7, -0.7]) {                 // Penumbra: faróis acesos (brilho + luz no chão)
             const g = new THREE.Sprite(lightMats().spr); g.scale.setScalar(1.3); g.position.set(2.35, 0.95, zz); mesh.add(g);

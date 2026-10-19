@@ -444,3 +444,27 @@ continua jogável em `/versao-anterior/` (cópia do `index.html` de antes, com a
   cavaletes (Bairro 3); caminhão com pisca-alerta e ajudante; buraco com água e aviso.
 - `models/house.js`: casas 0–31 (e as gêmeas 104–109) com tom de parede, cortinas, capacho; a casa do K (86) igual a antes.
 - `kit.js`: `vcMerge`, `mergePlain`; `bakeStatic` preserva cores por vértice.
+
+**Menus e interface (rodada B)**
+- HUD (`hud.js`): grade `logo | dicas | contador` / `pista`; a pista é o texto principal (≥ 20 px; celular em pé 3 linhas a 17 px, mín.
+  14,5), com linhas reservadas para a barra não mudar de altura entre estados. As dicas do `main.js` ("tecla: ação · …") viram teclas
+  desenhadas (`renderSeg`) e se compactam em etapas quando falta espaço; no toque somem. Toque deitado: barra de uma linha.
+- `touch.js`: aviso "Toque para continuar ▸" (`.tc-cue`) durante a fala do morador. MENU (`menu.js`): título PAUSA, "Continuar ▸",
+  opções marcadas "só no Modo Livre". Configurações: rodapé "Revisão de 19/10/2026". Missões: bairros sem missões mostram "Missões em
+  preparação"; selo "✔ concluída". Mapa da Carreira: balão "BAIRRO N · Nome"/"NÍVEL 10 · Veneza"; aviso de bloqueio coerente.
+  Seleção do Livre no celular em pé: 2 × 4 cartões. Créditos da música não cobrem cronômetro, caixa de fala nem painéis. DICA com seta
+  e tecla T. Nenhum nome de bairro foi trocado (todos escolhidos pelo dono; "Morro" veio de uma sessão anterior e foi mantido).
+
+**Bairros urbanos (rodada B)**
+- `world.js`: arredores das cidades com parque linear, quadrinhas e cidade instanciada até ~640 m (`buildCityOuter`), com tipo deduzido
+  em `createWorld` (mirante 6, altitude 7 com elevado engarrafado, ápice 8 com centro de arranha-céus, encostas 9 com morros `hillField`
+  que têm chão/colisão, canal 11 com rio e pontes, trilhos 12 com elevado do bonde, fluxo 14/19 com elevado). Material barato
+  (`cheapMat`, sem luzes pontuais) com janelas no shader (`FAC_*`); `world.setNight(on)` (chamado por `night.setup`) acende janelas,
+  postes e faróis. Cidade de longe em quadrantes; colisões de fora com `top` (altura).
+- Travessia (11): canal rebaixado (`CANAL_WL` −2 em `terrain.js`), cais, pontes com pilares, passarelas, barquinhos, água correndo.
+  Cachoeira (23): serras de mata em volta do vale (`buildCanyonHills`, com chão/colisão).
+- `barriers.js`: `tickBarriers(dt)` (pisca e PARE/SIGA param com o MENU); filas dos engarrafamentos andam um pouco de vez em quando.
+- `night.js`: neon de cada loja = nome do comércio (`SHOP_NEON`); grama de fora escura à noite. `train.js`: bondes com cor por linha,
+  letreiro de destino e passageiros (`buildTram({ line, dest })`); paradas na cor da linha. `traffic.js`: táxis, furgões, picapes.
+  `models/ware.js`: itens do pátio no chão, letreiro com nome. `models/apt.js`: ar-condicionados entre as janelas, rodapé, porta com
+  moldura, caixas de correio e interfone (o 87 igual).

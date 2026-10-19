@@ -1,7 +1,7 @@
 // Cenário especial dos Bairros 9 (Encostas: áreas elevadas, ladeiras e escadarias) e 10 (Travessia: canal, pontes,
 // passarelas e placas LADO LESTE / LADO OESTE). Só visual: a colisão está em layout.js (SOLIDS) e a altura em TERRAIN.h.
 import * as THREE from 'three';
-import { box, at, mesh, textTexture } from './models/kit.js';
+import { box, at, mesh, textTexture, dynamic } from './models/kit.js';
 import { cobble, gableRoof } from './models/venice.js';
 import { buildRail } from './train.js';
 import { buildFavelaScene } from './models/favela.js';
@@ -36,12 +36,26 @@ export function buildTerrain() {
   return g;
 }
 
-/** Bloco elevado de x0..x1 × z0..z1, de y0 até y1: muro de pedra e asfalto por cima. */
+/** Bloco elevado de x0..x1 × z0..z1, de y0 até y1: muro de pedra e asfalto por cima. Na face norte (a que se vê de baixo,
+ *  da rua de baixo), fiadas de pedra, pedras salientes, buzinotes de drenagem e um pouco de hera. */
+let wallSeed = 5;
 function block(g, x0, x1, z0, z1, y0, y1) {
   if (x1 - x0 < 0.05 || z1 - z0 < 0.05) return;
   const h = y1 - y0;
   g.add(at(box(x1 - x0, h - 0.06, z1 - z0, WALLC), (x0 + x1) / 2, y0 + (h - 0.06) / 2, (z0 + z1) / 2));
   g.add(at(box(x1 - x0, 0.06, z1 - z0, ASPHALT), (x0 + x1) / 2, y1 - 0.03, (z0 + z1) / 2));
+  if (TERRAIN.kind !== 'hill' || z1 - z0 < 3 || x1 - x0 < 2 || h < 2) return;   // (só os paredões de verdade das Encostas)
+  const r = () => (wallSeed = (wallSeed * 16807) % 2147483647) / 2147483647, W = x1 - x0;
+  for (let y = y0 + 0.7; y < y1 - 0.4; y += 0.75) g.add(at(box(W, 0.07, 0.04, '#a59a86'), (x0 + x1) / 2, y, z0 - 0.02));   // fiadas
+  for (let k = 0; k < W / 2.2; k++) {                                       // pedras salientes (tons variados)
+    const w = 0.9 + r() * 0.9, x = x0 + 0.5 + r() * (W - 1 - w) + w / 2, y = y0 + 0.4 + r() * (h - 1.0);
+    g.add(at(box(w, 0.42, 0.07, ['#c7bba5', '#ab9f8a', '#b3a893'][k % 3]), x, y, z0 - 0.035));
+  }
+  for (let x = x0 + 3; x < x1 - 1; x += 6.5) g.add(at(box(0.18, 0.18, 0.3, '#6b6f76'), x, y0 + 0.55, z0 - 0.12));   // buzinotes
+  for (let k = 0; k < W / 9; k++) {                                         // hera descendo do alto do muro
+    const x = x0 + 1 + r() * (W - 2), len = 0.8 + r() * (h - 1.2);
+    g.add(at(box(0.9 + r() * 1.2, len, 0.08, ['#4f8a3c', '#5f9a45', '#3f7a34'][k % 3]), x, y1 - 0.06 - len / 2, z0 - 0.05));
+  }
 }
 /** Faixa ao longo de x (z0..z1) com buracos nas colunas de rua `gaps`. */
 function bandWithGaps(g, xa, xb, z0, z1, y0, y1, gaps) {
@@ -125,24 +139,72 @@ function buildHill(g) {
   }
 }
 
+/** Nível da água do canal (Bairro 11) e do rio que o continua pelos arredores (world.js): abaixo da rua, entre muros de pedra. */
+export const CANAL_WL = -2.0;
+let waterMat = null;
+/** Água do canal/rio: azul com reflexos claros; a textura corre devagar para o sul (world.js anima os materiais com userData.flow). */
+export function canalWaterMaterial() {
+  if (waterMat) return waterMat;
+  const c = document.createElement('canvas'); c.width = 128; c.height = 256; const x = c.getContext('2d');
+  const gr = x.createLinearGradient(0, 0, 128, 0);                                  // mais escura junto aos muros (sombra do cais)
+  gr.addColorStop(0, '#24618c'); gr.addColorStop(0.12, '#327fb3'); gr.addColorStop(0.5, '#3b8cc0'); gr.addColorStop(0.88, '#327fb3'); gr.addColorStop(1, '#24618c');
+  x.fillStyle = gr; x.fillRect(0, 0, 128, 256);
+  let k = 11; const r = () => (k = (k * 16807) % 2147483647) / 2147483647;
+  for (let i = 0; i < 30; i++) {                                                    // reflexos alongados (no sentido da correnteza)
+    x.fillStyle = `rgba(190,226,248,${0.12 + r() * 0.26})`; const px = 14 + r() * 100, py = r() * 256, len = 10 + r() * 26;
+    x.fillRect(px, py, 2 + r() * 3, len); if (py + len > 256) x.fillRect(px, py - 256, 3, len);
+  }
+  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.wrapS = t.wrapT = THREE.RepeatWrapping; t.anisotropy = 4;
+  waterMat = new THREE.MeshStandardMaterial({ map: t, roughness: 0.25, metalness: 0.1 });
+  waterMat.userData.flow = 0.035; waterMat.userData.keep = true;
+  return waterMat;
+}
+/** Plano de água de x0..x1 × z0..z1 no nível do canal (UV em metros: a textura repete a cada 8 × 16). */
+export function waterPlane(x0, x1, z0, z1, y = CANAL_WL) {
+  const geo = new THREE.PlaneGeometry(x1 - x0, z1 - z0, 1, Math.max(1, Math.ceil((z1 - z0) / 60))); geo.rotateX(-Math.PI / 2);
+  const uv = geo.attributes.uv, p = geo.attributes.position;
+  for (let i = 0; i < uv.count; i++) uv.setXY(i, (p.getX(i) + (x1 - x0) / 2) / (x1 - x0), -(p.getZ(i) + (z1 - z0) / 2 + z0) / 16);   // (u: de um muro ao outro)
+  const m = new THREE.Mesh(geo, canalWaterMaterial()); m.position.set((x0 + x1) / 2, y, (z0 + z1) / 2); m.receiveShadow = true; m.castShadow = false;
+  return m;
+}
+/** Muro de cais (face para dentro do canal) de z0 a z1 na borda x (s = lado da água: +1 para leste), com a linha d'água escura. */
+export function quayWall(g, x, s, z0, z1) {
+  if (z1 - z0 < 0.05) return;
+  g.add(at(box(0.7, -CANAL_WL + 0.4, z1 - z0, STONE), x + s * 0.35, (CANAL_WL - 0.4) / 2, (z0 + z1) / 2));
+  g.add(at(box(0.06, 0.5, z1 - z0, '#5b6466'), x + s * 0.72, CANAL_WL + 0.2, (z0 + z1) / 2));          // limo na linha d'água
+  for (let z = z0 + 3; z < z1 - 1; z += 6) g.add(at(box(0.08, 0.16, 0.9, '#8d8478'), x + s * 0.73, CANAL_WL + 1.15, z));   // juntas/pedras salientes
+}
+
 function buildCanal(g) {
-  const C = CANAL, z0 = HEDGE, z1 = MAP - HEDGE, cx = (C.x0 + C.x1) / 2, w = C.x1 - C.x0;
-  // água (um pouco acima do asfalto) com faixas mais escuras nas margens e muretas de pedra
-  g.add(at(box(w, 0.06, z1 - z0, WATER), cx, 0.02, (z0 + z1) / 2));
-  for (const s of [-1, 1]) g.add(at(box(1.4, 0.07, z1 - z0, WATER_DEEP), cx + s * (w / 2 - 0.7), 0.03, (z0 + z1) / 2));
-  // reflexos (faixas claras) espalhados
-  for (let z = z0 + 6; z < z1 - 4; z += 9) g.add(at(box(2.2, 0.075, 0.25, '#8cc6ea'), cx + Math.sin(z) * w * 0.3, 0.035, z));
+  const C = CANAL, z0 = HEDGE, z1 = MAP - HEDGE, cx = (C.x0 + C.x1) / 2, w = C.x1 - C.x0, WL = CANAL_WL;
+  // canal rebaixado: água abaixo da rua (a colisão continua a mesma: a van nunca entra), muros de cais de pedra dos dois lados e,
+  // em cima deles, a mureta de sempre (aberta nas pontes e passarelas). A água vai de uma borda à outra do bairro e segue como rio
+  // pelos arredores (world.js), passando sob os muros em arco no lugar da sebe.
+  g.add(waterPlane(C.x0 + 0.7, C.x1 - 0.7, 0, MAP));
+  quayWall(g, C.x0, 1, 0, MAP); quayWall(g, C.x1, -1, 0, MAP);
+  g.add(at(box(w, 0.4, MAP, '#2e5f7d'), cx, WL - 0.5, MAP / 2));                                 // fundo (sob a água)
   const breaks = C.bridges.map(i => [rc(i) - hr, rc(i) + hr]).concat(C.foot.map(z => [z - 1.3, z + 1.3])).sort((a, b) => a[0] - b[0]);
   let z = z0;
   for (const [a, b] of breaks.concat([[z1, z1]])) {
     if (a > z) for (const x of [C.x0 + 0.25, C.x1 - 0.25]) g.add(at(box(0.5, 0.5, a - z, STONE), x, 0.25, (z + a) / 2));
     z = b;
   }
-  // pontes de carro: tabuleiro, guarda-corpos e placas nas saídas
+  // escadinhas de pedra até a água (uma de cada lado, longe das pontes): o canal é usado
+  for (const [x, s, zs] of [[C.x0, 1, lotZ(1) + 4], [C.x1, -1, lotZ(6) + 9]]) for (let k = 0; k < 6; k++) {
+    const y = -0.3 - k * (-WL - 0.3) / 6;
+    g.add(at(box(1.1, 0.24, 1.2, CAP), x + s * (0.7 + 0.55), y, zs + k * 1.2));
+  }
+  // pontes de carro: tabuleiro de pedra com laje grossa, dois pilares na água e o asfalto por cima; guarda-corpos e placas
   for (const i of C.bridges) {
     const zc = rc(i);
-    g.add(at(box(w + 1, 0.2, ROAD + 0.6, '#8d8a84'), cx, 0.0, zc));
+    g.add(at(box(w + 1, 0.9, ROAD + 0.6, '#9a958c'), cx, -0.35, zc));
     g.add(at(box(w + 1, 0.04, ROAD - 0.4, ASPHALT), cx, 0.11, zc));
+    for (let x = C.x0 + 1.5; x < C.x1 - 1; x += 2.6) g.add(at(box(1.4, 0.02, 0.22, '#f2d45c'), x, 0.135, zc));   // faixa central
+    for (const s of [-1, 1]) g.add(at(box(w + 1.1, 0.5, 0.25, CAP), cx, -0.55, zc + s * (ROAD / 2 + 0.35)));   // friso na lateral
+    for (const px of [cx - w / 4, cx + w / 4]) {                                                   // pilares com quebra-mar
+      g.add(at(box(1.8, -WL - 0.4, ROAD - 0.6, STONE), px, (WL - 1.2) / 2, zc));                      // (de 0,4 abaixo da água até a laje)
+      for (const s of [-1, 1]) g.add(at(box(1.27, -WL - 0.4, 1.27, STONE), px, (WL - 1.2) / 2, zc + s * (ROAD / 2 - 0.3), 0, Math.PI / 4, 0));
+    }
     for (const s of [-1, 1]) {
       const zz = zc + s * (hr + 0.1);
       g.add(at(box(w + 1, 0.9, 0.35, CAP), cx, 0.55, zz));
@@ -152,10 +214,12 @@ function buildCanal(g) {
     sign(g, 'LADO LESTE', C.x1 + 1.6, 0, zc - hr - 0.7, 0);
     sign(g, 'LADO OESTE', C.x0 - 1.6, 0, zc + hr + 0.7, Math.PI);
   }
-  // passarelas (só a pé): estreitas, de madeira, com corrimão
+  // passarelas (só a pé): estreitas, de madeira, com corrimão, apoiadas em pernas de madeira na água
   for (const fz of C.foot) {
     g.add(at(box(w + 0.8, 0.14, 2.4, WOOD), cx, 0.08, fz));
+    g.add(at(box(w + 0.8, 0.3, 0.3, '#6f5434'), cx, -0.12, fz));                                  // viga
     for (let x = C.x0; x < C.x1; x += 1.2) g.add(at(box(0.08, 0.02, 2.2, '#6f5434'), x, 0.16, fz));
+    for (let x = C.x0 + w / 4; x < C.x1 - 1; x += w / 4) for (const s of [-1, 1]) g.add(at(box(0.22, -WL, 0.22, '#5a4228'), x, WL / 2, fz + s * 1.0));
     for (const s of [-1, 1]) {
       g.add(at(box(w + 0.8, 0.1, 0.1, RAIL), cx, 1.05, fz + s * 1.15));
       for (let x = C.x0; x <= C.x1 + 0.01; x += w / 6) g.add(at(box(0.1, 1.0, 0.1, RAIL), x, 0.55, fz + s * 1.15));
@@ -163,7 +227,30 @@ function buildCanal(g) {
     // frade de concreto nas pontas: a van não passa
     for (const x of [C.x0 + 0.3, C.x1 - 0.3]) g.add(at(box(0.5, 0.9, 0.5, '#e0b43a'), x, 0.45, fz));
   }
+  // barquinhos amarrados junto ao cais (balançam na água: world.js anima quem tem userData.bob)
+  const BOATS = [['#f2efe6', '#2f6fb0'], ['#c8402f', '#f2efe6'], ['#3c8f52', '#f2efe6'], ['#f2efe6', '#c8402f'], ['#2f5f8a', '#efbf2a']];
+  [[C.x0, 1, lotZ(0) + 9], [C.x1, -1, lotZ(2) + 3.5], [C.x0, 1, lotZ(4) + 11], [C.x1, -1, lotZ(5) + 3], [C.x0, 1, lotZ(6) + 12]].forEach(([x, s, bz], i) => {
+    const b = dynamic(new THREE.Group()), [hull, band] = BOATS[i % BOATS.length];
+    b.add(at(box(1.4, 0.5, 3.4, hull), 0, 0, 0)); b.add(at(box(1.46, 0.12, 3.46, band), 0, 0.2, 0));          // casco e friso
+    b.add(at(box(0.98, 0.5, 0.98, hull), 0, 0, 1.75, 0, Math.PI / 4, 0));                                    // proa
+    b.add(at(box(1.1, 0.06, 3.0, '#8a6440'), 0, 0.12, 0)); b.add(at(box(1.2, 0.08, 0.36, '#6f5434'), 0, 0.3, -0.4));   // fundo e banco
+    for (const sx of [-1, 1]) b.add(at(box(0.07, 0.07, 2.2, '#c9a46a'), sx * 0.5, 0.36, 0.2, 0, sx * 0.08, 0));   // remos recolhidos
+    b.add(at(box(0.05, 0.05, 1.6, '#d8cfb4'), -s * 1.05, 0.55, 1.2, 0.5, s * 0.6, 0));                     // corda até a argola do cais
+    b.position.set(x + s * (0.7 + 0.95), WL + 0.12, bz); b.rotation.y = s * 0.04;
+    b.userData.bob = { y0: WL + 0.12, ph: i * 1.7 };
+    g.add(b);
+  });
+  // no lugar da sebe, nas duas bordas do bairro: ponte baixa de pedra sobre o canal com a sebe por cima (o rio segue por baixo)
+  for (const [za, zb] of [[0, HEDGE], [MAP - HEDGE, MAP]]) {
+    const zm = (za + zb) / 2, d = zb - za;
+    g.add(at(box(w, 0.9, d, STONE_DK), cx, -0.45, zm));                                             // laje
+    g.add(at(box(w, 0.9, d - 0.3, '#3d7c38'), cx, 0.45, zm));                                       // sebe (mesma altura e cor da sebe)
+    for (let x = C.x0 + 0.6, n = 0; x < C.x1; x += 1.25, n++) { const m = at(mesh(HEDGE_BUMP, ['#478d41', '#51994a', '#40833b'][n % 3]), x, 0.8, zm, n, n * 2, 0); m.scale.set(1.3, 0.92, 0.98); g.add(m); }
+    for (const px of [cx - w / 4, cx + w / 4]) g.add(at(box(1.6, -WL - 0.5, d, STONE_DK), px, (WL - 0.9 - 0.4) / 2 + 0.2, zm));   // pilares
+  }
 }
+const HEDGE_BUMP = new THREE.IcosahedronGeometry(0.72, 0);
+const STONE_DK = '#9b9183';
 
 // ---------- Nível 12 (Veneza): água, vielas, pracinha, Ponte de Rialto, pontes menores e placas de atracar ----------
 function deckSteps(g, along, from, to, cross, width, rise, n, color, side = true) {   // ponte em degraus (perfil em arco)

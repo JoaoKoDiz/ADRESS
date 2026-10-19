@@ -35,6 +35,11 @@ body.touch-on .gamenote-ok::before { content: 'Toque ▸ OK'; font-size: 14px; }
 body.touch-on .ahud-main.tc-tap { pointer-events: auto; cursor: pointer; }
 body.touch-on, body.touch-on .ahud { -webkit-touch-callout: none; }
 body.touch-on { overscroll-behavior: none; }
+.tc-cue { position: fixed; left: 50%; top: 64px; z-index: 31; display: none; transform: translateX(-50%); padding: 6px 14px; border-radius: 999px;
+  background: #FFF3D6; border: 2px solid #FF7A1A; color: #c2570c; font: 800 13px/1 system-ui, 'Segoe UI', Roboto, sans-serif; box-shadow: 0 2px 6px rgba(0,0,0,.25);
+  touch-action: none; user-select: none; -webkit-user-select: none; -webkit-tap-highlight-color: transparent; animation: tc-cue 1.4s ease-in-out infinite; }
+body.touch-on .tc-cue.on { display: block; }
+@keyframes tc-cue { 50% { transform: translateX(-50%) translateY(2px); } }
 canvas.tc-canvas { touch-action: none; -webkit-touch-callout: none; user-select: none; -webkit-user-select: none; }
 @supports (padding: env(safe-area-inset-left)) {
   .tc-zone { padding-left: env(safe-area-inset-left); padding-bottom: env(safe-area-inset-bottom); }
@@ -47,6 +52,9 @@ export function createTouch({ input, canvas }) {
   const base = document.createElement('div'); base.className = 'tc-base'; base.innerHTML = '<div class="tc-knob"></div>';
   const knob = base.firstChild; zone.appendChild(base); document.body.appendChild(zone);
   const acts = document.createElement('div'); acts.className = 'tc-acts'; document.body.appendChild(acts);
+  // fala do morador na barra de cima: no toque não há a dica "[E] continuar" — um aviso logo abaixo da barra mostra que é só tocar
+  const cue = document.createElement('div'); cue.className = 'tc-cue'; cue.textContent = 'Toque para continuar ▸'; document.body.appendChild(cue);
+  let cueTop = -1;
 
   let touchOn = false, joyOn = false, lookOn = false, dialogTap = false;
   const R = 46;                                         // raio útil do joystick (px)
@@ -121,7 +129,7 @@ export function createTouch({ input, canvas }) {
     const t = e.target.closest ? e.target : e.target.parentElement;
     if (!t || !t.closest) return;
     const prm = t.closest('.ahud-prompt.on') || document.elementsFromPoint(e.clientX, e.clientY).some(x => x.closest && x.closest('.ahud-prompt.on'));   // a indicação do lugar tem prioridade
-    if (prm || t.closest('.talkbox') || t.closest('.gamenote') || (dialogTap && t.closest('.ahud-main'))) {
+    if (prm || t.closest('.talkbox') || t.closest('.gamenote') || (dialogTap && (t.closest('.ahud-main') || t.closest('.tc-cue')))) {
       e.preventDefault(); e.stopPropagation(); input._press('KeyE');
     }
   }, true);
@@ -147,6 +155,8 @@ export function createTouch({ input, canvas }) {
     /** Por quadro (main.updateHUD): o que pode aparecer agora. actions: [{ key, label, k (tecla mostrada), hold }]. */
     update({ joystick = false, look: lk = false, actions = [], dialog = false, top = 64 } = {}) {
       if (!touchOn) { if (joyOn || lookOn) { joyOn = lookOn = false; zone.classList.remove('on'); acts.classList.remove('on'); } return; }
+      if (dialog !== dialogTap) cue.classList.toggle('on', dialog);
+      if (dialog && Math.round(top) !== cueTop) { cueTop = Math.round(top); cue.style.top = (cueTop + 40) + 'px'; }   // (abaixo do cronômetro e do MISSÕES)
       dialogTap = dialog;
       const main = document.querySelector('.ahud-main'); if (main) main.classList.toggle('tc-tap', dialog);
       if (joystick !== joyOn) { joyOn = joystick; zone.classList.toggle('on', joystick); if (!joystick) endJoy(); else if (!joy) endJoy(); }

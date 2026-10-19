@@ -3,10 +3,12 @@
 // e os moradores (criados sob demanda na primeira visita).
 import * as THREE from 'three';
 import {
-  HEDGE, ROAD, LOT, WALK, MAP, GRID, BUILD_H, PLAZA, lotX, lotZ, slotOrigin, slotY, roadCenter, ENTRANCE, LOT_ANCHORS, SOLIDS, TERRAIN, CANAL, RAIL, VENICE, FAVELA, FLUX, FARMLAND, SPOTS, SNOWV, GARDV, MOONV, FORESTV, MEDV,
+  HEDGE, ROAD, LOT, WALK, MAP, GRID, BUILD_H, PLAZA, lotX, lotZ, slotOrigin, slotY, roadCenter, ENTRANCE, LOT_ANCHORS, SOLIDS, TERRAIN, BOUNDS, CANAL, RAIL, VENICE, FAVELA, FLUX, FARMLAND, SPOTS, SNOWV, GARDV, MOONV, FORESTV, MEDV,
 } from './layout.js';
 import { HOUSES } from './data.js';
-import { buildTerrain } from './terrain.js';
+import { buildTerrain, waterPlane, quayWall, CANAL_WL } from './terrain.js';
+import { buildTram } from './train.js';
+import { tickBarriers } from './barriers.js';
 import { buildMoonScene } from './models/moon.js';
 import { FRAME } from './moonFrame.js';
 import { buildGasStation } from './models/gas.js';
@@ -62,10 +64,17 @@ function buildGround(venice = false, SP = null) {
   const cx = (ENTRANCE.x0 + ENTRANCE.x1) / 2;
 
   // grama até o horizonte
-  const CY = CANAL && CANAL.canyon ? { X0: CANAL.x0, X1: CANAL.x1, ZN: -320, ZS: MAP + 44 } : null;   // Cachoeira: o desfiladeiro fica aberto
+  // Cachoeira: o desfiladeiro fica aberto. Travessia (Bairro 11): o canal é rebaixado (água abaixo da rua, muros de pedra) e segue
+  // pelos arredores como rio: a faixa dele também fica sem grama e sem asfalto (água e muros: terrain.js e buildCityOuter)
+  const CY = CANAL ? (CANAL.canyon ? { X0: CANAL.x0, X1: CANAL.x1, ZN: -320, ZS: MAP + 44 } : { X0: CANAL.x0, X1: CANAL.x1, ZN: -RIVER_FAR, ZS: MAP + RIVER_FAR }) : null;
   // (subdividida: dois triângulos de 4 km, recortados pelo plano próximo da câmera baixa, perdiam precisão de profundidade e a
   // grama "vazava" por cima do asfalto 4 cm acima — as ruas do bairro apareciam verdes na câmera atrás da van)
-  if (!CY) g.add(at(plane(4000, 4000, GRASS, 80), MAP / 2, -0.04, MAP / 2));
+  if (SP && SP.kind === 'city') {
+    // cidade: a grama fica só por dentro das estradas de fora (o parque em volta do bairro); dali para fora o chão é a cidade
+    // (buildCityOuter) — sem uma camada de grama inteira por baixo, desenhada à toa em cada pixel
+    const R = { x0: SP.XW - SP.RL / 2 - 3, x1: SP.XE + SP.RL / 2 + 3, z0: SP.J - SP.RW / 2 - 3, z1: SP.ZS + SP.RW / 2 + 3 };
+    for (const [a, b] of CY ? [[R.x0, CY.X0], [CY.X1, R.x1]] : [[R.x0, R.x1]]) g.add(at(plane(b - a, R.z1 - R.z0, GRASS), (a + b) / 2, -0.04, (R.z0 + R.z1) / 2));
+  } else if (!CY) g.add(at(plane(4000, 4000, GRASS, 80), MAP / 2, -0.04, MAP / 2));
   else {
     const L = 2000 + CY.X0, R = 2000 - CY.X1 + MAP;
     g.add(at(plane(L, 4000, GRASS, 40), CY.X0 - L / 2, -0.04, MAP / 2), at(plane(R, 4000, GRASS, 40), CY.X1 + R / 2, -0.04, MAP / 2));
@@ -77,6 +86,7 @@ function buildGround(venice = false, SP = null) {
     const x = -90 + rand() * (MAP + 180), z = -80 + rand() * (MAP + 170);
     if (SP) {                                                     // arredores planejados: as manchas ficam só no gramado livre
       const r = 7;
+      if (SP.kind === 'city' && (x < SP.XW + SP.RL / 2 + r || x > SP.XE - SP.RL / 2 - r || z < SP.J + SP.RW / 2 + r || z > SP.ZS - SP.RW / 2 - r)) continue;   // (cidade: só no parque em volta)
       if (SP.roads.some(q => hitRect(q, x - r, z - r, x + r, z + r)) || SP.cells.some(q => q.type !== 'meadow' && hitRect(q, x - r, z - r, x + r, z + r))) continue;
     }
     if (x > -4 && x < MAP + 4 && z > -4 && z < MAP + 4) continue;
@@ -137,7 +147,8 @@ function buildGround(venice = false, SP = null) {
   // sombra "falsa" da sebe do lado de fora (oeste e norte): a grama de fora não recebe sombras reais
   g.add(slab(-0.65, 0, 0.3, MAP, GRASS_SHADOW, -0.012, 0.01));
   g.add(slab(-0.65, -1.0, ENTRANCE.x0 - 0.3, 0.3, GRASS_SHADOW, -0.012, 0.01));
-  g.add(slab(ENTRANCE.x1 + 0.3, -1.0, MAP, 0.3, GRASS_SHADOW, -0.012, 0.01));
+  if (CY && CY.X0 > ENTRANCE.x1) g.add(slab(ENTRANCE.x1 + 0.3, -1.0, CY.X0, 0.3, GRASS_SHADOW, -0.012, 0.01), slab(CY.X1, -1.0, MAP, 0.3, GRASS_SHADOW, -0.012, 0.01));   // (não passa por cima do canal/abismo)
+  else g.add(slab(ENTRANCE.x1 + 0.3, -1.0, MAP, 0.3, GRASS_SHADOW, -0.012, 0.01));
 
   // faixa de pedestres na entrada
   for (let x = ENTRANCE.x0 + 0.7; x < (MEDV ? -1 : ENTRANCE.x1 - 0.5); x += 0.95) g.add(slab(x, 0.15, x + 0.5, HEDGE - 0.15, ZEBRA, 0.02));
@@ -148,6 +159,7 @@ function buildGround(venice = false, SP = null) {
     [lotX(3) + 12, roadCenter(4) + 1.9], [roadCenter(4) + 1.9, lotZ(0) + 9], [lotX(0) + 13, roadCenter(1) + 1.9],
   ];
   for (const [x, z] of SPOTS ? [] : holes) {
+    if (CY && x > CY.X0 - 1 && x < CY.X1 + 1) continue;                   // (nada no canal/abismo)
     g.add(at(cyl(0.62, 0.62, 0.03, MANHOLE_RIM, 10), x, 0.012, z));
     g.add(at(cyl(0.5, 0.5, 0.03, MANHOLE, 10), x, 0.022, z));
   }
@@ -166,7 +178,7 @@ function buildHedge() {
     [0, MAP - HEDGE, MAP, MAP, [-1, 1]],                                  // sul: face interna e externa
     [0, HEDGE, HEDGE, MAP - HEDGE, [1]], [MAP - HEDGE, HEDGE, MAP, MAP - HEDGE, [-1]], // oeste, leste
   ];
-  if (CANAL && CANAL.canyon) for (const k of [2, 1]) {                       // Cachoeira: a sebe não atravessa o desfiladeiro
+  if (CANAL) for (const k of [2, 1]) {                                      // Cachoeira/Travessia: a sebe não atravessa o desfiladeiro nem o canal (no canal, um muro de pedra em arco: terrain.js)
     const [x0, z0, x1, z1, f] = segs[k]; segs.splice(k, 1, [x0, z0, CANAL.x0, z1, f], [CANAL.x1, z0, x1, z1, f]);
   }
   let n = 0;
@@ -366,6 +378,7 @@ function buildOutskirts(ground) {
 // Os bairros especiais (Veneza, Morro, Colheita, Nevasca, Lua, Cachoeira, Medieval, Jardins, Modernista, Bosque,
 // Operário) continuam com os arredores próprios (buildOutskirts acima).
 const J_ROAD = -62;                                   // eixo da estrada que cruza a de acesso, ao norte da entrada
+const RIVER_FAR = 900;                                // Travessia: até onde o canal segue como rio pelos arredores
 const OUT_R = 215;                                    // até onde vão os arredores (além da borda do bairro; a névoa da câmera de jogo começa a ~130)
 const U_BOX = new THREE.BoxGeometry(1, 1, 1).translate(0, 0.5, 0);           // base em y = 0
 const U_CBOX = new THREE.BoxGeometry(1, 1, 1);                                // centrada
@@ -375,6 +388,7 @@ const U_GABLE = (() => {                                                      //
 })();
 const U_TRUNK = new THREE.CylinderGeometry(0.7, 1, 1, 6).translate(0, 0.5, 0);
 const U_CYL = new THREE.CylinderGeometry(1, 1, 1, 10).translate(0, 0.5, 0);
+const U_POLE = new THREE.CylinderGeometry(1, 1, 1, 5).translate(0, 0.5, 0);    // postes (poucas faces: são muitos)
 const U_ICO = new THREE.IcosahedronGeometry(1, 0);
 const U_OCT = new THREE.OctahedronGeometry(1, 0);                              // frutinhas (8 triângulos)
 const U_CONE = new THREE.ConeGeometry(1, 1, 7).translate(0, 0.5, 0);
@@ -386,22 +400,34 @@ const SHADE_MAT = new THREE.MeshBasicMaterial({ color: '#1f2a14', transparent: t
 function instancer() {
   const sets = new Map(), o = new THREE.Object3D(), col = new THREE.Color();
   return {
+    suffix: '',                 // (cidade de longe: setor/faixa, para o recorte da câmera funcionar por pedaço)
     add(key, geo, x, y, z, sx, sy, sz, rx, ry, color, rz = 0) {
+      key += this.suffix;
       let s = sets.get(key); if (!s) sets.set(key, s = { geo, list: [] });
       s.list.push([x, y, z, sx, sy, sz, rx, ry, color, rz]);
     },
-    build(group, material = OUT_MAT) {
+    build(group, material = OUT_MAT, mats = {}) {
+      // quadrantes com poucas instâncias voltam a ser uma malha só (o recorte da câmera não compensa a chamada de desenho a mais)
+      const qs = new Map();
+      for (const [key, s] of sets) if (key.includes('#q')) { const b = key.split('#')[0]; (qs.get(b) || qs.set(b, []).get(b)).push(key); }
+      for (const [b, keys] of qs) {
+        if (keys.reduce((n, k) => n + sets.get(k).list.length, 0) >= 400) continue;
+        const into = sets.get(b) || { geo: sets.get(keys[0]).geo, list: [] };
+        for (const k of keys) { into.list.push(...sets.get(k).list); sets.delete(k); }
+        sets.set(b, into);
+      }
       for (const [key, s] of sets) {
-        const im = new THREE.InstancedMesh(s.geo, key === 'shade' ? SHADE_MAT : material, s.list.length);
+        const base = key.split('#')[0];
+        const im = new THREE.InstancedMesh(s.geo, base === 'shade' ? SHADE_MAT : mats[base] || material, s.list.length);
         s.list.forEach(([x, y, z, sx, sy, sz, rx, ry, c, rz], i) => {
           o.position.set(x, y, z); o.rotation.set(rx, ry, rz, 'YXZ'); o.scale.set(sx, sy, sz); o.updateMatrix();
-          im.setMatrixAt(i, o.matrix); if (key !== 'shade') im.setColorAt(i, col.set(c));
+          im.setMatrixAt(i, o.matrix); if (base !== 'shade') im.setColorAt(i, col.set(c));
         });
         im.instanceMatrix.needsUpdate = true;
         if (im.instanceColor) im.instanceColor.needsUpdate = true;
         im.computeBoundingSphere();
         im.castShadow = false; im.receiveShadow = false; im.name = 'arredores:' + key;
-        if (key === 'shade') im.renderOrder = -1;
+        if (base === 'shade') im.renderOrder = -1;
         group.add(dynamic(im));
       }
     },
@@ -409,6 +435,74 @@ function instancer() {
 }
 const lerpHex = (a, b, t) => '#' + new THREE.Color(a).lerp(new THREE.Color(b), t).getHexString();
 const hitRect = (r, x0, z0, x1, z1) => x1 > r.x0 && x0 < r.x1 && z1 > r.z0 && z0 < r.z1;
+
+/** Iluminação simples dos arredores da cidade: o céu (hemisfério) e o sol da cena, calculados num shader barato (sem as luzes
+ *  pontuais nem sombras). No Penumbra há 12 luzes pontuais e os faróis: num material comum, cada pixel da cidade de fora as
+ *  calcularia (era a maior parte do custo do quadro). `sync` relê as luzes (o Penumbra as troca ao virar noite). */
+function cityLight(lights) {
+  const U = { uSky: { value: new THREE.Color() }, uGround: { value: new THREE.Color() }, uSun: { value: new THREE.Color() }, uSunDir: { value: new THREE.Vector3(0, 1, 0) }, uNight: { value: 0 } };
+  const sync = () => {
+    const { hemi, sun } = lights;
+    U.uSky.value.copy(hemi.color).multiplyScalar(hemi.intensity / Math.PI);
+    U.uGround.value.copy(hemi.groundColor).multiplyScalar(hemi.intensity / Math.PI);
+    U.uSun.value.copy(sun.color).multiplyScalar(sun.intensity / Math.PI);
+    U.uSunDir.value.copy(sun.position).sub(sun.target.position).normalize();
+  };
+  sync();
+  return { U, sync };
+}
+// Janelas das fachadas (prédios dos arredores, caixas U_BOX instanciadas, base em y = 0): desenhadas pelo shader, numa grade por
+// andar (2,9) no espaço da própria instância (colunas inteiras em cada face, térreo com vitrines mais largas, faixa cega no alto).
+// De dia, vidro escuro; à noite (uNight = 1), parte das janelas acesa (quente ou fria, sorteada por janela); de longe, a média.
+// (tamanho, normal e origem da instância: constantes por face — 'flat', senão a interpolação deixa um resto mínimo que o hash das
+// janelas amplifica em chuvisco e listras dentro das janelas acesas)
+const FAC_VARY = 'varying vec3 vLoc;\nflat varying vec3 vSz;\nflat varying vec3 vLn;\nflat varying vec3 vOrg;\n';
+const FAC_VERT = `
+#ifdef USE_INSTANCING
+  vSz = vec3(length(instanceMatrix[0].xyz), length(instanceMatrix[1].xyz), length(instanceMatrix[2].xyz));
+  vOrg = instanceMatrix[3].xyz;
+#else
+  vSz = vec3(1.0); vOrg = vec3(0.0);
+#endif
+  vLoc = position * vSz; vLn = normal;`;
+const FAC_FRAG_DECL = 'float fhash(vec3 p) { return fract(sin(dot(p, vec3(12.9898, 78.233, 37.719))) * 43758.5453); }\n';
+const FAC_FRAG = `
+  float fSide = step(abs(vLn.y), 0.5);
+  float fAlongX = step(abs(vLn.x), 0.5);
+  float fU = mix(vLoc.z, vLoc.x, fAlongX), fW = mix(vSz.z, vSz.x, fAlongX);
+  float fCols = max(1.0, floor(fW / 2.6)), fCu = (fU / max(fW, 0.01) + 0.5) * fCols;
+  float fV = vLoc.y - 0.35, fCv = fV / 2.9;
+  vec2 fF = fract(vec2(fCu, fCv));
+  float fGround = 1.0 - step(1.0, fCv);
+  float fWin = fSide * step(mix(0.2, 0.07, fGround), fF.x) * step(fF.x, mix(0.8, 0.93, fGround))
+    * step(mix(0.3, 0.1, fGround), fF.y) * step(fF.y, 0.8) * step(0.0, fV) * step(vLoc.y, vSz.y - 0.75);
+  float fAA = clamp(1.6 - max(fwidth(fCu), fwidth(fCv)) * 2.2, 0.0, 1.0);
+  fWin = mix(fSide * 0.3 * step(0.0, fV) * step(vLoc.y, vSz.y - 0.75), fWin, fAA);
+  float fRnd = fhash(vec3(floor(fCu), floor(fCv), dot(vOrg, vec3(0.0131, 0.0071, 0.0113)) + vLn.x * 3.0 + vLn.z * 7.0));
+  vec3 fGlass = mix(vec3(0.13, 0.17, 0.23), vec3(0.22, 0.28, 0.35), fRnd);
+  diffuseColor.rgb = mix(diffuseColor.rgb * mix(1.0, 0.5, uNight), fGlass * mix(1.0, 0.4, uNight), fWin);
+  float fLit = fWin * mix(0.24, step(0.5, fRnd), fAA) * uNight;
+  vec3 fLitCol = mix(vec3(1.0, 0.7, 0.36), vec3(0.8, 0.88, 1.0), step(0.88, fRnd));`;
+/** Material barato dos arredores (com névoa e cor por instância); facade = com as janelas. */
+function cheapMat(L, params = {}, facade = false) {
+  const m = new THREE.MeshBasicMaterial({ color: '#ffffff', ...params });
+  m.onBeforeCompile = sh => {
+    Object.assign(sh.uniforms, L.U);
+    sh.vertexShader = 'varying vec3 vNw;\n' + (facade ? FAC_VARY : '') + sh.vertexShader.replace('#include <project_vertex>', `#include <project_vertex>
+  vec3 cN = normal;
+#ifdef USE_INSTANCING
+  cN = mat3(instanceMatrix) * cN;
+#endif
+  vNw = normalize(mat3(modelMatrix) * cN);` + (facade ? FAC_VERT : ''));
+    sh.fragmentShader = 'uniform vec3 uSky;\nuniform vec3 uGround;\nuniform vec3 uSun;\nuniform vec3 uSunDir;\nuniform float uNight;\nvarying vec3 vNw;\n' + (facade ? FAC_VARY + FAC_FRAG_DECL : '')
+      + sh.fragmentShader.replace('#include <color_fragment>', '#include <color_fragment>' + (facade ? FAC_FRAG : '') + `
+  vec3 cNn = normalize(vNw);
+  diffuseColor.rgb *= mix(uGround, uSky, cNn.y * 0.5 + 0.5) + uSun * max(dot(cNn, uSunDir), 0.0);`)
+      .replace('#include <opaque_fragment>', (facade ? '  outgoingLight += fLitCol * fLit * 1.15;\n' : '') + '#include <opaque_fragment>');
+  };
+  m.customProgramCacheKey = () => 'adress-cheap' + (facade ? '-f' : '') + (params.map ? '-m' : '') + (params.vertexColors ? '-v' : '');
+  return m;
+}
 
 /** Texturas listradas das plantações (uma por combinação; repetição por UV). */
 const fieldMats = new Map();
@@ -447,8 +541,8 @@ function surroundKind({ venice, moon, farm, snow, dry }) {
 }
 
 /** Planta dos arredores: estradas, casas/prédios ao longo delas e os terrenos (só dados; nada é desenhado aqui). */
-function planSurroundings(kind, dry) {
-  const rand = rng(41 + GRID * 7 + (PLAZA ? 3 : 0) + (kind === 'city' ? 11 : 0));
+function planSurroundings(kind, dry, flavor = null) {
+  const rand = rng(41 + GRID * 7 + (PLAZA ? 3 : 0) + (kind === 'city' ? 11 : 0) + (flavor ? flavor.length * 5 : 0));
   const M = MAP, cx = (ENTRANCE.x0 + ENTRANCE.x1) / 2;
   const city = kind === 'city', rural = kind === 'rural';
   const RW = city ? 8.4 : 6.8, RL = city ? 7.6 : 5.6;          // largura da estrada que cruza e das laterais
@@ -470,6 +564,10 @@ function planSurroundings(kind, dry) {
     { x0: cx - 20, x1: cx + 20, z0: -500, z1: 0 },
     ...roads.map(r => ({ x0: r.x0 - 3, x1: r.x1 + 3, z0: r.z0 - 3, z1: r.z1 + 3 })),
   ];
+  // bairros urbanos: o que é próprio de cada um passa por fora (corredores reservados antes de tudo)
+  const feat = cityFeature(flavor, M);
+  if (feat && feat.zH !== undefined) reserved.push({ x0: -3000, x1: 3000, z0: feat.zH - feat.half - 6, z1: feat.zH + feat.half + 6, corr: 'z' });   // elevado (vias/trilhos)
+  if (feat && feat.river) for (const [z0, z1] of [[-3000, 0], [M, 3000]]) reserved.push({ x0: feat.river.x0 - 8, x1: feat.river.x1 + 8, z0, z1, corr: 'x' });   // o canal continua como rio
   const openSouth = rural ? { x0: -90, x1: M + 90, z0: M + 8, z1: 2000 } : null;   // caminho da igreja (Bairro 1): só chão e árvores
   const free = (x0, z0, x1, z1) => !reserved.some(r => hitRect(r, x0, z0, x1, z1)) && !(openSouth && hitRect(openSouth, x0, z0, x1, z1));
   const builds = [];                                            // casas, galpões, prédios: { type, x, z, w, d, ry, ... }
@@ -507,27 +605,60 @@ function planSurroundings(kind, dry) {
   // terrenos: retalhos de ~34 m no anel em volta (o que não cabe vira gramado)
   const cells = [], C = 34;
   for (let x = XL; x < XR - C; x += C) for (let z = -OUT_R + 10; z < M + OUT_R - 10 - C; z += C) {
-    const x0 = x + 1.5, x1 = x + C - 1.5, z0 = z + 1.5, z1 = z + C - 1.5, mx = (x0 + x1) / 2, mz = (z0 + z1) / 2;
-    const ed = Math.hypot(Math.max(-mx, 0, mx - M), Math.max(-mz, 0, mz - M));
+    let x0 = x + 1.5, x1 = x + C - 1.5, z0 = z + 1.5, z1 = z + C - 1.5;
+    const ed = Math.hypot(Math.max(-(x0 + x1) / 2, 0, (x0 + x1) / 2 - M), Math.max(-(z0 + z1) / 2, 0, (z0 + z1) / 2 - M));
     if (ed > OUT_R - (city ? 50 : 20)) continue;                 // (a cidade é mais pesada: anel um pouco mais estreito)
+    for (const r of reserved) if (r.corr && hitRect(r, x0, z0, x1, z1)) {   // corredor (elevado, rio): a quadra encolhe para o lado que sobra
+      if (r.corr === 'z') { if (r.z0 - z0 >= z1 - r.z1) z1 = r.z0 - 1; else z0 = r.z1 + 1; }
+      else { if (r.x0 - x0 >= x1 - r.x1) x1 = r.x0 - 1; else x0 = r.x1 + 1; }
+    }
+    if (x1 - x0 < 14 || z1 - z0 < 14) continue;
+    const mx = (x0 + x1) / 2, mz = (z0 + z1) / 2, small = x1 - x0 < 26 || z1 - z0 < 26;
     if (reserved.some(r => hitRect(r, x0, z0, x1, z1))) continue;
     const south = openSouth && hitRect(openSouth, x0, z0, x1, z1);
     const r = rand();
     let type;
-    if (city) type = r < 0.3 ? 'block' : r < 0.45 ? 'ware' : r < 0.72 ? 'lot' : 'park';
+    if (city) type = r < 0.42 ? 'block' : r < 0.52 ? 'ware' : r < 0.6 ? 'lot' : r < 0.77 ? 'park' : 'parking';   // (a cidade continua: mais quadras, estacionamentos)
     else if (kind === 'town') type = r < 0.32 ? 'homes' : r < 0.5 ? 'grove' : r < 0.62 ? 'lot' : r < 0.8 ? 'crop' : 'meadow';
     else if (kind === 'trade') type = r < 0.22 ? 'homes' : r < 0.42 ? 'ware' : r < 0.58 ? 'grove' : r < 0.7 ? 'lot' : r < 0.85 ? 'crop' : 'meadow';
     else type = r < 0.22 ? 'crop' : r < 0.36 ? 'wheat' : r < 0.48 ? 'plowed' : r < 0.62 ? 'pasture' : r < 0.72 ? 'orchard' : r < 0.86 ? 'grove' : 'stubble';
     if (south && !['crop', 'wheat', 'plowed', 'meadow'].includes(type)) type = rand() < 0.5 ? 'wheat' : 'crop';   // caminho da igreja: só plantação rasteira
+    if (small && city) type = rand() < 0.5 ? 'park' : 'parking';                                 // (quadra encolhida pelo corredor)
     cells.push({ x0, x1, z0, z1, type, south, along: rand() < 0.5 ? 'x' : 'z' });
   }
-  return { kind, roads, builds, cells, farms, reserved, openSouth, RW, RL, XW, XE, ZS, J: J_ROAD, southRoad, laneEnd, rand, laneCol: dry ? '#a08562' : '#a88d66' };
+  // cidade: os vãos que sobraram entre as estradas, as fileiras de prédios e os corredores viram quadrinhas de 14 m (um prédio,
+  // uma pracinha ou um estacionamento) — nada de terreno vazio no meio da cidade
+  if (city) {
+    const S = C / 2;
+    for (let x = XL; x < XR - S; x += S) for (let z = -OUT_R + 10; z < M + OUT_R - 10 - S; z += S) {
+      const x0 = x + 1.5, x1 = x + S - 1.5, z0 = z + 1.5, z1 = z + S - 1.5, mx = (x0 + x1) / 2, mz = (z0 + z1) / 2;
+      if (Math.hypot(Math.max(-mx, 0, mx - M), Math.max(-mz, 0, mz - M)) > OUT_R - 50) continue;
+      if (reserved.some(r => hitRect(r, x0, z0, x1, z1)) || cells.some(c => hitRect(c, x0 - 1, z0 - 1, x1 + 1, z1 + 1))) continue;
+      const r = rand();
+      cells.push({ x0, x1, z0, z1, type: r < 0.45 ? 'one' : r < 0.8 ? 'park' : 'parking', south: false, along: 'x' });
+    }
+  }
+  return { kind, roads, builds, cells, farms, reserved, openSouth, RW, RL, XW, XE, ZS, J: J_ROAD, southRoad, laneEnd, rand, laneCol: dry ? '#a08562' : '#a88d66', flavor, feat };
+}
+
+/** O que cada bairro urbano tem nos arredores (além da cidade que continua):
+ *  altitude (7) e fluxo (14/19): um elevado com trânsito; trilhos (12): um elevado com o bonde; apice (8): o centro de arranha-céus;
+ *  canal (11): o canal segue como rio; encostas (9): morros com casas subindo. */
+function cityFeature(flavor, M) {
+  if (flavor === 'altitude') return { zH: M + 132, half: 8, y: 8.6, kind: 'road', jam: true };
+  if (flavor === 'flux') return { zH: J_ROAD - 104, half: 8, y: 9.2, kind: 'road', jam: false };
+  if (flavor === 'rail') return { zH: M + 128, half: 4, y: 7.4, kind: 'rail' };
+  if (flavor === 'apice') return { downtown: { x: M / 2 + 70, z: M + 330, r: 250 } };
+  if (flavor === 'canal' && CANAL) return { river: { x0: CANAL.x0, x1: CANAL.x1 } };
+  return null;
 }
 
 /** Desenha os arredores planejados. Devolve { group (instanciado/fundido), fields (chão), live (animado), update }. */
-function buildSurroundings(P, dryPal) {
+function buildSurroundings(P, dryPal, L = null) {
   const g = new THREE.Group(), fields = new THREE.Group(), live = new THREE.Group();
   const I = instancer(), rand = P.rand, solids = [], near = [];   // solids: colisão "sob demanda" (perto da van); near: troncos junto à sebe (sempre)
+  const lamps = []; lamps.night = []; lamps.dim = [];            // postes (brilho à noite), objetos só da noite e materiais do chão que escurecem à noite
+  const flatMats = new Map(), flatMat = c => { let m = flatMats.get(c); if (!m) { flatMats.set(c, m = L ? cheapMat(L, { color: c }) : new THREE.MeshStandardMaterial({ color: c, roughness: 0.95, flatShading: true })); lamps.dim.push(m); } return m; };
   const city = P.kind === 'city';
   const cityDims = () => ({ w: 11 + rand() * 9, d: 10 + rand() * 6, floors: 3 + Math.floor(rand() * (BUILD_H > 20 ? 6 : 4)) });
   const PAL = dryPal
@@ -613,7 +744,22 @@ function buildSurroundings(P, dryPal) {
     if (opts.chimney) { [x, z] = P2(w * 0.25, -d * 0.15); I.add('box', U_BOX, x, h + rise * 0.3, z, 0.65, rise * 0.75 + 0.5, 0.65, 0, ry, BRICK); }
     return P2;
   };
+  /** Prédio da cidade de fora: corpo com janelas (shader das fachadas), platibanda clara e, às vezes, algo no teto. */
+  const tower = (x, z, w, d, floors, wall, y = 0, roofItem = true, shadeOn = true) => {
+    const H = floors * 2.9;
+    I.add('tw', U_BOX, x, y, z, w, H, d, 0, 0, wall);
+    I.add('box', U_BOX, x, y + H, z, w + 0.3, 0.5, d + 0.3, 0, 0, lerpHex(wall, '#ffffff', 0.18));   // platibanda
+    if (roofItem) {
+      const r = rand();
+      if (r < 0.35 && !I.suffix) I.add('cyl', U_CYL, x + w * 0.2, y + H + 0.5, z - d * 0.15, 1.1, 1.6, 1.1, 0, 0, '#8f9399');   // caixa-d'água (de longe, só caixas)
+      else if (r < 0.7) I.add('box', U_BOX, x - w * 0.2, y + H + 0.5, z, Math.min(3.2, w * 0.3), 1.4, Math.min(3.2, d * 0.3), 0, 0, '#9fa3a8');   // casa de máquinas
+    }
+    if (shadeOn) shade(x + sd.x * Math.min(H, 18) * 0.45, z + sd.z * Math.min(H, 18) * 0.45, w * 0.62, d * 0.62);
+    return H;
+  };
+  const quad = city ? (x, z) => { I.suffix = '#q' + farKey(x, z, 0).slice(2); } : () => {};   // (cidade: um pedaço por quadrante, para a câmera recortar)
   for (const b of P.builds) {
+    quad(b.x, b.z);
     const P2 = local(b), ry = b.ry;
     const at2 = (key, geo, lx, y, lz, sx, sy, sz, col, rx = 0) => { const [x, z] = P2(lx, lz); I.add(key, geo, x, y, z, sx, sy, sz, rx, ry, col); };
     if (b.type === 'house' || b.type === 'farmhouse') {
@@ -667,15 +813,9 @@ function buildSurroundings(P, dryPal) {
       solid(b.box.x0 - 0.2, b.box.x1 + 0.2, b.box.z0 - 0.2, b.box.z1 + 0.2);
       shade(b.x + sd.x * 3, b.z + sd.z * 3, b.w * 0.6, b.d * 0.6);
     } else if (b.type === 'block') {                                                               // prédio baixo (cidade)
-      const H = b.floors * 2.9, wall = CITY_WALLS[Math.floor(rand() * CITY_WALLS.length)];
-      I.add('box', U_BOX, b.x, 0, b.z, Math.abs(Math.sin(ry)) > 0.5 ? b.d : b.w, H, Math.abs(Math.sin(ry)) > 0.5 ? b.w : b.d, 0, 0, wall);
       const W2 = (Math.abs(Math.sin(ry)) > 0.5 ? b.d : b.w), D2 = (Math.abs(Math.sin(ry)) > 0.5 ? b.w : b.d);
-      for (let f = 0; f < b.floors; f++) I.add('box', U_BOX, b.x, f * 2.9 + 1.05, b.z, W2 + 0.1, 1.0, D2 + 0.1, 0, 0, f === 0 ? '#5d5a55' : '#56636f');   // faixas de janelas
-      I.add('box', U_BOX, b.x, H, b.z, W2 + 0.3, 0.5, D2 + 0.3, 0, 0, lerpHex(wall, '#ffffff', 0.15));   // platibanda
-      if (rand() < 0.5) I.add('cyl', U_CYL, b.x + W2 * 0.2, H + 0.5, b.z - D2 * 0.15, 1.1, 1.6, 1.1, 0, 0, '#8f9399');   // caixa-d'água
-      else I.add('box', U_BOX, b.x - W2 * 0.2, H + 0.5, b.z, 2.2, 1.3, 2.2, 0, 0, '#9fa3a8');
-      solid(b.box.x0 - 0.2, b.box.x1 + 0.2, b.box.z0 - 0.2, b.box.z1 + 0.2);
-      shade(b.x + sd.x * H * 0.45, b.z + sd.z * H * 0.45, W2 * 0.62, D2 * 0.62);
+      const H = tower(b.x, b.z, W2, D2, b.floors, CITY_WALLS[Math.floor(rand() * CITY_WALLS.length)]);
+      solid(b.box.x0 - 0.2, b.box.x1 + 0.2, b.box.z0 - 0.2, b.box.z1 + 0.2).top = H;   // (top: altura, para quem quiser colisão no ar)
     }
   }
 
@@ -687,13 +827,14 @@ function buildSurroundings(P, dryPal) {
     if (along === 'z') m.rotation.y = Math.PI / 2;
     fields.add(m);
   };
-  const flat = (x0, z0, x1, z1, col, y = -0.016) => fields.add(at(new THREE.Mesh(new THREE.PlaneGeometry(x1 - x0, z1 - z0).rotateX(-Math.PI / 2), mat(col)), (x0 + x1) / 2, y, (z0 + z1) / 2));
+  const flat = (x0, z0, x1, z1, col, y = -0.016) => fields.add(at(new THREE.Mesh(new THREE.PlaneGeometry(x1 - x0, z1 - z0).rotateX(-Math.PI / 2), flatMat(col)), (x0 + x1) / 2, y, (z0 + z1) / 2));
   const nearRoad = r => { let best = null, bd = 1e9; for (const [k, d] of [['n', Math.abs(r.z0 - P.J)], ['s', Math.abs(r.z1 - P.ZS)], ['w', Math.abs(r.x0 - P.XW)], ['e', Math.abs(r.x1 - P.XE)]]) if (d < bd) { bd = d; best = k; } return best; };
   let signs = 0, bales = 0;
   const signTex = textTexture('VENDE-SE', { width: 256, height: 128, bg: '#fbf7ee', fg: '#c8312a', font: 'bold 60px "Trebuchet MS", sans-serif' });
   const signMat = new THREE.MeshStandardMaterial({ map: signTex, roughness: 0.9 });
   for (const c of P.cells) {
     const r = c, w = r.x1 - r.x0, d = r.z1 - r.z0, mx = (r.x0 + r.x1) / 2, mz = (r.z0 + r.z1) / 2;
+    quad(mx, mz);
     switch (c.type) {
       case 'crop': plane(r, fieldMat(PAL.crop[0], PAL.crop[1]), 3.6, c.along); if (!c.south && rand() < 0.45) fence(r.x0, r.z0, r.x1, r.z0); break;
       case 'wheat': plane(r, fieldMat(PAL.wheat[0], PAL.wheat[1]), 3.0, c.along); if (!c.south && rand() < 0.5) for (let k = 0; k < 7; k++) tree(r.x0 + 2 + k * (w - 4) / 6, r.z0 - 0.5, 'poplar', 0.85 + rand() * 0.25); break;   // quebra-vento de álamos
@@ -733,9 +874,16 @@ function buildSurroundings(P, dryPal) {
         }
         break;
       }
+      case 'one': {                                                                                  // quadrinha com um prédio só
+        flat(r.x0 + 0.5, r.z0 + 0.5, r.x1 - 0.5, r.z1 - 0.5, dryPal ? '#b4ab98' : '#b3ae9f');
+        const bw = w - 3, bd = d - 3;
+        const H = tower(mx, mz, bw, bd, 3 + Math.floor(rand() * 5), CITY_WALLS[Math.floor(rand() * CITY_WALLS.length)]);
+        solid(mx - bw / 2 - 0.2, mx + bw / 2 + 0.2, mz - bd / 2 - 0.2, mz + bd / 2 + 0.2).top = H;
+        break;
+      }
       case 'grove': case 'park': {
         if (c.type === 'park') flat(r.x0, r.z0, r.x1, r.z1, lerpHex(PAL.pasture, '#5f8f3f', 0.35));
-        for (let k = 0, n = 6 + Math.floor(rand() * 7); k < n; k++) {
+        for (let k = 0, n = Math.max(2, Math.round(w * d / 100 * (0.6 + rand() * 0.7))); k < n; k++) {
           const tx = mx + (rand() - 0.5) * (w - 6), tz = mz + (rand() - 0.5) * (d - 6);
           tree(tx, tz, k % 4 === 3 ? 'bush' : treeType(), 0.8 + rand() * 0.6);
         }
@@ -785,24 +933,41 @@ function buildSurroundings(P, dryPal) {
       }
       case 'block': {
         flat(r.x0 + 1, r.z0 + 1, r.x1 - 1, r.z1 - 1, dryPal ? '#b4ab98' : '#b3ae9f');               // calçamento da quadra
-        const n = 2 + Math.floor(rand() * 2);
+        const n = 3 + Math.floor(rand() * 2);                                                      // 3 ou 4 prédios por quadra
         for (let k = 0; k < n; k++) {
-          const dm = cityDims(), bw = Math.min(dm.w, w / 2 - 1.5), bd = Math.min(dm.d, d / 2 - 1.5);
-          const bx = k % 2 ? r.x1 - bw / 2 - 2 : r.x0 + bw / 2 + 2, bz = k < 2 ? r.z0 + bd / 2 + 2 : r.z1 - bd / 2 - 2;
-          const H = dm.floors * 2.9, wall = CITY_WALLS[Math.floor(rand() * CITY_WALLS.length)];
-          I.add('box', U_BOX, bx, 0, bz, bw, H, bd, 0, 0, wall);
-          for (let f = 0; f < dm.floors; f++) I.add('box', U_BOX, bx, f * 2.9 + 1.05, bz, bw + 0.1, 1.0, bd + 0.1, 0, 0, f === 0 ? '#5d5a55' : '#56636f');
-          I.add('box', U_BOX, bx, H, bz, bw + 0.3, 0.5, bd + 0.3, 0, 0, lerpHex(wall, '#ffffff', 0.15));
-          solid(bx - bw / 2 - 0.2, bx + bw / 2 + 0.2, bz - bd / 2 - 0.2, bz + bd / 2 + 0.2);
-          shade(bx + sd.x * H * 0.45, bz + sd.z * H * 0.45, bw * 0.62, bd * 0.62);
+          const dm = cityDims(), bw = Math.min(dm.w, w / 2 - 2), bd = Math.min(dm.d, d / 2 - 2);
+          const bx = k % 2 ? r.x1 - bw / 2 - 1.5 : r.x0 + bw / 2 + 1.5, bz = k < 2 ? r.z0 + bd / 2 + 1.5 : r.z1 - bd / 2 - 1.5;
+          const H = tower(bx, bz, bw, bd, dm.floors, CITY_WALLS[Math.floor(rand() * CITY_WALLS.length)]);
+          solid(bx - bw / 2 - 0.2, bx + bw / 2 + 0.2, bz - bd / 2 - 0.2, bz + bd / 2 + 0.2).top = H;
         }
-        if (rand() < 0.6) tree(mx, mz, 'round', 0.8);
+        if (n === 3) tree(r.x0 + w * 0.72, r.z0 + d * 0.72, 'round', 0.8);                       // pátio arborizado no canto vazio
+        break;
+      }
+      case 'parking': {                                                                              // estacionamento com carros parados
+        flat(r.x0 + 1, r.z0 + 1, r.x1 - 1, r.z1 - 1, '#6b7079');
+        const rows = d >= 28 ? 3 : d >= 18 ? 2 : 1, nk = Math.max(2, Math.floor((w - 4) / 2.9));
+        for (let row = 0; row < rows; row++) {
+          const zr = r.z0 + d * (row + 1) / (rows + 1);
+          for (let k = 0; k < nk; k++) {
+            const xr = r.x0 + 3.2 + k * (w - 6.4) / (nk - 1);
+            I.add('cbox', U_CBOX, xr - 1.4, 0.01, zr, 0.12, 0.02, 4.4, 0, 0, '#e8e6df');                  // faixa da vaga
+            if (rand() < 0.62) {
+              const col = ['#d8473a', '#3a78d4', '#efbf2a', '#f2f2f2', '#2b2d33', '#8f959c', '#3c9d55'][Math.floor(rand() * 7)];
+              I.add('cbox', U_CBOX, xr, 0.2, zr, 1.7, 0.4, 3.3, 0, 0, '#26282c');                   // rodas (antes a carroceria flutuava)
+              I.add('cbox', U_CBOX, xr, 0.72, zr, 1.85, 0.7, 4.1, 0, 0, col);
+              I.add('cbox', U_CBOX, xr, 1.3, zr - 0.2, 1.65, 0.55, 2.1, 0, 0, '#c9d6e0');
+              solid(xr - 1, xr + 1, zr - 2.1, zr + 2.1);
+            }
+          }
+        }
+        for (const [tx, tz] of [[r.x0 + 2, r.z0 + 2], [r.x1 - 2, r.z1 - 2]]) tree(tx, tz, 'round', 0.7);
         break;
       }
       default: break;                                                                                 // gramado
     }
   }
 
+  I.suffix = '';
   // ---- rede elétrica ao longo da estrada que cruza (postes de madeira e três fios caídos) ----
   const cx = (ENTRANCE.x0 + ENTRANCE.x1) / 2, poleZ = P.J - P.RW / 2 - 1.2, PH = 7.6;
   const poles = [];
@@ -871,7 +1036,7 @@ function buildSurroundings(P, dryPal) {
     return placed.every(([px, pz, pr]) => Math.hypot(px - x, pz - z) > pr + r + 0.6);
   };
   let groups = 0;
-  for (let tries = 0; groups < 26 && tries < 4000; tries++) {
+  for (let tries = 0; groups < (city ? 0 : 26) && tries < 4000; tries++) {   // (cidade: no lugar, o parque linear de buildCityOuter)
     const x = -60 + rand() * (M + 120), z = -60 + rand() * (M + 120), e = edge(x, z);
     if (e < 9 || e > 40) continue;
     const n = 2 + Math.floor(rand() * 5), main = treeType();
@@ -890,7 +1055,7 @@ function buildSurroundings(P, dryPal) {
     if (any) groups++;
   }
   // flores do campo e moitas soltas (sem colisão) nos gramados perto da sebe
-  for (let k = 0; k < 140; k++) {
+  for (let k = 0; k < (city ? 0 : 140); k++) {
     const x = -50 + rand() * (M + 100), z = -50 + rand() * (M + 100), e = edge(x, z);
     if (e < 4 || e > 46 || !okNear(x, z, 0.6)) continue;
     if (rand() < 0.5) I.add('ico', U_ICO, x, 0.12, z, 0.55, 0.32, 0.5, 0, rand() * 3, lerpHex(PAL.leaves[k % PAL.leaves.length], '#ffffff', 0.08));
@@ -945,9 +1110,534 @@ function buildSurroundings(P, dryPal) {
     });
   }
 
-  I.build(g);
+  // a cidade continua até o horizonte (bairros urbanos) e o que é de cada um passa por fora; postes com brilho à noite
+  const fac = L ? { material: cheapMat(L, {}, true), uNight: L.U.uNight } : null;
+  const cctx = { I, g, fields, live, updaters, tree, tower, solid, rand, dryPal, lamps, L, farPts: {}, hillH: null };
+  if (city) buildCityOuter(P, cctx);
+  if (lamps.length) {
+    const pts = new THREE.Points(new THREE.BufferGeometry().setAttribute('position', new THREE.Float32BufferAttribute(lamps, 3)), glowMat('#ffd28a', 5.5));
+    pts.visible = false; pts.frustumCulled = false; live.add(pts); lamps.night.push(pts);
+  }
+  if (lamps.red) {                                                                    // luz vermelha no alto da torre (pisca à noite)
+    const red = new THREE.Points(new THREE.BufferGeometry().setAttribute('position', new THREE.Float32BufferAttribute(lamps.red, 3)), glowMat('#ff3a2a', 9));
+    red.visible = false; live.add(red); lamps.night.push(red);
+    updaters.push(t => { red.material.opacity = (t % 1.6) < 0.8 ? 1 : 0.15; });
+  }
+  const outMat = L ? cheapMat(L) : OUT_MAT.clone(); lamps.dim.push(outMat);      // (um por mundo: à noite escurece só o deste)
+  I.build(g, outMat, fac ? { tw: fac.material } : {});
+  // cidade além da névoa da câmera de jogo: cada pedaço com os centros das quadras do seu setor (createWorld decide se aparece)
+  const farBand = g.children.filter(o => o.name.includes('#f')).map(m => ({ m, pts: cctx.farPts[m.name.slice(m.name.indexOf('#f'))] || [] }));
   live.traverse(o => { if (o.isMesh) { o.castShadow = false; o.receiveShadow = false; } });
-  return { group: g, fields, live, solids: near, farSolids: solids, update: (t, dt) => { for (const u of updaters) u(t, dt); } };
+  /** Penumbra: janelas acesas e postes brilhando nos arredores. */
+  const setNight = on => {
+    if (L) { L.sync(); L.U.uNight.value = on ? 1 : 0; } for (const o of lamps.night) o.visible = on;
+    for (const m of lamps.dim) { m.userData.day = m.userData.day || m.color.clone(); m.color.copy(m.userData.day).multiplyScalar(on ? 0.42 : 1); }   // chão da cidade à noite
+  };
+  return { group: g, fields, live, solids: near, farSolids: solids, update: (t, dt) => { for (const u of updaters) u(t, dt); }, setNight, farBand, hillH: cctx.hillH };
+}
+
+// ---------- A cidade que continua (bairros urbanos: 6, 7, 8, 9, 11, 12, 14, 19) ----------
+// Além do anel de quadras perto do bairro (buildSurroundings), a cidade segue até o horizonte: chão de quadras e ruas (uma
+// textura repetida, alinhada com a estrada de acesso e a estrada que cruza), prédios instanciados com as janelas do shader das
+// fachadas (à noite, parte acesa), mais baixos e esparsos para longe. E o que é de cada bairro passa por ali: um elevado com
+// trânsito (Altitude: anda e para; Fluxo/Penumbra: corrido), o elevado do bonde com a estação (Trilhos), o centro de
+// arranha-céus com a torre de TV (Ápice), o canal que segue como rio com pontes e barcos (Travessia) e os morros com casas
+// (Encostas). Colisão: só prédios, pilares, muros do rio e troncos — todos sob demanda (perto da van), fora da área jogável.
+const TILE = 44, STREET = 8, FAR0 = 188, FAR1 = 640;
+let glowTex = null;
+function lampGlow() {
+  if (glowTex) return glowTex;
+  const c = document.createElement('canvas'); c.width = c.height = 64; const x = c.getContext('2d');
+  const gr = x.createRadialGradient(32, 32, 0, 32, 32, 32);
+  gr.addColorStop(0, 'rgba(255,255,255,1)'); gr.addColorStop(0.22, 'rgba(255,255,255,0.6)'); gr.addColorStop(1, 'rgba(255,255,255,0)');
+  x.fillStyle = gr; x.fillRect(0, 0, 64, 64); glowTex = new THREE.CanvasTexture(c); glowTex.colorSpace = THREE.SRGBColorSpace; return glowTex;
+}
+/** Brilho em pontos (postes, faróis do elevado, luz da torre), com teto para o tamanho na tela: sem ele, um poste a poucos
+ *  metros da câmera virava um quadrado enorme de luz chapada (à noite, dirigindo pelos arredores do Penumbra). */
+function glowMat(color, size) {
+  const m = new THREE.PointsMaterial({ map: lampGlow(), color, size, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, toneMapped: false });
+  m.onBeforeCompile = sh => { sh.vertexShader = sh.vertexShader.replace('#include <logdepthbuf_vertex>', 'gl_PointSize = min(gl_PointSize, scale * 0.35);\n\t#include <logdepthbuf_vertex>'); };
+  m.customProgramCacheKey = () => 'adress-glowcap';
+  return m;
+}
+/** Quadra de 44 m vista de longe: ruas de 8 m nas bordas (com faixa central), calçadas e o miolo da quadra. */
+function streetTexture(dry) {
+  const c = document.createElement('canvas'); c.width = c.height = 256; const x = c.getContext('2d');
+  const k = 256 / TILE, s = STREET / 2 * k, w = 1.8 * k;
+  x.fillStyle = dry ? '#a39c8e' : '#9e9c95'; x.fillRect(0, 0, 256, 256);
+  x.fillStyle = dry ? '#c2baa9' : '#bdbab1';
+  x.fillRect(0, 0, 256, s + w); x.fillRect(0, 256 - s - w, 256, s + w); x.fillRect(0, 0, s + w, 256); x.fillRect(256 - s - w, 0, s + w, 256);
+  x.fillStyle = '#62676f';
+  x.fillRect(0, 0, 256, s); x.fillRect(0, 256 - s, 256, s); x.fillRect(0, 0, s, 256); x.fillRect(256 - s, 0, s, 256);
+  x.fillStyle = '#d6c060';
+  for (let p = s + w + 8; p < 256 - s - w - 12; p += 24) { x.fillRect(p, 0, 12, 2); x.fillRect(p, 254, 12, 2); x.fillRect(0, p, 2, 12); x.fillRect(254, p, 2, 12); }
+  x.fillStyle = '#e8e4da';                                                                         // faixas de pedestre nas esquinas
+  for (const [cx, cy] of [[0, 0], [256, 0], [0, 256], [256, 256]]) for (let q = -3; q <= 3; q++) {
+    x.fillRect(cx + (cx ? -s - 8 : s + 2), cy - s + 2 + (q + 3) * (s * 2 - 4) / 7, 6, (s * 2 - 4) / 14);
+    x.fillRect(cx - s + 2 + (q + 3) * (s * 2 - 4) / 7, cy + (cy ? -s - 8 : s + 2), (s * 2 - 4) / 14, 6);
+  }
+  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.wrapS = t.wrapT = THREE.RepeatWrapping; t.anisotropy = 8;
+  return t;
+}
+/** Plano horizontal x0..x1 × z0..z1 com UV em quadras (origem ox, oz: as ruas passam em ox + k·44 e oz + k·44). */
+function tilePlane(x0, z0, x1, z1, ox, oz, material, y) {
+  if (x1 - x0 < 0.5 || z1 - z0 < 0.5) return null;
+  const geo = new THREE.PlaneGeometry(x1 - x0, z1 - z0, Math.max(1, Math.ceil((x1 - x0) / 80)), Math.max(1, Math.ceil((z1 - z0) / 80)));
+  geo.rotateX(-Math.PI / 2); geo.translate((x0 + x1) / 2, y, (z0 + z1) / 2);
+  const p = geo.attributes.position, uv = geo.attributes.uv;
+  for (let i = 0; i < p.count; i++) uv.setXY(i, (p.getX(i) - ox) / TILE, (p.getZ(i) - oz) / TILE);
+  const m = new THREE.Mesh(geo, material); m.castShadow = false; m.receiveShadow = false;
+  return m;
+}
+/** Moldura: o retângulo `out` menos o `inn` (4 faixas), menos as faixas verticais `cuts` ([x0, x1]). */
+function frameRects(out, inn, cuts = []) {
+  const rs = [[out.x0, out.z0, out.x1, inn.z0], [out.x0, inn.z1, out.x1, out.z1], [out.x0, inn.z0, inn.x0, inn.z1], [inn.x1, inn.z0, out.x1, inn.z1]];
+  let res = rs;
+  for (const [c0, c1] of cuts) res = res.flatMap(([x0, z0, x1, z1]) => (c1 <= x0 || c0 >= x1) ? [[x0, z0, x1, z1]] : [[x0, z0, Math.max(x0, c0), z1], [Math.min(x1, c1), z0, x1, z1]]);
+  return res.filter(([x0, z0, x1, z1]) => x1 - x0 > 0.5 && z1 - z0 > 0.5);
+}
+
+/** Pedaço da cidade de longe (4 setores em volta do bairro × perto/longe): cada pedaço vira uma InstancedMesh própria, então a
+ *  câmera recorta o que está atrás dela, e a faixa de longe (além da névoa da câmera de jogo) só é desenhada na visão geral. */
+function farKey(x, z, e) {
+  const a = Math.atan2(z - MAP / 2, x - MAP / 2), sec = (Math.floor((a + Math.PI * 1.25) / (Math.PI / 2)) + 4) % 4;   // (quadrantes: norte, leste, sul, oeste)
+  return '#' + (e > FAR_FOG ? 'f' : 'n') + sec;
+}
+const FAR_FOG = 380;                                  // além disso a névoa da câmera de jogo (130 → 430) já apagou quase tudo
+const PARK_O = 17;                                    // eixo do caminho do parque linear (a partir da borda do bairro)
+/** Desenha a cidade de fora e o que é próprio do bairro. ctx: { I, g, fields, live, updaters, tree, tower, solid, rand, dryPal, lamps }. */
+function buildCityOuter(P, ctx) {
+  const { I, g, fields, live, updaters, tree, tower, solid, rand, dryPal, lamps, L, farPts } = ctx;
+  const M = MAP, flavor = P.flavor, feat = P.feat || {}, cx = (ENTRANCE.x0 + ENTRANCE.x1) / 2;
+  const edge = (x, z) => Math.hypot(Math.max(-x, 0, x - M), Math.max(-z, 0, z - M));
+  const river = feat.river, rx0 = river ? river.x0 - 8 : 0, rx1 = river ? river.x1 + 8 : 0;
+  const inRiver = (x0, x1) => river && x1 > rx0 && x0 < rx1;
+
+  // ---- chão: calçamento entre as estradas de fora e o anel de quadras; quadras e ruas daí até o horizonte ----
+  const inner = { x0: P.XW - P.RL / 2, x1: P.XE + P.RL / 2, z0: P.J - P.RW / 2, z1: P.ZS + P.RW / 2 };
+  const mid = { x0: -FAR0 + 12, x1: M + FAR0 - 12, z0: -FAR0 + 12, z1: M + FAR0 - 12 };
+  const outer = { x0: -1900, x1: M + 1900, z0: -1900, z1: M + 1900 };
+  const cuts = river ? [[river.x0, river.x1]] : [];
+  const paveM = cheapMat(L, { color: dryPal ? '#b6af9f' : '#b2afa6' }); lamps.dim.push(paveM);
+  const hills = flavor === 'encostas' ? hillField(M, cx, cheapMat(L, { vertexColors: true })) : null;
+  if (!hills) for (const [x0, z0, x1, z1] of frameRects(mid, inner, cuts)) { const m = tilePlane(x0, z0, x1, z1, 0, 0, paveM, -0.026); if (m) fields.add(m); }   // (Encostas: gramado até os morros)
+  if (!hills) {
+    const stM = cheapMat(L, { map: streetTexture(dryPal) }); lamps.dim.push(stM);
+    for (const [x0, z0, x1, z1] of frameRects(outer, mid, cuts)) { const m = tilePlane(x0, z0, x1, z1, cx, P.J, stM, -0.026); if (m) fields.add(m); }
+  } else fields.add(hills.mesh);
+  const hAt = hills ? hills.h : () => 0;
+  if (hills) ctx.hillH = hills.h;                                                 // (Encostas: a van sobe os morros — createWorld)
+
+  // ---- prédios de longe, quadra a quadra (alinhados com as ruas da textura) ----
+  const dt = feat.downtown;
+  const WALLS_F = flavor === 'apice' ? ['#c9ced3', '#a9b6c2', '#8f9eac', '#d9d6cf', '#b7bcc2', '#7d8a96']
+    : flavor === 'mirante' ? ['#cbbfac', '#c2c7c0', '#d6cbb8', '#b9b4aa', '#c9b8a6', '#aeb4b8']
+    : flavor === 'flux' ? ['#c7c9cc', '#9ea7ae', '#d8d4cb', '#b3b9bd', '#8e979f', '#c9bfae']
+    : flavor === 'encostas' ? ['#e8dcc4', '#d9c7a8', '#e6d2c0', '#cfd6c4', '#e0c9b0', '#d6d0c6', '#c9b49b']
+    : ['#bdb8ae', '#aaa59c', '#c9c2b5', '#9e9a92', '#b8a593', '#c7bba9'];
+  const wall = () => WALLS_F[Math.floor(rand() * WALLS_F.length)];
+  const floorsAt = (x, z, e) => {
+    const fall = e > 470 ? 0.75 : 1;
+    let f;
+    switch (flavor) {
+      case 'mirante': f = rand() < 0.12 ? 11 + rand() * 6 : 4 + rand() * 5; break;
+      case 'altitude': f = rand() < 0.08 ? 9 + rand() * 5 : 3 + rand() * 5; break;
+      case 'apice': { const d = Math.hypot(x - dt.x, z - dt.z), k = Math.max(0, 1 - d / dt.r); f = k > 0 ? 12 + rand() * 14 + k * k * 30 : 7 + rand() * 9; break; }
+      case 'flux': f = rand() < 0.16 ? 12 + rand() * 8 : 5 + rand() * 6; break;
+      case 'encostas': f = 1 + rand() * 2.6; break;
+      default: f = 3 + rand() * 5;
+    }
+    return Math.max(1, Math.floor(f * fall));
+  };
+  const tvTower = flavor === 'apice' && dt ? { x: dt.x + 30, z: dt.z + 60 } : null;
+  if (tvTower) P.reserved.push({ x0: tvTower.x - 14, x1: tvTower.x + 14, z0: tvTower.z - 14, z1: tvTower.z + 14 });
+  const reservedHit = (x0, z0, x1, z1) => P.reserved.some(r => hitRect(r, x0, z0, x1, z1)) || P.cells.some(c => hitRect(c, x0 - 4, z0 - 4, x1 + 4, z1 + 4));
+  const NI = Math.ceil((FAR1 + M / 2) / TILE) + 1;
+  for (let i = -NI; i <= NI; i++) for (let j = -NI; j <= NI; j++) {
+    const tx = cx + TILE / 2 + i * TILE, tz = P.J + TILE / 2 + j * TILE, e = edge(tx, tz);
+    if (e < FAR0 || e > FAR1) continue;
+    const half = TILE / 2 - STREET / 2 - 0.6, x0 = tx - half, x1 = tx + half, z0 = tz - half, z1 = tz + half;
+    if (reservedHit(x0, z0, x1, z1) || inRiver(x0, x1)) continue;
+    if (e > 470 && rand() < (e - 470) / 260) continue;                                            // rareia no horizonte
+    I.suffix = farKey(tx, tz, e);
+    if (I.suffix[1] === 'f') (farPts[I.suffix] || (farPts[I.suffix] = [])).push(tx, tz);
+    const r = rand(), y0 = hills ? Math.min(hAt(x0, z0), hAt(x1, z0), hAt(x0, z1), hAt(x1, z1)) - 0.4 : 0;
+    if (hills) {                                                                                   // morro: casinhas em fileiras subindo a encosta
+      const steep = Math.max(hAt(x0, z0), hAt(x1, z0), hAt(x0, z1), hAt(x1, z1)) - y0;
+      if (r < 0.22 || steep > 16) { for (let k = 0; k < 3; k++) { const ax = x0 + 3 + rand() * (x1 - x0 - 6), az = z0 + 3 + rand() * (z1 - z0 - 6); treeOn(ax, az); } continue; }
+      for (let a = 0; a < 3; a++) for (let b = 0; b < 3; b++) {
+        if (rand() < 0.22) continue;
+        const bw = 6.5 + rand() * 3, bd = 6 + rand() * 3, bx = x0 + 6 + a * (x1 - x0 - 12) / 2, bz = z0 + 6 + b * (z1 - z0 - 12) / 2;
+        const by = Math.min(hAt(bx - bw / 2, bz - bd / 2), hAt(bx + bw / 2, bz + bd / 2), hAt(bx - bw / 2, bz + bd / 2), hAt(bx + bw / 2, bz - bd / 2)) - 0.3;
+        tower(bx, bz, bw, bd, floorsAt(bx, bz, e), wall(), by, false, false);
+        solid(bx - bw / 2, bx + bw / 2, bz - bd / 2, bz + bd / 2);
+      }
+      continue;
+    }
+    if (r < 0.1) {                                                                                 // praça arborizada
+      I.add('pad', U_CBOX, tx, 0.01, tz, half * 2, 0.04, half * 2, 0, 0, dryPal ? '#8f9a52' : '#7aa252');
+      for (let k = 0; k < 6; k++) treeOn(tx + (rand() - 0.5) * (half * 2 - 6), tz + (rand() - 0.5) * (half * 2 - 6));   // (árvores de uma copa só: de longe não se nota)
+      continue;
+    }
+    const big = flavor === 'apice' && dt && Math.hypot(tx - dt.x, tz - dt.z) < dt.r;
+    if (r < 0.28 && !big) {                                                                        // um prédio grande e baixo (galpão, shopping)
+      const H = 2 + Math.floor(rand() * 2), w = half * 2 - 3, d = half * 2 - 6;
+      solid(tx - w / 2, tx + w / 2, tz - d / 2, tz + d / 2).top = tower(tx, tz, w, d, H, wall(), 0, true, false);
+    } else if (r < 0.45 || big) {                                                                   // uma torre e um prédio menor
+      const w = 14 + rand() * 6, d = 14 + rand() * 6, f = floorsAt(tx, tz, e) + (big ? 6 : 3);
+      const bx = tx - half + w / 2 + 1, bz = tz - half + d / 2 + 1;
+      solid(bx - w / 2, bx + w / 2, bz - d / 2, bz + d / 2).top = tower(bx, bz, w, d, f, wall(), 0, true, false);
+      if (big && f > 24) { I.add('cyl', U_CYL, bx, f * 2.9 + 0.5, bz, 0.25, 6 + rand() * 6, 0.25, 0, 0, '#d8d8d8'); }   // antena no alto
+      const w2 = 12 + rand() * 4, d2 = 12 + rand() * 4, sx = tx + half - w2 / 2 - 1, sz = tz + half - d2 / 2 - 1;
+      solid(sx - w2 / 2, sx + w2 / 2, sz - d2 / 2, sz + d2 / 2).top = tower(sx, sz, w2, d2, Math.max(2, floorsAt(tx, tz, e) - 2), wall(), 0, true, false);
+    } else {                                                                                       // 4 prédios nos cantos, pátio no meio
+      for (let k = 0; k < 4; k++) {
+        if (rand() < 0.12) continue;
+        const w = 12 + rand() * 4, d = 12 + rand() * 4;
+        const bx = k % 2 ? tx + half - w / 2 - 0.5 : tx - half + w / 2 + 0.5, bz = k < 2 ? tz - half + d / 2 + 0.5 : tz + half - d / 2 - 0.5;
+        solid(bx - w / 2, bx + w / 2, bz - d / 2, bz + d / 2).top = tower(bx, bz, w, d, floorsAt(bx, bz, e), wall(), 0, true, false);
+      }
+      if (rand() < 0.6) tree(tx, tz, 'round', 0.8);
+    }
+  }
+  I.suffix = '';
+  function treeOn(x, z) {                                                               // árvore de uma copa (no chão ou no morro)
+    const y = hAt(x, z), s = 0.9 + rand() * 0.6, ry = rand() * 6, LV = dryPal ? ['#7f9a45', '#8ea24e', '#6f8a3e', '#a0a457'] : ['#4f9a45', '#5ea84e', '#3f8a3c', '#6db256'];
+    I.add('trunk', U_TRUNK, x, y - 0.2, z, 0.34 * s, 2.3 * s, 0.34 * s, 0, ry, '#7a5230');
+    I.add('ico', U_ICO, x, y + 2.75 * s, z, 1.7 * s, 1.55 * s, 1.7 * s, rand(), ry, LV[Math.floor(rand() * 4)]);
+    solid(x - 0.6 * s, x + 0.6 * s, z - 0.6 * s, z + 0.6 * s);
+  }
+
+  // ---- postes das estradas de fora (só se veem à noite: brilho) ----
+  /** Poste de luz (o brilho só aparece à noite). base: chão do poste (o do elevado fica no tabuleiro). */
+  const lampAt = (x, z, y = 6.2, base = 0) => {
+    lamps.push(x, y - 0.12, z);                                                         // (brilho logo abaixo da luminária, não dentro dela)
+    if (edge(x, z) > 260) return;                                                       // (de longe, só o brilho à noite)
+    I.add('pole', U_POLE, x, base, z, 0.12, y - base + 0.1, 0.12, 0, 0, '#4a4f56');
+    I.add('cbox', U_CBOX, x, y + 0.05, z, 0.6, 0.18, 0.6, 0, 0, '#e9e2c8');
+    if (!base) solid(x - 0.2, x + 0.2, z - 0.2, z + 0.2).post = true;
+  };
+  // ---- parque linear em volta do bairro (entre a sebe e as estradas de fora): caminho, fileiras de árvores, bancos e postes ----
+  {
+    const o = PARK_O, R = P.RW, side = [];
+    const pathM = cheapMat(L, { color: dryPal ? '#d3c7ad' : '#d6cdb6' }); lamps.dim.push(pathM);
+    const free = (x, z, r) => !P.reserved.slice(1).some(q => x + r > q.x0 && x - r < q.x1 && z + r > q.z0 && z - r < q.z1);   // (fora das estradas, da placa e do corredor da estrada de acesso)
+    // [eixo, coordenada fixa, de, até, sinal para fora] — norte, sul, oeste, leste
+    side.push(['x', -o, -o, M + o, -1], ['x', M + o, -o, M + o, 1], ['z', -o, -o, M + o, -1], ['z', M + o, -o, M + o, 1]);
+    for (const [ax, c, a, b, sg] of side) {
+      const strip = (u0, u1) => { if (u1 - u0 < 1) return; fields.add(ax === 'x' ? at(new THREE.Mesh(new THREE.PlaneGeometry(u1 - u0, 3.2).rotateX(-Math.PI / 2), pathM), (u0 + u1) / 2, -0.014, c) : at(new THREE.Mesh(new THREE.PlaneGeometry(3.2, u1 - u0).rotateX(-Math.PI / 2), pathM), c, -0.014, (u0 + u1) / 2)); };
+      // (o caminho do norte encontra a estrada de acesso; na Travessia, o rio corta os dois caminhos: passarela em buildRiver)
+      const cuts = ax !== 'x' ? [] : [...(c < 0 ? [[cx - 6, cx + 6]] : []), ...(river ? [[river.x0 - 0.3, river.x1 + 0.3]] : [])].sort((p, q) => p[0] - q[0]);
+      let u0 = a - 1.6; for (const [k0, k1] of cuts) { strip(u0, k0); u0 = k1; } strip(u0, b + 1.6);
+      const far = ax === 'x' ? (c < 0 ? P.J + R / 2 + 7 : P.ZS - R / 2 - 7) : (c < 0 ? P.XW + P.RL / 2 + 7 : P.XE - P.RL / 2 - 7);   // fileira de fora, junto à estrada
+      let n = 0;
+      for (let u = a + 5; u < b - 4; u += 11, n++) {
+        const at2 = (off, cb) => { const x = ax === 'x' ? u : c + off, z = ax === 'x' ? c + off : u; if (free(x, z, 2.2)) { I.suffix = '#q' + farKey(x, z, 0).slice(2); cb(x, z); I.suffix = ''; } };
+        for (const off of [-4.4, 4.4]) at2(off, (x, z) => tree(x, z, n % 5 === 2 ? 'birch' : 'round', 0.85 + ((n * 7) % 5) * 0.06));
+        const xf = ax === 'x' ? u + 5.5 : far, zf = ax === 'x' ? far : u + 5.5;
+        if (n % 2 && free(xf, zf, 2.2)) { I.suffix = '#q' + farKey(xf, zf, 0).slice(2); tree(xf, zf, n % 4 === 1 ? 'poplar' : 'pine', 0.95); I.suffix = ''; }
+        if (n % 3 === 1) at2(sg * 2.3, (x, z) => {                                                  // banco virado para o caminho
+          const ry = ax === 'x' ? (sg > 0 ? Math.PI : 0) : (sg > 0 ? -Math.PI / 2 : Math.PI / 2);
+          I.add('cbox', U_CBOX, x, 0.45, z, ax === 'x' ? 1.9 : 0.5, 0.1, ax === 'x' ? 0.5 : 1.9, 0, 0, '#8a5a36');
+          I.add('cbox', U_CBOX, x + (ax === 'x' ? 0 : sg * 0.25), 0.75, z + (ax === 'x' ? sg * 0.25 : 0), ax === 'x' ? 1.9 : 0.08, 0.5, ax === 'x' ? 0.08 : 1.9, 0, 0, '#8a5a36');
+          for (const d of [-0.75, 0.75]) I.add('cbox', U_CBOX, x + (ax === 'x' ? d : 0), 0.22, z + (ax === 'x' ? 0 : d), 0.1, 0.44, 0.4, 0, ry, '#3a3d44');
+          solid(x - 1, x + 1, z - 1, z + 1);
+        });
+        if (n % 3 === 0) at2(-sg * 2.2, (x, z) => lampAt(x, z, 4.2));
+      }
+    }
+  }
+  const onCross = x => Math.abs(x - cx) < 8 || Math.abs(x - P.XW) < P.RL / 2 + 1.5 || Math.abs(x - P.XE) < P.RL / 2 + 1.5 || inRiver(x - 1, x + 1);
+  for (let x = P.XW + 13; x < P.XE - 6; x += 26) { if (!onCross(x)) lampAt(x, P.J + P.RW / 2 + 0.6); if (P.southRoad && !onCross(x + 13)) lampAt(x + 13, P.ZS - P.RW / 2 - 0.6); }
+  for (let z = P.J + 20; z < P.laneEnd; z += 26) { lampAt(P.XW + P.RL / 2 + 0.6, z); lampAt(P.XE - P.RL / 2 - 0.6, z); }
+  for (let z = P.J - 20; z > -420; z -= 26) lampAt(cx + 4.4, z);
+  if (!hills) for (let i = -NI; i <= NI; i += 1) for (let j = -NI; j <= NI; j += 1) {               // esquinas das ruas de longe
+    const x = cx + i * TILE, z = P.J + j * TILE, e = edge(x, z);
+    if (e > FAR0 - 10 && e < FAR1 - 40 && !inRiver(x - 2, x + 2) && (i + j) % 2 === 0) { I.suffix = farKey(x, z, e); lampAt(x + 4.6, z + 4.6); I.suffix = ''; }
+  }
+
+  // ---- o que é de cada bairro ----
+  if (feat.zH !== undefined) buildElevated(feat);
+  if (river) buildRiver();
+  if (tvTower) {                                                                                   // torre de TV no centro (marco no horizonte)
+    const tx = tvTower.x, tz = tvTower.z;
+    I.add('cyl', U_CYL, tx, 0, tz, 3.2, 96, 3.2, 0, 0, '#d9dadb');
+    I.add('cyl', U_CYL, tx, 82, tz, 8.5, 9, 8.5, 0, 0, '#9ab0c4');
+    I.add('cyl', U_CYL, tx, 91, tz, 9.2, 1.2, 9.2, 0, 0, '#e8e8e8');
+    for (let k = 0; k < 5; k++) I.add('cyl', U_CYL, tx, 96 + k * 6, tz, 0.9 - k * 0.15, 6, 0.9 - k * 0.15, 0, 0, k % 2 ? '#d8473a' : '#f2f2f2');
+    solid(tx - 3.4, tx + 3.4, tz - 3.4, tz + 3.4);
+    lamps.red = [tx, 127, tz];
+  }
+
+  /** Elevado: tabuleiro em pilares, de ponta a ponta do horizonte, com trânsito (road) ou com o bonde e a estação (rail). */
+  function buildElevated(F) {
+    const z = F.zH, Y = F.y, H2 = F.half, L0 = -900, L1 = M + 900, SEG = 40;
+    for (let x = L0; x < L1; x += SEG) {
+      I.add('deck', U_CBOX, x + SEG / 2, Y - 0.5, z, SEG + 0.05, 1.0, H2 * 2, 0, 0, '#bdb7ab');                     // tabuleiro
+      for (const s of [-1, 1]) I.add('deck', U_CBOX, x + SEG / 2, Y + 0.45, z + s * (H2 - 0.2), SEG + 0.05, 0.9, 0.4, 0, 0, '#d2ccc0');   // mureta
+      I.add('deck', U_CBOX, x + SEG / 2, Y - 1.15, z, SEG + 0.05, 0.3, H2 * 2 - 2, 0, 0, '#a59f93');                // viga embaixo
+    }
+    for (let x = L0 + 20; x < L1; x += 36) {                                                        // pilares (fora das estradas)
+      if (Math.abs(x - cx) < 14 || (river && x > river.x0 - 3 && x < river.x1 + 3)) continue;
+      if (F.kind === 'road' && (Math.abs(x - P.XW) < P.RL / 2 + 3 || Math.abs(x - P.XE) < P.RL / 2 + 3)) continue;
+      I.add('deck', U_CBOX, x, (Y - 1.3) / 2, z, 1.8, Y - 1.3, 2.6, 0, 0, '#b3ada1');
+      I.add('deck', U_CBOX, x, Y - 1.5, z, 2.6, 0.8, H2 * 2 - 1.2, 0, 0, '#b3ada1');
+      solid(x - 1.1, x + 1.1, z - 1.5, z + 1.5).post = true;
+      if (F.kind === 'road') lampAt(x, z, Y + 5.2, Y + 0.5);                                     // (no meio, sobre a divisória)
+    }
+    // embaixo do elevado: canteiro gramado com árvores entre os pilares (a estrada de acesso passa livre)
+    const lawn = cheapMat(L, { color: dryPal ? '#8f9a52' : '#7aa252' }); lamps.dim.push(lawn);
+    const strip = (a, b) => { if (b - a > 1) fields.add(at(new THREE.Mesh(new THREE.PlaneGeometry(b - a, H2 * 2 + 6).rotateX(-Math.PI / 2), lawn), (a + b) / 2, -0.012, z)); };
+    if (z < 0) { strip(L0, cx - 8); strip(cx + 8, L1); } else strip(L0, L1);
+    for (let x = L0 + 38, k = 0; x < L1 - 20; x += 36, k++) {
+      if (Math.abs(x - cx) < 14 || Math.abs(x - M / 2) > 560) continue;
+      tree(x, z + (k % 2 ? 1 : -1) * (H2 + 1.2), k % 3 ? 'round' : 'birch', 0.75);
+    }
+    if (F.kind === 'road') {
+      for (let x = L0; x < L1; x += 8) for (const lz of [-H2 / 2 + 0.2, H2 / 2 - 0.2]) I.add('deck', U_CBOX, x, Y + 0.01, z + lz, 3, 0.02, 0.15, 0, 0, '#ecebe6');   // faixas
+      I.add('deck', U_CBOX, (L0 + L1) / 2, Y + 0.25, z, L1 - L0, 0.5, 0.35, 0, 0, '#d2ccc0');                                       // divisória central
+      roadTraffic(F);
+    } else railLine(F);
+  }
+  /** Trânsito do elevado: 2 faixas por sentido; na Altitude, um sentido anda e para (o engarrafamento), o outro corre. */
+  function roadTraffic(F) {
+    const z = F.zH, Y = F.y, L0 = -520, L1 = M + 520, cars = [];                                    // (além disso a névoa já cobre tudo)
+    const lanes = [{ z: z - F.half * 0.75, dir: 1 }, { z: z - F.half * 0.3, dir: 1 }, { z: z + F.half * 0.3, dir: -1 }, { z: z + F.half * 0.75, dir: -1 }];
+    const COL = ['#d8473a', '#3a78d4', '#efbf2a', '#f2f2f2', '#2b2d33', '#8f959c', '#3c9d55', '#ff8a1e', '#e86aa0'];
+    lanes.forEach((ln, li) => {
+      const jam = F.jam && ln.dir > 0, gap = jam ? 6.8 : 22 + rand() * 16;
+      for (let x = L0 + rand() * 20; x < L1; x += gap * (jam ? 1 : 0.7 + rand() * 0.8)) cars.push({ ln, li, x, v: 0, col: COL[Math.floor(rand() * COL.length)], truck: rand() < 0.12 });
+    });
+    const body = new THREE.InstancedMesh(U_CBOX, new THREE.MeshStandardMaterial({ roughness: 0.6, flatShading: true }), cars.length);
+    const cab = new THREE.InstancedMesh(U_CBOX, new THREE.MeshStandardMaterial({ color: '#cfdbe4', roughness: 0.3, flatShading: true }), cars.length);
+    const col = new THREE.Color();
+    cars.forEach((c, i) => body.setColorAt(i, col.set(c.col)));
+    body.frustumCulled = cab.frustumCulled = false; live.add(dynamic(body), dynamic(cab));
+    const heads = new Float32Array(cars.length * 3), tails = new Float32Array(cars.length * 3);
+    const hp = new THREE.Points(new THREE.BufferGeometry().setAttribute('position', new THREE.BufferAttribute(heads, 3)), glowMat('#fff3d0', 3.2));
+    const tp = new THREE.Points(new THREE.BufferGeometry().setAttribute('position', new THREE.BufferAttribute(tails, 3)), glowMat('#ff3a2a', 2.4));
+    hp.frustumCulled = tp.frustumCulled = false; hp.visible = tp.visible = false; live.add(hp, tp); lamps.night.push(hp, tp);
+    const o = new THREE.Object3D(), byLane = lanes.map((ln, li) => cars.filter(c => c.li === li).sort((a, b) => (b.x - a.x) * ln.dir));   // da frente para trás
+    const gapOf = (a, b) => (a.truck || b.truck ? 9.5 : 6.4);
+    updaters.push((t, dtt) => {
+      const d = Math.min(dtt, 0.1);
+      byLane.forEach((list, li) => {
+        const ln = lanes[li], jam = F.jam && ln.dir > 0;
+        for (let k = 0; k < list.length; k++) {
+          const c = list[k], front = k ? list[k - 1] : null;
+          // engarrafamento: ondas de anda e para que correm para trás pela fila (cada carro arranca um pouco depois do da frente)
+          const want = jam ? 8 * Math.max(0, Math.sin(t * 0.3 + c.x * 0.018 + li)) ** 2 : 17 + li * 1.5;
+          c.v += (want - c.v) * Math.min(1, d * (jam ? 1.4 : 0.8));
+          c.x += ln.dir * c.v * d;
+          if (front && (front.x - c.x) * ln.dir < gapOf(c, front)) { c.x = front.x - ln.dir * gapOf(c, front); c.v = Math.min(c.v, front.v); }   // não encosta no da frente
+        }
+        const head = list[0];                                                                       // o da frente saiu lá longe: volta pelo fim da fila
+        if (head && (ln.dir > 0 ? head.x > L1 : head.x < L0)) {
+          list.shift(); const tail = list[list.length - 1];
+          head.x = ln.dir > 0 ? Math.min(L0, tail.x - 12) : Math.max(L1, tail.x + 12); list.push(head);
+        }
+      });
+      cars.forEach((c, i) => {
+        const len = c.truck ? 7.5 : 4.2, hgt = c.truck ? 2.6 : 0.9;
+        o.position.set(c.x, Y + 0.05 + hgt / 2 + 0.25, c.ln.z); o.rotation.set(0, 0, 0); o.scale.set(len, hgt, 1.9); o.updateMatrix(); body.setMatrixAt(i, o.matrix);
+        o.position.set(c.x - c.ln.dir * (c.truck ? -2.6 : 0.3), Y + 0.3 + hgt + (c.truck ? -0.6 : 0.3), c.ln.z); o.scale.set(c.truck ? 1.8 : 2.1, c.truck ? 1.1 : 0.62, 1.7); o.updateMatrix(); cab.setMatrixAt(i, o.matrix);
+        heads.set([c.x + c.ln.dir * len / 2, Y + 0.9, c.ln.z], i * 3); tails.set([c.x - c.ln.dir * len / 2, Y + 0.9, c.ln.z], i * 3);
+      });
+      body.instanceMatrix.needsUpdate = cab.instanceMatrix.needsUpdate = true;
+      if (hp.visible) { hp.geometry.attributes.position.needsUpdate = true; tp.geometry.attributes.position.needsUpdate = true; }
+    });
+  }
+  /** Elevado do bonde (Trilhos): trilhos, postes da rede aérea com o fio, estação com cobertura e dois bondes indo e vindo. */
+  function railLine(F) {
+    const z = F.zH, Y = F.y, L0 = -900, L1 = M + 900, tracks = [z - 1.7, z + 1.7];
+    for (const tz of tracks) for (const o of [-0.72, 0.72]) I.add('deck', U_CBOX, (L0 + L1) / 2, Y + 0.06, tz + o, L1 - L0, 0.1, 0.12, 0, 0, '#8d949b');
+    for (let x = L0; x < L1; x += 30) {                                                             // postes e fios da rede aérea
+      I.add('deck', U_CBOX, x, Y + 2.7, z, 0.22, 5.4, 0.22, 0, 0, '#3f4a52');
+      I.add('deck', U_CBOX, x, Y + 5.3, z, 0.14, 0.14, 6.4, 0, 0, '#3f4a52');
+    }
+    for (const tz of tracks) I.add('deck', U_CBOX, (L0 + L1) / 2, Y + 5.1, tz, L1 - L0, 0.05, 0.05, 0, 0, '#2c2c2c');
+    const SX = M / 2 + 150;                                                                          // estação (vista do bairro, ao sul)
+    I.add('deck', U_CBOX, SX, Y + 0.6, z, 34, 1.0, 2.4, 0, 0, '#cfc6b4');                          // plataforma central
+    for (const dx of [-14, -4, 6, 14]) I.add('deck', U_CBOX, SX + dx, Y + 2.3, z, 0.25, 2.6, 0.25, 0, 0, '#9e3a26');
+    I.add('deck', U_CBOX, SX, Y + 3.7, z, 34, 0.25, 5.6, 0, 0, '#9e3a26');                         // cobertura vermelha (como as paradas do bairro)
+    const sTex = textTexture('ESTAÇÃO TRILHOS', { width: 768, height: 128, bg: '#9e3a26', fg: '#fff3d6', font: 'bold 64px "Trebuchet MS", sans-serif' });
+    for (const s of [-1, 1]) { const pl = new THREE.Mesh(new THREE.PlaneGeometry(9, 1.5), new THREE.MeshStandardMaterial({ map: sTex, roughness: 0.8 })); pl.position.set(SX, Y + 4.7, z + s * 0.2); pl.rotation.y = s > 0 ? 0 : Math.PI; g.add(pl); }
+    I.add('deck', U_CBOX, SX, Y + 4.7, z, 9.2, 1.6, 0.3, 0, 0, '#7a2e20');
+    const trams = tracks.map((tz, k) => {
+      const t = buildTram(); t.position.set(SX + (k ? 300 : -300), Y + 0.1, tz); live.add(dynamic(t));
+      return { t, tz, x: SX + (k ? 260 : -380), dir: k ? -1 : 1, v: 0, wait: 0, k };
+    });
+    updaters.push((time, dtt) => {
+      const d = Math.min(dtt, 0.1);
+      for (const T of trams) {
+        if (T.wait > 0) { T.wait -= d; continue; }
+        const toSt = (SX - T.x) * T.dir, end = T.dir > 0 ? L1 - 60 - T.x : T.x - (L0 + 60);
+        const stop = !T.served && toSt > 0 ? Math.min(toSt, end) : end;                            // para na estação e no fim da linha
+        const want = Math.min(12, Math.sqrt(2 * 1.2 * Math.max(0, stop)) + 0.15);
+        T.v += Math.sign(want - T.v) * Math.min(Math.abs(want - T.v), d * (want > T.v ? 1.0 : 2.4));
+        T.x += T.dir * T.v * d;
+        if (!T.served && toSt <= 0.25) { T.served = true; T.wait = 9; T.v = 0; }                     // na estação: embarque
+        else if (end < 0.4) { T.dir = -T.dir; T.wait = 6; T.v = 0; T.served = false; }               // fim da linha: volta
+        T.t.position.x = T.x;
+      }
+    });
+  }
+  /** Travessia: o canal sai do bairro pelas pontes de pedra (terrain.js) e segue como rio, ao norte e ao sul, entre muros de cais;
+   *  as estradas de fora cruzam por pontes; barcos amarrados e uma chata subindo e descendo devagar. */
+  function buildRiver() {
+    const X0 = river.x0, X1 = river.x1, wc = (X0 + X1) / 2, w = X1 - X0, PATHS_Z = [-PARK_O, M + PARK_O];   // (caminhos do parque linear)
+    const spans = [[-RIVER_FAR, 0], [M, M + RIVER_FAR]];
+    for (const [a, b] of spans) {
+      g.add(waterPlane(X0 + 0.7, X1 - 0.7, a, b));
+      quayWall(g, X0, 1, a, b); quayWall(g, X1, -1, a, b);
+      g.add(at(box(w, 0.4, b - a, '#2e5f7d'), wc, CANAL_WL - 0.5, (a + b) / 2));
+      const roadsZ = P.roads.filter(r => r.axis === 'x' && r.z0 < b && r.z1 > a && r.x0 < X1 && r.x1 > X0).map(r => [r.z0 - 0.5, r.z1 + 0.5])
+        .concat(PATHS_Z.filter(z => z > a && z < b).map(z => [z - 1.9, z + 1.9])).sort((p, q) => p[0] - q[0]);   // (e nas passarelas do parque)
+      let z0 = a + (a === M ? 0.2 : 0);
+      for (const [r0, r1] of roadsZ.concat([[b - (b === 0 ? 0.2 : 0), b]])) {                         // gradil de ferro na beira (aberto nas estradas)
+        if (r0 - z0 > 1) {
+          for (const x of [X0 + 0.25, X1 - 0.25]) {
+            I.add('deck', U_CBOX, x, 1.0, (z0 + r0) / 2, 0.08, 0.08, r0 - z0, 0, 0, '#3a3d44');
+            for (let zz = z0; zz < r0; zz += 2.4) I.add('deck', U_CBOX, x, 0.5, zz, 0.07, 1.0, 0.07, 0, 0, '#3a3d44');
+          }
+          solid(X0 - 0.1, X1 + 0.1, z0, r0);                                                       // (o rio: a van não entra)
+        }
+        z0 = r1;
+      }
+    }
+    for (const z of PATHS_Z) {                                                                       // passarelas do parque linear (só a pé)
+      I.add('deck', U_CBOX, wc, -0.1, z, w + 1.2, 0.25, 3.4, 0, 0, '#cfc6b4');                     // tabuleiro (rente ao caminho)
+      I.add('deck', U_CBOX, wc, -0.42, z, w - 0.6, 0.4, 1.6, 0, 0, '#a99f8f');                       // viga
+      I.add('deck', U_CBOX, wc, (CANAL_WL - 0.62) / 2 - 0.2, z, 1.1, -CANAL_WL - 0.2, 1.1, 0, 0, '#a99f8f');   // pilar no meio do rio
+      for (const s of [-1, 1]) {
+        I.add('deck', U_CBOX, wc, 1.0, z + s * 1.6, w + 1.2, 0.07, 0.07, 0, 0, '#3a3d44');          // corrimão (como o gradil)
+        for (let x = X0 - 0.5; x <= X1 + 0.51; x += (w + 1) / 5) I.add('deck', U_CBOX, x, 0.5, z + s * 1.6, 0.07, 1.0, 0.07, 0, 0, '#3a3d44');
+      }
+      for (const x of [X0 - 0.45, X1 + 0.45]) I.add('deck', U_CBOX, x, 0.45, z, 0.5, 0.9, 0.5, 0, 0, '#e0b43a');   // frade: a van não passa
+      solid(X0 - 0.7, X1 + 0.7, z - 1.9, z + 1.9).vanOnly = true;
+    }
+    for (const r of P.roads) if (r.axis === 'x' && r.x0 < X1 && r.x1 > X0) {                        // pontes das estradas de fora
+      const zm = (r.z0 + r.z1) / 2, d = r.z1 - r.z0 + 1.2;
+      g.add(at(box(w + 1.4, 0.9, d, '#9a958c'), wc, -0.46, zm));
+      for (const s of [-1, 1]) {
+        g.add(at(box(w + 1.4, 0.9, 0.35, '#d8cfbe'), wc, 0.45, zm + s * (d / 2 - 0.17)));
+        for (const px of [wc - w / 4, wc + w / 4]) g.add(at(box(1.8, -CANAL_WL - 0.5, d - 1, '#a99f8f'), px, (CANAL_WL - 1.4) / 2 + 0.1, zm));
+      }
+    }
+    // barcos amarrados nas margens e uma chata subindo e descendo o trecho norte, devagar
+    for (let k = 0; k < 10; k++) {
+      const north = k % 2 === 0, z = north ? -30 - rand() * 600 : M + 30 + rand() * 600, s = rand() < 0.5 ? 1 : -1;
+      if (P.roads.some(r => r.axis === 'x' && z > r.z0 - 6 && z < r.z1 + 6)) continue;
+      const b = dynamic(new THREE.Group()), hull = ['#f2efe6', '#c8402f', '#3c8f52', '#2f5f8a'][k % 4];
+      b.add(at(box(1.4, 0.5, 3.4, hull), 0, 0, 0)); b.add(at(box(0.98, 0.5, 0.98, hull), 0, 0, 1.75, 0, Math.PI / 4, 0)); b.add(at(box(1.1, 0.06, 3.0, '#8a6440'), 0, 0.12, 0));
+      b.position.set(s > 0 ? X0 + 1.65 : X1 - 1.65, CANAL_WL + 0.12, z); b.userData.bob = { y0: CANAL_WL + 0.12, ph: k * 1.3 };
+      live.add(b);
+    }
+    const barge = dynamic(new THREE.Group());
+    barge.add(at(box(4.2, 1.0, 13, '#3a3d44'), 0, 0.2, 0)); barge.add(at(box(4.3, 0.2, 13.1, '#c8402f'), 0, 0.75, 0));
+    barge.add(at(box(3.2, 0.9, 8, '#b08a5a'), 0, 1.2, 1.2));                                         // carga (madeira)
+    barge.add(at(box(2.4, 1.6, 2.4, '#f2efe6'), 0, 1.6, -4.8)); barge.add(at(box(2.6, 0.2, 2.6, '#3a3d44'), 0, 2.5, -4.8));   // casinha do barqueiro
+    barge.position.set(wc, CANAL_WL + 0.25, -300); live.add(barge);
+    const B = { z: -300, dir: -1 };
+    updaters.push((t, dtt) => {
+      const d = Math.min(dtt, 0.1);
+      B.z += B.dir * 2.2 * d;
+      if (B.z < -RIVER_FAR + 60) B.dir = 1; else if (B.z > P.J - P.RW / 2 - 20) B.dir = -1;       // (vira antes da ponte da estrada)
+      barge.position.z = B.z; barge.rotation.y = B.dir > 0 ? 0 : Math.PI; barge.position.y = CANAL_WL + 0.25 + Math.sin(t * 0.8) * 0.04;
+    });
+  }
+}
+
+/** Encostas (Bairro 9): morros em volta da cidade (sobem a partir de ~150 m do bairro; a estrada de acesso fica no vale). */
+function hillField(M, cx, material) {
+  const rand = rng(97), B = [];
+  for (let k = 0; k < 14; k++) {
+    const a = k / 14 * Math.PI * 2 + rand() * 0.3, d = M / 2 + 300 + rand() * 260;
+    B.push({ x: M / 2 + Math.cos(a) * d, z: M / 2 + Math.sin(a) * d, H: 22 + rand() * 38, s: 90 + rand() * 80 });
+  }
+  const edge = (x, z) => Math.hypot(Math.max(-x, 0, x - M), Math.max(-z, 0, z - M));
+  const h = (x, z) => {
+    const e = edge(x, z); if (e < 150) return 0;
+    let y = 8 * THREE.MathUtils.smoothstep(e, 150, 520);
+    for (const b of B) y += b.H * Math.exp(-((x - b.x) ** 2 + (z - b.z) ** 2) / (2 * b.s * b.s));
+    const road = z < 0 ? THREE.MathUtils.smoothstep(Math.abs(x - cx), 24, 70) : 1;               // vale da estrada de acesso
+    return y * THREE.MathUtils.smoothstep(e, 150, 260) * road;
+  };
+  const S = 3400, N = 136, geo = new THREE.PlaneGeometry(S, S, N, N); geo.rotateX(-Math.PI / 2); geo.translate(M / 2, 0, M / 2);
+  const p = geo.attributes.position, cols = new Float32Array(p.count * 3), c = new THREE.Color(), lo = new THREE.Color('#6f9e4c'), hi = new THREE.Color('#9fb565');
+  for (let i = 0; i < p.count; i++) {
+    const y = h(p.getX(i), p.getZ(i)); p.setY(i, y - 0.08);
+    c.copy(lo).lerp(hi, Math.min(1, y / 55)); cols.set([c.r, c.g, c.b], i * 3);
+  }
+  geo.setAttribute('color', new THREE.BufferAttribute(cols, 3)); geo.computeVertexNormals();
+  const mesh2 = new THREE.Mesh(geo.toNonIndexed(), material);
+  mesh2.geometry.computeVertexNormals(); mesh2.castShadow = false; mesh2.receiveShadow = false; mesh2.name = 'arredores:morros';
+  return { mesh: mesh2, h };
+}
+
+// ---------- Cachoeira (Bairro 23): serras de mata em volta ----------
+/** O desfiladeiro corta uma região de serra: a partir de ~100 m do bairro o terreno sobe em morros cobertos de mata, dos dois
+ *  lados do vale (o vale do rio e a estrada de acesso ficam planos), e atrás do maciço da cachoeira a serra continua mais alta.
+ *  Só cenário (sem colisão): dois terrenos (um de cada lado do desfiladeiro) e árvores instanciadas nas encostas. */
+function buildCanyonHills() {
+  const g = new THREE.Group(); g.name = 'serra';
+  const C = CANAL, M = MAP, gx = (C.x0 + C.x1) / 2, ZS = M + 44, cx = (ENTRANCE.x0 + ENTRANCE.x1) / 2;
+  const rand = rng(231), B = [];
+  for (let k = 0; k < 18; k++) {
+    const a = k / 18 * Math.PI * 2 + rand() * 0.25, d = M / 2 + 330 + rand() * 420;
+    B.push({ x: M / 2 + Math.cos(a) * d, z: M / 2 + Math.sin(a) * d, H: 34 + rand() * 60, s: 110 + rand() * 120 });
+  }
+  B.push({ x: gx - 260, z: ZS + 300, H: 95, s: 190 }, { x: gx + 280, z: ZS + 330, H: 110, s: 210 });   // serra atrás da cachoeira
+  const edge = (x, z) => Math.hypot(Math.max(-x, 0, x - M), Math.max(-z, 0, z - M));
+  const h = (x, z) => {
+    const e = edge(x, z); if (e < 90) return 0;
+    let y = 14 * THREE.MathUtils.smoothstep(e, 90, 600);
+    for (const b of B) y += b.H * Math.exp(-((x - b.x) ** 2 + (z - b.z) ** 2) / (2 * b.s * b.s));
+    const valley = THREE.MathUtils.smoothstep(Math.abs(x - gx) - (C.x1 - C.x0) / 2, 70, 170);         // vale do rio (as matas das margens ficam no plano)
+    const road = z < 0 ? THREE.MathUtils.smoothstep(Math.abs(x - cx), 22, 80) : 1;                     // vale da estrada de acesso
+    return y * THREE.MathUtils.smoothstep(e, 90, 220) * valley * road;
+  };
+  g.userData.h = h;                                                                  // (createWorld: chão de fora para a van e o helicóptero)
+  const lo = new THREE.Color('#5f8f45'), hi = new THREE.Color('#87a85a'), rockC = new THREE.Color('#8c7b66'), c = new THREE.Color();
+  for (const [x0, x1] of [[-1700, C.x0 - 1], [C.x1 + 1, M + 1700]]) {
+    const W = x1 - x0, D = 3400, geo = new THREE.PlaneGeometry(W, D, Math.ceil(W / 26), 130);
+    geo.rotateX(-Math.PI / 2); geo.translate((x0 + x1) / 2, 0, M / 2);
+    const p = geo.attributes.position;
+    for (let i = 0; i < p.count; i++) p.setY(i, h(p.getX(i), p.getZ(i)) - 0.08);
+    const ng = geo.toNonIndexed(); ng.computeVertexNormals();
+    const q = ng.attributes.position, nrm = ng.attributes.normal, cols = new Float32Array(q.count * 3);
+    for (let i = 0; i < q.count; i += 3) {                                                         // cor por face: encosta íngreme = pedra
+      const y = (q.getY(i) + q.getY(i + 1) + q.getY(i + 2)) / 3, steep = 1 - nrm.getY(i);
+      c.copy(lo).lerp(hi, Math.min(1, y / 70)); if (steep > 0.32) c.lerp(rockC, Math.min(1, (steep - 0.32) * 3));
+      for (let k = 0; k < 3; k++) cols.set([c.r, c.g, c.b], (i + k) * 3);
+    }
+    ng.setAttribute('color', new THREE.BufferAttribute(cols, 3));
+    const m = new THREE.Mesh(ng, new THREE.MeshStandardMaterial({ vertexColors: true, flatShading: true, roughness: 1 }));
+    m.castShadow = m.receiveShadow = false; g.add(m);
+  }
+  // mata nas encostas (pinheiros e árvores redondas, mais densa no alto)
+  const I = instancer(), PINE_C = ['#2f6a3e', '#3a7a48', '#2a5f38'], LEAF_C = ['#4f8f3a', '#3f7d34', '#5a9a44'];
+  for (let k = 0, t = 0; k < 2200 && t < 16000; t++) {
+    const x = -700 + rand() * (M + 1400), z = -700 + rand() * (M + 1400), y = h(x, z);
+    if (y < 2.5 || rand() > Math.min(1, y / 16)) continue;
+    const s = 1.6 + rand() * 1.6, ry = rand() * 6;
+    if (rand() < 0.6) { I.add('cone', U_CONE, x, y - 0.3, z, 1.9 * s, 4.6 * s, 1.9 * s, 0, ry, PINE_C[k % 3]); }
+    else { I.add('trunk', U_TRUNK, x, y - 0.3, z, 0.4 * s, 2.2 * s, 0.4 * s, 0, ry, '#6b4a2e'); I.add('ico', U_ICO, x, y + 2.6 * s, z, 1.8 * s, 1.5 * s, 1.8 * s, rand(), ry, LEAF_C[k % 3]); }
+    k++;
+  }
+  I.build(g);
+  // a van não sobe a serra (é só cenário): onde o terreno começa a subir, colisão — a van e o personagem param no pé da encosta em
+  // vez de entrarem por baixo dela (o chão de fora para a van e o helicóptero é o da serra: createWorld). Colunas de 8 m dentro do limite do mundo; trechos seguidos viram uma caixa só.
+  const CS = 8;
+  for (let x = BOUNDS.min; x < BOUNDS.max; x += CS) {
+    let run = null;
+    for (let z = BOUNDS.min; z < BOUNDS.zMax; z += CS) {
+      const up = h(x + CS / 2, z + CS / 2) > 0.9, last = z + CS >= BOUNDS.zMax;
+      if (up && run === null) run = z;
+      if (run !== null && (!up || last)) { SOLIDS.push({ x0: x, x1: x + CS, z0: run, z1: up ? z + CS : z, serra: true }); run = null; }
+    }
+  }
+  return g;
 }
 
 // ---------- Luz ----------
@@ -1288,11 +1978,17 @@ export function createWorld({ renderer, buildLot, buildResident, yardBuilders, p
 
   const solidsStart = SOLIDS.length;          // os troncos das árvores de fora entram em SOLIDS aqui
   const sk = surroundKind({ venice, moon, farm, snow, dry });              // bairros comuns/urbanos: arredores com relação ao lugar
-  const SP = sk ? planSurroundings(sk, dry) : null;
+  // bairros urbanos: o jeito de cada um nos arredores (Mirante 6, Altitude 7, Ápice 8, Encostas 9, Travessia 11, Trilhos 12,
+  // Fluxo 14 e Penumbra 19 — este liga a noite depois, em night.js)
+  const flavor = sk !== 'city' ? null : TERRAIN.kind === 'hill' ? 'encostas' : CANAL ? 'canal' : RAIL ? 'rail' : FLUX ? 'flux'
+    : GRID === 8 ? 'apice' : pool.includes(87) ? 'mirante' : 'altitude';
+  const SP = sk ? planSurroundings(sk, dry, flavor) : null;
   const ground = moon ? new THREE.Group() : buildGround(venice, SP);
-  const sur = SP ? buildSurroundings(SP, dry) : null;
+  const sur = SP ? buildSurroundings(SP, dry, sk === 'city' ? cityLight(lights) : null) : null;
   if (sur) SOLIDS.push(...sur.solids);
   const outskirts = moon || farm || sur ? new THREE.Group() : buildOutskirts(ground);   // Colheita: em volta são plantações (farmOutside.js)
+  const serra = CANAL && CANAL.canyon ? buildCanyonHills() : null;       // Cachoeira: serra de mata em volta do vale
+  if (serra) scene.add(serra);
   if (venice || moon || farm) SOLIDS.length = solidsStart;              // Veneza: sem árvores de fora (laguna)
   const extraSolids = SOLIDS.slice(solidsStart);
   scene.add(baked(ground, false, true));
@@ -1437,8 +2133,10 @@ export function createWorld({ renderer, buildLot, buildResident, yardBuilders, p
   const STREAM_R = 60, camGround = { x: 0, z: 0, ok: false };
   if (sur) {
     for (const b of sur.farSolids) b.out = true;
+    const hook = (r, sc, cam) => { camGround.x = cam.position.x; camGround.z = cam.position.z; camGround.ok = true; };
     const grassMesh = ground.children.find(o => o.isMesh && o.material === mat(GRASS));
-    if (grassMesh) grassMesh.onBeforeRender = (r, sc, cam) => { camGround.x = cam.position.x; camGround.z = cam.position.z; camGround.ok = true; };
+    if (grassMesh) grassMesh.onBeforeRender = hook;
+    sur.fields.traverse(o => { if (o.isMesh) o.onBeforeRender = hook; });            // (cidade: o chão de fora também serve)
   }
   const nearTo = (b, x, z) => { const dx = Math.max(b.x0 - x, 0, x - b.x1), dz = Math.max(b.z0 - z, 0, z - b.z1); return dx * dx + dz * dz < STREAM_R * STREAM_R; };
   function streamSolids(x, z) {
@@ -1446,9 +2144,47 @@ export function createWorld({ renderer, buildLot, buildResident, yardBuilders, p
     const cam = camGround.ok && Math.hypot(camGround.x - x, camGround.z - z) > 25;
     for (const b of sur.farSolids) if (nearTo(b, x, z) || (cam && nearTo(b, camGround.x, camGround.z))) SOLIDS.push(b);
   }
+  // água que corre (canal e rio da Travessia) e barcos amarrados balançando: achados uma vez na cena montada
+  const flows = new Set(), bobs = [];
+  scene.traverse(o => { if (o.material && o.material.userData && o.material.userData.flow) flows.add(o.material); if (o.userData.bob) bobs.push(o); });
+  // cidade de longe (além de ~380 m do bairro): com a câmera de jogo dentro do bairro a névoa já a apaga, então nem é desenhada;
+  // aparece na visão geral e, por setor, quando a câmera sai do bairro e chega perto (dirigindo pelos arredores no Livre — antes
+  // os prédios de longe continuavam invisíveis ali, mas sólidos). Decidido a cada desenho, com a câmera que desenha.
+  if (sur && sur.farBand.length) {
+    const secs = new Map();
+    for (const { m, pts } of sur.farBand) { const k = m.name.slice(m.name.indexOf('#f')); let s = secs.get(k); if (!s) secs.set(k, s = { pts, meshes: [], vis: true }); s.meshes.push(m); }
+    let lx = 1e9, lz = 1e9, lf = -1;
+    scene.onBeforeRender = (r, sc, cam) => {
+      const x = cam.position.x, z = cam.position.z, far = sc.fog ? sc.fog.far : Infinity;
+      if (Math.abs(x - lx) + Math.abs(z - lz) < 2 && far === lf) return;
+      lx = x; lz = z; lf = far;
+      const out = Math.hypot(Math.max(-x, 0, x - MAP), Math.max(-z, 0, z - MAP)) > 8, lim = far - 20;
+      for (const s of secs.values()) {
+        let vis = far > 900;
+        if (!vis && out) for (let i = 0; i < s.pts.length; i += 2) if (Math.hypot(s.pts[i] - x, s.pts[i + 1] - z) < lim) { vis = true; break; }
+        if (vis !== s.vis) { s.vis = vis; for (const m of s.meshes) m.visible = vis; }
+      }
+    };
+  }
+  // Encostas: os morros de fora são chão de verdade (a van e o personagem sobem por eles em vez de passar por baixo). Cachoeira:
+  // a serra também é o chão de fora (o helicóptero voa e pousa por cima dela; a van para no pé, nas colisões da serra). O chão
+  // do bairro continua o de layout.js; fora do quadrado do bairro vale o de fora (0 junto da sebe). Refeito sempre que o bairro
+  // volta a ser montado (configureGrid troca TERRAIN.h).
+  let hillWrap = null;
+  const outerH = sur && sur.hillH ? sur.hillH : serra ? serra.userData.h : null;
+  const hillGround = () => {
+    if (!outerH || TERRAIN.h === hillWrap || (sur && sur.hillH ? TERRAIN.kind !== 'hill' : !(CANAL && CANAL.canyon))) return;
+    const base = TERRAIN.h, hh = outerH;
+    TERRAIN.h = hillWrap = (x, z) => (x < 0 || z < 0 || x > MAP || z > MAP) ? hh(x, z) : base(x, z);
+  };
+  hillGround();
   let ambT = 0;
   function update(t, dt) {
     ambT += dt || 0;
+    hillGround();
+    tickBarriers(dt || 0);                       // pisca-pisca e placa PARE/SIGA dos bloqueios: no tempo do jogo (param com o MENU)
+    for (const m of flows) if (m.map) m.map.offset.y = (m.map.offset.y - (dt || 0) * m.userData.flow) % 1;
+    for (const b of bobs) { const u = b.userData.bob; b.position.y = u.y0 + Math.sin(ambT * 1.3 + u.ph) * 0.05; b.rotation.z = Math.sin(ambT * 0.9 + u.ph * 2) * 0.035; b.rotation.x = Math.sin(ambT * 0.7 + u.ph) * 0.02; }
     if (sur) sur.update(ambT, dt || 0);
     if (plife) plife.update(ambT);
     for (const i of pool) {
@@ -1487,6 +2223,8 @@ export function createWorld({ renderer, buildLot, buildResident, yardBuilders, p
     extraSolids,
     /** Esconde (true) ou mostra a casa h inteira, refazendo o merge dos lotes. */
     setHidden(h, on) { on ? hidden.add(h) : hidden.delete(h); lots[h].visible = !on; mergeLots(); },
+    /** Penumbra (night.js): arredores à noite — janelas acesas, postes e faróis no elevado. */
+    setNight(on) { if (sur && sur.setNight) sur.setNight(on); },
     /** Mostra todas as casas de novo. */
     showAll() { if (!hidden.size) return; for (const h of hidden) lots[h].visible = true; hidden.clear(); mergeLots(); },
   };

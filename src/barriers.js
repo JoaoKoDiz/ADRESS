@@ -20,8 +20,13 @@ const FLASH_A = new THREE.MeshStandardMaterial({ color: '#ff8a1a', emissive: '#f
 const FLASH_B = new THREE.MeshStandardMaterial({ color: '#ff8a1a', emissive: '#ff6a00', emissiveIntensity: 0.9, roughness: 0.6 });
 const HAZARD = new THREE.MeshStandardMaterial({ color: '#ff9a1a', emissive: '#ff7a00', emissiveIntensity: 1, roughness: 0.6 });
 let flashFrame = -1;
+// Relógio do jogo (não o relógio real): avança em world.update com o dt do mundo, então o pisca-pisca e a placa PARE/SIGA
+// param junto com o resto do mundo quando o MENU (ou a lista de missões) está aberto.
+let clockT = 0;
+/** Avança o relógio dos bloqueios (chamado por world.update). */
+export function tickBarriers(dt) { clockT += dt || 0; }
 function flashTick() {
-  const t = performance.now() / 1000;
+  const t = clockT;
   if (Math.floor(t * 60) === flashFrame) return;
   flashFrame = Math.floor(t * 60);
   const on = (t % 1) < 0.5;
@@ -233,7 +238,7 @@ export function buildCar() {
   for (const x of [-1.4, 1.4]) for (const zz of [0.95, -0.95]) g.add(at(cyl(0.42, 0.42, 0.3, '#1f2023', 10), x, 0.42, zz, Math.PI / 2, 0, 0));
   const brake = mat('#ff3b30', { emissive: '#ff1a1a', emissiveIntensity: 1.1 }), head = mat('#fff3c0', { emissive: '#ffe9a0', emissiveIntensity: 0.4 });
   for (const zz of [0.7, -0.7]) {
-    const r = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.25, 0.4), brake); r.position.set(-2.2, 0.95, zz); g.add(r);   // luzes de freio
+    const r = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.25, 0.4), brake); r.position.set(-2.2, 0.95, zz); r.userData.brake = true; g.add(r);   // luzes de freio
     const f = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.22, 0.4), head); f.position.set(2.2, 0.95, zz); g.add(f);
   }
   g.traverse(o => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
@@ -241,17 +246,34 @@ export function buildCar() {
   return g;
 }
 const JAM_CARS = [-5.4, 0, 5.4];                  // 3 carros por faixa (trecho livre: ~16,8)
+/** Engarrafamento: cada faixa é uma fila que anda um palmo de vez em quando (as luzes de freio apagam enquanto anda) e volta
+ *  devagar, quase sem se notar, para o lugar; as duas faixas e cada engarrafamento em ritmos diferentes. No relógio do jogo. */
+let jamSeed = 0;
 function buildJam() {
   const g = new THREE.Group();
   g.userData.cars = [];
-  for (const lane of [1, -1]) for (const x of JAM_CARS) {
-    const c = buildCar();
-    c.position.set(x, 0, lane * ROAD / 4);
-    c.rotation.y = lane > 0 ? 0 : Math.PI;       // mão dupla: uma faixa para cada lado
-    dynamic(c.userData.body);                     // (a carroceria troca de cor a cada partida: fica separada)
-    g.add(c); g.userData.cars.push(c);
+  for (const lane of [1, -1]) {
+    const lg = dynamic(new THREE.Group()), brake = new THREE.MeshStandardMaterial({ color: '#ff3b30', emissive: '#ff1a1a', emissiveIntensity: 1.1, roughness: 0.5 });
+    for (const x of JAM_CARS) {
+      const c = buildCar();
+      c.position.set(x, 0, lane * ROAD / 4);
+      c.rotation.y = lane > 0 ? 0 : Math.PI;     // mão dupla: uma faixa para cada lado
+      dynamic(c.userData.body);                   // (a carroceria troca de cor a cada partida: fica separada)
+      c.traverse(o => { if (o.userData.brake) o.material = brake; });
+      lg.add(c); g.userData.cars.push(c);
+    }
+    bakeStatic(lg);                               // rodas, vidros, faróis… dos 3 carros da fila viram poucas malhas
+    const period = 9 + ((jamSeed * 5 + (lane > 0 ? 0 : 3)) % 7), ph = (jamSeed * 3.7 + (lane > 0 ? 0 : 4.1)) % period;
+    const tick = lg.children.find(o => o.isMesh && o.material === brake) || lg.children[0];
+    tick.onBeforeRender = () => {
+      const u = (clockT + ph) % period, go = 1.5;   // anda 0,45 em 1,5 s; depois volta 0,45 no resto do ciclo (bem devagar)
+      const k = u < go ? (1 - Math.cos(u / go * Math.PI)) / 2 : 1 - (u - go) / (period - go);
+      lg.position.x = lane * 0.45 * (k - 0.5);
+      brake.emissiveIntensity = u < go ? 0.15 : 1.1;
+    };
+    g.add(lg);
   }
-  bakeStatic(g);                                  // rodas, vidros, faróis… dos 6 carros viram poucas malhas
+  jamSeed++;
   return g;
 }
 
@@ -276,7 +298,7 @@ function placeObra(b, c, on) {
   const p = worker.userData.paddle;
   if (p && !p.userData.hooked) {                               // a placa vira de PARE para SIGA de tempos em tempos
     p.userData.hooked = true;
-    p.children[0].onBeforeRender = () => { const t = performance.now() / 1000 + worker.userData.t0; const k = Math.min(1, Math.max(0, (Math.sin(t * 0.35) + 0.15) * 4)); p.rotation.y = k * Math.PI; };
+    p.children[0].onBeforeRender = () => { const t = clockT + worker.userData.t0; const k = Math.min(1, Math.max(0, (Math.sin(t * 0.35) + 0.15) * 4)); p.rotation.y = k * Math.PI; };
   }
 }
 

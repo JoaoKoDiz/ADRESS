@@ -7,6 +7,7 @@ const CSS = `
 .back-btn:hover { filter: brightness(1.2); }
 .back-btn.on { display: block; }
 body.has-back .ahud-logo { margin-left: 112px; }   /* não fica embaixo do botão */
+body.touch-on .back-btn { min-height: 38px; padding: .4em 1.05em; font-size: 14px; }   /* toque: alvo maior */
 `;
 
 export function createBackButton(onBack) {

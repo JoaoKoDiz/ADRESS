@@ -3,12 +3,14 @@
 // O que varia (e aparece nas pistas): cor do telhado e do portão; caixas/pallets, empilhadeira, caminhão, barris/tubos.
 // Origem no canto noroeste do lote da esquerda, frente +Z (como os outros lotes).
 import * as THREE from 'three';
-import { box, cyl, at, mat, bakeStatic } from './kit.js';
+import { box, cyl, at, mat, bakeStatic, textTexture } from './kit.js';
 import { LOT, ROAD } from '../layout.js';
 
 export const WROOF_COL = { red: '#c8463a', blue: '#3a6fbf', green: '#3c8f52', gray: '#7d838c' };
 export const GATE_COL = { blue: '#2f78d0', red: '#d6402f', yellow: '#efbf2a', green: '#36a05a' };
 const W = LOT * 2 + ROAD, G = 0.06, T = 0.12;   // T: topo do pátio (os itens do pátio se apoiam nele)
+const WARE_NAMES = ['DEPÓSITO', 'ARMAZÉM', 'TRANSPORTES', 'DISTRIBUIDORA', 'LOGÍSTICA', 'CARGAS & CIA', 'EXPEDIÇÃO', 'ESTOQUE GERAL'];   // letreiros
+const signCache = new Map();
 
 export function buildWareLot(h) {
   const root = new THREE.Group();
@@ -22,14 +24,16 @@ export function buildWareLot(h) {
   for (let x = BX0 + 1.2; x < BX1 - 0.5; x += 1.6) add(box(0.18, BH - 0.4, 0.12, '#c4bfb2'), x, G + BH / 2, BZ1 + 0.06);
   // telhado de duas águas: as duas águas se encontram na cumeeira (ao longo do comprimento, eixo X), apoiadas no topo das
   // paredes, com beiral uniforme; oitões triangulares nas duas pontas preenchem exatamente o vão sob o telhado
-  const rc = WROOF_COL[h.wroof] || '#7d838c', zc = (BZ0 + BZ1) / 2, half = (BZ1 - BZ0) / 2, rise = 2.2, O = 0.6, T = 0.3;
+  // (RT: espessura das águas — antes se chamava T e escondia o T do topo do pátio: pallets, empilhadeira, caminhão e barris
+  // ficavam 18 cm acima do chão)
+  const rc = WROOF_COL[h.wroof] || '#7d838c', zc = (BZ0 + BZ1) / 2, half = (BZ1 - BZ0) / 2, rise = 2.2, O = 0.6, RT = 0.3;
   const ang = Math.atan2(rise, half), yTop = G + BH + rise, run = half + O, len = run / Math.cos(ang);
   for (const s of [-1, 1]) {
     // face de baixo da água: reta da cumeeira (zc, yTop) até o beiral; passa exatamente sobre o topo da parede
     const mz = zc + s * run / 2, my = yTop - Math.tan(ang) * run / 2;
-    add(box(BX1 - BX0 + 2 * O, T, len, rc), (BX0 + BX1) / 2, my + (T / 2) / Math.cos(ang), mz, s * ang, 0, 0);
+    add(box(BX1 - BX0 + 2 * O, RT, len, rc), (BX0 + BX1) / 2, my + (RT / 2) / Math.cos(ang), mz, s * ang, 0, 0);
   }
-  add(box(BX1 - BX0 + 2 * O, 0.32, 0.5, rc), (BX0 + BX1) / 2, yTop + T / Math.cos(ang) - 0.06, zc);   // cumeeira (fecha a junta)
+  add(box(BX1 - BX0 + 2 * O, 0.32, 0.5, rc), (BX0 + BX1) / 2, yTop + RT / Math.cos(ang) - 0.06, zc);   // cumeeira (fecha a junta)
   const gable = new THREE.Shape(); gable.moveTo(-half, 0); gable.lineTo(half, 0); gable.lineTo(0, rise); gable.lineTo(-half, 0);
   const gGeo = new THREE.ExtrudeGeometry(gable, { depth: 0.3, bevelEnabled: false });
   for (const x of [BX0, BX1 - 0.3]) {                                   // oitões no plano das paredes das pontas
@@ -46,8 +50,13 @@ export function buildWareLot(h) {
   add(box(14, 1.2, 2.4, '#a9a49a'), 24, G + 0.6, BZ1 + 1.2);
   add(box(14, 0.15, 0.2, '#efbf2a'), 24, G + 1.2, BZ1 + 2.35);
   for (const x of [19.5, 24, 28.5]) add(box(3, 3.4, 0.2, '#6d737c'), x, G + 1.2 + 1.7, BZ1 + 0.12);
-  // letreiro
+  // letreiro com o nome do negócio (nunca uma cor: as pistas falam do telhado e do portão)
   add(box(9, 1.2, 0.2, '#2e3a46'), W / 2, G + BH - 0.9, BZ1 + 0.12);
+  const name = WARE_NAMES[(h.index || 0) % WARE_NAMES.length];
+  let tex = signCache.get(name);
+  if (!tex) signCache.set(name, tex = textTexture(name, { width: 768, height: 104, bg: '#2e3a46', fg: '#f2ead8', font: 'bold 64px "Trebuchet MS", sans-serif' }));
+  const plate = new THREE.Mesh(new THREE.PlaneGeometry(8.6, 8.6 * 104 / 768), new THREE.MeshStandardMaterial({ map: tex, roughness: 0.8 }));
+  plate.position.set(W / 2, G + BH - 0.9, BZ1 + 0.225); root.add(plate);
   const it = h.items || [];
   if (it.includes('pallets')) {                                       // caixas e pallets ao lado do portão (longe do caminho)
     for (const [x, z, n] of [[2.8, 13.6, 3], [4.6, 13.8, 2], [2.8, 15.4, 1]]) {
