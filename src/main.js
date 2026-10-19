@@ -535,6 +535,9 @@ heli.setGround((x, z) => {
     const o = slotOrigin(s), R = APT_ROOF;
     if (x > o.x + R.x0 + 0.5 && x < o.x + R.x1 - 0.5 && z > o.z + R.z0 + 0.5 && z < o.z + R.z1 - 0.5) return (HOUSES[h].kind === 'fut' ? futRoofHeight(HOUSES[h], x - o.x, z - o.z) : aptRoofHeight(HOUSES[h], x - o.x, z - o.z)) + TERRAIN.h(o.x + 8.6, o.z + 8.6);
   }
+  // prédios dos arredores das cidades (top = altura): o helicóptero que desce em cima de um pousa no terraço em vez de
+  // afundar nele (antes atravessava; com a colisão no ar, seria empurrado de lado ao descer)
+  if (heli.flying) for (const b of SOLIDS) if (b.out && b.top && x > b.x0 + 0.3 && x < b.x1 - 0.3 && z > b.z0 + 0.3 && z < b.z1 - 0.3) return b.top + 0.5;
   return 0;
 });
 heli.setTerrain((x, z) => TERRAIN.h(x, z));   // Bairro 9: o chão sobe nas encostas
@@ -2807,10 +2810,11 @@ function update(dt, t) {
           setState('walk');
           break;
         }
-        if (heli.flying) { fuelMsg = 'Pouse o helicóptero antes de descer.'; fuelMsgT = 2.5; }
-        else if (Math.abs(van.speed) > 3.5) { fuelMsg = 'Pare a van para descer (L).'; fuelMsgT = 2.5; }
+        if (heli.landed) { fuelMsg = 'Daqui não dá para descer: decole e pouse no chão ou num terraço do bairro.'; fuelMsgT = 3; }   // (terraço de um prédio dos arredores)
+        else if (heli.flying) { fuelMsg = 'Pouse o helicóptero antes de descer.'; fuelMsgT = 2.5; }
+        else if (Math.abs(van.speed) > 3.5) { fuelMsg = VENICE ? 'Pare a lancha para descer.' : 'Pare a van para descer.'; fuelMsgT = 2.5; }
         else {
-          if (!walker.placeBesideVan(van, walkSolids(), !!VENICE)) { fuelMsg = 'Encoste a lancha no cais para descer (L).'; fuelMsgT = 2.5; }   // Veneza: só desce em terra
+          if (!walker.placeBesideVan(van, walkSolids(), !!VENICE)) { fuelMsg = 'Encoste a lancha no cais para descer.'; fuelMsgT = 2.5; }   // Veneza: só desce em terra
           else {
             if (gameMode === 'career') career.exitVan(van.x, van.z, van.heading, van.speed, shopFronts());   // Bairro 4: "Estacione de ré"
             van.stop(); nearHouse = -1; nearPump = false;
@@ -3276,7 +3280,7 @@ function updateHUD() {
     const extraKeys = extraKeys0 + (gameMode === 'free' ? (MOONV ? '  ·  H: helicóptero' : '  ·  H: helicóptero  ·  F: míssil') : '  ·  M: missões');
     const fKey = gameMode === 'free' && !MOONV ? '  ·  F: míssil' : '';                          // (Lua: sem míssil)
     // cenas, conversas e momentos sem controle de direção: nada de teclas de dirigir na barra (cada cena mostra a própria dica)
-    const noKeys = ['talk', 'cine', 'trolley', 'trolleyBlack', 'laser', 'wstory', 'mstory', 'chseq', 'chat', 'boss', 'missile'].includes(state);
+    const noKeys = ['talk', 'cine', 'trolley', 'trolleyBlack', 'laser', 'wstory', 'mstory', 'chseq', 'chat', 'boss', 'missile', 'fadeOut'].includes(state);
     hud.setSub(noKeys ? '' : state === 'walk'
       ? (rig.mode === 'chase' ? `A PÉ  ·  W/S: andar  ·  A/D: virar  ·  E (perto da ${vehicle}): entrar  ·  C: bairro  ·  botão direito: olhar em volta` : `A PÉ  ·  WASD: andar  ·  E (perto da ${vehicle}): entrar  ·  C: câmera`)
       : heli.landed
@@ -3296,7 +3300,7 @@ function updateHUD() {
     else if (state === 'walk' && carrying) hud.setMain(walker.nearVan(van) ? 'Entrar na van devolve a caixa ao lugar dela.' : 'Carregando uma caixa… de quem será?', 'clue');
     // a pé: "perto da van" só quando E de fato entra nela (perto de uma porta, porteira ou alguém para conversar, o E faz aquilo);
     // Veneza e os bairros sem grade aceitam entrega a pé, então a pista continua na barra
-    else if (state === 'walk') hud.setMain(walkNear && !walkAct ? (touchOn ? `Perto da ${vehicle} — toque em “Entrar na ${vehicle}”.` : `Perto da ${vehicle} — aperte E para entrar.`) : VENICE || SPOTS ? game.mainText() : 'Passeando a pé… (não dá para entregar andando)', 'clue');
+    else if (state === 'walk') hud.setMain(walkNear && !walkAct ? (touchOn ? `Perto da ${vehicle} — toque em “Entrar na ${vehicle}”.` : `Perto da ${vehicle} — aperte E para entrar.`) : VENICE || SPOTS ? game.mainText() : 'Passeando a pé… (neste bairro, as entregas são feitas da van)', 'clue');
     else if (state === 'drive' && fuelMsgT > 0) hud.setMain(fuelMsg, 'dialog');
     else if (state === 'fadeOut') hud.setMain(restartMsg || (endToMap ? 'Partida concluída!' : 'Entrega concluída! Preparando a próxima…'), restartMsg ? 'dialog' : 'success');   // (na Carreira volta ao mapa)
     else hud.setMain(game.mainText(), 'clue');

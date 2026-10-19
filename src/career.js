@@ -102,27 +102,33 @@ export function createCareer() {
   let toastTimer = 0;
   // logo abaixo da barra do topo (a altura dela muda com a tela e o modo toque); se encostar no botão MISSÕES ou no
   // cronômetro, desce para baixo deles
+  // (o aviso "Toque para continuar" do celular aparece logo depois, com a fala: por isso a posição é revista enquanto o aviso está na tela)
   function placeToast() {
     const bar = document.querySelector('.ahud'), r = bar && bar.offsetParent ? bar.getBoundingClientRect() : null;
     let top = (r && r.height ? r.bottom : 0) + 12;
-    toastEl.style.top = top + 'px';
-    const t = toastEl.getBoundingClientRect();
-    for (const el of document.querySelectorAll('.missions-btn.on, .match-timer.on, .match-bumps.on')) {
-      const o = el.getBoundingClientRect();
-      if (!o.width || !o.height || getComputedStyle(el).display === 'none' || getComputedStyle(el).visibility === 'hidden') continue;
-      if (o.left < t.right && o.right > t.left && o.top < top + t.height && o.bottom > top) top = o.bottom + 8;
+    const t = toastEl.getBoundingClientRect(), avoid = [];
+    for (const el of document.querySelectorAll('.missions-btn.on, .match-timer.on, .match-bumps.on, .tc-cue.on')) {
+      const o = el.getBoundingClientRect(), cs = getComputedStyle(el);
+      if (o.width && o.height && cs.display !== 'none' && cs.visibility !== 'hidden') avoid.push(o);
     }
-    toastEl.style.top = top + 'px';
+    for (let k = 0, moved = true; moved && k < 5; k++) {
+      moved = false;
+      for (const o of avoid) if (o.left < t.right && o.right > t.left && o.top < top + t.height && o.bottom > top) { top = o.bottom + 8; moved = true; }
+    }
+    if (toastEl.style.top !== top + 'px') toastEl.style.top = top + 'px';
   }
+  let placeTimer = 0;
   /** Aviso curto abaixo da barra; fica o tempo de ler (mín. 3,2 s). pend: missão cumprida nesta partida, ainda não salva. Devolve a duração (ms). */
   function toast(text, pend = false) {
     toastEl.textContent = text;
     toastEl.classList.toggle('pend', pend);
-    try { placeToast(); } catch (e) { /* sem layout: fica na posição do CSS */ }
+    const place = () => { try { placeToast(); } catch (e) { /* sem layout: fica na posição do CSS */ } };
+    place();
     toastEl.classList.add('on');
-    clearTimeout(toastTimer);
+    clearTimeout(toastTimer); clearInterval(placeTimer);
+    placeTimer = setInterval(place, 200);
     const ms = Math.max(3200, 1200 + text.length * 50);
-    toastTimer = setTimeout(() => toastEl.classList.remove('on'), ms);
+    toastTimer = setTimeout(() => { toastEl.classList.remove('on'); clearInterval(placeTimer); }, ms);
     return ms;
   }
 

@@ -7,7 +7,11 @@
 // Estrutura fixa: 18 trechos, 8 fragmentos e o ponto final (fragmentos/final = pausas neutras provisórias, com ganchos).
 // Música: a adaptação de "Finale" (battleMusic.js); a POSIÇÃO DELA é o relógio: cada trecho tem uma janela (TL) e os
 // fragmentos começam no alarme do episódio da faixa — quando a janela acaba, o trecho é interrompido e a batalha segue.
-// Duas câmeras: a de jogo (elevada) em toda janela de ataque; a de impacto (baixa) só em intervalos seguros e na apresentação.
+// Câmeras: a de jogo é baixa e próxima, atrás e à direita do jogador (arena adaptada a ela: grade mais curta, fissuras e
+// estruturas fora das silhuetas, marcas no chão sob os projéteis, prévia da placa, círculo que não sai do quadro); a de
+// impacto (baixa, de lado) só em intervalos seguros e na apresentação; a da grade erguida no REFLETIR aprimorado.
+// Depois do 2º fragmento azul a batalha se intensifica: rajadas/cruzados/leques no Bloquear, o K se defende sozinho (aos
+// poucos), REFLETIR com a grade erguida e trocas, e CONDUZIR aprimorado (a figura segura o objeto; os projéteis o rasgam).
 // Efeitos curtos procedurais pela saída de efeitos.
 import * as THREE from 'three';
 import { buildStandingReader, reachArm } from './models/reader.js';
@@ -76,6 +80,7 @@ const GH = { y: H_PROJ + 0.15, hitR: 0.62, yankAt: 0.36, yankT: 0.32, regrab: 0.
 // self = defende a si mesmo; other = chance de proteger o jogador)
 const K_DEF = [null, { gap: 9, chance: 0.35, hesitate: 0.7, self: true, other: 0 }, { gap: 6, chance: 0.5, hesitate: 0.5 }, { gap: 4.5, chance: 0.65, hesitate: 0.4 }, { gap: 3.5, chance: 0.7, hesitate: 0.3, other: 0.45 }];
 const kDef = l => Object.assign({}, K_DEF[1], K_DEF[l]);
+const K_ACT_AT = 1.2;                                                 // o K ergue a placa quando faltam ~1,2 s para o projétil chegar
 const T = { fadeIn: 0.7, startFade: 1.5, intro: 1.0, clear: 1.0, out: 0.7, freeze: 0.35, failMsg: 1.0 };
 const RETRY_MIN = 4;                                                  // falha com menos que isso de janela: o trecho não recomeça (a música segue)
 const BOUND = { x: 14, z: 16 };
@@ -379,7 +384,7 @@ export function createBattle(ctx) {
   cDisc.rotation.x = -Math.PI / 2; circle.add(cDisc);
   const lenArc = arcRing(CIRCLE_R + 0.08, CIRCLE_R + 0.13); lenArc.visible = false; circle.add(lenArc);
   const PREV_MAX = 128;
-  const prevLine = ribbon(PREV_MAX, 0.08, 0.22, 0.14, '#ffffff', 0.6); prevLine.visible = false; scene.add(prevLine);
+  const prevLine = ribbon(PREV_MAX, 0.12, 0.22, 0.14, '#ffffff', 0.7); prevLine.visible = false; scene.add(prevLine);   // (larga o bastante para a câmera baixa)
 
   // ---- estabilidade: anel aos pés (arco = estabilidade) ----
   const stabRing = { P: arcRing(0.62, 0.68), K: arcRing(0.62, 0.68) };
@@ -583,6 +588,9 @@ export function createBattle(ctx) {
     projGet: () => projPool.get(), projPut: o => projPool.put(o), pose, figGest: g => { figGest = g; }, charPos });
   const plusSeg = () => !!(seg && seg.plus);
 
+  /** Tela em pé (celular): o fov já abre até 80°; além disso a câmera recua ao longo da própria linha de visão (sem passar
+   *  da altura da cabeça do jogador), para o jogador, o K e a figura caberem na largura. */
+  const framePos = (pos, look, asp, out) => { out.copy(pos); if (asp < 1.3) { const f = Math.min(1.35, 1 + 0.25 * (1.3 / asp - 1)); out.sub(look).multiplyScalar(f).add(look); out.y = Math.min(out.y, Math.max(pos.y, 2.45)); } return out; };
   const fovFor = (base, asp) => { const h = Math.tan(base * Math.PI / 360) * 16 / 9; return asp >= 16 / 9 ? base : Math.min(80, Math.atan(h / asp) * 360 / Math.PI); };
   function fitFov(base) {
     const fov = fovFor(base, camera.aspect || 16 / 9);
@@ -596,7 +604,7 @@ export function createBattle(ctx) {
     const asp = camera.aspect || 16 / 9;
     if (asp !== fenceAsp) {
       fenceAsp = asp; fenceCam.aspect = asp; fenceCam.fov = fovFor(CAMS.game.fov, asp); fenceCam.updateProjectionMatrix();
-      fenceCam.position.copy(CAMS.game.pos); fenceCam.lookAt(CAMS.game.look); fenceCam.updateMatrixWorld(true);
+      framePos(CAMS.game.pos, CAMS.game.look, asp, fenceCam.position); fenceCam.lookAt(CAMS.game.look); fenceCam.updateMatrixWorld(true);
     }
     for (const dx of [-CIRCLE_R, CIRCLE_R]) {                          // as duas pontas do disco (de lado) e o meio
       _fp.set(x + dx, 0.04, z).project(fenceCam);
@@ -611,7 +619,7 @@ export function createBattle(ctx) {
     camBase.lerpVectors(G.pos, I.pos, e); camLook.lerpVectors(G.look, I.look, e); let fov = G.fov + (I.fov - G.fov) * e;
     const pw = plus.camW;                                             // grade erguida: câmera baixa atrás/à direita do jogador
     if (pw > 0) { camBase.lerp(CAMS.wall.pos, pw); camLook.lerp(CAMS.wall.look, pw); fov += (CAMS.wall.fov - fov) * pw; }
-    camera.position.copy(camBase); camera.lookAt(camLook); fitFov(fov);
+    framePos(camBase, camLook, camera.aspect || 16 / 9, camera.position); camera.lookAt(camLook); fitFov(fov);
     for (const f of Object.values(fissures)) f.g.rotation.y = Math.atan2(camBase.x - f.x, camBase.z - f.z);   // de frente para a câmera
   }
   /** Nada que exija reação: sem projéteis/avisos, sem traço sendo desenhado, sem núcleo sendo segurado. */
@@ -666,7 +674,7 @@ export function createBattle(ctx) {
   function launch(w) {
     const dx = w.tx - w.ox, dz = w.tz - w.oz, l = Math.hypot(dx, dz) || 1;
     const p = { id: nextId++, x: w.ox, z: w.oz, vx: dx / l * w.speed, vz: dz / l * w.speed, speed: w.speed, target: w.target, tx: w.tx, tz: w.tz,
-      reflected: false, alive: true, kClaim: false, kEval: 1.4 + Math.random() * 0.4, evaluated: false, src: w.src, obj: projPool.get(), age: 0 };
+      reflected: false, alive: true, kClaim: false, kEval: kLevel() >= 2 ? 99 : 1.4 + Math.random() * 0.4, evaluated: false, src: w.src, obj: projPool.get(), age: 0 };
     const u = p.obj.userData; u.edges.material = M.edge; u.trail.material = M.trail; u.mark.visible = true;   // (pode voltar do vazio branco)
     p.obj.position.set(p.x, H_PROJ, p.z); p.obj.visible = true; u.claim.visible = false; scene.add(p.obj);
     if (seg && seg.guide) {                                           // Conduzir: míssil que guarda o alvo original
@@ -938,7 +946,7 @@ export function createBattle(ctx) {
     if (g.snap >= 0 && g.snap < 1) g.snap = Math.min(1, g.snap + dt / GH.snapT);
     if (g.state === 'grab') {
       const d = Math.hypot(cpos.x - g.x, cpos.z - g.z); g.tension = Math.min(1, d / GUIDE.pull);
-      if (g.held && g.tension >= GH.yankAt) { g.state = 'yank'; g.t = 0; g.yank = 1; g.regrab = seg.t + GH.regrab; sfx('frebound'); L('guide:yank'); }   // a figura dá um tranco: a ponta escapa
+      if (g.held && g.tension >= GH.yankAt) { g.state = 'yank'; g.t = 0; g.yank = 1; g.yanked = true; g.regrab = seg.t + GH.regrab; sfx('frebound'); L('guide:yank'); }   // a figura dá um tranco: a ponta escapa
       else if (d >= GUIDE.pull) rupture(cpos.x - g.x, cpos.z - g.z, 'P');
     } else if (g.state === 'release') { g.tension = Math.max(0, g.tension - dt / 0.35); if (g.tension <= 0) g.state = 'idle'; }
     else if (g.state === 'yank') { g.tension = Math.max(0, g.tension - dt / 0.12); if (g.t >= GH.yankT) { g.state = 'idle'; g.tension = 0; } }
@@ -1039,6 +1047,8 @@ export function createBattle(ctx) {
   }
 
   // ---------- defesa do K ----------
+  // Quando o K decide: no nível 1 (logo depois do 2º azul) só tarde, se ninguém cobriu (hesitante); a partir do 2 ele já
+  // assume o projétil no lançamento (anel claro em volta dele — o jogador vê que pode deixar aquele com o K).
   /** O caminho restante de p já está coberto por uma barreira/parede que ainda vai existir quando ele chegar lá? */
   function covered(p) {
     const px = p.x, pz = p.z, dx = p.tx - px, dz = p.tz - pz, L2 = Math.hypot(dx, dz) || 1, ux = dx / L2, uz = dz / L2, R = BLOCK.r + PR;
@@ -1067,6 +1077,8 @@ export function createBattle(ctx) {
   function updateK(dt) {
     if (!kAct) return;
     const a = kAct; a.t += dt;
+    // assumido cedo (anel no projétil), mas a placa só sai perto da chegada — senão ela venceria (BLOCK.life) antes do impacto
+    if (!a.made && !a.cancel && !a.go) { const p = a.proj; if (p.alive && Math.hypot(p.tx - p.x, p.tz - p.z) / p.speed > K_ACT_AT + a.hes) a.t = 0; else a.go = true; }
     if (!a.made && !a.cancel && a.t >= a.hes) {
       const p = a.proj;
       if (!p.alive || p.reflected) a.cancel = true;
@@ -1499,7 +1511,7 @@ export function createBattle(ctx) {
     get active() { return active; }, get fade() { return fade; },
     get joystick() { return active && !!seg && (phase === 'play' || phase === 'clear' || (phase === 'intro' && fade <= 0) || (phase === 'wait' && camK < 0.02)); },
     get actionLabel() { return active && seg && phase === 'play' ? ACTION[seg.mech] : null; },
-    get action2Label() { return active && seg && phase === 'play' && seg.mech === 'guide' && seg.guide && (seg.guide.state === 'idle' || seg.guide.state === 'grab' || seg.guide.state === 'release') ? 'Puxar' : null; },
+    get action2Label() { return active && seg && phase === 'play' && seg.mech === 'guide' && seg.guide && !seg.guide.yanked && (seg.guide.state === 'idle' || seg.guide.state === 'grab' || seg.guide.state === 'release') ? 'Puxar' : null; },   // (aprimorado: depois do 1º tranco o botão sai — puxar não adianta)
     prerender,
     setFragmentHandler(fn) { fragHandler = fn || null; },
     setFinaleHandler(fn) { finaleHandler = fn || null; },
