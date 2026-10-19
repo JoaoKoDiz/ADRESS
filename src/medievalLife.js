@@ -22,29 +22,50 @@ const wrap = a => Math.atan2(Math.sin(a), Math.cos(a));
 const angTo = (x, z, tx, tz) => Math.atan2(tx - x, tz - z);
 const shuffle = a => { for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; };
 
-// ---- falas (curtas, do dia a dia; 3 por papel) ----
+// ---- falas (curtas, do dia a dia; preocupações de cada um, nada de pistas) ----
 const LINES = {
-  food: ['Pão, maçãs e queijo da serra! Tudo fresquinho hoje.', 'Se o vento parar, eu arrumo as frutas de novo.', 'As maçãs vieram do pomar do moinho. Estão docinhas.'],
-  cloth: ['Esse azul foi tingido com flores do campo.', 'Cuidado ao passar: acabei de dobrar tudo.', 'Tecido bom aguenta muitos invernos.'],
-  tools: ['Panela de ferro boa dura a vida inteira.', 'Precisa de um prego? Tenho de todos os tamanhos.', 'O ferreiro me mandou umas facas novas hoje.'],
-  buyer: ['Prometi levar esse cesto antes do almoço.', 'Ainda falta comprar o queijo. Quase esqueci!', 'O pão daqui é o melhor do burgo.'],
-  sweeper: ['Tomara que não chova antes de eu recolher as roupas.', 'Folha que o vento traz, a vassoura leva.', 'Gosto da frente da casa bem varrida.'],
-  water: ['A água da fonte é a mais fresca do burgo.', 'Balde cheio pesa, mas faz bem para os braços.', 'Hoje tem sopa. Precisa de muita água!'],
-  chat: ['Você soube? A filha do moleiro vai se casar na primavera.', 'Estamos só colocando a conversa em dia.', 'Dizem que vai ter festa no castelo no fim do mês.'],
-  elder: ['Daqui eu vejo o burgo inteiro passar.', 'No meu tempo, a fonte fazia ainda mais barulho.', 'Sente um pouco. O banco é grande.'],
-  porter: ['Mais um caixote para a taverna. Depois eu descanso.', 'Esses caixotes ficam mais pesados depois do meio-dia.', 'Farinha para a padaria, cerveja para a taverna. Assim é o dia.'],
-  gardener: ['Essas flores gostam de sol, mas hoje só tem nuvem.', 'Um pouco de água todo dia e elas ficam felizes.', 'As floreiras são o orgulho da rua.'],
-  guard: ['Tudo calmo no portão. Do jeito que eu gosto.', 'Cuidado com as carroças na subida.', 'Bom dia! Entregas são sempre bem-vindas no burgo.'],
-  guard2: ['O castelo está tranquilo hoje.', 'Daqui de cima dá para ver todos os telhados.', 'Ninguém entra sem avisar. Nem as galinhas.'],
-  baker: ['Hoje a farinha chegou cedo. Ainda bem.', 'O forno está quente desde antes do galo cantar.', 'Sinta o cheiro! A próxima fornada sai já, já.'],
-  smith: ['Estou tentando consertar essa dobradiça desde ontem.', 'Cuidado com as faíscas!', 'Ferro quente não espera. Com licença!'],
-  weaver: ['Dobrar tecido também é uma arte.', 'Esse vermelho vai virar o estandarte de alguém.', 'O vento de hoje está bagunçando meus panos.'],
-  keeper: ['Hoje tem sopa de legumes. Passe mais tarde!', 'Caneca limpa, freguês feliz.', 'À noite a taverna fica cheia de histórias.'],
-  child: ['Pega! Agora é você!', 'A gente está brincando de pega-pega em volta da fonte!', 'Quando eu crescer, vou ser guarda do castelo!'],
-  walker: ['Vou visitar minha irmã. Ela mora aqui perto.', 'Que dia cinzento! Mas o burgo está animado.', 'Já viu o castelo de perto? Vale a subida.'],
-  browser: ['Só estou olhando. Tudo é tão bonito aqui!', 'Vim ver se chegaram tecidos novos.', 'Adoro o barulho da fonte.'],
-  local: ['Vou ali na vizinha devolver uma panela.', 'Bom dia! A rua está movimentada hoje.', 'Esqueci o xale na casa da minha tia. De novo!'],
-  child2: ['Mamãe disse que hoje tem pão doce!', 'Eu ajudo a escolher as maçãs.', 'Olha a fonte! Ela nunca para de jorrar.'],
+  food: ['Pão, maçãs e queijo da serra! Tudo fresco hoje.', 'Se o vento parar, eu arrumo as frutas de novo.', 'As maçãs vieram do pomar do moinho. Estão docinhas.',
+    'O queijo acaba antes do meio-dia. Sempre.', 'Uma criança levou uma maçã sem pagar. Deixei: era a mais feia.'],
+  cloth: ['Esse azul foi tingido com flores do campo.', 'Cuidado ao passar: acabei de dobrar tudo.', 'Tecido bom aguenta muitos invernos.',
+    'A chuva de ontem molhou dois rolos. Estão secando lá dentro.', 'Todo mundo pergunta pelo vermelho. Ninguém compra o vermelho.'],
+  tools: ['Panela de ferro boa dura a vida inteira.', 'Precisa de um prego? Tenho de todos os tamanhos.', 'O ferreiro me mandou umas facas novas hoje.',
+    'Vendi três martelos hoje e nenhuma panela. Semana estranha.'],
+  buyer: ['Prometi levar esse cesto antes do almoço.', 'Ainda falta comprar o queijo. Quase esqueci!', 'O pão daqui é o melhor do burgo.',
+    'Minha lista tem cinco coisas, e eu só lembro de três.', 'Se eu voltar sem os ovos, nem preciso voltar.'],
+  sweeper: ['Tomara que não chova antes de eu recolher as roupas.', 'Folha que o vento traz, a vassoura leva.', 'Gosto da frente da casa bem varrida.',
+    'Varro de manhã, varro de tarde. A rua não colabora.', 'Esta vassoura era da minha avó. Ainda varre melhor que as novas.'],
+  water: ['A água da fonte é a mais fresca do burgo.', 'Balde cheio pesa, mas faz bem para os braços.', 'Hoje tem sopa. Precisa de muita água!',
+    'Já é a terceira viagem. A panela grande bebe muita água.'],
+  chat: ['Você soube? A filha do moleiro vai se casar na primavera.', 'Estamos só colocando a conversa em dia.', 'Dizem que vai ter festa no castelo no fim do mês.',
+    'O preço do sal subiu de novo. Ninguém sabe por quê.', 'Ela jura que viu um gato na torre. Eu acho que era um corvo.'],
+  elder: ['Daqui eu vejo o burgo inteiro passar.', 'No meu tempo, a fonte fazia ainda mais barulho.', 'Sente um pouco. O banco é grande.',
+    'Conto as carroças que passam. Hoje já foram onze.', 'Meus joelhos avisam a chuva antes do céu.'],
+  porter: ['Mais um caixote para a taverna. Depois eu descanso.', 'Esses caixotes ficam mais pesados depois do meio-dia.', 'Farinha para a padaria, cerveja para a taverna. Assim é o dia.',
+    'Se eu derrubar este, a taverneira me põe para lavar canecas.'],
+  gardener: ['Essas flores gostam de sol, mas hoje só tem nuvem.', 'Um pouco de água todo dia, e elas ficam felizes.', 'As floreiras são o orgulho da rua.',
+    'Os pássaros comem as sementes antes de elas nascerem.'],
+  guard: ['Tudo calmo no portão. Do jeito que eu gosto.', 'Cuidado com as carroças na subida.', 'Bom dia! Entregas são sempre bem-vindas no burgo.',
+    'Essa sua carroça sem cavalo passou e o portão nem rangeu.', 'Minha lança está mais limpa que as minhas botas.'],
+  guard2: ['O castelo está tranquilo hoje.', 'Daqui de cima dá para ver todos os telhados.', 'Ninguém entra sem avisar. Nem as galinhas.',
+    'Troca de guarda só ao pôr do sol. Ainda falta muito.'],
+  baker: ['Hoje a farinha chegou cedo. Ainda bem.', 'O forno está quente desde antes de o galo cantar.', 'Sinta o cheiro! A próxima fornada sai já, já.',
+    'Pão queimado eu dou para os pássaros. Eles nunca reclamam.'],
+  smith: ['Estou tentando consertar essa dobradiça desde ontem.', 'Cuidado com as faíscas!', 'Ferro quente não espera. Com licença!',
+    'Ferradura nova para o cavalo da carroça. Ele não para quieto para provar.'],
+  weaver: ['Dobrar tecido também é uma arte.', 'Esse vermelho vai virar o estandarte de alguém.', 'O vento de hoje está bagunçando meus panos.',
+    'Um fio solto, e o tecido inteiro reclama.'],
+  keeper: ['Hoje tem sopa de legumes. Passe mais tarde!', 'Caneca limpa, freguês feliz.', 'À noite a taverna fica cheia de histórias.',
+    'Alguém esqueceu um chapéu aqui ontem. Ninguém veio buscar.'],
+  child: ['Pega! Agora é você!', 'A gente está brincando de pega-pega em volta da fonte!', 'Quando eu crescer, vou ser guarda do castelo!',
+    'Sua carroça não tem cavalo! Onde ele está?'],
+  walker: ['Vou visitar minha irmã. Ela mora aqui perto.', 'Que dia cinzento! Mas o burgo está animado.', 'Já viu o castelo de perto? Vale a subida.',
+    'Esqueci aonde eu ia. Vou andando até lembrar.'],
+  browser: ['Só estou olhando. Tudo é tão bonito aqui!', 'Vim ver se chegaram tecidos novos.', 'Adoro o barulho da fonte.',
+    'Se eu comprar mais um cesto, não cabe em casa.'],
+  local: ['Vou ali na vizinha devolver uma panela.', 'Bom dia! A rua está movimentada hoje.', 'Esqueci o xale na casa da minha tia. De novo!',
+    'Levo este pão para a vizinha. Ela me deve um favor, e eu devo dois.'],
+  child2: ['Mamãe disse que hoje tem pão doce!', 'Eu ajudo a escolher as maçãs.', 'Olha a fonte! Ela nunca para de jorrar.',
+    'Eu sei contar até cem. Quer ver? Um, dois…'],
 };
 
 // ---- caminhos a pé: grafo das calçadas sem as arestas que atravessam sólidos ou passam nos pontos de entrega ----
@@ -1144,7 +1165,8 @@ export function createMedievalLife(audio) {
     talk(n, px, pz) {
       if (!n) return [];
       n.talking = true; n.talkT = 0; n.talkRy = angTo(n.x, n.z, px, pz); n.v = 0;
-      const L = linesOf(n); n.lineI = (n.lineI + 1) % L.length;
+      const L = linesOf(n);
+      if (!n.heard) { n.heard = true; n.lineI = Math.floor(Math.random() * L.length); } else n.lineI = (n.lineI + 1) % L.length;   // 1ª conversa: qualquer fala; depois, a seguinte
       return [[L[n.lineI]]];
     },
     endTalk(n) { if (n) { n.talking = false; n.st.act = null; n.st.talk = 0; } },

@@ -86,7 +86,8 @@ export function bakeStatic(root) {
     if (Array.isArray(mtl) || mtl.transparent) return; // mantém transparentes/multimaterial separados
     let g = o.geometry.index ? o.geometry.toNonIndexed() : o.geometry.clone();
     const keepUv = !!mtl.map && g.attributes.uv;                  // materiais com textura (pedregulho, placas) mantêm o UV
-    for (const k of Object.keys(g.attributes)) if (k !== 'position' && k !== 'normal' && !(keepUv && k === 'uv')) g.deleteAttribute(k);
+    const keepCol = !!mtl.vertexColors && g.attributes.color;      // malhas com cor por vértice (vcMerge) mantêm a cor
+    for (const k of Object.keys(g.attributes)) if (k !== 'position' && k !== 'normal' && !(keepUv && k === 'uv') && !(keepCol && k === 'color')) g.deleteAttribute(k);
     if (!g.attributes.normal) g.computeVertexNormals();
     g.morphAttributes = {};
     g.applyMatrix4(new THREE.Matrix4().multiplyMatrices(inv, o.matrixWorld));
@@ -156,4 +157,44 @@ export function smoothCharacter(root) {
     o.geometry = upGeo(o.geometry); o.material = smoothMat(o.material);
   });
   return root;
+}
+
+/** Funde um grupo (montado com as primitivas do kit) num único Mesh com cor por vértice: 1 desenho para um personagem
+ *  pequeno ou peça animada inteira. A transformação do próprio grupo entra no resultado (monte-o na origem). */
+export function vcMerge(group, opts = {}) {
+  group.updateMatrixWorld(true);
+  const parts = [];
+  group.traverse(o => {
+    if (!o.isMesh) return;
+    const g = o.geometry.index ? o.geometry.toNonIndexed() : o.geometry.clone();
+    for (const k of Object.keys(g.attributes)) if (k !== 'position' && k !== 'normal') g.deleteAttribute(k);
+    g.applyMatrix4(o.matrixWorld);
+    const n = g.attributes.position.count, c = o.material.color, arr = new Float32Array(n * 3);
+    for (let i = 0; i < n; i++) { arr[i * 3] = c.r; arr[i * 3 + 1] = c.g; arr[i * 3 + 2] = c.b; }
+    g.setAttribute('color', new THREE.BufferAttribute(arr, 3));
+    parts.push(g);
+  });
+  const m = new THREE.Mesh(mergeGeometries(parts, false), mat('#ffffff', { vertexColors: true, ...opts }));
+  parts.forEach(p => p.dispose());
+  m.castShadow = true; m.receiveShadow = true;
+  return m;
+}
+
+/** Tira de `group` as peças "simples" (cor lisa: sem textura, sem brilho próprio, sem transparência, fora de partes
+ *  animadas) e devolve uma malha só com cor por vértice (vcMerge), ou null. O que sobra continua em `group`. Serve para
+ *  enfeites com muitas cores pequenas (vitrines, mercadoria), que senão virariam um desenho por cor. */
+export function mergePlain(group) {
+  group.updateMatrixWorld(true);
+  const list = [];
+  group.traverse(o => {
+    if (!o.isMesh || o.isInstancedMesh) return;
+    for (let p = o; p && p !== group; p = p.parent) if (p.userData.dynamic) return;
+    const m = o.material;
+    if (Array.isArray(m) || m.map || m.transparent || m.vertexColors || (m.emissive && m.emissive.getHex() !== 0)) return;
+    list.push(o);
+  });
+  if (!list.length) return null;
+  const plain = new THREE.Group();
+  for (const o of list) plain.attach(o);
+  return vcMerge(plain);
 }

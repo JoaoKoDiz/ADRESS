@@ -410,3 +410,37 @@ Relatório completo em `REVISAO_QUALIDADE.md`. Resumo do que um novo chat precis
 - **Salvar no Shop** (`shop.js` `saveBar`, `models/vanLook.js`): barra fixa no rodapé do meio, em TODAS as categorias (Bonés: "Nada para salvar ainda"). Rodas/Bagageiro/Estampas: "Salvar" equipa o modelo (`adress.shop.equip.v1`, `registerVan`) e salva junto as cores do painel (roda padrão/xadrez). Cores (Pintura, Camisas, Calças, Sapatos, Tom de pele, painéis) são rascunho (`draft`) até apertar Salvar (`adress.shop.v1`); trocar de categoria ou fechar o Shop sem salvar volta às cores salvas (`revertColors`).
 - **Câmera** (`camera.js`, reescrita): braço em raio que para antes de casas/sebe (sem saltos), pivô, giro, inclinação e zoom suavizados. Botão direito arrastando gira/inclina e **fica** onde o jogador deixou; roda só aproxima; **botão do meio** volta ao padrão. Nada muda sozinho.
 - **Personagem** (`models/driver.js`): mesma fisionomia e estilo do K (história paralela): cabeça grande facetada (esfera de poucas faces), nariz e orelhas arredondados, olhos simples, sobrancelhas retas, boca pequena e reta (sério e tranquilo), nuca e mechas de cabelo, boné e óculos escuros (aro octogonal) do jogador; corpo compacto, pernas curtas (`BODY` exporta as medidas), ombros embutidos no tronco, mãos simples (`flatHand`), tênis um pouco maiores; tudo fosco e facetado (`flatShading`). As cores NÃO são as do K: camisa/calça/tênis/pele continuam sendo os materiais únicos do Shop. No menu, o motorista fica sentado dentro da cabine: `models/seatedDriver.js` (`buildSeatedDriver(van.body)`) usa o MESMO `buildBody()` (escala 0,4, girado para a janela, preso à carroceria — acompanha a suspensão e o bagageiro pesado), janela aberta de verdade (o vão escuro grava stencil e apaga a profundidade só ali; as peças de dentro da cabine usam stencil e só aparecem pela janela), braço resolvido pelos pontos reais (ombro → cotovelo apoiado no peitoril → antebraço pendurado por fora, rente à porta; `flatHands` = mão com palma, dedos juntos e polegar). Só a cabeça balança (em volta do pescoço). Testes: `ADRESS.titleDriver._tick(n, dt)`, `_view(pos, alvo)`, `_seated`. `buildBody()` (a pé, `walker.js`) e `buildHead()` (também na janela da van, `titleDriver.js`). `CHAR_MATS`/`CHAR_DEFAULT`/`setCharColors` agora moram aí (reexportados por `walker.js`). Camisa, calça e tênis têm 1 material cada; dobras/gola/barras/cadarço são só geometria no mesmo material. Cabelo ainda é cor fixa; o boné tem cor e modelo no Shop.
+
+## 11. Revisão de qualidade de 19/10 (versão original; relatório em `REVISAO_2026-10-19.md`)
+
+Base: `98e09ca` (src = `preservado/2026-10-18`). Recuperação: branch `preservado/2026-10-19-antes-da-revisao`. A versão anterior
+continua jogável em `/versao-anterior/` (cópia do `index.html` de antes, com as músicas em `../assets/`). As versões experimentais
+(`/experimento/`, branches `experimento/*`) NÃO fazem parte do jogo original e não foram usadas.
+
+**Falas das entregas (`logic.js` + `TALK` em `data.js`)**
+- Cada morador ganha, na 1ª visita da partida, um temperamento (`TALK.TEMPERS`: direto, distraído, falante, brincalhão, ocupado,
+  desconfiado; tirado de um baralho) e uma atividade do cotidiano (1ª vez / quando volta / entrega certa). A atividade vem da casa gêmea
+  (Bairro 11), de uma característica real da casa (`FEAT`, respeita os itens retirados da Nevasca) ou do cotidiano do tipo de destino e
+  do bairro (`ACTS` + `TALK.LEVEL[lv]`). Vale até `newRound`; no Livre o morador lembra de você entre entregas.
+- Fala = reação + informação. A informação é SEMPRE `ref(destino) com phrase(pista)` (modelos `(p, r)` em `TALK.VOICE.base/ven/moon/med`),
+  nunca alterada pelo texto. Chaves: hint, late, rep2/rep3/repN (insistência), nohint/nohint2/nohintN (fora da pista), ok, okAgain, again.
+- Relação de lugar (`TALK.REL`) só quando calculada em `whereIs()` (quadra da frente/de trás/do lado, perto, longe, lado do canal, ponte);
+  nunca na Lua; sem vizinhança em Veneza. As reações nunca citam cores nem posições.
+- Tamanho: `fit()` limita a 150 caracteres (126 em telas < 600 px); encurta lugar/reação, nunca a informação.
+- `game.visit(h, lv)` recebe o bairro (estado `ring`). Quem fala: `speaker()` (portaria dos prédios contemporâneos, função + loja nas
+  oficinas, função nas lojas do Modernista). Nomes únicos dentro de cada tipo de casa.
+- Medieval (`medievalLife.js` LINES): 4–5 falas por papel. Frentista: `FUEL_LINES` (5). Narrador do K: só pontuação.
+
+**Subúrbio, comércio e arredores**
+- `world.js`: arredores novos para os bairros comuns e urbanos (`surroundKind`: rural 1/3, town 2, roads 4, trade 5, city 6–9/11/12/14/19):
+  estrada que cruza a de acesso (z = −62), ruas laterais, vizinhança simples ao longe (cores apagadas, nenhuma das cores de pista),
+  plantações, cata-vento, pássaros, vacas; tudo instanciado. Nos Bairros 1 e 3 o sul fica aberto (caminho da igreja). Colisões dos
+  arredores entram em `SOLIDS` só a até 60 m da van/câmera (`b.out`, via `world.updateGas`). `plane()` subdivide os planos do chão
+  (a grama de 4 km vazava sobre o asfalto). Praça do Bairro 2 com gente (`buildPlazaLife`).
+- `models/shop.js`: cada prédio comercial é um comércio (32 Padaria, 33 Farmácia, 34 Rádio e TV, 35 Sorveteria, 36 Mercadinho,
+  37 Papelaria, 66 Floricultura, 67 Lanchonete, 68 Barbearia, 69 Lavanderia), vitrine acesa, detalhe de calçada, pequenas animações.
+- `models/gas.js`: loja de conveniência, ilhas detalhadas e frentista que olha a van e acena nas bombas.
+- `barriers.js`: cavalete com OBRAS/sacos de areia/pisca; obra completa (vala, asfalto novo, 2 operários) só quando a partida tem só
+  cavaletes (Bairro 3); caminhão com pisca-alerta e ajudante; buraco com água e aviso.
+- `models/house.js`: casas 0–31 (e as gêmeas 104–109) com tom de parede, cortinas, capacho; a casa do K (86) igual a antes.
+- `kit.js`: `vcMerge`, `mergePlain`; `bakeStatic` preserva cores por vértice.

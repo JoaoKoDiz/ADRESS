@@ -479,6 +479,7 @@ function flamingo() {
   // em S aparecia escondido atrás do corpo; assim a silhueta pescoço + cabeça fica de frente para a câmera.
   const tilt = group(g);
   tilt.rotation.x = -26 * DEG;
+  tilt.scale.setScalar(0.86);   // (~3,1 de altura: continua lendo de longe sem passar tanto da porta da casa)
   return group(tilt);
 }
 
@@ -505,7 +506,8 @@ function gnome() {
   g.add(at(sphere(0.06, C.black, 5, 3), 0.2, 1.8, 0.45));
   g.add(at(cyl(0.6, 0.62, 0.14, C.gnomeHat, 14), 0, 1.98, -0.02));
   g.add(at(cone(0.6, 1.75, C.gnomeHat, 12), 0.2, 2.8, -0.12, -0.1, 0, -0.22)); // chapéu alto, caído para o lado
-  return g;
+  g.scale.setScalar(0.86);      // (~3,1 de altura: o chapéu vermelho continua lendo de longe; antes passava bem da porta)
+  return group(g);
 }
 
 // =====================================================================================

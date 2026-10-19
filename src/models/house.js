@@ -45,6 +45,14 @@ const C = {
   kiteR: '#ff3b3b', kiteY: '#ffd12a', kiteB: '#2f7fe0', kiteG: '#2fbf5a', string: '#4a4a4a',
   mail: '#3f6fb0', mailDark: '#233f6e', flag: '#e63946', dirt: '#8a6a45',
 };
+// Tons de parede (neutros e quentes, pouco saturados: nenhum compete com a cor do telhado ou da porta, que são pistas).
+// Cada casa usa sempre o mesmo tom, para a rua não parecer feita de cópias.
+const WALL_TONES = [WALL_COL, '#f1e6d6', '#e8dbc2', '#efe0d2'];
+// Cortinas (dentro das janelas): cores claras e apagadas, por casa.
+const CURTAINS = ['#f3e9d2', '#e9d3c8', '#dfe6d6'];
+// Casas gêmeas (Travessia, 104–109) são cópias de casas comuns: usam o índice da original, para continuarem idênticas a ela.
+const baseIndex = h => (h.twin != null ? h.twin : h.index);
+const isCommon = h => { const i = baseIndex(h); return i != null && i < 32; };
 // Estacas brancas levemente emissivas: continuam brancas mesmo vistas de cima/na sombra (o vão da tábua
 // que falta aparece bem).
 const picketMat = () => mat(C.picket, { emissive: '#505048' });
@@ -220,11 +228,12 @@ function buildFences(root, house) {
 }
 
 // ---------- Casa ----------
-function windowAt(root, x, y, z, ry = 0) {
+function windowAt(root, x, y, z, ry = 0, curtain = null) {
   // moldura branca, vidro, cruz e peitoril; montado num grupo e girado para a parede certa
   const w = new THREE.Group();
   w.add(at(box(1.9, 1.45, 0.1, C.winFrame), 0, 0, 0.05));
   w.add(at(box(1.6, 1.15, 0.06, C.glass), 0, 0, 0.11));
+  if (curtain) for (const s of [-1, 1]) w.add(at(box(0.36, 1.08, 0.02, curtain), s * 0.6, 0.0, 0.152));   // cortinas abertas nos cantos
   w.add(at(box(0.09, 1.15, 0.05, C.winFrame), 0, 0, 0.15));
   w.add(at(box(1.6, 0.09, 0.05, C.winFrame), 0, 0.02, 0.15));
   w.add(at(box(2.1, 0.1, 0.26, C.winFrame), 0, -0.76, 0.12));
@@ -238,11 +247,14 @@ function buildHouse(root, house) {
   const roofDark = shade(roofCol, -0.42);
   const doorCol = house.door ? DOOR_COL[house.door] : DOOR_DEFAULT;
 
-  // paredes + barrado
-  root.add(at(box(HW, WH, HD, C.wall), HX, G + WH / 2, HZ));
+  // paredes + barrado (tom da parede: fixo por casa)
+  const bi = baseIndex(house), common = isCommon(house);              // casas comuns (a do K, índice 86, fica exatamente como era)
+  const wallCol = common ? WALL_TONES[(bi * 7 + 3) % WALL_TONES.length] : C.wall;
+  const curtain = common ? CURTAINS[(bi * 5 + 1) % CURTAINS.length] : null;
+  root.add(at(box(HW, WH, HD, wallCol), HX, G + WH / 2, HZ));
   root.add(at(box(HW + 0.1, 0.28, HD + 0.1, C.trim), HX, G + 0.14, HZ));
   // oitões (triângulos sob o telhado)
-  const gable = prism('gable', [[-HALF, 0], [HALF, 0], [0, A.roofRise]], HW, C.wall);
+  const gable = prism('gable', [[-HALF, 0], [HALF, 0], [0, A.roofRise]], HW, wallCol);
   root.add(at(gable, HX, WALL_TOP, HZ, 0, Math.PI / 2, 0));
 
   // telhado: laje escura (borda) + fileiras de telhas na cor da casa + juntas
@@ -279,8 +291,9 @@ function buildHouse(root, house) {
   root.add(at(box(doorW - 0.5, 0.75, 0.06, doorCol), doorX, doorY + 1.55, fz + 0.18));
   root.add(at(box(doorW - 0.5, 0.75, 0.06, doorCol), doorX, doorY + 0.62, fz + 0.18));
   root.add(at(sphere(0.1, C.brass, 8, 6), doorX + doorW / 2 - 0.22, doorY + 1.08, fz + 0.2));
-  // degrau
+  // degrau e capacho
   root.add(at(box(doorW + 1.0, 0.16, 0.8, C.step), doorX, G + 0.08, fz + 0.4));
+  if (common) root.add(at(box(1.1, 0.03, 0.5, '#8a6a48'), doorX, G + 0.17, fz + 0.42));
   // luminária ao lado da porta
   root.add(at(box(0.12, 0.12, 0.2, C.frame), doorX - doorW / 2 - 0.45, doorY + 1.7, fz + 0.1));
   root.add(at(box(0.26, 0.34, 0.26, C.frame), doorX - doorW / 2 - 0.45, doorY + 1.58, fz + 0.25));
@@ -293,8 +306,8 @@ function buildHouse(root, house) {
   root.add(at(box(doorW - 0.5, 0.75, 0.06, doorCol), doorX, doorY + 0.62, bz - 0.18));
   root.add(at(sphere(0.1, C.brass, 8, 6), doorX - doorW / 2 + 0.22, doorY + 1.08, bz - 0.2));
   root.add(at(box(doorW + 1.0, 0.16, 0.7, C.step), doorX, G + 0.08, bz - 0.35));
-  // janelas da frente
-  for (const wx of [HS.x0 + 1.75, HS.x1 - 1.75]) windowAt(root, wx, G + 1.3, fz);
+  // janelas da frente (com cortina) — o resto da casa sem
+  for (const wx of [HS.x0 + 1.75, HS.x1 - 1.75]) windowAt(root, wx, G + 1.3, fz, 0, curtain);
   // janelas laterais e dos fundos
   windowAt(root, HS.x1, G + 1.5, HZ, Math.PI / 2);
   windowAt(root, HS.x0, G + 1.5, HZ, -Math.PI / 2);
@@ -570,10 +583,12 @@ function buildRoofItems(root, house, updaters) {
 // Caixa comprida ao longo de X (a câmera vê o lado comprido e a bandeira vermelha na face sul).
 // A torta é girada no chão (~35°, bem visível de cima, fora do alinhamento da cerca), inclinada,
 // com a tampa aberta pendurada, a bandeira caída e amassados.
-function buildMailbox(root, crooked) {
+function buildMailbox(root, crooked, common = true) {
   const g = new THREE.Group();             // guinada (só na torta)
   g.position.set(A.mailbox.x, G, A.mailbox.z);
-  g.scale.setScalar(1.4);                  // grande o bastante para a inclinação ler de longe
+  // Proporção: antes 1,4 (a caixa passava da altura da porta e escondia o quintal da direita). A torta fica um pouco maior
+  // que a reta — a inclinação continua lendo de longe.
+  g.scale.setScalar(!common ? 1.4 : crooked ? 1.25 : 1.1);
   const lean = new THREE.Group();          // inclinação do poste (só na torta)
   g.add(lean);
   const postH = 1.25, bl = 1.25, bw = 0.66, bh = 0.4, r = bw / 2;
@@ -652,7 +667,7 @@ export function buildLot(house, { yardBuilders } = {}) {
   buildFences(root, house);
   buildHouse(root, house);
   buildRoofItems(root, house, updaters);
-  buildMailbox(root, house.f.includes('mailbox'));
+  buildMailbox(root, house.f.includes('mailbox'), house.index == null || isCommon(house));
 
   bakeStatic(root);
   root.userData.update = t => { for (let i = 0; i < updaters.length; i++) updaters[i](t); };

@@ -1370,9 +1370,11 @@ function nowPlaying() {
 // Para abastecer de novo, a van precisa sair de perto das bombas e voltar.
 const FUEL_TIME = 1.8;
 const FUEL_LINES = [
-  'Frentista: “Deu R$ 389,90.” — É MUITO CARO!',
-  'Frentista: “Completinho! R$ 412,00… aceita cartão?” — É muito caro!',
-  'Frentista: “Gasolina subiu de novo hoje, viu?” — Que caro!',
+  'Frentista: “Completinho! Deu R$ 389,90. Pode pagar na loja de conveniência.”',
+  'Frentista: “R$ 412,00. Eu também acho caro, se serve de consolo.”',
+  'Frentista: “Tanque cheio! A gasolina subiu de novo hoje, viu?”',
+  'Frentista: “Pronto! O cafezinho da loja é por conta da casa.”',
+  'Frentista: “Abastecida! Quer o chaveiro de brinde? É um pneuzinho.”',
 ];
 let nearPump = false, fuelArmed = true, fuelMsgT = 0, fuelMsg = '';
 function atPump() {
@@ -2605,7 +2607,7 @@ function update(dt, t) {
       if (stateT > RESIDENT_APPEAR && !HOUSES[pending].narrator) world.showResident(pending, 'angry');   // K não atende: continua lendo
       if (stateT > RING_TIME) {
         const stepBefore = game.step, indicated = game.route[game.step] === pending;
-        dialog = game.visit(pending);
+        dialog = game.visit(pending, gameMode === 'career' ? careerLevel : freeLevel);   // (o bairro dá o jeito das falas)
         if (gameMode === 'career') career.visit(pending, dialog.success, indicated, stepBefore, game, { time: matchTimer.time, bumps });   // na entrega certa, confirma e salva as missões desta partida
         if (gameMode === 'career' && dialog.success) matchTimer.stop();   // Carreira: a entrega certa encerra a partida — o tempo para aqui
         if (!dialog.narrator) world.showResident(pending, dialog.success ? 'happy' : 'angry');
