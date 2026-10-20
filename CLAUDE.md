@@ -275,7 +275,7 @@ Casas especiais usadas em missões:
 
 Fases bloqueadas usam a versão cinza.
 
-**Maquetes em arquivo próprio** (`src/minis/`, ligadas por `MINI_MODULES` em `minis/index.js`; `miniFromModule` em `careerMap.js`): Colheita (`farm.js`, vale também para a miniatura do Livre), Jardins (`garden.js`) e Modernista (`modern.js`, as duas lendo o plano real do bairro), Operário (`work.js`), Bosque (`forest.js`), Cachoeira (`canyon.js`) e Medieval (`medieval.js`). Cada uma exporta `build(ctx)`, `signY` (altura da placa no mapa; MISSÕES 6 acima) e `thumb` (enquadramento da miniatura do Livre). Os blocos antigos desses tipos em `miniNeighborhood` ficaram sem uso. Teste: `ADRESS.renderMini(i, w, h, gray)`.
+**Maquetes em arquivo próprio** (`src/minis/`, ligadas por `MINI_MODULES` em `minis/index.js`; `miniFromModule` em `careerMap.js`): Colheita (`farm.js`, vale também para a miniatura do Livre), Jardins (`garden.js`) e Modernista (`modern.js`), Operário (`work.js`), Bosque (`forest.js`), Cachoeira (`canyon.js`) e Medieval (`medieval.js`). Versão simples (poucas peças, no estilo das maquetes básicas; peças comuns em `minis/simple.js`). Cada uma exporta `build(ctx)`, `signY` (altura da placa no mapa; MISSÕES 6 acima) e `thumb` (enquadramento da miniatura do Livre). Os blocos antigos desses tipos em `miniNeighborhood` ficaram sem uso. Teste: `ADRESS.renderMini(i, w, h, gray)`.
 
 
 ## 7. Como testar (Chrome headless)
